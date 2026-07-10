@@ -15,7 +15,7 @@ It is **not** a standard file host. It is a cryptographic pipeline:
 
 - Files are encrypted **in the browser** before a single byte leaves your machine
 - The server is **completely blind** — it cannot read your files or link your identity to your uploads
-- Storage is **ephemeral** — hard 5-day deletion via Cloudflare R2 lifecycle rules, no exceptions
+- Storage is **ephemeral** — hard deletion via Cloudflare R2 lifecycle rules, no exceptions
 - Transfers run at **full line speed** — no artificial throttling, even on the free tier
 
 ---
@@ -25,7 +25,7 @@ It is **not** a standard file host. It is a cryptographic pipeline:
 ### Two-Layer Cryptographic Stack
 
 **BLAKE3 — Internal Chunk Integrity**  
-Every file is split into 50MB blocks. Each block is fingerprinted using a BLAKE3 Merkle tree, computed client-side via a compiled WebAssembly module. If a network interruption occurs at 180GB into a transfer, the browser performs a rapid BLAKE3 tree-check against the Cloudflare Worker to identify exactly which chunks already exist in R2 — resuming in milliseconds without restarting.
+Every file is split into 50MB blocks. Each block is fingerprinted using a BLAKE3 Merkle tree, computed client-side via a compiled WebAssembly module. If a network interruption occurs mid-transfer, the browser performs a rapid BLAKE3 tree-check against the Cloudflare Worker to identify exactly which chunks already exist in R2 — resuming in milliseconds without restarting.
 
 BLAKE3 is used exclusively for **internal indexing and chunk verification**. It does not replace the Cashu blind signature scheme.
 
@@ -56,7 +56,7 @@ AES-GCM session keys are wrapped inside an **ML-KEM (Kyber)** post-quantum envel
 |-------|-----------|
 | Frontend | HTML5 / JavaScript Streams API / BLAKE3 WASM |
 | Backend | Cloudflare Workers (serverless, blind relay) |
-| Storage | Cloudflare R2 (zero egress fees, 5-day lifecycle) |
+| Storage | Cloudflare R2 (zero egress fees) |
 | Ledger | Supabase PostgreSQL (spent-token tracking only) |
 | Payments | Stripe (card / Apple Pay) · Lightning BOLT11 |
 | Encryption | AES-GCM 256-bit (client-side) · ML-KEM (PQC, Max tier) |
@@ -80,21 +80,12 @@ Frame.io is not benchmarked here because it serves a different purpose (collabor
 
 ## Tiers
 
-| Tier | Price | Cap | Features |
-|------|-------|-----|---------|
-| **Skint Tog** | Free | 6 GB per transfer | Unthrottled · 5-day deletion · Share links |
-| **Creative Premium** | £12/mo | 100 GB per transfer | NUT-11 contractor upload links · Email backup · Portfolio embed |
-| **Production Max** | £24/mo | 250 GB per transfer | BLAKE3 pause/resume · ML-KEM PQC key locks · P2SH identity-gated downloads |
-| **Enterprise** | Contact | Unlimited | White-label custom domain integration |
-
----
-
-## Economics (Cloudflare R2)
-
-Cloudflare charges ~£0.012/GB/month for storage. Egress is always free.
-
-- A Premium user (100GB cap, ~150GB average active) costs ~£2.18/month to service → **~82% margin**
-- A Max user (250GB cap, ~350GB average active) costs ~£4.76/month to service → **~80% margin**
+| Tier | Price | Cap | Link expiry |
+|------|-------|-----|-------------|
+| **Skint Tog** | Free | 4 GB per transfer | 5 days, no extension |
+| **Creative Premium** | £12/mo or £120/yr | 100 GB per transfer | User-set: 1 / 7 / 30 days |
+| **Production Max** | £24/mo or £240/yr | 250 GB per transfer | User-set: 1 / 7 / 30 / 90 days |
+| **Enterprise** | Contact | Unlimited | Custom |
 
 ---
 
@@ -113,7 +104,7 @@ Three reasons:
 `refueler-share` is one of three infrastructure pillars in the Refueler ecosystem:
 
 ```
-              [ refueler.io ] (Master Brand & Funnel)
+              [ refueler.io ] (Commerce Platform)
              /       |        \
             /        |         \
 [multi-core]         |      [share.refueler.io]
@@ -129,12 +120,12 @@ Three reasons:
 
 ## Status
 
-🔴 **Pre-build.** Architecture locked. Repository initialised.  
-Active development begins Q3 2026.
+🟡 **Active build — Session 2 in progress.**  
+Architecture locked. Supabase migration applied. Worker scaffold and frontend under construction.
 
 ---
 
 ## Licence
 
-MIT — open infrastructure, open source.  
+Apache 2.0 — open infrastructure, open source. The patent grant clause protects the novel BLAKE3 + Cashu blind signature combination.  
 The Cashu blind signature implementation within this repo is a closed-loop, non-monetary application. No external Cashu mint is used or connected.

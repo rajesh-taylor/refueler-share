@@ -1,0 +1,23 @@
+name = "refueler-share"
+main = "src/index.js"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "refueler-share-prod"
+preview_bucket_name = "refueler-share-dev"
+
+# Secrets (set via `wrangler secret put <NAME>`)
+# MINT_PRIVATE_KEY     — secp256k1 private key hex (32 bytes). Never logged. Never exposed.
+# TURNSTILE_SECRET_KEY — Cloudflare Turnstile secret key
+# SUPABASE_URL         — https://<project>.supabase.co
+# SUPABASE_SERVICE_KEY — service_role JWT (spent_tokens write)
+
+[vars]
+ENVIRONMENT = "production"
+
+# R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
+# Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
+# Rule 2: Expiration backstop — 92 days (90-day Production Max max + 2-day buffer)
