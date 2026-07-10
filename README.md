@@ -65,16 +65,70 @@ AES-GCM session keys are wrapped inside an **ML-KEM (Kyber)** post-quantum envel
 
 ## Speed Benchmarks
 
-On a standard 500 Mbps UK studio fibre line:
+*Pending A/B test results from `refueler-share-dev` bucket — to be published pre-Production Max launch.*  
+*Test protocol: 1GB / 10GB / 50GB / 100GB files across 500 Mbps fibre, 100 Mbps broadband, 30 Mbps 4G.*
 
-| Platform | Real-World Speed | Our Advantage |
-|----------|-----------------|---------------|
-| Smash (Free) | ~25 Mbps (artificially throttled) | **15–20× faster** |
-| WeTransfer (Paid) | ~85–160 Mbps (server-side rate limits) | **3–5× faster** |
-| Dropbox Transfer | ~380–430 Mbps (sequential server-side encryption) | **1.5–2× faster** |
-| **share.refueler.io** | **~480+ Mbps (full line saturation)** | Maximum |
+Directional benchmarks (500 Mbps UK studio fibre):
 
-Frame.io is not benchmarked here because it serves a different purpose (collaborative review, proxy transcoding). `refueler-share` deliberately does zero transcoding — raw BLAKE3-hashed encrypted data passes directly to R2 at full fibre saturation.
+| Platform | Real-World Speed | Notes |
+|----------|-----------------|-------|
+| Smash (Free) | ~25 Mbps | Artificially throttled above 2 GB |
+| WeTransfer (Paid) | ~85–160 Mbps | Server-side rate limits |
+| SwissTransfer | ~200–350 Mbps | Server-side AES — Infomaniak holds your key |
+| PrivCloud | ~180–280 Mbps | Client-side AES-256, 2 GB free cap |
+| **share.refueler.io** | **~480+ Mbps** | Full line saturation, client-side encryption |
+
+---
+
+## How We Compare
+
+### The honest competitive picture
+
+| Service | Free Cap | Retention | Zero-Knowledge | Download Limit | Business Model |
+|---------|----------|-----------|----------------|----------------|----------------|
+| WeTransfer | 2 GB | 7 days | ✗ — server reads files | None stated | Ads + data |
+| Smash | Unlimited\* | 7 days | ✗ | None stated | Paid speed tiers |
+| TransferNow | 5 GB | 7 days | ✗ | None stated | Paid tiers |
+| **SwissTransfer** | **50 GB** | **30 days** | **✗ — Infomaniak holds the key** | **250 downloads** | **Loss leader for hosting upsell** |
+| PrivCloud | 2 GB | — | ✓ (client-side AES) | None stated | Freemium |
+| **share.refueler.io** | **4 GB** | **5 days** | **✓ — server is structurally blind** | **None** | **Lightning + Stripe** |
+
+\*Smash throttles transfers above 2 GB on the free tier to ~25 Mbps.
+
+### On SwissTransfer's 50 GB free tier
+
+SwissTransfer is run by Infomaniak, a Swiss cloud hosting company with 8.28 million transfers per month (roughly 3 per second). They offer 50 GB free deliberately — it is their marketing budget, not a file transfer business. The model: handle hundreds of thousands of transfers daily to convert a fraction of users into paid Infomaniak cloud hosting customers.
+
+**The structural problem:** SwissTransfer encrypts files on Infomaniak's servers. The encryption key is generated server-side and held by Infomaniak. This means:
+
+- Infomaniak can read every file you send
+- A court order, data breach, or insider threat exposes your content
+- Their privacy claim is jurisdictional (Swiss law), not cryptographic
+
+SwissTransfer also caps downloads at 250 per link — a hard operational limit for anyone distributing to a wider audience.
+
+We are not competing with SwissTransfer's 50 GB free tier. That figure is subsidised by an unrelated hosting business and carries a privacy model that undermines the headline claim. Our 4 GB free tier is fully zero-knowledge — the AES-256 key never leaves your browser, and our infrastructure is structurally incapable of decrypting your files regardless of jurisdiction or legal compulsion.
+
+### On PrivCloud
+
+PrivCloud are the closest ideological competitors — client-side AES-256, no account required, open source. Respect to them for building correctly.
+
+Their constraints: 2 GB free cap, French hosting jurisdiction (GDPR-compliant, but a legal surface area exists), no Lightning payment option, no BLAKE3 chunk integrity, no anonymous credential system.
+
+Our 4 GB free tier beats their 2 GB. Our blind signature auth means even the act of uploading is uncorrelated with identity. And for users who want to pay without creating a financial paper trail, Lightning is available.
+
+### Why the free tier is 4 GB, not more
+
+4 GB is a deliberate choice, not a limitation. It covers:
+
+- ~800 RAW files from a Canon R5 or Sony A7 series shoot
+- A full 4K ProRes clip up to approximately 12 minutes at 422 HQ
+- A complete audio master session with stems
+- An uncompressed 4K DCP package for a short film
+
+The Skint Tog's actual delivery job fits inside 4 GB. Users who need 50 GB of free storage are not users who need zero-knowledge encryption — they are users who need a loss leader, and SwissTransfer serves them correctly.
+
+Our 100 GB Creative Premium tier (£12/mo) is the answer for users with larger regular transfers. At that price point against SwissTransfer's free 50 GB, the value proposition is not size — it is that your client's confidential brief, your unreleased footage, or your legal document cannot be read by anyone other than the intended recipient, regardless of what happens to our infrastructure.
 
 ---
 
@@ -87,15 +141,7 @@ Frame.io is not benchmarked here because it serves a different purpose (collabor
 | **Production Max** | £24/mo or £240/yr | 250 GB per transfer | User-set: 1 / 7 / 30 / 90 days |
 | **Enterprise** | Contact | Unlimited | Custom |
 
----
-
-## Why Not Just Use WeTransfer?
-
-Three reasons:
-
-1. **Speed** — WeTransfer enforces browser-session rate limits to keep legacy servers alive. We don't have a legacy server.
-2. **Privacy** — WeTransfer can read your files. Our Cloudflare Worker receives and stores encrypted noise it cannot interpret.
-3. **Business model alignment** — WeTransfer sells your data behaviour. We sell upload capacity, settled instantly via Lightning.
+Yearly pricing = 10 months. Two months free.
 
 ---
 
@@ -120,8 +166,9 @@ Three reasons:
 
 ## Status
 
-🟡 **Active build — Session 2 in progress.**  
-Architecture locked. Supabase migration applied. Worker scaffold and frontend under construction.
+🟢 **Session 2 complete — commit `4152d29`.**  
+Worker scaffold, Supabase migration, BLAKE3 WASM integration, and frontend built.  
+Session 3: NUT-11 P2SH download gating, payment integration, domain routing.
 
 ---
 
