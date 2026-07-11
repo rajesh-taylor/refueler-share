@@ -14,7 +14,7 @@
 It is **not** a standard file host. It is a cryptographic pipeline:
 
 - Files are encrypted **in the browser** before a single byte leaves your machine
-- The server is **completely blind** — it cannot read your files or link your identity to your uploads
+- The server is **architected to be blind** — reading your files is not technically possible for us, regardless of policy, jurisdiction, or legal compulsion
 - Storage is **ephemeral** — hard deletion via Cloudflare R2 lifecycle rules, no exceptions
 - Transfers run at **full line speed** — no artificial throttling, even on the free tier
 
@@ -32,7 +32,7 @@ BLAKE3 is used exclusively for **internal indexing and chunk verification**. It 
 **Cashu Blind Signatures — Anonymous Upload Authentication**  
 Access tokens are issued using the cryptographic primitive underlying the Cashu protocol — specifically the blind signature scheme (NUT-00). The server signs a blinded upload credential without ever learning the token's serial number. The client presents the unblinded proof to the Cloudflare Worker to authorise a transfer.
 
-This is not a monetary use of Cashu. There is no external mint. The blind signature primitive is repurposed as a **zero-knowledge anonymous credential system** for upload access — keeping the server's ledger completely unable to link a user identity to a specific file transfer.
+This is not a monetary use of Cashu. There is no external mint. The blind signature primitive is repurposed as a **zero-knowledge anonymous credential system** for upload access — keeping the server's ledger structurally unable to link a user identity to a specific file transfer.
 
 > **This combination — BLAKE3 chunk trees + Cashu blind sigs as anonymous auth — has not been publicly implemented before.**
 
@@ -66,13 +66,14 @@ AES-GCM session keys are wrapped inside an **ML-KEM (Kyber)** post-quantum envel
 ## Speed Benchmarks
 
 *Pending A/B test results from `refueler-share-dev` bucket — to be published pre-Production Max launch.*  
-*Test protocol: 1GB / 10GB / 50GB / 100GB files across 500 Mbps fibre, 100 Mbps broadband, 30 Mbps 4G.*
+*Test protocol: 1GB / 10GB / 50GB / 100GB files across 500 Mbps fibre, 100 Mbps broadband, 30 Mbps 4G.*  
+*Metric: CIT — Cryptographic Integrity Throughput (verified GB/s, BLAKE3-confirmed end-to-end).*
 
 Directional benchmarks (500 Mbps UK studio fibre):
 
 | Platform | Real-World Speed | Notes |
 |----------|-----------------|-------|
-| Smash (Free) | ~25 Mbps | Artificially throttled above 2 GB |
+| Smash (Free) | ~25 Mbps | Throttled above 2 GB on free tier |
 | WeTransfer (Paid) | ~85–160 Mbps | Server-side rate limits |
 | SwissTransfer | ~200–350 Mbps | Server-side AES — Infomaniak holds your key |
 | PrivCloud | ~180–280 Mbps | Client-side AES-256, 2 GB free cap |
@@ -91,44 +92,45 @@ Directional benchmarks (500 Mbps UK studio fibre):
 | TransferNow | 5 GB | 7 days | ✗ | None stated | Paid tiers |
 | **SwissTransfer** | **50 GB** | **30 days** | **✗ — Infomaniak holds the key** | **250 downloads** | **Loss leader for hosting upsell** |
 | PrivCloud | 2 GB | — | ✓ (client-side AES) | None stated | Freemium |
-| **share.refueler.io** | **4 GB** | **5 days** | **✓ — server is structurally blind** | **None** | **Lightning + Stripe** |
+| **share.refueler.io** | **4 GB** | **5 days** | **✓ — reading your files is not technically possible for us** | **None** | **Lightning + Stripe** |
 
-\*Smash throttles transfers above 2 GB on the free tier to ~25 Mbps.
+\*Smash throttles transfers above 2 GB on the free tier to approximately 25 Mbps.
+
+### Why "we can't read your files" means something different here
+
+Most privacy services make a policy promise: *we choose not to read your files*. Policy promises can be changed, compelled by courts, or quietly abandoned after an acquisition.
+
+We make an architectural statement: **reading your files is not technically possible for us.**
+
+Here is why that claim holds:
+
+The AES-256 key is generated inside your browser using the Web Crypto API. It is placed in the URL fragment — the part after the `#` symbol. Browsers are specified by RFC 3986 never to transmit the fragment to a server. It does not appear in HTTP requests. It does not appear in our Worker logs. It does not exist anywhere in our infrastructure.
+
+Our Cloudflare Worker receives encrypted bytes and stores them in R2. It has no key. It cannot decrypt what it stores. A court order compelling us to hand over file contents would be complied with immediately — and yield nothing readable. A data breach of our R2 bucket exposes only ciphertext.
+
+This is not a policy choice we made. It is the consequence of how the code is written. [Read more about how we structured the architecture →](https://refueler.io/editorial/)
+
+### We also cannot "double-dip"
+
+Most free file transfer services are not file transfer businesses. They are data businesses that use file transfer as an acquisition channel. Your upload behaviour, your recipient's download behaviour, your file metadata, your IP, your device fingerprint — all of it is extractable and sellable to advertisers and data brokers.
+
+We cannot do this. Not because we have chosen not to — because we have no data to extract. We do not know who you are. We do not know what you transferred. We do not know who received it. The anonymous credential system is designed specifically so that this information does not exist on our side in any recoverable form.
+
+One revenue stream. Upload capacity, paid directly via Lightning or card. No behavioural inventory to monetise. [On why this is a better business model →](https://refueler.io/editorial/)
 
 ### On SwissTransfer's 50 GB free tier
 
-SwissTransfer is run by Infomaniak, a Swiss cloud hosting company with 8.28 million transfers per month (roughly 3 per second). They offer 50 GB free deliberately — it is their marketing budget, not a file transfer business. The model: handle hundreds of thousands of transfers daily to convert a fraction of users into paid Infomaniak cloud hosting customers.
+SwissTransfer is operated by Infomaniak, a Swiss cloud hosting company. They handle 8.28 million transfers per month — roughly 3 every second — and offer 50 GB free deliberately. It is their marketing budget, not a file transfer business. The model: generate brand exposure through massive transfer volume and convert a fraction of users into paid Infomaniak hosting customers.
 
-**The structural problem:** SwissTransfer encrypts files on Infomaniak's servers. The encryption key is generated server-side and held by Infomaniak. This means:
+The structural problem: SwissTransfer encrypts files on Infomaniak's servers. The encryption key is generated server-side and held by Infomaniak. This means Infomaniak can read every file you send, and their privacy guarantee is a legal one (Swiss data protection law) rather than a cryptographic one. SwissTransfer also caps downloads at 250 per link.
 
-- Infomaniak can read every file you send
-- A court order, data breach, or insider threat exposes your content
-- Their privacy claim is jurisdictional (Swiss law), not cryptographic
-
-SwissTransfer also caps downloads at 250 per link — a hard operational limit for anyone distributing to a wider audience.
-
-We are not competing with SwissTransfer's 50 GB free tier. That figure is subsidised by an unrelated hosting business and carries a privacy model that undermines the headline claim. Our 4 GB free tier is fully zero-knowledge — the AES-256 key never leaves your browser, and our infrastructure is structurally incapable of decrypting your files regardless of jurisdiction or legal compulsion.
+We are not competing with their 50 GB figure. That number is subsidised by an unrelated hosting business and built on a privacy model that doesn't survive a serious threat. Our 4 GB free tier is architecturally zero-knowledge. No subsidy required.
 
 ### On PrivCloud
 
-PrivCloud are the closest ideological competitors — client-side AES-256, no account required, open source. Respect to them for building correctly.
+PrivCloud are technically correct — client-side AES-256, open source, no account required for small transfers. The closest ideological overlap.
 
-Their constraints: 2 GB free cap, French hosting jurisdiction (GDPR-compliant, but a legal surface area exists), no Lightning payment option, no BLAKE3 chunk integrity, no anonymous credential system.
-
-Our 4 GB free tier beats their 2 GB. Our blind signature auth means even the act of uploading is uncorrelated with identity. And for users who want to pay without creating a financial paper trail, Lightning is available.
-
-### Why the free tier is 4 GB, not more
-
-4 GB is a deliberate choice, not a limitation. It covers:
-
-- ~800 RAW files from a Canon R5 or Sony A7 series shoot
-- A full 4K ProRes clip up to approximately 12 minutes at 422 HQ
-- A complete audio master session with stems
-- An uncompressed 4K DCP package for a short film
-
-The Skint Tog's actual delivery job fits inside 4 GB. Users who need 50 GB of free storage are not users who need zero-knowledge encryption — they are users who need a loss leader, and SwissTransfer serves them correctly.
-
-Our 100 GB Creative Premium tier (£12/mo) is the answer for users with larger regular transfers. At that price point against SwissTransfer's free 50 GB, the value proposition is not size — it is that your client's confidential brief, your unreleased footage, or your legal document cannot be read by anyone other than the intended recipient, regardless of what happens to our infrastructure.
+Their constraints: 2 GB free cap (ours is 4 GB), French legal jurisdiction as the primary privacy guarantee rather than cryptographic architecture, no Lightning payment option, no BLAKE3 chunk integrity verification, no anonymous credential system (an account or session exists that can be correlated with a transfer).
 
 ---
 
@@ -168,7 +170,7 @@ Yearly pricing = 10 months. Two months free.
 
 🟢 **Session 2 complete — commit `4152d29`.**  
 Worker scaffold, Supabase migration, BLAKE3 WASM integration, and frontend built.  
-Session 3: NUT-11 P2SH download gating, payment integration, domain routing.
+Session 3: NUT-11 P2SH download gating, payment integration, domain routing, Paper-default frontend.
 
 ---
 
