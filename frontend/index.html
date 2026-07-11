@@ -1,377 +1,1086 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="paper">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>refueler share</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Satoshi:wght@400;600;700&family=DM+Sans:wght@300;400;600&family=Source+Serif+4:wght@300&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --carbon: #1A1A1A; --paper: #F5F0E8; --gold: #C8A96E; --gold-dark: #9A7040;
-      --warn: #C8943A; --danger: #E05252;
-      --font-head: 'Satoshi', sans-serif; --font-body: 'DM Sans', sans-serif;
-      --font-serif: 'Source Serif 4', serif; --font-mono: 'IBM Plex Mono', monospace;
-    }
-    /* Paper theme (DEFAULT) */
-    :root, [data-theme="paper"] {
-      --bg: #F5F0E8; --bg-raised: #EDE8DF; --bg-sunken: #E5DFD5;
-      --border: #CCC7BE; --border-accent: #9A7040;
-      --text-primary: #1A1A1A; --text-secondary: #4A4540; --text-muted: #7A7570;
-      --gold-ui: #9A7040; --gold-ui-bg: rgba(154,112,64,0.08);
-      --drop-icon: #9A7040; --progress-track: #D5D0C8;
-    }
-    /* Carbon theme (TOGGLE) */
-    [data-theme="carbon"] {
-      --bg: #1A1A1A; --bg-raised: #2A2A2A; --bg-sunken: #3A3A3A;
-      --border: #3A3A3A; --border-accent: #C8A96E;
-      --text-primary: #F5F0E8; --text-secondary: #A8A49C; --text-muted: #686460;
-      --gold-ui: #C8A96E; --gold-ui-bg: rgba(200,169,110,0.06);
-      --drop-icon: #C8A96E; --progress-track: #3A3A3A;
-    }
-    html, body {
-      height: 100%; background: var(--bg); color: var(--text-primary);
-      font-family: var(--font-body); font-weight: 300; font-size: 15px; line-height: 1.6;
-      -webkit-font-smoothing: antialiased; transition: background 0.2s, color 0.2s;
-    }
-    .shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; max-width: 720px; margin: 0 auto; padding: 0 24px; }
-    header { padding: 32px 0 24px; display: flex; align-items: center; justify-content: space-between; }
-    .logo { font-family: var(--font-head); font-weight: 600; font-size: 17px; letter-spacing: -0.02em; color: var(--text-primary); text-decoration: none; }
-    .logo span { color: var(--gold-ui); }
-    .header-right { display: flex; align-items: center; gap: 16px; }
-    .tier-badge { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; }
-    .theme-toggle { display: flex; align-items: center; gap: 7px; cursor: pointer; background: none; border: 1px solid var(--border); border-radius: 20px; padding: 5px 10px 5px 8px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; transition: border-color 0.15s, color 0.15s; }
-    .theme-toggle:hover { border-color: var(--gold-ui); color: var(--gold-ui); }
-    .theme-toggle-pip { width: 28px; height: 15px; background: var(--border); border-radius: 10px; position: relative; transition: background 0.2s; flex-shrink: 0; }
-    .theme-toggle-pip::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; background: var(--text-muted); border-radius: 50%; transition: transform 0.2s, background 0.2s; }
-    [data-theme="carbon"] .theme-toggle-pip { background: var(--gold-ui); }
-    [data-theme="carbon"] .theme-toggle-pip::after { transform: translateX(13px); background: var(--carbon); }
-    .info-card { background: var(--bg-raised); border: 1px solid var(--border); border-left: 3px solid var(--gold-ui); border-radius: 6px; padding: 14px 16px; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 12px; }
-    .info-card.dismissed { display: none; }
-    .info-card p { font-family: var(--font-serif); font-weight: 300; font-size: 14px; color: var(--text-secondary); flex: 1; line-height: 1.65; }
-    .info-card strong { font-family: var(--font-body); font-weight: 600; color: var(--text-primary); }
-    .info-card-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; flex-shrink: 0; transition: color 0.15s; }
-    .info-card-close:hover { color: var(--text-primary); }
-    .drop-zone { border: 1.5px dashed var(--border); border-radius: 10px; padding: 64px 32px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; }
-    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--gold-ui); background: var(--gold-ui-bg); }
-    .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-    .drop-icon { width: 48px; height: 48px; margin: 0 auto 20px; opacity: 0.5; }
-    .drop-label { font-family: var(--font-head); font-weight: 600; font-size: 20px; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 8px; }
-    .drop-sub { font-size: 14px; color: var(--text-secondary); }
-    .drop-sub em { font-style: normal; color: var(--gold-ui); font-family: var(--font-mono); font-size: 13px; }
-    .cap-warning { display: none; background: rgba(224,82,82,0.07); border: 1px solid rgba(224,82,82,0.25); border-radius: 6px; padding: 12px 16px; margin-top: 16px; font-size: 14px; color: #B03030; }
-    [data-theme="carbon"] .cap-warning { color: var(--danger); }
-    .cap-warning.visible { display: block; }
-    .upgrade-cta { color: var(--gold-ui); text-decoration: underline; cursor: pointer; font-weight: 600; }
-    .expiry-section { display: none; margin-top: 20px; }
-    .expiry-section.visible { display: block; }
-    .expiry-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
-    .expiry-options { display: flex; gap: 10px; flex-wrap: wrap; }
-    .expiry-option { border: 1.5px solid var(--border); border-radius: 6px; padding: 10px 18px; background: none; color: var(--text-secondary); font-family: var(--font-body); font-size: 14px; cursor: pointer; transition: all 0.15s; }
-    .expiry-option:hover { border-color: var(--gold-ui); color: var(--text-primary); }
-    .expiry-option.selected { border-color: var(--gold-ui); color: var(--gold-ui); background: var(--gold-ui-bg); }
-    .expiry-immutable { font-size: 12px; color: var(--text-muted); margin-top: 10px; font-weight: 300; }
-    .upload-btn { display: none; width: 100%; margin-top: 24px; padding: 16px; background: var(--gold-ui); color: var(--paper); font-family: var(--font-head); font-weight: 600; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; letter-spacing: -0.01em; transition: opacity 0.15s, transform 0.1s; }
-    [data-theme="carbon"] .upload-btn { color: var(--carbon); }
-    .upload-btn:hover { opacity: 0.85; }
-    .upload-btn:active { transform: scale(0.99); }
-    .upload-btn.visible { display: block; }
-    .upload-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-    .progress-section { display: none; margin-top: 32px; }
-    .progress-section.visible { display: block; }
-    .progress-stage { font-family: var(--font-mono); font-size: 12px; color: var(--gold-ui); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 12px; }
-    .progress-bar-track { height: 2px; background: var(--progress-track); border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
-    .progress-bar-fill { height: 100%; background: var(--gold-ui); border-radius: 2px; width: 0%; transition: width 0.3s ease; }
-    .progress-detail { font-size: 13px; color: var(--text-muted); display: flex; justify-content: space-between; }
-    .bytes { font-family: var(--font-mono); font-size: 12px; }
-    .share-panel { display: none; margin-top: 32px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; padding: 28px; }
-    .share-panel.visible { display: block; }
-    .share-panel h2 { font-family: var(--font-head); font-weight: 600; font-size: 18px; letter-spacing: -0.02em; margin-bottom: 6px; }
-    .share-panel-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 24px; font-family: var(--font-serif); font-weight: 300; line-height: 1.65; }
-    .share-link-box { display: flex; align-items: center; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-    .share-link-text { flex: 1; padding: 12px 14px; font-family: var(--font-mono); font-size: 12px; color: var(--gold-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all; }
-    .copy-btn { padding: 12px 16px; background: none; border: none; border-left: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; font-size: 13px; font-family: var(--font-body); transition: color 0.15s; }
-    .copy-btn:hover { color: var(--text-primary); }
-    .copy-btn.copied { color: var(--gold-ui); }
-    .share-meta { display: flex; gap: 24px; margin-top: 16px; font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }
-    .share-meta strong { color: var(--text-secondary); font-weight: 400; }
-    .qr-section { margin-top: 24px; text-align: center; }
-    .qr-label { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; font-family: var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
-    #qr-canvas { display: inline-block; padding: 12px; background: var(--paper); border-radius: 6px; border: 1px solid var(--border); }
-    .privacy-note { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); font-family: var(--font-serif); font-weight: 300; line-height: 1.7; }
-    .privacy-note strong { font-family: var(--font-body); font-weight: 600; color: var(--text-secondary); }
-    .cf-turnstile { visibility: hidden; height: 0; }
-    footer { padding: 32px 0 24px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 48px; }
-    footer a { color: var(--text-muted); text-decoration: none; transition: color 0.15s; }
-    footer a:hover { color: var(--gold-ui); }
-    .footer-links { display: flex; gap: 20px; }
-  </style>
-</head>
-<body>
-<div class="shell">
-  <header>
-    <a class="logo" href="https://refueler.io">refueler <span>share</span></a>
-    <div class="header-right">
-      <span class="tier-badge" id="tier-badge">skint tog · free</span>
-      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
-        <span class="theme-toggle-pip"></span>
-        <span id="theme-label">Dark</span>
-      </button>
-    </div>
-  </header>
-  <main>
-    <div class="info-card" id="info-card">
-      <p>
-        <strong>No account. No email. No history.</strong><br>
-        Save the link before you share it — it's the only way to access the download.
-      </p>
-      <button class="info-card-close" id="info-card-close" aria-label="Dismiss">×</button>
-    </div>
-    <div class="drop-zone" id="drop-zone">
-      <input type="file" id="file-input" aria-label="Select file to upload">
-      <svg class="drop-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M24 8v24M14 18l10-10 10 10" stroke="var(--drop-icon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M8 36h32" stroke="var(--drop-icon)" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      <p class="drop-label">Drop your file here</p>
-      <p class="drop-sub">or click to browse &nbsp;·&nbsp; up to <em id="cap-label">4 GB</em> · link valid <em>5 days</em></p>
-    </div>
-    <div class="cap-warning" id="cap-warning">
-      <strong>File too large for this tier.</strong><br>
-      <span id="cap-warning-detail"></span><br>
-      <span class="upgrade-cta">Upgrade for up to 100 GB →</span>
-    </div>
-    <div class="expiry-section" id="expiry-section">
-      <p class="expiry-label">How long should this link stay active?</p>
-      <div class="expiry-options" id="expiry-options"></div>
-      <p class="expiry-immutable">This cannot be changed after the link is created.</p>
-    </div>
-    <div class="cf-turnstile" data-sitekey="0x4AAAAAAA_REPLACE_WITH_REAL_SITEKEY" data-callback="onTurnstileSuccess" data-size="invisible" id="turnstile-widget"></div>
-    <button class="upload-btn" id="upload-btn" disabled>Encrypt &amp; upload</button>
-    <div class="progress-section" id="progress-section">
-      <div class="progress-stage" id="progress-stage">Preparing…</div>
-      <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar"></div></div>
-      <div class="progress-detail">
-        <span id="progress-label"></span>
-        <span class="bytes" id="progress-bytes"></span>
-      </div>
-    </div>
-    <div class="share-panel" id="share-panel">
-      <h2>Ready to share</h2>
-      <p class="share-panel-sub">Copy the link below. Anyone with it can download the file. The decryption key is embedded in the link — we never see it.</p>
-      <div class="share-link-box">
-        <span class="share-link-text" id="share-link-text"></span>
-        <button class="copy-btn" id="copy-btn">Copy</button>
-      </div>
-      <div class="share-meta">
-        <span>SIZE <strong id="meta-size">—</strong></span>
-        <span>EXPIRES <strong id="meta-expiry">—</strong></span>
-        <span>CHUNKS <strong id="meta-chunks">—</strong></span>
-      </div>
-      <div class="qr-section">
-        <p class="qr-label">Scan to share</p>
-        <div id="qr-canvas"></div>
-      </div>
-      <p class="privacy-note">
-        <strong>Lost this link?</strong> The file is inaccessible — there is no recovery path.
-        No account was created. No email was collected. No server log connects your identity to this transfer.
-        The AES key exists only in the link you hold.
-      </p>
-    </div>
-  </main>
-  <footer>
-    <span>© refueler · Apache 2.0</span>
-    <div class="footer-links">
-      <a href="https://refueler.io">refueler.io</a>
-      <a href="https://refueler.io/privacy">Privacy</a>
-      <a href="https://github.com/rajesh-taylor/refueler-share">Source</a>
-    </div>
-  </footer>
-</div>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>refueler share — encrypted file transfer</title>
+<meta name="description" content="Anonymous, encrypted file transfer. No account. No email. No history." />
+
+<!-- Fonts — matches refueler.io canonical -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+<!-- Theme: applied before first paint to avoid flash -->
 <script>
-  const html = document.documentElement;
-  const toggleBtn = document.getElementById('theme-toggle');
-  const themeLabel = document.getElementById('theme-label');
-  const saved = sessionStorage.getItem('rs_theme');
-  if (saved === 'carbon') { html.dataset.theme = 'carbon'; themeLabel.textContent = 'Light'; }
-  toggleBtn.addEventListener('click', () => {
-    const next = html.dataset.theme === 'paper' ? 'carbon' : 'paper';
-    html.dataset.theme = next;
-    themeLabel.textContent = next === 'carbon' ? 'Light' : 'Dark';
-    sessionStorage.setItem('rs_theme', next);
-  });
+  const THEME_KEY = 'rfTheme';
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    const pill = document.getElementById('themePill');
+    if (theme === 'carbon') {
+      root.classList.add('carbon-mode');
+      root.setAttribute('data-theme', 'carbon');
+      if (pill) pill.textContent = 'Carbon / Paper';
+    } else {
+      root.classList.remove('carbon-mode');
+      root.removeAttribute('data-theme');
+      if (pill) pill.textContent = 'Paper / Carbon';
+    }
+  }
+  function toggleTheme() {
+    const current = localStorage.getItem(THEME_KEY) || 'paper';
+    const next = current === 'paper' ? 'carbon' : 'paper';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  }
+  // Apply immediately — share defaults to paper (same as refueler.io)
+  (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
 </script>
+
+<style>
+  /* ── Brand tokens — canonical match to refueler.io ─────────────── */
+  :root {
+    --carbon:          #1A1A1A;
+    --paper:           #F5F0E8;
+    --gold:            #C8A96E;
+    --gold-dim:        #9E8050;
+
+    /* Paper mode (default) */
+    --bg:              var(--paper);
+    --fg:              var(--carbon);
+    --fg-muted:        #5A5550;
+    --fg-subtle:       #9A9590;
+    --border:          rgba(26,26,26,0.12);
+    --nav-bg:          rgba(245,240,232,0.88);
+    --card-bg:         rgba(26,26,26,0.04);
+    --card-border:     rgba(26,26,26,0.08);
+    --input-bg:        #FFFFFF;
+    --input-border:    rgba(26,26,26,0.18);
+    --drop-border:     rgba(26,26,26,0.20);
+    --drop-hover-bg:   rgba(26,26,26,0.03);
+    --tag-bg:          rgba(26,26,26,0.07);
+    --link-box-bg:     rgba(26,26,26,0.05);
+
+    --radius:          6px;
+    --mono:            'IBM Plex Mono', monospace;
+    --sans:            'DM Sans', sans-serif;
+    --display:         'Satoshi', 'DM Sans', sans-serif;
+  }
+
+  /* Carbon override — canonical match to refueler.io */
+  html.carbon-mode {
+    --bg:              var(--carbon);
+    --fg:              var(--paper);
+    --fg-muted:        #B0AAA2;
+    --fg-subtle:       #6A6560;
+    --border:          rgba(245,240,232,0.10);
+    --nav-bg:          rgba(26,26,26,0.90);
+    --card-bg:         rgba(245,240,232,0.04);
+    --card-border:     rgba(245,240,232,0.08);
+    --input-bg:        #252525;
+    --input-border:    rgba(245,240,232,0.18);
+    --drop-border:     rgba(245,240,232,0.22);
+    --drop-hover-bg:   rgba(245,240,232,0.03);
+    --tag-bg:          rgba(245,240,232,0.08);
+    --link-box-bg:     rgba(245,240,232,0.05);
+  }
+
+  /* ── Reset ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    min-height: 100%;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.35s ease, color 0.25s ease;
+  }
+
+  /* ── Site header — canonical spec from refueler.io ──────────────── */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--nav-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 clamp(1.25rem, 4vw, 3rem);
+    transition: background 0.35s ease, border-color 0.25s ease;
+  }
+  .header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: 0.06em;
+    color: var(--fg);
+    text-decoration: none;
+    white-space: nowrap;
+    text-transform: none;
+  }
+  .wordmark-divider {
+    font-weight: 300;
+    opacity: 0.3;
+    margin: 0 0.5rem;
+  }
+  .wordmark-section {
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    opacity: 0.55;
+    text-transform: none;
+  }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+  .site-nav a {
+    font-family: var(--display);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .site-nav a:hover { color: var(--fg); }
+  .site-nav a.active { color: var(--fg); }
+  /* Theme pill — border only, no fill, no gold on any state */
+  .theme-pill {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 0.35rem 0.85rem;
+    background: transparent;
+    color: var(--fg-muted);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .theme-pill:hover {
+    border-color: var(--fg-muted);
+    color: var(--fg);
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  .shell {
+    min-height: calc(100vh - 56px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px 80px;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── Cards ───────────────────────────────────────────────────────── */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+
+  /* ── Info card ───────────────────────────────────────────────────── */
+  .info-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+  .info-card .info-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .info-card-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg-subtle);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 0 0 8px;
+    flex-shrink: 0;
+  }
+  .info-card-dismiss:hover { color: var(--fg); }
+
+  /* ── Drop zone ───────────────────────────────────────────────────── */
+  .drop-zone {
+    background: var(--card-bg);
+    border: 1.5px dashed var(--drop-border);
+    border-radius: var(--radius);
+    padding: 56px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: var(--fg-muted);
+    background: var(--drop-hover-bg);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .drop-icon {
+    font-size: 28px;
+    margin-bottom: 14px;
+    opacity: 0.35;
+    line-height: 1;
+    color: var(--fg);
+  }
+  .drop-label {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 16px;
+    color: var(--fg);
+    margin-bottom: 6px;
+  }
+  .drop-sub { font-size: 13px; color: var(--fg-muted); }
+
+  /* ── Tags ────────────────────────────────────────────────────────── */
+  .tag {
+    display: inline-block;
+    background: var(--tag-bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    padding: 10px 20px;
+    transition: opacity 0.2s, background 0.2s;
+  }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  /* Primary: carbon bg / paper text (Paper mode) — inverts in Carbon */
+  .btn-primary {
+    background: var(--fg);
+    color: var(--bg);
+  }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+  /* Ghost: border only */
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--fg-muted);
+    color: var(--fg);
+  }
+  .btn-full { width: 100%; }
+
+  /* ── Inputs ──────────────────────────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--fg-subtle);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  input[type="text"],
+  input[type="password"] {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus,
+  input[type="password"]:focus { border-color: var(--fg-muted); }
+
+  /* ── Toggle switch ───────────────────────────────────────────────── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .toggle-label { font-size: 13px; color: var(--fg); }
+  .toggle-desc { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 38px; height: 21px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: var(--tag-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 21px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .slider::before {
+    content: '';
+    position: absolute;
+    width: 15px; height: 15px;
+    left: 2px; top: 2px;
+    background: var(--fg-subtle);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .switch input:checked + .slider { background: var(--fg); border-color: var(--fg); }
+  .switch input:checked + .slider::before { transform: translateX(17px); background: var(--bg); }
+
+  /* ── Progress ────────────────────────────────────────────────────── */
+  .progress-bar-wrap {
+    background: var(--card-border);
+    border-radius: 2px;
+    height: 2px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--fg);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .progress-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    margin-top: 6px;
+  }
+
+  /* ── Share link panel ────────────────────────────────────────────── */
+  .link-box {
+    background: var(--link-box-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 12px 14px;
+    word-break: break-all;
+    color: var(--fg-muted);
+    margin-top: 10px;
+    line-height: 1.6;
+  }
+  #qr-wrap { margin-top: 16px; display: flex; justify-content: center; }
+  #qr-wrap canvas, #qr-wrap img { border-radius: 4px; }
+
+  /* ── Passphrase unlock (download) ────────────────────────────────── */
+  #unlock-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    gap: 20px;
+    text-align: center;
+  }
+  .unlock-icon { font-size: 40px; opacity: 0.4; }
+  .unlock-title {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+  .unlock-sub { font-size: 13px; color: var(--fg-muted); max-width: 320px; line-height: 1.6; }
+  #unlock-error { color: #C0392B; font-size: 12px; min-height: 16px; font-family: var(--mono); }
+
+  /* ── Utility ─────────────────────────────────────────────────────── */
+  .muted      { color: var(--fg-muted); }
+  .subtle     { color: var(--fg-subtle); }
+  .mono       { font-family: var(--mono); }
+  .small      { font-size: 12px; }
+  .cap-warn   { color: #D97706; font-size: 13px; line-height: 1.5; }
+  .success-txt{ color: #27AE60; }
+  .danger-txt { color: #C0392B; }
+  .hidden     { display: none !important; }
+  .flex-row   { display: flex; align-items: center; gap: 10px; }
+  .mt4        { margin-top: 4px; }
+  .mt8        { margin-top: 8px; }
+  .mt12       { margin-top: 12px; }
+  .mt16       { margin-top: 16px; }
+
+  /* ── Site footer ─────────────────────────────────────────────────── */
+  .site-footer {
+    border-top: 1px solid var(--border);
+    padding: 20px clamp(1.25rem, 4vw, 3rem);
+    margin-top: auto;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .footer-note {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-subtle);
+    font-family: var(--display);
+  }
+  .footer-links { display: flex; gap: 1.5rem; }
+  .footer-links a {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--fg); }
+
+  /* ── Responsive ──────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .shell { padding: 32px 16px 60px; }
+    .drop-zone { padding: 40px 16px; }
+    .site-nav { gap: 1.25rem; }
+    .site-nav a:not(:last-of-type) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress-bar, .btn, .slider, .slider::before,
+    html, body { transition: none; }
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ── Site header — canonical nav ──────────────────────────────────── -->
+<header class="site-header">
+  <div class="header-inner">
+    <a href="https://refueler.io/" class="wordmark">
+      Refueler
+      <span class="wordmark-divider">/</span>
+      <span class="wordmark-section">Share</span>
+    </a>
+    <nav class="site-nav">
+      <a href="https://refueler.io/">App</a>
+      <a href="https://refueler.io/editorial/">Editorial</a>
+      <a href="https://refueler.io/privacy/">Privacy</a>
+      <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ── Main shell ────────────────────────────────────────────────────── -->
+<div class="shell">
+  <main id="app">
+
+    <!-- Info card -->
+    <div class="info-card" id="info-card">
+      <span class="info-icon">🔒</span>
+      <span>No account. No email. No history. Files are encrypted in your browser before upload. Only you hold the key.</span>
+      <button class="info-card-dismiss" id="dismiss-info" aria-label="Dismiss">✕</button>
+    </div>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" aria-label="Select file" />
+      <div class="drop-icon">↑</div>
+      <div class="drop-label">Drop a file or click to browse</div>
+      <div class="drop-sub mt4">End-to-end encrypted · Free up to 4 GB</div>
+    </div>
+
+    <!-- Cap warning -->
+    <div id="cap-warning" class="card hidden">
+      <p class="cap-warn">File exceeds the 4 GB free tier limit. Upgrade to Creative Premium for transfers up to 100 GB.</p>
+    </div>
+
+    <!-- Options card (shown after file selected) -->
+    <div class="card hidden" id="options-card">
+      <div class="flex-row" id="file-summary">
+        <span class="tag" id="file-name-tag"></span>
+        <span class="muted small" id="file-size-tag"></span>
+      </div>
+      <!-- Passphrase toggle -->
+      <div class="mt16">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Protect with passphrase</div>
+            <div class="toggle-desc">Recipient must enter a passphrase to download</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="passphrase-toggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="mt12 hidden" id="passphrase-field-wrap">
+          <div class="field">
+            <label for="passphrase-input">Passphrase</label>
+            <input type="password" id="passphrase-input" placeholder="Choose a strong passphrase" autocomplete="new-password" />
+          </div>
+          <div class="muted small mt4">Share this separately. We never store it.</div>
+        </div>
+      </div>
+      <div class="mt16">
+        <button class="btn btn-primary btn-full" id="upload-btn" disabled>Encrypt &amp; upload</button>
+      </div>
+    </div>
+
+    <!-- Progress card -->
+    <div class="card hidden" id="progress-card">
+      <div class="flex-row">
+        <span class="tag" id="progress-stage-tag">Preparing</span>
+        <span class="muted small" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="progress-label mt4" id="progress-detail"></div>
+    </div>
+
+    <!-- Share link panel -->
+    <div class="card hidden" id="share-card">
+      <div class="flex-row">
+        <span class="success-txt small mono">✓</span>
+        <span style="font-size:14px;font-weight:500">Ready to share</span>
+      </div>
+      <div class="link-box" id="share-link-display"></div>
+      <div class="flex-row mt12">
+        <button class="btn btn-primary" id="copy-btn">Copy link</button>
+        <button class="btn btn-ghost" id="new-upload-btn">New upload</button>
+      </div>
+      <div id="qr-wrap"></div>
+    </div>
+
+    <!-- Unlock screen (download flow — passphrase gated) -->
+    <div id="unlock-screen">
+      <div class="unlock-icon">🔐</div>
+      <div class="unlock-title">Enter passphrase</div>
+      <div class="unlock-sub">This file is protected. Enter the passphrase to download.</div>
+      <div class="field" style="width:100%;max-width:320px">
+        <input type="password" id="unlock-input" placeholder="Passphrase" autocomplete="current-password" />
+      </div>
+      <div id="unlock-error"></div>
+      <button class="btn btn-primary" id="unlock-btn" style="min-width:140px">Unlock</button>
+    </div>
+
+    <!-- Download progress -->
+    <div class="card hidden" id="download-card">
+      <div class="flex-row">
+        <span class="tag" id="dl-stage-tag">Downloading</span>
+        <span class="muted small" id="dl-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="dl-bar"></div>
+      </div>
+      <div class="progress-label mt4" id="dl-detail"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Site footer ────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <span class="footer-note">© 2026 Refueler · share.refueler.io</span>
+    <div class="footer-links">
+      <a href="https://refueler.io/">App</a>
+      <a href="https://refueler.io/editorial/">Editorial</a>
+      <a href="https://refueler.io/privacy/">Privacy</a>
+    </div>
+  </div>
+</footer>
+
+<!-- Turnstile widget (invisible) -->
+<div id="cf-turnstile" class="cf-turnstile hidden"
+  data-sitekey="TURNSTILE_SITEKEY_PLACEHOLDER"
+  data-callback="onTurnstileSuccess"
+  data-size="invisible">
+</div>
+
 <script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
+const WORKER_URL  = 'WORKER_URL_PLACEHOLDER';
+const CHUNK_SIZE  = 8 * 1024 * 1024;         // 8 MB
+const FREE_CAP    = 4 * 1024 * 1024 * 1024;  // 4 GB
+const FREE_EXPIRY = 5 * 24 * 60 * 60;        // 5 days in seconds
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deps (dynamic)
+// ─────────────────────────────────────────────────────────────────────────────
 let blake3, secp;
-async function loadBlake3() { if (blake3) return blake3; const m = await import('https://esm.sh/blake3-wasm@2.1.5/browser'); await m.default.load(); blake3 = m.default; return blake3; }
-async function loadSecp()   { if (secp)   return secp;   secp   = await import('https://esm.sh/@noble/secp256k1@1.7.1'); return secp; }
+async function loadDeps() {
+  [blake3, secp] = await Promise.all([
+    import('https://esm.sh/blake3-wasm@2.1.5/browser'),
+    import('https://esm.sh/@noble/secp256k1@1.7.1'),
+  ]);
+  await blake3.default();
+}
 
-const WORKER_URL  = 'https://refueler-share.workers.dev';
-const CHUNK_SIZE  = 50 * 1024 * 1024;
-const TIER        = 'free';
-const TIER_CAPS   = { free: 4 * 1024**3, creative_premium: 100 * 1024**3, production_max: 250 * 1024**3 };
-const EXPIRY_OPTS = {
-  free:             [{ label: '5 days', seconds: 5*86400 }],
-  creative_premium: [{ label: '1 day', seconds: 86400 }, { label: '7 days', seconds: 7*86400 }, { label: '30 days', seconds: 30*86400 }],
-  production_max:   [{ label: '1 day', seconds: 86400 }, { label: '7 days', seconds: 7*86400 }, { label: '30 days', seconds: 30*86400 }, { label: '90 days', seconds: 90*86400 }],
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let selectedFile   = null;
+let turnstileToken = null;
+let downloadToken  = null;
+let sessionAesKey  = null;
+let sessionIv      = null;
+let uploadUUID     = null;
 
-let selectedFile = null, turnstileToken = null, selectedExpiry = TIER === 'free' ? 5*86400 : null, uploadInProgress = false;
-let aesKey = null, aesKeyRaw = null;
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const infoCard         = $('info-card');
+const dropZone         = $('drop-zone');
+const fileInput        = $('file-input');
+const capWarning       = $('cap-warning');
+const optionsCard      = $('options-card');
+const fileNameTag      = $('file-name-tag');
+const fileSizeTag      = $('file-size-tag');
+const passphraseToggle = $('passphrase-toggle');
+const passphraseWrap   = $('passphrase-field-wrap');
+const passphraseInput  = $('passphrase-input');
+const uploadBtn        = $('upload-btn');
+const progressCard     = $('progress-card');
+const stageTag         = $('progress-stage-tag');
+const progressPct      = $('progress-pct');
+const progressBar      = $('progress-bar');
+const progressDetail   = $('progress-detail');
+const shareCard        = $('share-card');
+const shareLinkDisplay = $('share-link-display');
+const copyBtn          = $('copy-btn');
+const newUploadBtn     = $('new-upload-btn');
+const qrWrap           = $('qr-wrap');
+const unlockScreen     = $('unlock-screen');
+const unlockInput      = $('unlock-input');
+const unlockError      = $('unlock-error');
+const unlockBtn        = $('unlock-btn');
+const downloadCard     = $('download-card');
+const dlStageTag       = $('dl-stage-tag');
+const dlPct            = $('dl-pct');
+const dlBar            = $('dl-bar');
+const dlDetail         = $('dl-detail');
 
-const $ = id => document.getElementById(id);
-const dropZone = $('drop-zone'), fileInput = $('file-input'), infoCard = $('info-card');
-const infoCardClose = $('info-card-close'), capWarning = $('cap-warning'), capWarningDetail = $('cap-warning-detail');
-const expirySection = $('expiry-section'), expiryOptions = $('expiry-options'), uploadBtn = $('upload-btn');
-const progressSection = $('progress-section'), progressStage = $('progress-stage');
-const progressBar = $('progress-bar'), progressLabel = $('progress-label'), progressBytes = $('progress-bytes');
-const sharePanel = $('share-panel'), shareLinkText = $('share-link-text'), copyBtn = $('copy-btn');
-const metaSize = $('meta-size'), metaExpiry = $('meta-expiry'), metaChunks = $('meta-chunks');
+// ─────────────────────────────────────────────────────────────────────────────
+// Info card
+// ─────────────────────────────────────────────────────────────────────────────
+$('dismiss-info').addEventListener('click', () => infoCard.classList.add('hidden'));
 
-infoCardClose.addEventListener('click', () => { infoCard.classList.add('dismissed'); sessionStorage.setItem('rs_info_dismissed','1'); });
-if (sessionStorage.getItem('rs_info_dismissed')) infoCard.classList.add('dismissed');
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode detection
+// ─────────────────────────────────────────────────────────────────────────────
+const fragment = parseFragment();
+if (fragment.uuid && fragment.key) {
+  enterDownloadMode(fragment);
+} else {
+  enterUploadMode();
+}
 
-if (TIER !== 'free') {
-  expirySection.classList.add('visible');
-  (EXPIRY_OPTS[TIER] ?? EXPIRY_OPTS.free).forEach(opt => {
-    const btn = document.createElement('button');
-    btn.className = 'expiry-option'; btn.textContent = opt.label;
-    btn.addEventListener('click', () => { document.querySelectorAll('.expiry-option').forEach(b => b.classList.remove('selected')); btn.classList.add('selected'); selectedExpiry = opt.seconds; checkReady(); });
-    expiryOptions.appendChild(btn);
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload mode
+// ─────────────────────────────────────────────────────────────────────────────
+function enterUploadMode() {
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFileSelection(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFileSelection(fileInput.files[0]);
+  });
+  passphraseToggle.addEventListener('change', () => {
+    passphraseWrap.classList.toggle('hidden', !passphraseToggle.checked);
+    if (!passphraseToggle.checked) passphraseInput.value = '';
+    updateUploadBtn();
+  });
+  passphraseInput.addEventListener('input', updateUploadBtn);
+  uploadBtn.addEventListener('click', startUpload);
+  copyBtn.addEventListener('click', copyShareLink);
+  newUploadBtn.addEventListener('click', () => location.reload());
+}
+
+function handleFileSelection(file) {
+  selectedFile = file;
+  capWarning.classList.add('hidden');
+  optionsCard.classList.add('hidden');
+  if (file.size > FREE_CAP) { capWarning.classList.remove('hidden'); return; }
+  fileNameTag.textContent = file.name.length > 32 ? file.name.slice(0, 30) + '…' : file.name;
+  fileSizeTag.textContent = formatBytes(file.size);
+  optionsCard.classList.remove('hidden');
+  updateUploadBtn();
+  if (window.turnstile) window.turnstile.execute();
+}
+
+function updateUploadBtn() {
+  const needsPassphrase = passphraseToggle.checked && passphraseInput.value.trim().length === 0;
+  uploadBtn.disabled = !selectedFile || needsPassphrase;
+}
+
+window.onTurnstileSuccess = token => { turnstileToken = token; };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload flow
+// ─────────────────────────────────────────────────────────────────────────────
+async function startUpload() {
+  if (!selectedFile) return;
+  uploadBtn.disabled = true;
+  optionsCard.classList.add('hidden');
+  progressCard.classList.remove('hidden');
+
+  await loadDeps();
+
+  setStage('Generating key', 5);
+  sessionAesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  sessionIv     = crypto.getRandomValues(new Uint8Array(12));
+  const rawKey  = await crypto.subtle.exportKey('raw', sessionAesKey);
+  const keyHex  = bufToHex(rawKey);
+  const ivHex   = bufToHex(sessionIv);
+
+  let p2shHashHex = null;
+  if (passphraseToggle.checked && passphraseInput.value.trim()) {
+    setStage('Hashing passphrase', 8);
+    p2shHashHex = await blake3Hash(new TextEncoder().encode(passphraseInput.value.trim()));
+    passphraseInput.value = '';
+  }
+
+  setStage('Chunking', 10);
+  uploadUUID = crypto.randomUUID();
+  const chunks = splitChunks(selectedFile, CHUNK_SIZE);
+  const totalChunks = chunks.length;
+  const chunkHashes = [];
+
+  setStage('Credentialling', 12);
+  if (!turnstileToken) await waitForTurnstile(10000);
+  const { blindedMsg, blindingFactor } = await generateBlindedCredential();
+  const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turnstile_token: turnstileToken, blinded_message: blindedMsg, tier: 'free' }),
+  });
+  if (!issueRes.ok) throw new Error(`Credential issue failed: ${await issueRes.text()}`);
+  const { signed_point, mint_pubkey } = await issueRes.json();
+  const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
+
+  setStage('Uploading', 15);
+  const expiryTimestamp = Math.floor(Date.now() / 1000) + FREE_EXPIRY;
+
+  for (let i = 0; i < totalChunks; i++) {
+    const raw = await readChunk(chunks[i]);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+      sessionAesKey, raw
+    );
+    const chunkHashHex = await blake3Hash(new Uint8Array(encrypted));
+    chunkHashes.push(chunkHashHex);
+    const rollingRoot = await blake3Hash(new TextEncoder().encode(chunkHashes.join('')));
+
+    const headers = {
+      'Content-Type': 'application/octet-stream',
+      'X-Blake3-Chunk-Hash': chunkHashHex,
+      'X-Blake3-Root': rollingRoot,
+    };
+    if (i === 0) {
+      headers['X-Cashu-Credential']  = credential;
+      headers['X-Total-Chunks']      = String(totalChunks);
+      headers['X-Total-Bytes']       = String(selectedFile.size);
+      headers['X-Tier']              = 'free';
+      headers['X-Expiry-Timestamp']  = String(expiryTimestamp);
+      if (p2shHashHex) headers['X-P2SH-Secret-Hash'] = p2shHashHex;
+    }
+
+    const res = await fetch(`${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`, {
+      method: 'PUT', headers, body: encrypted,
+    });
+    if (!res.ok) throw new Error(`Chunk ${i} upload failed: ${await res.text()}`);
+    setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
+  }
+
+  setStage('Done', 100);
+  progressDetail.textContent = '';
+
+  const fragmentStr = `uuid=${uploadUUID}&key=${keyHex}&iv=${ivHex}`;
+  const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
+  history.replaceState(null, '', location.pathname);
+  showSharePanel(shareUrl, !!p2shHashHex);
+}
+
+function showSharePanel(url, isProtected) {
+  progressCard.classList.add('hidden');
+  shareCard.classList.remove('hidden');
+  shareLinkDisplay.textContent = url;
+  if (isProtected) {
+    const note = document.createElement('p');
+    note.className = 'muted small mt8';
+    note.textContent = '🔐 Passphrase-protected — share the passphrase separately.';
+    shareLinkDisplay.insertAdjacentElement('afterend', note);
+  }
+  qrWrap.innerHTML = '';
+  const isDark = document.documentElement.classList.contains('carbon-mode');
+  new QRCode(qrWrap, {
+    text: url, width: 148, height: 148,
+    colorDark: isDark ? '#F5F0E8' : '#1A1A1A',
+    colorLight: isDark ? '#1A1A1A' : '#F5F0E8',
   });
 }
 
-window.onTurnstileSuccess = t => { turnstileToken = t; checkReady(); };
-
-function handleFileSelect(file) {
-  if (!file) return; selectedFile = file; capWarning.classList.remove('visible');
-  if (file.size > TIER_CAPS[TIER]) {
-    capWarningDetail.textContent = `${file.name} is ${fmt(file.size)}. Your tier allows ${fmt(TIER_CAPS[TIER])} per transfer.`;
-    capWarning.classList.add('visible'); selectedFile = null; uploadBtn.classList.remove('visible'); return;
-  }
-  uploadBtn.classList.add('visible');
-  if (TIER === 'free' && window.turnstile) window.turnstile.execute('#turnstile-widget');
-  checkReady();
+function copyShareLink() {
+  navigator.clipboard.writeText(shareLinkDisplay.textContent).then(() => {
+    copyBtn.textContent = 'Copied ✓';
+    setTimeout(() => { copyBtn.textContent = 'Copy link'; }, 2000);
+  });
 }
 
-dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop',      e  => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFileSelect(e.dataTransfer.files[0]); });
-fileInput.addEventListener('change',   ()  => handleFileSelect(fileInput.files[0]));
+// ─────────────────────────────────────────────────────────────────────────────
+// Download mode
+// ─────────────────────────────────────────────────────────────────────────────
+async function enterDownloadMode({ uuid, key, iv }) {
+  dropZone.classList.add('hidden');
+  infoCard.classList.add('hidden');
+  optionsCard.classList.add('hidden');
 
-function checkReady() { uploadBtn.disabled = !(selectedFile && (TIER === 'free' || selectedExpiry) && (TIER !== 'free' || turnstileToken) && !uploadInProgress); }
+  await loadDeps();
 
-uploadBtn.addEventListener('click', async () => {
-  if (!selectedFile || uploadInProgress) return;
-  uploadInProgress = true; uploadBtn.disabled = true;
-  try { await runUpload(selectedFile); }
-  catch(e) { console.error(e); stage('Upload failed — please try again.'); uploadInProgress = false; uploadBtn.disabled = false; }
-});
+  const keyBytes = hexToBuf(key);
+  const ivBytes  = hexToBuf(iv);
+  sessionAesKey  = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+  sessionIv      = new Uint8Array(ivBytes);
+  history.replaceState(null, '', location.pathname);
 
-async function runUpload(file) {
-  const b3 = await loadBlake3(), ec = await loadSecp();
-  stage('Generating encryption key…');
-  aesKey    = await crypto.subtle.generateKey({ name:'AES-GCM', length:256 }, true, ['encrypt','decrypt']);
-  aesKeyRaw = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
+  const probe = await fetch(`${WORKER_URL}/download/${uuid}/0000`);
 
-  stage('Chunking file…');
-  const n = Math.ceil(file.size / CHUNK_SIZE), chunks = [], root = b3.createHash();
-  for (let i = 0; i < n; i++) {
-    const raw = await file.slice(i*CHUNK_SIZE, Math.min((i+1)*CHUNK_SIZE, file.size)).arrayBuffer();
-    const ch  = b3.createHash(); ch.update(new Uint8Array(raw));
-    root.update(new Uint8Array(raw));
-    chunks.push({ raw, hash: ch.digest('hex') });
-    progress((i+1)/n*20, `Hashing chunk ${i+1} of ${n}…`);
+  if (probe.status === 401) {
+    unlockScreen.style.display = 'flex';
+    unlockBtn.addEventListener('click', async () => {
+      const passphrase = unlockInput.value.trim();
+      if (!passphrase) return;
+      unlockBtn.disabled = true;
+      unlockError.textContent = '';
+      try {
+        const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passphrase }),
+        });
+        if (!authRes.ok) {
+          unlockError.textContent = authRes.status === 401 ? 'Incorrect passphrase.' : 'Something went wrong.';
+          unlockBtn.disabled = false;
+          return;
+        }
+        const { token } = await authRes.json();
+        downloadToken = token;
+        unlockInput.value = '';
+        unlockScreen.style.display = 'none';
+        await startDownload(uuid, probe);
+      } catch {
+        unlockError.textContent = 'Network error. Try again.';
+        unlockBtn.disabled = false;
+      }
+    });
+    unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
+  } else if (probe.ok || probe.status === 206) {
+    await startDownload(uuid, probe);
+  } else {
+    showDownloadError(`Transfer unavailable (${probe.status}).`);
   }
-  const blake3Root = root.digest('hex');
+}
 
-  stage('Encrypting…');
-  const enc = [];
+async function startDownload(uuid, firstChunkResponse) {
+  downloadCard.classList.remove('hidden');
+  const chunks = [await firstChunkResponse.arrayBuffer()];
+  let chunkIndex = 1;
+
+  while (true) {
+    const headers = {};
+    if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
+    const res = await fetch(`${WORKER_URL}/download/${uuid}/${String(chunkIndex).padStart(4, '0')}`, { headers });
+    if (res.status === 404) break;
+    if (!res.ok) { showDownloadError(`Download failed at chunk ${chunkIndex}.`); return; }
+    chunks.push(await res.arrayBuffer());
+    dlStageTag.textContent = 'Downloading';
+    dlPct.textContent = '—';
+    dlDetail.textContent = `Chunk ${chunkIndex + 1}`;
+    chunkIndex++;
+  }
+
+  dlStageTag.textContent = 'Decrypting';
+  const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, aesKey, chunks[i].raw);
-    const out = new Uint8Array(12 + ct.byteLength); out.set(iv); out.set(new Uint8Array(ct), 12);
-    enc.push({ data: out, hash: chunks[i].hash });
-    progress(20 + (i+1)/chunks.length*20, `Encrypting chunk ${i+1} of ${chunks.length}…`);
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+      sessionAesKey, chunks[i]
+    );
+    decrypted.push(plain);
+    dlPct.textContent = Math.round(((i + 1) / chunks.length) * 100) + '%';
+    dlBar.style.width = dlPct.textContent;
+    dlDetail.textContent = `Decrypting ${i + 1} / ${chunks.length}`;
   }
 
-  stage('Issuing upload credential…');
-  const { blindedPoint, secret, blindingFactor } = await blindedCred(ec);
-  const cr = await fetch(`${WORKER_URL}/credential/issue`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ turnstile_token: turnstileToken, blinded_point: blindedPoint, tier: TIER }) });
-  if (!cr.ok) { const e = await cr.json().catch(()=>({})); throw new Error(e.error ?? 'Credential failed'); }
-  const { signed_point, mint_pubkey } = await cr.json();
-  const unblinded = await unblind(ec, signed_point, mint_pubkey, blindingFactor);
-  const cred64    = btoa(JSON.stringify({ secret, unblinded_sig: unblinded }));
+  const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = blobUrl;
+  a.download    = `refueler-${uuid.slice(0, 8)}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
-  stage('Uploading…');
-  const uuid = crypto.randomUUID();
-  for (let i = 0; i < enc.length; i++) {
-    const h = { 'Content-Type':'application/octet-stream', 'X-Chunk-Hash': enc[i].hash, 'X-Chunk-Total': String(enc.length) };
-    if (i === 0) Object.assign(h, { Authorization:`Cashu ${cred64}`, 'X-Total-Bytes': String(file.size), 'X-Blake3-Root': blake3Root, 'X-Tier': TIER, 'X-Expiry-Seconds': String(selectedExpiry) });
-    const r = await fetch(`${WORKER_URL}/upload/${uuid}/${String(i).padStart(4,'0')}`, { method:'PUT', headers:h, body:enc[i].data });
-    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.error ?? `Chunk ${i} failed`); }
-    progress(40 + (i+1)/enc.length*60, `Uploading chunk ${i+1} of ${enc.length}…`, `${fmt(Math.min((i+1)*CHUNK_SIZE, file.size))} of ${fmt(file.size)}`);
+  dlStageTag.textContent = 'Complete';
+  dlPct.textContent = '100%';
+  dlBar.style.width = '100%';
+  dlDetail.textContent = 'File saved.';
+}
+
+function showDownloadError(msg) {
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = 'Error';
+  dlDetail.textContent = msg;
+  dlDetail.classList.add('danger-txt');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUT-00 crypto
+// ─────────────────────────────────────────────────────────────────────────────
+async function generateBlindedCredential() {
+  const r   = secp.utils.randomPrivateKey();
+  const msg = crypto.getRandomValues(new Uint8Array(32));
+  const Y   = await hashToCurve(bufToHex(msg));
+  const rG  = secp.Point.fromPrivateKey(r);
+  const B_  = Y.add(rG);
+  return { blindedMsg: B_.toHex(true), blindingFactor: bufToHex(r) };
+}
+
+async function unblindSignature(signedPoint, blindingFactor, mintPubkeyHex) {
+  const C_ = secp.Point.fromHex(signedPoint);
+  const K  = secp.Point.fromHex(mintPubkeyHex);
+  const r  = BigInt('0x' + blindingFactor);
+  const C  = C_.add(K.multiply(r).negate());
+  return JSON.stringify({ C: C.toHex(true), mint_pubkey: mintPubkeyHex });
+}
+
+async function hashToCurve(msgHex) {
+  const hash = await crypto.subtle.digest('SHA-256', hexToBuf(msgHex));
+  const hashHex = bufToHex(hash);
+  for (let i = 0; i < 256; i++) {
+    try {
+      return secp.Point.fromHex('02' + (BigInt('0x' + hashHex) + BigInt(i)).toString(16).padStart(64, '0'));
+    } catch { continue; }
   }
-
-  const link = `${window.location.origin}/d/${uuid}#${btoa(String.fromCharCode(...aesKeyRaw))}`;
-  history.replaceState(null, '', window.location.pathname);
-  showShare(link, file, enc.length, selectedExpiry);
+  throw new Error('hashToCurve failed');
 }
 
-async function blindedCred(secp) {
-  const sb = crypto.getRandomValues(new Uint8Array(32));
-  const secret = [...sb].map(b => b.toString(16).padStart(2,'0')).join('');
-  const Y  = await h2c(secp, sb);
-  const r  = secp.utils.randomPrivateKey();
-  const rb = BigInt('0x' + [...r].map(b => b.toString(16).padStart(2,'0')).join(''));
-  return { blindedPoint: Y.add(secp.Point.BASE.multiply(rb)).toHex(true), secret, blindingFactor: r };
+// ─────────────────────────────────────────────────────────────────────────────
+// BLAKE3
+// ─────────────────────────────────────────────────────────────────────────────
+async function blake3Hash(data) {
+  const h = blake3.createHash();
+  h.update(data);
+  return h.digest('hex');
 }
 
-async function unblind(secp, sp, kp, r) {
-  const rb = BigInt('0x' + [...r].map(b => b.toString(16).padStart(2,'0')).join(''));
-  return secp.Point.fromHex(sp).subtract(secp.Point.fromHex(kp).multiply(rb)).toHex(true);
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function parseFragment() {
+  const raw = location.hash.slice(1);
+  if (!raw) return {};
+  return Object.fromEntries(raw.split('&').map(p => p.split('=')));
 }
-
-async function h2c(secp, sb) {
-  const P = new TextEncoder().encode('Secp256k1_HashToCurve_Cashu_');
-  const c = new Uint8Array(P.length + sb.length); c.set(P); c.set(sb, P.length);
-  const m = new Uint8Array(await crypto.subtle.digest('SHA-256', c));
-  for (let n = 0; n < 0xffffffff; n++) {
-    const nb = new Uint8Array(4); new DataView(nb.buffer).setUint32(0, n, true);
-    const hi = new Uint8Array(m.length + 4); hi.set(m); hi.set(nb, m.length);
-    const hh = new Uint8Array(await crypto.subtle.digest('SHA-256', hi));
-    const hex = [...new Uint8Array([0x02,...hh])].map(b=>b.toString(16).padStart(2,'0')).join('');
-    try { return secp.Point.fromHex(hex); } catch { continue; }
-  }
+function splitChunks(file, size) {
+  const out = [];
+  let offset = 0;
+  while (offset < file.size) { out.push(file.slice(offset, offset + size)); offset += size; }
+  return out;
 }
-
-function stage(t) { progressSection.classList.add('visible'); progressStage.textContent = t; }
-function progress(pct, lbl, bytes='') { progressBar.style.width=`${pct.toFixed(1)}%`; if(lbl)progressLabel.textContent=lbl; if(bytes)progressBytes.textContent=bytes; }
-
-function showShare(link, file, chunks, expirySecs) {
-  progressSection.classList.remove('visible');
-  dropZone.style.display = 'none'; uploadBtn.classList.remove('visible');
-  sharePanel.classList.add('visible');
-  shareLinkText.textContent = link;
-  metaSize.textContent   = fmt(file.size);
-  metaChunks.textContent = String(chunks);
-  metaExpiry.textContent = new Date(Date.now() + expirySecs*1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
-  const theme = document.documentElement.dataset.theme;
-  new QRCode($('qr-canvas'), { text:link, width:160, height:160, colorDark: theme==='carbon'?'#F5F0E8':'#1A1A1A', colorLight:'#F5F0E8', correctLevel:QRCode.CorrectLevel.M });
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(link).then(() => { copyBtn.textContent='Copied'; copyBtn.classList.add('copied'); setTimeout(()=>{ copyBtn.textContent='Copy'; copyBtn.classList.remove('copied'); }, 2000); });
+function readChunk(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsArrayBuffer(blob);
   });
 }
-
-function fmt(b) {
-  if (b >= 1024**3) return (b/1024**3).toFixed(1)+' GB';
-  if (b >= 1024**2) return (b/1024**2).toFixed(1)+' MB';
-  if (b >= 1024)    return (b/1024).toFixed(0)+' KB';
-  return b+' B';
+function setStage(label, pct) {
+  stageTag.textContent     = label;
+  progressPct.textContent  = pct + '%';
+  progressBar.style.width  = pct + '%';
+}
+function setProgress(pct, detail) {
+  progressPct.textContent   = pct + '%';
+  progressBar.style.width   = pct + '%';
+  progressDetail.textContent = detail;
+}
+function formatBytes(b) {
+  if (b < 1024)       return b + ' B';
+  if (b < 1024 ** 2)  return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 ** 3)  return (b / 1024 ** 2).toFixed(1) + ' MB';
+  return (b / 1024 ** 3).toFixed(2) + ' GB';
+}
+function bufToHex(buf) {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function hexToBuf(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) out[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  return out.buffer;
+}
+async function waitForTurnstile(ms) {
+  const start = Date.now();
+  while (!turnstileToken && Date.now() - start < ms) await new Promise(r => setTimeout(r, 200));
 }
 </script>
 </body>

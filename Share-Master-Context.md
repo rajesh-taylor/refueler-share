@@ -133,6 +133,8 @@ refueler-share/
 
 ---
 
+Speed benchmarks (pre-Production Max): Replace directional figures with empirical CIT results. Run refueler-share-dev A/B test protocol against SwissTransfer and PrivCloud under identical conditions. No competitor publishes verified throughput figures — empirical CIT data is a first-mover differentiator for press and investor materials.
+
 ## Session 3 targets (carry-forward)
 
 - NUT-11 P2SH download gating (Mode 1: pre-shared secret; Mode 2: keypair challenge-response)
@@ -140,6 +142,8 @@ refueler-share/
 - Payment integration (Stripe Checkout + Blink BOLT11 for paid tiers)
 - `share.refueler.io` domain + Cloudflare Pages routing
 - Dashboard for paid tiers (transfer history — UUID only, no AES key reconstruction)
+- Speed benchmark table (A/B test — pre-Production Max launch): Replace directional figures with empirical CIT results. Run the refueler-share-dev test protocol against SwissTransfer and PrivCloud under identical conditions (same file sizes, same connection profiles). No competitor in this space publishes verified throughput numbers. Empirical data published as CIT (Cryptographic Integrity Throughput, verified GB/s) is a first-mover differentiator.
+- "Info card technical copy displaced to a 'How it works' secondary block on the landing page."
 
 ---
 

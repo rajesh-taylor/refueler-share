@@ -1,133 +1,138 @@
 /**
- * Manifest — authoritative transfer state
+ * manifest.js — R2 manifest helpers + TIER_CAPS
  *
- * The R2 manifest.json is the single source of truth for every transfer.
- * Supabase (spent_tokens) is the double-spend ledger only.
- * No transfer state lives in KV, Durable Objects, or Worker memory.
- *
- * Manifest key: {transfer-uuid}/manifest.json
- * Chunk key:    {transfer-uuid}/{chunk-index-zero-padded-4-digits}
- *               e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890/0042
+ * Manifest schema (stored at {uuid}/manifest.json):
+ * {
+ *   uuid:                    string
+ *   tier:                    'free' | 'creative' | 'production' | 'enterprise'
+ *   total_chunks:            number
+ *   total_bytes:             number
+ *   expiry_timestamp:        number  (unix seconds)
+ *   created_at:              number  (unix seconds)
+ *   blake3_root:             string  (hex — rolling root hash from client)
+ *   chunks_received:         number[]
+ *   upload_complete:         boolean
+ *   download_initiated_at:   number | null  (unix seconds, first chunk download)
+ *   p2sh_secret_hash:        string | null  (BLAKE3 hex — null = no passphrase gate)
+ * }
  */
 
-// Transfer capacity limits per tier (bytes)
 export const TIER_CAPS = {
-  free:               4  * 1024 * 1024 * 1024,  //   4 GB — Skint Tog
-  creative_premium:   100 * 1024 * 1024 * 1024, // 100 GB
-  production_max:     250 * 1024 * 1024 * 1024, // 250 GB
-  enterprise:         Infinity,
+  free:       4  * 1024 * 1024 * 1024,   // 4 GB
+  creative:   100 * 1024 * 1024 * 1024,  // 100 GB
+  production: 250 * 1024 * 1024 * 1024,  // 250 GB
+  enterprise: Infinity,
 };
 
-// Link expiry options per tier (seconds)
-export const TIER_EXPIRY_OPTIONS = {
-  free:             [5 * 86400],                                // 5 days only, no choice
-  creative_premium: [1 * 86400, 7 * 86400, 30 * 86400],        // 1 / 7 / 30 days
-  production_max:   [1 * 86400, 7 * 86400, 30 * 86400, 90 * 86400], // 1 / 7 / 30 / 90 days
-  enterprise:       null,                                       // custom
+export const TIER_EXPIRY_SECONDS = {
+  free:       5  * 24 * 60 * 60,   // 5 days, fixed
+  creative:   null,                 // user-set: 1 / 7 / 30 days
+  production: null,                 // user-set: 1 / 7 / 30 / 90 days
+  enterprise: null,                 // custom
 };
 
-/**
- * Manifest v1 shape.
- * All fields present from creation. Null fields updated as transfer progresses.
- */
-export function buildManifest({
-  uuid,
-  tier,
-  chunkCount,
-  totalBytes,
-  blake3RootHash,
-  expirySeconds,
-  recipientMode = null,
-  maxRedemptions = null,
-  maxDownloadsPerKey = null,
-}) {
-  const now = Math.floor(Date.now() / 1000);
-  return {
-    version: 1,
-    transfer_uuid: uuid,
-    tier,
-    chunk_count: chunkCount,
-    total_bytes: totalBytes,
-    blake3_root_hash: blake3RootHash,
-    created_at: now,
-    expiry_timestamp: now + expirySeconds,
-    download_initiated_at: null,
-    p2sh_mode: null,
-    p2sh_secret_hash: null,
-    p2sh_public_key: null,
-    aes_key_encrypted: null,
-    ml_kem_enabled: false,
-    recipient_mode: recipientMode,
-    max_redemptions: maxRedemptions,
-    redemption_count: 0,
-    max_downloads_per_key: maxDownloadsPerKey,
-  };
-}
+// ---------------------------------------------------------------------------
+// Read
+// ---------------------------------------------------------------------------
 
 /**
- * getManifest(uuid, env) → manifest object | null
+ * Fetch and parse manifest from R2.
+ * Returns parsed object or null if not found.
  */
-export async function getManifest(uuid, env) {
-  const obj = await env.R2.get(`${uuid}/manifest.json`);
+export async function getManifest(r2, uuid) {
+  const obj = await r2.get(`${uuid}/manifest.json`);
   if (!obj) return null;
+  const text = await obj.text();
   try {
-    return JSON.parse(await obj.text());
+    return JSON.parse(text);
   } catch {
     return null;
   }
 }
 
-/**
- * putManifest(manifest, env) → void
- *
- * Writes manifest to R2. Overwrites existing. Caller is responsible for
- * atomic consistency — use ETag conditional writes for redemption_count
- * increments to prevent race conditions.
- */
-export async function putManifest(manifest, env) {
-  await env.R2.put(
-    `${manifest.transfer_uuid}/manifest.json`,
-    JSON.stringify(manifest),
-    { httpMetadata: { contentType: 'application/json' } }
-  );
-}
+// ---------------------------------------------------------------------------
+// Write
+// ---------------------------------------------------------------------------
 
 /**
- * isExpired(manifest) → boolean
- *
- * Returns true if the transfer link has expired AND no download is in progress.
- * Grace period: if download_initiated_at is set and was before expiry, serve continues.
+ * Write manifest to R2.
+ */
+export async function putManifest(r2, uuid, manifest) {
+  await r2.put(`${uuid}/manifest.json`, JSON.stringify(manifest), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Create
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a fresh manifest object.
+ * p2shSecretHash: hex string from nut11.hashSecret(), or null.
+ */
+export function createManifest({
+  uuid,
+  tier,
+  totalChunks,
+  totalBytes,
+  expiryTimestamp,
+  blake3Root,
+  p2shSecretHash = null,
+}) {
+  return {
+    uuid,
+    tier,
+    total_chunks: totalChunks,
+    total_bytes: totalBytes,
+    expiry_timestamp: expiryTimestamp,
+    created_at: Math.floor(Date.now() / 1000),
+    blake3_root: blake3Root,
+    chunks_received: [],
+    upload_complete: false,
+    download_initiated_at: null,
+    p2sh_secret_hash: p2shSecretHash,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Expiry helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Is the transfer expired?
+ * Returns true if past expiry_timestamp.
  */
 export function isExpired(manifest) {
-  const now = Math.floor(Date.now() / 1000);
-  if (now <= manifest.expiry_timestamp) return false;
-  // Link is past expiry — check in-progress grace period
-  if (manifest.download_initiated_at && manifest.download_initiated_at < manifest.expiry_timestamp) {
-    // Download started before expiry — grace period applies, not expired for this transfer
-    return false;
-  }
-  return true;
+  return Math.floor(Date.now() / 1000) > manifest.expiry_timestamp;
 }
 
 /**
- * chunkKey(uuid, chunkIndex) → string
- *
- * Produces the zero-padded 4-digit chunk key for R2 storage.
- * e.g. chunkKey('abc...', 42) → 'abc.../0042'
+ * Is an in-progress download within grace period?
+ * If download_initiated_at is set and the transfer was started before expiry,
+ * we continue serving chunks even after expiry_timestamp has passed.
  */
-export function chunkKey(uuid, chunkIndex) {
-  return `${uuid}/${String(chunkIndex).padStart(4, '0')}`;
+export function isInGracePeriod(manifest) {
+  if (!manifest.download_initiated_at) return false;
+  return manifest.download_initiated_at < manifest.expiry_timestamp;
 }
 
 /**
- * validateExpiryChoice(tier, expirySeconds) → boolean
- *
- * Ensures the client hasn't sent a non-permitted expiry value for their tier.
- * Free tier is always 5 days — any other value is rejected.
+ * Should this download request be blocked?
+ * Blocked if: expired AND not in grace period.
  */
-export function validateExpiryChoice(tier, expirySeconds) {
-  const options = TIER_EXPIRY_OPTIONS[tier];
-  if (options === null) return true;           // enterprise: anything goes
-  if (!options) return false;
-  return options.includes(expirySeconds);
+export function isDownloadBlocked(manifest) {
+  if (!isExpired(manifest)) return false;
+  return !isInGracePeriod(manifest);
+}
+
+// ---------------------------------------------------------------------------
+// P2SH gate helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Does this manifest require a passphrase?
+ */
+export function requiresPassphrase(manifest) {
+  return typeof manifest.p2sh_secret_hash === 'string' && manifest.p2sh_secret_hash.length === 64;
 }
