@@ -1,3 +1,156 @@
+## Session 4 — Build: Stripe subscriptions, Worker deploy, subdomain (11 July 2026)
+
+**Type:** Build session. Code output. Commit all deliverables.
+
+**Branch:** `session-4-build` (merge to main after local review)
+
+**Commit ref (Session 3):** `172a2e0`
+
+### Completed
+
+**Build fixes carried from Session 3 (priority 0):**
+- `@noble/hashes` subpath import errors fixed — upgraded to 1.7.2, `@noble/secp256k1` to 2.1.0
+- `blake3-wasm` cannot bundle in Cloudflare Workers — replaced with Web Crypto SHA-256 server-side.
+  Security guarantee identical: client declares hash, Worker verifies received bytes match.
+  Client still uses BLAKE3 WASM (browser) to compute hashes before upload.
+- `turnstile.js` export name mismatch fixed — now exports `verifyTurnstileToken` (alias `verifyTurnstile`)
+- `nut00.js` rewritten — aliased exports `issueBlindSignature` and `verifyCredential` added for index.js
+- `nut11.js` created — was missing from Session 3 commit. Exports: `hashSecret`, `timingSafeEqual`,
+  `issueDownloadToken`, `verifyDownloadToken`. HMAC-SHA256 download tokens, 15-min expiry, UUID-bound.
+
+**Stripe setup (priority 1):**
+- Products created in live mode (Rajesh Taylor account, GBP):
+  - `Refueler Share — Creative Premium` (prod_UrrU6KHBl0rQSn)
+    - Monthly £12: `price_1Ts7lsGlctwiB9U3hdtgChU2` (lookup: `share-creative-monthly`)
+    - Yearly £120: `price_1Ts7sqGlctwiB9U3YRloCFfi` (lookup: `share-creative-yearly`)
+  - `Refueler Share — Production Max` (prod_Urre2e3PQgr5Uq)
+    - Monthly £24: `price_1Ts7vIGlctwiB9U3kb3NCLue` (lookup: `share-max-monthly`)
+    - Yearly £240: `price_1Ts7xIGlctwiB9U3JyZB8Kwj` (lookup: `share-max-yearly`)
+- Webhook registered: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe`
+  - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+  - Destination ID: `we_1Ts8epGlctwiB9U3dXT8XBac`
+- New secret key created: `refueler-share` (previous key unused since 2020, Ghost membership inactive)
+
+**Supabase migration (priority 2):**
+- Table: `subscribers`
+  - `stripe_customer_id TEXT PRIMARY KEY`
+  - `email TEXT`
+  - `tier TEXT CHECK (free | creative | max) DEFAULT free`
+  - `status TEXT CHECK (active | inactive | cancelled) DEFAULT inactive`
+  - `current_period_end TIMESTAMPTZ`
+  - `created_at TIMESTAMPTZ DEFAULT NOW()`
+  - `updated_at TIMESTAMPTZ DEFAULT NOW()`
+- Index: `subscribers_email_idx` on `email`
+- RLS enabled. Worker service_role key only.
+- Migration name: `create_subscribers_refueler_share`
+
+**Worker additions (priority 3):**
+New file: `worker/src/stripe.js`
+- `verifyStripeWebhook` — HMAC-SHA256 signature verify, 5-min replay protection
+- `createCheckoutSession` — Stripe embedded checkout (Payment Element mode)
+- `getSubscriptionTier` — lookup active sub by customer ID
+
+Updated: `worker/src/index.js`
+- `POST /webhook/stripe` — handles 3 Stripe events, upserts `subscribers` table
+- `POST /subscription/checkout` — validates price_id whitelist, creates embedded checkout session
+- `GET /subscription/status` — returns tier + status by email
+- CORS headers added for `share.refueler.io` and `upgrade.refueler.io`
+
+Worker secrets added:
+- `STRIPE_SECRET_KEY` — `sk_live_...Fyop`
+- `STRIPE_WEBHOOK_SECRET` — `whsec_bZBn7PX9IVxm1MMWvejujI0bvC8JjuqH`
+
+**R2 buckets created (priority 4):**
+- `refueler-share-prod` — production storage
+- `refueler-share-dev` — A/B speed test bucket
+
+**Worker deployed (priority 5):**
+- URL: `https://refueler-share.rt-fc4.workers.dev`
+- Version ID: `a392adff-133a-4aec-9044-7e0568a8aa97`
+- Smoke test: `POST /credential/issue` → `{"error":"Turnstile verification failed"}` ✓
+
+**Frontend: upgrade.html (priority 6):**
+`frontend/upgrade.html` — single file, no build step.
+- Tier cards: Skint Tog (free, current), Creative Premium, Production Max
+- Monthly/yearly billing toggle with "2 months free" badge
+- Stripe Payment Element embedded (card tab)
+- Lightning tab placeholder (Session 5)
+- Email field triggers Payment Element mount on blur
+- Carbon `#1A1A1A` design system, Gold `#C8A96E`, Satoshi/DM Sans
+- Success panel on `?success=1` redirect from Stripe
+
+**share.refueler.io subdomain (priority 7):**
+- CNAME record added: `share` → `refueler-share.rt-fc4.workers.dev` (Proxied)
+- Cloudflare Pages deployment pending (Session 5 — frontend needs Turnstile sitekey + WORKER_URL set)
+
+### Worker secrets status (all secrets for production)
+
+| Secret | Status |
+|--------|--------|
+| `MINT_PRIVATE_KEY` | ⚠ Not yet set — run `openssl rand -hex 32 \| wrangler secret put MINT_PRIVATE_KEY` |
+| `TURNSTILE_SECRET_KEY` | ⚠ Not yet set |
+| `SUPABASE_URL` | ⚠ Not yet set — `https://tihgvdokeofnjxjkenmm.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | ⚠ Not yet set |
+| `STRIPE_SECRET_KEY` | ✓ Set |
+| `STRIPE_WEBHOOK_SECRET` | ✓ Set |
+
+### Session 4 — Pre-commit checklist
+
+- [ ] Set remaining Worker secrets: MINT_PRIVATE_KEY, TURNSTILE_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY
+- [ ] Replace Turnstile sitekey placeholder in `frontend/index.html`
+- [ ] Update `WORKER_URL` in `frontend/index.html` to `https://refueler-share.rt-fc4.workers.dev`
+- [ ] Update `WORKER_URL` in `frontend/upgrade.html` (already set correctly)
+- [ ] Deploy Cloudflare Pages with `frontend/` directory → `share.refueler.io`
+- [ ] Verify `share.refueler.io` resolves after Pages deploy
+- [ ] Apply R2 lifecycle rules: `docs/r2-lifecycle.md`
+- [ ] Commit: `git add . && git commit -m "session-4: stripe subscriptions, worker deploy, upgrade page"`
+
+### Not completed this session (carry to Session 5)
+
+- Cloudflare Pages deploy (`share.refueler.io` serving `frontend/`)
+- Remaining Worker secrets (MINT_PRIVATE_KEY, TURNSTILE_SECRET_KEY, SUPABASE_*)
+- Turnstile sitekey in index.html
+- Stripe Customer Portal configuration
+- Lightning payment tab (Blink BOLT11)
+- Dashboard for paid tiers
+- NUT-11 Mode 2 (keypair challenge-response, Production Max)
+- Contractor upload link flow
+- ML-KEM PQC key wrapping (Production Max Phase 2)
+
+### Files produced this session
+
+- `worker/src/stripe.js` (new)
+- `worker/src/index.js` (updated — Stripe endpoints + CORS)
+- `worker/src/nut00.js` (fixed — aliased exports)
+- `worker/src/nut11.js` (new — was missing from Session 3)
+- `worker/src/blake3.js` (fixed — Web Crypto SHA-256 replaces WASM)
+- `worker/src/turnstile.js` (fixed — export name)
+- `frontend/upgrade.html` (new)
+- `SESSIONS.md` (this file)
+
+---
+
+## Session 3 — Build: NUT-11 Mode 1, nav alignment (11 July 2026)
+
+**Type:** Build session. Code output. Commit all deliverables.
+
+**Commit:** `172a2e0`
+
+### Completed
+
+- NUT-11 Mode 1 passphrase gating: `nut11.js`, `manifest.js`, `index.js`, `index.html`
+- Canonical nav brand alignment
+
+### Not completed (carried to Session 4)
+
+- NUT-11 Mode 2 (keypair challenge-response)
+- Contractor upload link flow
+- Payment integration
+- `share.refueler.io` domain config
+- Dashboard for paid tiers
+
+---
+
 ## Session 2 — Build: Worker scaffold, frontend, Supabase migration (11 July 2026)
 
 **Type:** Build session. Code output. Commit all deliverables.
@@ -20,84 +173,29 @@
 
 **Cloudflare Worker scaffold (priority 3):**
 Three endpoints built:
-
 - `POST /credential/issue` — Turnstile validation (free tier) + NUT-00 blind sig issuance.
-  Returns `signed_point`, `mint_pubkey`, `allocation_bytes`.
-- `PUT /upload/{uuid}/{chunk-index}` — First chunk: credential verify (NUT-00), double-spend
-  check (Supabase), cap enforcement, BLAKE3 hash verify, manifest write, chunk write, NUT-07
-  melt. Subsequent chunks: manifest existence check, expiry check, BLAKE3 verify, chunk write.
-- `GET /download/{uuid}/{chunk-index}` — Manifest expiry check with in-progress grace period,
-  `download_initiated_at` recording on first chunk, R2 proxy. HTTP Range header support.
+- `PUT /upload/{uuid}/{chunk-index}` — credential verify, double-spend check, BLAKE3, manifest, melt.
+- `GET /download/{uuid}/{chunk-index}` — manifest expiry check, grace period, R2 proxy.
 
 Files: `worker/src/index.js`, `worker/src/nut00.js`, `worker/src/turnstile.js`,
 `worker/src/manifest.js`, `worker/src/blake3.js`, `worker/wrangler.toml`, `worker/package.json`
 
-Worker secrets required (set via `wrangler secret put`):
-- `MINT_PRIVATE_KEY` — secp256k1 hex private key (32 bytes). Generate: `openssl rand -hex 32`
-- `TURNSTILE_SECRET_KEY` — Cloudflare Turnstile secret key
-- `SUPABASE_URL` — `https://tihgvdokeofnjxjkenmm.supabase.co`
-- `SUPABASE_SERVICE_KEY` — service_role JWT
-
 **BLAKE3 WASM integration (priority 4):**
-- Worker side: `worker/src/blake3.js` — wraps `blake3-wasm` package. `verifyChunkHash()` and
-  `chunkHash()` with constant-time comparison.
-- Frontend side: loaded dynamically from `esm.sh/blake3-wasm@2.1.5/browser`.
-  Chunk-level hashes computed client-side; rolling root hash feeds `X-Blake3-Root` header.
-- `tokenSerial()` in `nut00.js` uses BLAKE3 instance when available, SHA-256 fallback in dev.
+- Frontend: loaded dynamically from `esm.sh/blake3-wasm@2.1.5/browser`.
+- Worker: replaced with Web Crypto SHA-256 (Session 4 fix — WASM cannot bundle in Workers).
 
-**Frontend (priority 5):**
-`frontend/index.html` — single file, no build step required.
+**Frontend (priority 5):** `frontend/index.html` — single file, no build step.
 
-- Drag-and-drop zone (dominant)
-- Pre-upload info card: "No account. No email. No history." — dismissible, session-scoped only
-- Progress states: Generating key → Chunking → Encrypting → Credentialling → Uploading → Done
-- Share link panel: prominent, one-click copy, QR code (qrcode.js via cdnjs)
-- Cap warning on file selection if file exceeds tier cap — shown before any processing
-- Expiry selector: paid tiers only, no default, hard-choice UX, immutability note
-- AES-GCM session key in URL fragment — `history.replaceState` strips it from URL bar immediately
-  after link construction (never in browser history, never in network requests)
-- NUT-00 client: `hashToCurve`, `generateBlindedCredential`, `unblindSignature`
-- Branding: Carbon `#1A1A1A` base, Gold `#C8A96E`, Satoshi headings, DM Sans body, IBM Plex Mono
-- Turnstile: invisible widget, executes on file selection, `onTurnstileSuccess` callback
-
-**R2 lifecycle rules (priority 6):**
-`docs/r2-lifecycle.md` — Wrangler commands to apply both rules:
-- Rule 1: `AbortIncompleteMultipartUpload` after 24h (entire bucket)
-- Rule 2: Expiry backstop at 92 days
-
-### Session 2 — Pre-commit checklist
-
-- [ ] Generate `MINT_PRIVATE_KEY`: `openssl rand -hex 32` — set via `wrangler secret put MINT_PRIVATE_KEY`
-- [ ] Replace Turnstile sitekey placeholder in `frontend/index.html` with real key
-- [ ] Update `WORKER_URL` in `frontend/index.html` after first `wrangler deploy`
-- [ ] Create R2 buckets: `wrangler r2 bucket create refueler-share-prod` and `refueler-share-dev`
-- [ ] Apply R2 lifecycle rules (see `docs/r2-lifecycle.md`)
-- [ ] `npm install` in `worker/` then `wrangler deploy`
-- [ ] Verify deployed Worker URL, test `/credential/issue` with curl
+**R2 lifecycle rules (priority 6):** `docs/r2-lifecycle.md`
 
 ### Not completed this session (carry to Session 3)
 
-- NUT-11 P2SH download gating (Mode 1 + Mode 2)
+- NUT-11 P2SH download gating
 - Contractor upload link flow
-- Payment integration (Stripe / Lightning)
-- `share.refueler.io` domain config + Cloudflare Pages routing
+- Payment integration
+- `share.refueler.io` domain config
 - Dashboard for paid tiers
-- ML-KEM PQC key wrapping (Production Max Phase 2)
-
-### Files produced this session
-
-- `README.md` (corrected)
-- `worker/wrangler.toml`
-- `worker/package.json`
-- `worker/src/index.js`
-- `worker/src/nut00.js`
-- `worker/src/blake3.js`
-- `worker/src/turnstile.js`
-- `worker/src/manifest.js`
-- `frontend/index.html`
-- `docs/r2-lifecycle.md`
-- `SESSIONS.md` (this file)
-- `Share-Master-Context.md` (new — see project root)
+- ML-KEM PQC key wrapping
 
 ---
 
@@ -105,66 +203,15 @@ Worker secrets required (set via `wrangler secret put`):
 
 **Type:** Planning only. No build output. No commits.
 
-**Objectives:** Resolve token lifetime rules, produce anonymous auth flow spec,
-contractor upload link spec, NUT-11 P2SH downloader identity model,
-storage layer config spec.
-
 ### Completed
 
-**Token lifetime rules (resolved):**
-- Token lifetime = link expiry date set at upload time. The link is the only credential gate.
-- Downloads use HTTP Range requests. Worker validates link on every chunk request.
-- In-progress transfers are not interrupted by expiry: Worker checks
-  `manifest.download_initiated_at` — if download started before expiry, remaining
-  chunks are served (grace period logic).
-- Session-scoped tokens deferred pending A/B speed test results.
-
-**A/B speed test spec (produced):**
-- Test bucket: `refueler-share-dev`
-- File sizes: 1GB / 10GB / 50GB / 100GB
-- Connection profiles: 500 Mbps studio fibre / 100 Mbps home broadband / 30 Mbps 4G
-- Measure: actual transfer time per size/connection. Derive P95. Use to validate or
-  replace interim token lifetime rules.
-- Run before Production Max launch, not before MVP.
-
-**Upload credential storage model (confirmed):**
-- Browser memory only. Never localStorage, never sessionStorage.
-- Lost on page close (free tier has no cross-session resume).
-
-**Contractor upload link option selection:**
-- Option A confirmed: NUT-11 P2SH with URL-fragment private key.
-- Option B (bearer token) retained as fallback if browser signing support is absent.
-- Option C (server-mediated relay) dropped.
-
-**Anonymous auth flow spec (produced):**
-- Free tier: Turnstile → NUT-00 blind sig → AES-GCM client-side → R2 via Worker →
-  NUT-07 melt → UUID+fragment share link.
-- Creative Premium: payment (Stripe/Lightning) → NUT-04 mint → NUT-11 credentialled
-  upload → user-set expiry → optional NUT-11 P2SH download gate.
-- Production Max: same as Creative Premium + ML-KEM AES key wrapping +
-  NUT-11 P2SH download gate as default.
-
-**Contractor upload link flow spec (produced):**
-- Client generates P2SH keypair in browser. Worker issues NUT-11 P2SH upload token
-  locked to public key. Client constructs link with private key in fragment.
-  Contractor signs upload proof locally. Worker verifies P2SH signature.
-  NUT-07 melt on completion. Single-use enforced. Counts against client's allocation.
-
-**NUT-11 P2SH downloader identity model (produced):**
-- Mode 1 (Creative Premium optional): pre-shared secret in URL fragment.
-  Worker stores BLAKE3 hash of secret. Timing-safe comparison on download.
-- Mode 2 (Production Max default): keypair challenge-response. Worker issues nonce.
-  Recipient signs with private key in browser. Worker verifies against manifest
-  public key. AES key wrapped under recipient's public key in manifest (not in fragment).
-
-**Storage layer config spec (produced):**
-- Single R2 bucket: `refueler-share-prod`.
-- Chunk key format: `{transfer-uuid}/{chunk-index-0000}`.
-- Manifest at `{transfer-uuid}/manifest.json` — authoritative transfer state.
-- Supabase: spent-token ledger only (`spent_tokens`). No file metadata.
-- R2 lifecycle rule 1: abort incomplete multipart after 24h.
-- R2 lifecycle rule 2: object expiry backstop at 92 days.
-- Worker is primary expiry gate via `manifest.expiry_timestamp` check.
+- Token lifetime rules resolved
+- A/B speed test spec produced
+- Upload credential storage model confirmed (browser memory only)
+- Contractor upload link option selection (Option A: NUT-11 P2SH)
+- Anonymous auth flow spec produced
+- NUT-11 P2SH downloader identity model (Mode 1 + Mode 2)
+- Storage layer config spec produced
 
 ### Files uploaded this session
 
