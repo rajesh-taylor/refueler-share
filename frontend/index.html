@@ -515,6 +515,8 @@
       <a href="https://refueler.io/">App</a>
       <a href="https://refueler.io/editorial/">Editorial</a>
       <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="/upgrade.html">Upgrade</a>
+      <a href="/upgrade.html">Upgrade</a>
       <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
     </nav>
   </div>
@@ -636,13 +638,14 @@
       <a href="https://refueler.io/">App</a>
       <a href="https://refueler.io/editorial/">Editorial</a>
       <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="/upgrade.html">Upgrade</a>
     </div>
   </div>
 </footer>
 
 <!-- Turnstile widget (invisible) -->
 <div id="cf-turnstile" class="cf-turnstile hidden"
-  data-sitekey="TURNSTILE_SITEKEY_PLACEHOLDER"
+  data-sitekey="0x4AAAAAAD0N7GlHlCRuWITr"
   data-callback="onTurnstileSuccess"
   data-size="invisible">
 </div>
@@ -651,7 +654,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
-const WORKER_URL  = 'WORKER_URL_PLACEHOLDER';
+const WORKER_URL  = 'https://refueler-share.rt-fc4.workers.dev';
 const CHUNK_SIZE  = 8 * 1024 * 1024;         // 8 MB
 const FREE_CAP    = 4 * 1024 * 1024 * 1024;  // 4 GB
 const FREE_EXPIRY = 5 * 24 * 60 * 60;        // 5 days in seconds
@@ -663,7 +666,7 @@ let blake3, secp;
 async function loadDeps() {
   [blake3, secp] = await Promise.all([
     import('https://esm.sh/blake3-wasm@2.1.5/browser'),
-    import('https://esm.sh/@noble/secp256k1@1.7.1'),
+    import('https://esm.sh/@noble/secp256k1@1.7.2'),
   ]);
   await blake3.default();
 }
