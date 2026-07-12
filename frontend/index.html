@@ -453,6 +453,9 @@
   .mt12       { margin-top: 12px; }
   .mt16       { margin-top: 16px; }
 
+  /* ── Turnstile ───────────────────────────────────────────────────── */
+  .turnstile-wrap { display: flex; justify-content: center; }
+
   /* ── Site footer ─────────────────────────────────────────────────── */
   .site-footer {
     border-top: 1px solid var(--border);
@@ -516,7 +519,6 @@
       <a href="https://refueler.io/editorial/">Editorial</a>
       <a href="https://refueler.io/privacy/">Privacy</a>
       <a href="/upgrade.html">Upgrade</a>
-      <a href="/upgrade.html">Upgrade</a>
       <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
     </nav>
   </div>
@@ -570,6 +572,15 @@
             <input type="password" id="passphrase-input" placeholder="Choose a strong passphrase" autocomplete="new-password" />
           </div>
           <div class="muted small mt4">Share this separately. We never store it.</div>
+        </div>
+      </div>
+      <!-- Turnstile — visible managed widget, shown after file selected -->
+      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
+        <div id="cf-turnstile" class="cf-turnstile"
+          data-sitekey="0x4AAAAAAD0N7GlHlCRuWITr"
+          data-callback="onTurnstileSuccess"
+          data-theme="auto"
+          data-size="normal">
         </div>
       </div>
       <div class="mt16">
@@ -643,12 +654,7 @@
   </div>
 </footer>
 
-<!-- Turnstile widget (invisible) -->
-<div id="cf-turnstile" class="cf-turnstile"
-  data-sitekey="0x4AAAAAAD0N7GlHlCRuWITr"
-  data-callback="onTurnstileSuccess"
-  data-appearance="interaction-only">
-</div>
+<!-- Turnstile widget moved inline to options-card -->
 
 <script type="module">
 // ─────────────────────────────────────────────────────────────────────────────
@@ -764,16 +770,19 @@ function handleFileSelection(file) {
   fileNameTag.textContent = file.name.length > 32 ? file.name.slice(0, 30) + '…' : file.name;
   fileSizeTag.textContent = formatBytes(file.size);
   optionsCard.classList.remove('hidden');
+  // Show the visible Turnstile checkbox; reset any previous token
+  turnstileToken = null;
+  const tsWrap = document.getElementById('turnstile-wrap');
+  if (tsWrap) tsWrap.classList.remove('hidden');
   updateUploadBtn();
-  if (window.turnstile) window.turnstile.execute();
 }
 
 function updateUploadBtn() {
   const needsPassphrase = passphraseToggle.checked && passphraseInput.value.trim().length === 0;
-  uploadBtn.disabled = !selectedFile || needsPassphrase;
+  uploadBtn.disabled = !selectedFile || needsPassphrase || !turnstileToken;
 }
 
-window.onTurnstileSuccess = token => { turnstileToken = token; };
+window.onTurnstileSuccess = token => { turnstileToken = token; updateUploadBtn(); };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload flow
@@ -807,7 +816,6 @@ async function startUpload() {
   const chunkHashes = [];
 
   setStage('Credentialling', 12);
-  if (!turnstileToken) await waitForTurnstile(10000);
   const { blindedMsg, blindingFactor } = await generateBlindedCredential();
   const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
     method: 'POST',
