@@ -1,8 +1,6 @@
 # Share-Master-Context — refueler-share
-> **Version:** 1.1 | **Last updated:** Session 4 · 11 July 2026
+> **Version:** 1.2 | **Last updated:** Session 8 · 12 July 2026
 > Load this file alongside `CLAUDE.md` (refueler-share) and `SESSIONS.md` for every share session.
-> Do NOT load `Refueler_MasterContext_CC64.md` for share sessions — it carries irrelevant context
-> (Blink webhooks, rail intelligence, Numo, mint). This file is the lean equivalent.
 
 ---
 
@@ -13,7 +11,7 @@ BLAKE3 chunk integrity + Cashu NUT-00 blind signatures as anonymous auth.
 **These are distinct layers. Never conflate.**
 
 Local path: `/Users/rajeshtaylor/Documents/refueler-share/`
-Licence: **Apache 2.0** (not MIT — early repo init was wrong, corrected Session 2)
+Licence: **Apache 2.0**
 
 ---
 
@@ -26,10 +24,10 @@ Licence: **Apache 2.0** (not MIT — early repo init was wrong, corrected Sessio
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
 | Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens` + `subscribers` |
 | Frontend | Static HTML5 — `frontend/index.html` + `frontend/upgrade.html` |
-| Subdomain | `share.refueler.io` → CNAME → `refueler-share.rt-fc4.workers.dev` (Proxied) |
-| Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser only), secp256k1 (@noble) |
+| Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` (Pages) |
+| Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser, local bundle), secp256k1 (@noble) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | Blink BOLT11 — Session 5 |
+| Payments (sats) | Blink BOLT11 — Session 9+ |
 
 ---
 
@@ -65,17 +63,17 @@ Index: `subscribers_email_idx` on `email`. RLS enabled. Worker service_role key 
 | Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
 | R2 prod bucket | `refueler-share-prod` |
 | R2 dev bucket | `refueler-share-dev` |
-| Pages | `share.refueler.io` — NOT YET DEPLOYED (Session 5) |
-| Turnstile | Sitekey NOT YET CREATED (Session 5) |
-| DNS | `share.refueler.io` CNAME → `refueler-share.rt-fc4.workers.dev` (Proxied) ✓ |
+| Pages | `share.refueler.io` — LIVE · project `refueler-share` · CNAME → refueler-share.pages.dev |
+| Turnstile | Sitekey `0x4AAAAAAD0N7GlHlCRuWITr` · Secret `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` · Widget: refueler-share (Managed) |
+| DNS | `share.refueler.io` CNAME → `refueler-share.pages.dev` ✓ |
 
 Worker secrets (all set ✓):
-- `MINT_PRIVATE_KEY` — secp256k1 hex (32 bytes). Generated Session 4.
-- `TURNSTILE_SECRET_KEY` — ⚠ NOT YET SET (Session 5)
+- `MINT_PRIVATE_KEY` — secp256k1 hex (32 bytes) ✓
+- `TURNSTILE_SECRET_KEY` — `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` ✓ (corrected Session 8)
 - `SUPABASE_URL` → `https://tihgvdokeofnjxjkenmm.supabase.co` ✓
 - `SUPABASE_SERVICE_KEY` → service_role JWT ✓
 - `STRIPE_SECRET_KEY` → `sk_live_...Fyop` ✓
-- `STRIPE_WEBHOOK_SECRET` → `whsec_bZBn7PX9IVxm1MMWvejujI0bvC8JjuqH` ✓
+- `STRIPE_WEBHOOK_SECRET` → rotated Session 6 ✓
 
 ---
 
@@ -100,16 +98,16 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 ## Locked architecture decisions
 
 - **Free tier cap: 4 GB** per transfer
-- **Worker URL: `https://refueler-share.rt-fc4.workers.dev`** — hardcoded in upgrade.html. Update index.html Session 5.
-- BLAKE3 = chunk integrity (browser WASM). Server-side uses Web Crypto SHA-256 for verification.
-  Security guarantee identical — client declares hash, Worker verifies bytes match.
+- **Worker URL: `https://refueler-share.rt-fc4.workers.dev`** — hardcoded in both HTML files ✓
+- BLAKE3 = chunk integrity (browser WASM, local bundle at `frontend/blake3/`). Server-side uses Web Crypto SHA-256.
+- `frontend/blake3/` is force-committed via `git add -f` — `dist/` is in `.gitignore`, must use `-f` flag if re-adding
 - Cashu blind sigs = anonymous auth. Never conflate with BLAKE3.
 - No external mint. No ecash-to-sats path. No Cashu monetary usage.
 - AES-GCM session key lives in URL fragment only. Never in network requests. Never in logs.
 - Browser memory only for credentials. Never localStorage. Never sessionStorage.
 - Subscription model (monthly/yearly). Pay-per-transfer deferred to future.
 - Stripe embedded Payment Element (not Checkout redirect) — card in upgrade.html.
-- Lightning tab in upgrade.html is placeholder — Blink BOLT11 Session 5.
+- Lightning tab in upgrade.html is placeholder — Blink BOLT11 Session 9+.
 - NUT-07 melt fires after first chunk write. On Supabase failure: log and continue.
 - Turnstile: fail-closed on any verification error.
 - R2 manifest is authoritative transfer state. Supabase is ledger only.
@@ -117,6 +115,28 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Manifest key: `{uuid}/manifest.json`
 - Direct R2 URL exposure: none. Worker proxies all R2 access.
 - curl: always single-line, real key inlined, no backslash continuations.
+
+---
+
+## Known broken / do not retry
+
+- **blake3-wasm CDN imports** — `esm.sh` returns 404, `unpkg.com` blocked by CORS on Cloudflare Pages. Local bundle only.
+- **`import('https://unpkg.com/blake3-wasm...')`** — confirmed broken, do not use.
+- **Invisible Turnstile mode** — doesn't resolve in Chrome/Safari without user interaction. Visible managed widget only.
+
+---
+
+## Current blocker (Session 9 priority 0)
+
+`POST /credential/issue` → **500 Internal Server Error**, body: `{"error":"Credential issuance failed"}`
+
+Turnstile verification passes (no longer 403). Crash inside `nut00.js` → `issueBlindSignature()`.
+
+**Session 9 fix plan:**
+1. `npx wrangler tail --format pretty` (from `worker/` dir) + trigger upload → get stack trace
+2. Check `MINT_PRIVATE_KEY` env passthrough: `index.js` must pass `env` to `nut00.js`
+3. Verify `MINT_PRIVATE_KEY` is valid 32-byte hex: `echo -n $KEY | wc -c` should be 64
+4. Fix and re-smoke-test to completion
 
 ---
 
@@ -138,8 +158,8 @@ Yearly = 10 months price (2 months free).
 | Session | NUTs in scope |
 |---------|--------------|
 | Sessions 2-4 (complete) | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
-| Session 5 | NUT-04 (mint on payment — may simplify to subscription check) |
-| Session 6+ | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
+| Session 9 | Smoke test completion, then Stripe Portal + R2 lifecycle + Lightning tab |
+| Session 10+ | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
 | Prod Max Phase 2 | ML-KEM key wrapping (deferred) |
 
 ---
@@ -148,7 +168,7 @@ Yearly = 10 months price (2 months free).
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/credential/issue` | NUT-00 blind sig (free tier, Turnstile gate) |
+| POST | `/credential/issue` | NUT-00 blind sig (free tier, Turnstile gate) — **currently 500, Session 9 fix** |
 | PUT | `/upload/{uuid}/{chunk}` | Chunked upload, credential verify |
 | POST | `/auth/{uuid}` | NUT-11 Mode 1 passphrase → download token |
 | GET | `/download/{uuid}/{chunk}` | R2 chunk proxy |
@@ -164,52 +184,43 @@ Yearly = 10 months price (2 months free).
 refueler-share/
   README.md
   CLAUDE.md
-  SESSIONS.md               ← updated Session 4
-  Share-Master-Context.md   ← this file (v1.1)
+  SESSIONS.md
+  Share-Master-Context.md   ← this file (v1.2)
   LICENSE                   ← Apache 2.0
+  frontend-deps/            ← throwaway npm install dir, not committed
   worker/
     wrangler.toml
     package.json            ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
-    package-lock.json
     src/
       index.js              ← 7 endpoints + CORS
-      nut00.js              ← NUT-00 BDHKE + aliased exports
+      nut00.js              ← NUT-00 BDHKE + aliased exports ⚠ 500 on /credential/issue
       nut11.js              ← NUT-11 Mode 1 helpers + download tokens
-      blake3.js             ← Web Crypto SHA-256 (WASM replaced Session 4)
-      turnstile.js          ← Turnstile verify (export: verifyTurnstileToken)
+      blake3.js             ← Web Crypto SHA-256 (server-side only)
+      turnstile.js          ← Turnstile verify ✓
       manifest.js           ← R2 manifest helpers + TIER_CAPS
       stripe.js             ← Stripe webhook verify + checkout session
   frontend/
-    index.html              ← upload UI (WORKER_URL needs updating Session 5)
-    upgrade.html            ← tier cards + Payment Element (new Session 4)
+    index.html              ← upload UI ✓ (loadDeps uses local blake3 bundle)
+    upgrade.html            ← tier cards + Payment Element
+    blake3/                 ← local blake3-wasm bundle (force-committed, dist/ in .gitignore)
+      browser-async.js
+      esm/browser/*.js
+      esm/base/*.js
+      dist/wasm/web/blake3_js.js
+      dist/wasm/web/blake3_js_bg.wasm
   docs/
     r2-lifecycle.md         ← R2 lifecycle rules (not yet applied)
 ```
 
 ---
 
-## Session 5 targets
+## Session 9 targets
 
-1. **Turnstile** — create sitekey + secret in Cloudflare dashboard → `wrangler secret put TURNSTILE_SECRET_KEY` → replace placeholder in `index.html`
-2. **Update `WORKER_URL`** in `frontend/index.html` → `https://refueler-share.rt-fc4.workers.dev`
-3. **Cloudflare Pages deploy** — connect repo `frontend/` directory → `share.refueler.io`
-4. **End-to-end smoke test** — upload a small file through `share.refueler.io`, verify download link works
-5. **Lightning tab** — Blink BOLT11 invoice generation in `upgrade.html`
-6. **Stripe Customer Portal** — enable in Stripe dashboard, wire up "Manage subscription" link
-7. **R2 lifecycle rules** — apply from `docs/r2-lifecycle.md`
-8. **Speed benchmark table** — A/B test protocol against SwissTransfer and PrivCloud
-
----
-
-## Pre-commit checklist (Session 5)
-
-- [ ] `wrangler secret put TURNSTILE_SECRET_KEY`
-- [ ] Replace Turnstile sitekey placeholder in `frontend/index.html`
-- [ ] Update `WORKER_URL` in `frontend/index.html` to `https://refueler-share.rt-fc4.workers.dev`
-- [ ] Cloudflare Pages: connect repo, set build output to `frontend/`, custom domain `share.refueler.io`
-- [ ] Apply R2 lifecycle rules: `docs/r2-lifecycle.md`
-- [ ] End-to-end upload smoke test
-- [ ] Commit all
+1. **Fix `/credential/issue` 500** — `wrangler tail` to get stack trace, fix `nut00.js` env passthrough
+2. **End-to-end smoke test** — upload small file, verify share link + download works
+3. **Stripe Customer Portal** — enable in dashboard, wire "Manage subscription" link
+4. **R2 lifecycle rules** — apply from `docs/r2-lifecycle.md`
+5. **Lightning tab** — Blink BOLT11 invoice in `upgrade.html`
 
 ---
 

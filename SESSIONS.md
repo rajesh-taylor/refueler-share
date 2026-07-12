@@ -1,201 +1,175 @@
+## Session 8 — Debug: blake3-wasm local bundle, Turnstile secret fix (12 July 2026)
+
+**Type:** Debug + deploy session.
+**Commit:** `0369dc8`
+
+### Completed
+
+**blake3-wasm CDN failure root cause confirmed:**
+- `esm.sh` returns 404 for blake3-wasm browser build
+- `unpkg.com` CORS blocks WASM module imports from `share.refueler.io` (Cloudflare Pages strips cross-origin headers)
+- Fix: bundled blake3-wasm locally into `frontend/blake3/`
+
+**Local bundle steps completed:**
+- `npm install blake3-wasm@2.1.5 --prefix ./frontend-deps` (repo root, no package.json needed)
+- Copied: `browser-async.js`, `esm/browser/*.js`, `esm/base/*.js`, `dist/wasm/web/blake3_js.js`, `dist/wasm/web/blake3_js_bg.wasm` → `frontend/blake3/`
+- `dist/` was in `.gitignore` (under `# Build output`) — required `git add -f frontend/blake3/` to force-commit
+- `loadDeps()` in `index.html` patched: `import('https://unpkg.com/blake3-wasm@2.1.5/esm/browser.js')` → `import('./blake3/browser-async.js')`
+- `blake3` variable now receives ready API directly from `browser-async.js` (no second `.default()` call needed)
+- Committed and pushed — Pages deployed, confirmed `content-type: application/javascript` for both `browser-async.js` and `blake3_js.js` via curl
+
+**Turnstile secret key mismatch fixed:**
+- `TURNSTILE_SECRET_KEY` was set to wrong value in Session 5
+- Correct secret retrieved from Cloudflare Dashboard → Turnstile → refueler-share widget
+- Re-set: `echo "0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU" | npx wrangler secret put TURNSTILE_SECRET_KEY`
+
+**Smoke test progress:**
+- Before Session 8: stuck at "Preparing 0%" — blake3 import failing
+- After blake3 fix: reached "Credentialling 12%" — BLAKE3 loading confirmed working
+- After Turnstile secret fix: reached "Credentialling 12%" then **500 Internal Server Error** from `/credential/issue`
+- Error body: `{"error":"Credential issuance failed"}` — Turnstile verification now PASSES, Worker crashes inside NUT-00 blind sig logic
+
+### Current blocker (Session 9)
+
+`POST /credential/issue` → 500, `{"error":"Credential issuance failed"}`
+
+Turnstile is verified correctly. Crash is inside `nut00.js` — `issueBlindSignature()`.
+Likely cause: `MINT_PRIVATE_KEY` env var not accessible, or secp256k1 point arithmetic failing at Worker runtime.
+
+**Session 9 fix plan:**
+1. Pull Worker logs to get the actual stack trace:
+   `npx wrangler tail --format pretty` (from `worker/` dir) then trigger an upload attempt
+2. Likely fix: verify `MINT_PRIVATE_KEY` is valid 32-byte hex and accessible in `nut00.js` via `env.MINT_PRIVATE_KEY`
+3. If key access issue: check `wrangler.toml` bindings and `index.js` env passthrough to `nut00.js`
+4. Re-smoke-test to completion
+
+### Do not retry
+
+- DO NOT attempt CDN imports for blake3-wasm (esm.sh 404, unpkg CORS blocked)
+- DO NOT use `import('https://unpkg.com/blake3-wasm...')` — confirmed broken on Cloudflare Pages
+- DO NOT re-set TURNSTILE_SECRET_KEY — correct value now set, widget sitekey `0x4AAAAAAD0N7GlHlCRuWITr` matches
+
+### Files changed this session
+
+- `frontend/blake3/browser-async.js` (new — force-added)
+- `frontend/blake3/esm/browser/*.js` (new — force-added)
+- `frontend/blake3/esm/base/*.js` (new — force-added)
+- `frontend/blake3/dist/wasm/web/blake3_js.js` (new — force-added)
+- `frontend/blake3/dist/wasm/web/blake3_js_bg.wasm` (new — force-added)
+- `frontend/index.html` (patched — loadDeps CDN → local)
+- `TURNSTILE_SECRET_KEY` Worker secret updated
+
+### Not completed (carry to Session 9)
+
+- Smoke test to completion (upload + share link)
+- Stripe Customer Portal enable
+- R2 lifecycle rules (`docs/r2-lifecycle.md`)
+- Lightning tab — Blink BOLT11 in `upgrade.html`
+- NUT-11 Mode 2
+
+---
+
+## Session 7 — Debug: Turnstile visible widget, blake3 CDN failures (12 July 2026)
+
+**Type:** Debug session.
+**Commit:** `3b9a9aa`
+
+### Completed
+
+- Replaced invisible Turnstile with visible managed widget (explicit `window.turnstile.render()`)
+- Safari iframe block resolved
+- blake3-wasm CDN failures identified: esm.sh 404, unpkg CORS blocked
+- Local bundle fix deferred to Session 8
+
+### Not completed (carried to Session 8)
+
+- blake3-wasm local bundle
+- Smoke test
+
+---
+
+## Session 6 — Debug: Stripe webhook secret rotation, Turnstile fixes (12 July 2026)
+
+**Type:** Debug session.
+**Commit:** `458bc99` / `a96c9c55` (Pages)
+
+### Completed
+
+- `STRIPE_WEBHOOK_SECRET` rotated (old `whsec_bZBn7...` was exposed in git, now dead)
+- Turnstile size/appearance fixes attempted
+- Smoke test stalled at "Preparing 0%" — Turnstile not resolving in headless/interaction-only mode
+
+### Not completed (carried to Session 7)
+
+- Turnstile visible widget fix
+- Smoke test
+
+---
+
+## Session 5 — Deploy: Turnstile, Pages, share.refueler.io live (12 July 2026)
+
+**Type:** Build + deploy session.
+**Commit:** `9a5fdc1`
+
+### Completed
+
+- Turnstile widget created (Managed, share.refueler.io, no pre-clearance)
+- All 6 Worker secrets confirmed set
+- `frontend/index.html` patched: sitekey, WORKER_URL, secp256k1 version, Upgrade nav link
+- Cloudflare Pages project created — `refueler-share` → `frontend/` directory
+- Custom domain `share.refueler.io` activated, SSL enabled
+- DNS CNAME updated: share → refueler-share.pages.dev
+
+### Not completed (carried to Session 6)
+
+- End-to-end upload smoke test
+- Stripe Customer Portal
+- R2 lifecycle rules
+- Lightning tab
+
+---
+
 ## Session 4 — Build: Stripe subscriptions, Worker deploy, subdomain (11 July 2026)
 
 **Type:** Build session. Code output. Commit all deliverables.
-
-**Branch:** `session-4-build` (merge to main after local review)
-
+**Branch:** `session-4-build`
 **Commit ref (Session 3):** `172a2e0`
 
 ### Completed
 
-**Build fixes carried from Session 3 (priority 0):**
-- `@noble/hashes` subpath import errors fixed — upgraded to 1.7.2, `@noble/secp256k1` to 2.1.0
-- `blake3-wasm` cannot bundle in Cloudflare Workers — replaced with Web Crypto SHA-256 server-side.
-  Security guarantee identical: client declares hash, Worker verifies received bytes match.
-  Client still uses BLAKE3 WASM (browser) to compute hashes before upload.
-- `turnstile.js` export name mismatch fixed — now exports `verifyTurnstileToken` (alias `verifyTurnstile`)
-- `nut00.js` rewritten — aliased exports `issueBlindSignature` and `verifyCredential` added for index.js
-- `nut11.js` created — was missing from Session 3 commit. Exports: `hashSecret`, `timingSafeEqual`,
-  `issueDownloadToken`, `verifyDownloadToken`. HMAC-SHA256 download tokens, 15-min expiry, UUID-bound.
-
-**Stripe setup (priority 1):**
-- Products created in live mode (Rajesh Taylor account, GBP):
-  - `Refueler Share — Creative Premium` (prod_UrrU6KHBl0rQSn)
-    - Monthly £12: `price_1Ts7lsGlctwiB9U3hdtgChU2` (lookup: `share-creative-monthly`)
-    - Yearly £120: `price_1Ts7sqGlctwiB9U3YRloCFfi` (lookup: `share-creative-yearly`)
-  - `Refueler Share — Production Max` (prod_Urre2e3PQgr5Uq)
-    - Monthly £24: `price_1Ts7vIGlctwiB9U3kb3NCLue` (lookup: `share-max-monthly`)
-    - Yearly £240: `price_1Ts7xIGlctwiB9U3JyZB8Kwj` (lookup: `share-max-yearly`)
-- Webhook registered: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe`
-  - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
-  - Destination ID: `we_1Ts8epGlctwiB9U3dXT8XBac`
-- New secret key created: `refueler-share` (previous key unused since 2020, Ghost membership inactive)
-
-**Supabase migration (priority 2):**
-- Table: `subscribers`
-  - `stripe_customer_id TEXT PRIMARY KEY`
-  - `email TEXT`
-  - `tier TEXT CHECK (free | creative | max) DEFAULT free`
-  - `status TEXT CHECK (active | inactive | cancelled) DEFAULT inactive`
-  - `current_period_end TIMESTAMPTZ`
-  - `created_at TIMESTAMPTZ DEFAULT NOW()`
-  - `updated_at TIMESTAMPTZ DEFAULT NOW()`
-- Index: `subscribers_email_idx` on `email`
-- RLS enabled. Worker service_role key only.
-- Migration name: `create_subscribers_refueler_share`
-
-**Worker additions (priority 3):**
-New file: `worker/src/stripe.js`
-- `verifyStripeWebhook` — HMAC-SHA256 signature verify, 5-min replay protection
-- `createCheckoutSession` — Stripe embedded checkout (Payment Element mode)
-- `getSubscriptionTier` — lookup active sub by customer ID
-
-Updated: `worker/src/index.js`
-- `POST /webhook/stripe` — handles 3 Stripe events, upserts `subscribers` table
-- `POST /subscription/checkout` — validates price_id whitelist, creates embedded checkout session
-- `GET /subscription/status` — returns tier + status by email
-- CORS headers added for `share.refueler.io` and `upgrade.refueler.io`
-
-Worker secrets added:
-- `STRIPE_SECRET_KEY` — `sk_live_...Fyop`
-- `STRIPE_WEBHOOK_SECRET` — `whsec_bZBn7PX9IVxm1MMWvejujI0bvC8JjuqH`
-
-**R2 buckets created (priority 4):**
-- `refueler-share-prod` — production storage
-- `refueler-share-dev` — A/B speed test bucket
-
-**Worker deployed (priority 5):**
-- URL: `https://refueler-share.rt-fc4.workers.dev`
-- Version ID: `a392adff-133a-4aec-9044-7e0568a8aa97`
-- Smoke test: `POST /credential/issue` → `{"error":"Turnstile verification failed"}` ✓
-
-**Frontend: upgrade.html (priority 6):**
-`frontend/upgrade.html` — single file, no build step.
-- Tier cards: Skint Tog (free, current), Creative Premium, Production Max
-- Monthly/yearly billing toggle with "2 months free" badge
-- Stripe Payment Element embedded (card tab)
-- Lightning tab placeholder (Session 5)
-- Email field triggers Payment Element mount on blur
-- Carbon `#1A1A1A` design system, Gold `#C8A96E`, Satoshi/DM Sans
-- Success panel on `?success=1` redirect from Stripe
-
-**share.refueler.io subdomain (priority 7):**
-- CNAME record added: `share` → `refueler-share.rt-fc4.workers.dev` (Proxied)
-- Cloudflare Pages deployment pending (Session 5 — frontend needs Turnstile sitekey + WORKER_URL set)
-
-### Worker secrets status (all secrets for production)
-
-| Secret | Status |
-|--------|--------|
-| `MINT_PRIVATE_KEY` | ⚠ Not yet set — run `openssl rand -hex 32 \| wrangler secret put MINT_PRIVATE_KEY` |
-| `TURNSTILE_SECRET_KEY` | ⚠ Not yet set |
-| `SUPABASE_URL` | ⚠ Not yet set — `https://tihgvdokeofnjxjkenmm.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | ⚠ Not yet set |
-| `STRIPE_SECRET_KEY` | ✓ Set |
-| `STRIPE_WEBHOOK_SECRET` | ✓ Set |
-
-### Session 4 — Pre-commit checklist
-
-- [ ] Set remaining Worker secrets: MINT_PRIVATE_KEY, TURNSTILE_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY
-- [ ] Replace Turnstile sitekey placeholder in `frontend/index.html`
-- [ ] Update `WORKER_URL` in `frontend/index.html` to `https://refueler-share.rt-fc4.workers.dev`
-- [ ] Update `WORKER_URL` in `frontend/upgrade.html` (already set correctly)
-- [ ] Deploy Cloudflare Pages with `frontend/` directory → `share.refueler.io`
-- [ ] Verify `share.refueler.io` resolves after Pages deploy
-- [ ] Apply R2 lifecycle rules: `docs/r2-lifecycle.md`
-- [ ] Commit: `git add . && git commit -m "session-4: stripe subscriptions, worker deploy, upgrade page"`
-
-### Not completed this session (carry to Session 5)
-
-- Cloudflare Pages deploy (`share.refueler.io` serving `frontend/`)
-- Remaining Worker secrets (MINT_PRIVATE_KEY, TURNSTILE_SECRET_KEY, SUPABASE_*)
-- Turnstile sitekey in index.html
-- Stripe Customer Portal configuration
-- Lightning payment tab (Blink BOLT11)
-- Dashboard for paid tiers
-- NUT-11 Mode 2 (keypair challenge-response, Production Max)
-- Contractor upload link flow
-- ML-KEM PQC key wrapping (Production Max Phase 2)
-
-### Files produced this session
-
-- `worker/src/stripe.js` (new)
-- `worker/src/index.js` (updated — Stripe endpoints + CORS)
-- `worker/src/nut00.js` (fixed — aliased exports)
-- `worker/src/nut11.js` (new — was missing from Session 3)
-- `worker/src/blake3.js` (fixed — Web Crypto SHA-256 replaces WASM)
-- `worker/src/turnstile.js` (fixed — export name)
-- `frontend/upgrade.html` (new)
-- `SESSIONS.md` (this file)
+- Build fixes from Session 3: @noble/* versions, blake3.js→SHA-256, turnstile.js export, nut00.js aliases, nut11.js created
+- Stripe products + webhook created (live mode, GBP)
+- Supabase `subscribers` table migrated
+- Worker endpoints: `/webhook/stripe`, `/subscription/checkout`, `/subscription/status`
+- R2 buckets created: `refueler-share-prod`, `refueler-share-dev`
+- Worker deployed: `https://refueler-share.rt-fc4.workers.dev`
+- `frontend/upgrade.html` created
+- `share.refueler.io` CNAME added
 
 ---
 
 ## Session 3 — Build: NUT-11 Mode 1, nav alignment (11 July 2026)
 
-**Type:** Build session. Code output. Commit all deliverables.
-
 **Commit:** `172a2e0`
 
 ### Completed
 
-- NUT-11 Mode 1 passphrase gating: `nut11.js`, `manifest.js`, `index.js`, `index.html`
+- NUT-11 Mode 1 passphrase gating
 - Canonical nav brand alignment
-
-### Not completed (carried to Session 4)
-
-- NUT-11 Mode 2 (keypair challenge-response)
-- Contractor upload link flow
-- Payment integration
-- `share.refueler.io` domain config
-- Dashboard for paid tiers
 
 ---
 
 ## Session 2 — Build: Worker scaffold, frontend, Supabase migration (11 July 2026)
 
-**Type:** Build session. Code output. Commit all deliverables.
-
-**Branch:** `session-2-build` (merge to main after local review)
+**Branch:** `session-2-build`
 
 ### Completed
 
-**README correction (priority 1):**
-- Free tier cap corrected: 6 GB → **4 GB** (Skint Tog row and prose references)
-- Licence corrected: MIT → **Apache 2.0** (was wrong from initialisation — CC-64 carry-forward)
-- Economics section removed (should have been stripped in CC-64)
-- Status copy updated to reflect Session 2 in progress
-
-**Supabase migration applied (priority 2):**
-- Table: `spent_tokens` — `serial TEXT PRIMARY KEY`, `melted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
-- RLS enabled. No client policies created. Worker service_role key only.
-- Verified post-apply via `execute_sql` — schema confirmed correct.
-- Migration name: `create_spent_tokens_refueler_share`
-
-**Cloudflare Worker scaffold (priority 3):**
-Three endpoints built:
-- `POST /credential/issue` — Turnstile validation (free tier) + NUT-00 blind sig issuance.
-- `PUT /upload/{uuid}/{chunk-index}` — credential verify, double-spend check, BLAKE3, manifest, melt.
-- `GET /download/{uuid}/{chunk-index}` — manifest expiry check, grace period, R2 proxy.
-
-Files: `worker/src/index.js`, `worker/src/nut00.js`, `worker/src/turnstile.js`,
-`worker/src/manifest.js`, `worker/src/blake3.js`, `worker/wrangler.toml`, `worker/package.json`
-
-**BLAKE3 WASM integration (priority 4):**
-- Frontend: loaded dynamically from `esm.sh/blake3-wasm@2.1.5/browser`.
-- Worker: replaced with Web Crypto SHA-256 (Session 4 fix — WASM cannot bundle in Workers).
-
-**Frontend (priority 5):** `frontend/index.html` — single file, no build step.
-
-**R2 lifecycle rules (priority 6):** `docs/r2-lifecycle.md`
-
-### Not completed this session (carry to Session 3)
-
-- NUT-11 P2SH download gating
-- Contractor upload link flow
-- Payment integration
-- `share.refueler.io` domain config
-- Dashboard for paid tiers
-- ML-KEM PQC key wrapping
+- README corrections (free tier cap 4 GB, Apache 2.0 licence)
+- Supabase `spent_tokens` table migrated
+- Worker scaffold: 3 endpoints
+- Frontend: `frontend/index.html`
+- R2 lifecycle rules: `docs/r2-lifecycle.md`
 
 ---
 
@@ -205,17 +179,7 @@ Files: `worker/src/index.js`, `worker/src/nut00.js`, `worker/src/turnstile.js`,
 
 ### Completed
 
-- Token lifetime rules resolved
-- A/B speed test spec produced
-- Upload credential storage model confirmed (browser memory only)
-- Contractor upload link option selection (Option A: NUT-11 P2SH)
-- Anonymous auth flow spec produced
-- NUT-11 P2SH downloader identity model (Mode 1 + Mode 2)
-- Storage layer config spec produced
-
-### Files uploaded this session
-
-- `claude.md` (v4.7)
-- `Refueler_MasterContext_CC64.md`
-- `REFUELER_SHARE_SESSION_1.md`
-- `refueler-share/README.md`
+- Token lifetime rules, A/B speed test spec, upload credential storage model
+- Contractor upload link: Option A (NUT-11 P2SH)
+- Anonymous auth flow spec, NUT-11 P2SH downloader identity model
+- Storage layer config spec
