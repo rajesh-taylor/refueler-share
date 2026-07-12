@@ -770,7 +770,7 @@ function handleFileSelection(file) {
 
 function updateUploadBtn() {
   const needsPassphrase = passphraseToggle.checked && passphraseInput.value.trim().length === 0;
-  uploadBtn.disabled = !selectedFile || needsPassphrase || !turnstileToken;
+  uploadBtn.disabled = !selectedFile || needsPassphrase;
 }
 
 window.onTurnstileSuccess = token => { turnstileToken = token; };
