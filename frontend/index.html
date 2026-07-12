@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 
 <!-- Theme: applied before first paint to avoid flash -->
 <script>
@@ -576,12 +576,7 @@
       </div>
       <!-- Turnstile — visible managed widget, shown after file selected -->
       <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
-        <div id="cf-turnstile" class="cf-turnstile"
-          data-sitekey="0x4AAAAAAD0N7GlHlCRuWITr"
-          data-callback="onTurnstileSuccess"
-          data-theme="auto"
-          data-size="normal">
-        </div>
+        <div id="cf-turnstile"></div>
       </div>
       <div class="mt16">
         <button class="btn btn-primary btn-full" id="upload-btn" disabled>Encrypt &amp; upload</button>
@@ -770,10 +765,11 @@ function handleFileSelection(file) {
   fileNameTag.textContent = file.name.length > 32 ? file.name.slice(0, 30) + '…' : file.name;
   fileSizeTag.textContent = formatBytes(file.size);
   optionsCard.classList.remove('hidden');
-  // Show the visible Turnstile checkbox; reset any previous token
+  // Show and render Turnstile widget; reset any previous token
   turnstileToken = null;
   const tsWrap = document.getElementById('turnstile-wrap');
   if (tsWrap) tsWrap.classList.remove('hidden');
+  renderTurnstile();
   updateUploadBtn();
 }
 
@@ -782,7 +778,38 @@ function updateUploadBtn() {
   uploadBtn.disabled = !selectedFile || needsPassphrase || !turnstileToken;
 }
 
-window.onTurnstileSuccess = token => { turnstileToken = token; updateUploadBtn(); };
+let turnstileWidgetId = null;
+
+window.onTurnstileLoad = function() {
+  // Turnstile script ready — widget will be rendered on file selection
+};
+
+function renderTurnstile() {
+  const container = document.getElementById('cf-turnstile');
+  if (!container || !window.turnstile) return;
+  // Reset any previous render
+  if (turnstileWidgetId !== null) {
+    try { window.turnstile.remove(turnstileWidgetId); } catch(e) {}
+    turnstileWidgetId = null;
+  }
+  container.innerHTML = '';
+  turnstileWidgetId = window.turnstile.render(container, {
+    sitekey: '0x4AAAAAAD0N7GlHlCRuWITr',
+    theme: 'auto',
+    callback: function(token) {
+      turnstileToken = token;
+      updateUploadBtn();
+    },
+    'error-callback': function() {
+      turnstileToken = null;
+      updateUploadBtn();
+    },
+    'expired-callback': function() {
+      turnstileToken = null;
+      updateUploadBtn();
+    },
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload flow
