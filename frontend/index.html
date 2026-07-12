@@ -644,7 +644,7 @@
 </footer>
 
 <!-- Turnstile widget (invisible) -->
-<div id="cf-turnstile" class="cf-turnstile hidden"
+<div id="cf-turnstile" class="cf-turnstile"
   data-sitekey="0x4AAAAAAD0N7GlHlCRuWITr"
   data-callback="onTurnstileSuccess"
   data-size="invisible">
@@ -770,7 +770,7 @@ function handleFileSelection(file) {
 
 function updateUploadBtn() {
   const needsPassphrase = passphraseToggle.checked && passphraseInput.value.trim().length === 0;
-  uploadBtn.disabled = !selectedFile || needsPassphrase;
+  uploadBtn.disabled = !selectedFile || needsPassphrase || !turnstileToken;
 }
 
 window.onTurnstileSuccess = token => { turnstileToken = token; };
