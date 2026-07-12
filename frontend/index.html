@@ -665,11 +665,12 @@ const FREE_EXPIRY = 5 * 24 * 60 * 60;        // 5 days in seconds
 // ─────────────────────────────────────────────────────────────────────────────
 let blake3, secp;
 async function loadDeps() {
-  [blake3, secp] = await Promise.all([
-    import('https://unpkg.com/blake3-wasm@2.1.5/esm/browser.js'),
+  const [b3mod, secpMod] = await Promise.all([
+    import('./blake3/browser-async.js'),
     import('https://esm.sh/@noble/secp256k1@1.7.2'),
   ]);
-  await blake3.default();
+  blake3 = await b3mod.default();
+  secp = secpMod;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
