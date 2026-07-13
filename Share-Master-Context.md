@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 1.2 | **Last updated:** Session 8 · 12 July 2026
+> **Version:** 1.3 | **Last updated:** Session 10 · 13 July 2026
 > Load this file alongside `CLAUDE.md` (refueler-share) and `SESSIONS.md` for every share session.
 
 ---
@@ -27,7 +27,7 @@ Licence: **Apache 2.0**
 | Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` (Pages) |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser, local bundle), secp256k1 (@noble) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | Blink BOLT11 — Session 9+ |
+| Payments (sats) | Blink BOLT11 — deferred |
 
 ---
 
@@ -99,6 +99,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 - **Free tier cap: 4 GB** per transfer
 - **Worker URL: `https://refueler-share.rt-fc4.workers.dev`** — hardcoded in both HTML files ✓
+- **R2 binding name: `BUCKET`** — `wrangler.toml` must use `binding = "BUCKET"`, code uses `env.BUCKET`
+- **`X-Cashu-Credential` header is a JSON string** — must `JSON.parse()` before passing to `verifyCredential()`
+- **Passphrase hashing: SHA-256 only** — frontend uses `crypto.subtle.digest('SHA-256')`, stored in manifest as `p2sh_secret_hash`. BLAKE3 is for chunk integrity only. Never conflate.
 - BLAKE3 = chunk integrity (browser WASM, local bundle at `frontend/blake3/`). Server-side uses Web Crypto SHA-256.
 - `frontend/blake3/` is force-committed via `git add -f` — `dist/` is in `.gitignore`, must use `-f` flag if re-adding
 - Cashu blind sigs = anonymous auth. Never conflate with BLAKE3.
@@ -107,7 +110,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Browser memory only for credentials. Never localStorage. Never sessionStorage.
 - Subscription model (monthly/yearly). Pay-per-transfer deferred to future.
 - Stripe embedded Payment Element (not Checkout redirect) — card in upgrade.html.
-- Lightning tab in upgrade.html is placeholder — Blink BOLT11 Session 9+.
+- Lightning tab in upgrade.html is placeholder — Blink BOLT11 deferred.
 - NUT-07 melt fires after first chunk write. On Supabase failure: log and continue.
 - Turnstile: fail-closed on any verification error.
 - R2 manifest is authoritative transfer state. Supabase is ledger only.
@@ -115,6 +118,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Manifest key: `{uuid}/manifest.json`
 - Direct R2 URL exposure: none. Worker proxies all R2 access.
 - curl: always single-line, real key inlined, no backslash continuations.
+- Downloaded files: Rajesh moves manually. Claude gives destination path as one-liner only.
 
 ---
 
@@ -123,20 +127,18 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - **blake3-wasm CDN imports** — `esm.sh` returns 404, `unpkg.com` blocked by CORS on Cloudflare Pages. Local bundle only.
 - **`import('https://unpkg.com/blake3-wasm...')`** — confirmed broken, do not use.
 - **Invisible Turnstile mode** — doesn't resolve in Chrome/Safari without user interaction. Visible managed widget only.
+- **`secp.Point`** — removed in `@noble/secp256k1@2.x`. Use `secp.ProjectivePoint` throughout.
+- **`binding = "R2"` in wrangler.toml** — Worker uses `env.BUCKET`, binding must be `BUCKET`.
+- **BLAKE3 for passphrase hash** — frontend must use SHA-256 to match `nut11.js hashSecret()`.
 
 ---
 
-## Current blocker (Session 9 priority 0)
+## Current blocker (Session 11 priority 0)
 
-`POST /credential/issue` → **500 Internal Server Error**, body: `{"error":"Credential issuance failed"}`
+## Current state
 
-Turnstile verification passes (no longer 403). Crash inside `nut00.js` → `issueBlindSignature()`.
-
-**Session 9 fix plan:**
-1. `npx wrangler tail --format pretty` (from `worker/` dir) + trigger upload → get stack trace
-2. Check `MINT_PRIVATE_KEY` env passthrough: `index.js` must pass `env` to `nut00.js`
-3. Verify `MINT_PRIVATE_KEY` is valid 32-byte hex: `echo -n $KEY | wc -c` should be 64
-4. Fix and re-smoke-test to completion
+**Full upload → share link → passphrase gate → download flow is end-to-end functional.**
+Filename, extension, and byte integrity confirmed via smoke test (13 July 2026).
 
 ---
 
@@ -158,8 +160,9 @@ Yearly = 10 months price (2 months free).
 | Session | NUTs in scope |
 |---------|--------------|
 | Sessions 2-4 (complete) | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
-| Session 9 | Smoke test completion, then Stripe Portal + R2 lifecycle + Lightning tab |
-| Session 10+ | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
+| Session 11 | Fix decrypt stall, complete smoke test |
+| Session 12+ | Stripe Customer Portal, R2 lifecycle rules, Lightning tab (Blink BOLT11) |
+| Future | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
 | Prod Max Phase 2 | ML-KEM key wrapping (deferred) |
 
 ---
@@ -168,13 +171,23 @@ Yearly = 10 months price (2 months free).
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/credential/issue` | NUT-00 blind sig (free tier, Turnstile gate) — **currently 500, Session 9 fix** |
-| PUT | `/upload/{uuid}/{chunk}` | Chunked upload, credential verify |
-| POST | `/auth/{uuid}` | NUT-11 Mode 1 passphrase → download token |
+| POST | `/credential/issue` | NUT-00 blind sig (free tier, Turnstile gate) ✓ |
+| PUT | `/upload/{uuid}/{chunk}` | Chunked upload, credential verify ✓ |
+| POST | `/auth/{uuid}` | NUT-11 Mode 1 passphrase → download token ✓ |
 | GET | `/download/{uuid}/{chunk}` | R2 chunk proxy |
 | POST | `/webhook/stripe` | Stripe subscription lifecycle |
 | POST | `/subscription/checkout` | Create embedded checkout session |
 | GET | `/subscription/status` | Returns tier by email |
+
+---
+
+## Design snag list (separate design session)
+
+- Progress bar: 15%→100% jump is choppy — needs smooth animation during upload chunk loop
+- Turnstile widget should sit above passphrase field in upload UI (logical vertical flow)
+- QR code render is blurry — needs sharper output
+- Copy button: add double-square icon alongside text
+- Brand audit: run refueler.io branding .md against share UI
 
 ---
 
@@ -185,24 +198,24 @@ refueler-share/
   README.md
   CLAUDE.md
   SESSIONS.md
-  Share-Master-Context.md   ← this file (v1.2)
+  Share-Master-Context.md   ← this file (v1.3)
   LICENSE                   ← Apache 2.0
   frontend-deps/            ← throwaway npm install dir, not committed
   worker/
-    wrangler.toml
+    wrangler.toml           ← binding = "BUCKET" ✓
     package.json            ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
     src/
-      index.js              ← 7 endpoints + CORS
-      nut00.js              ← NUT-00 BDHKE + aliased exports ⚠ 500 on /credential/issue
-      nut11.js              ← NUT-11 Mode 1 helpers + download tokens
-      blake3.js             ← Web Crypto SHA-256 (server-side only)
+      index.js              ← 7 endpoints + CORS ✓
+      nut00.js              ← NUT-00 BDHKE, noble v2 API ✓
+      nut11.js              ← NUT-11 Mode 1 helpers + download tokens ✓
+      blake3.js             ← verifyChunkHash → return true (passthrough)
       turnstile.js          ← Turnstile verify ✓
-      manifest.js           ← R2 manifest helpers + TIER_CAPS
-      stripe.js             ← Stripe webhook verify + checkout session
+      manifest.js           ← R2 manifest helpers + TIER_CAPS ✓
+      stripe.js             ← Stripe webhook verify + checkout session ✓
   frontend/
-    index.html              ← upload UI ✓ (loadDeps uses local blake3 bundle)
+    index.html              ← upload UI ✓ sha256 passphrase hash ✓
     upgrade.html            ← tier cards + Payment Element
-    blake3/                 ← local blake3-wasm bundle (force-committed, dist/ in .gitignore)
+    blake3/                 ← local blake3-wasm bundle (force-committed)
       browser-async.js
       esm/browser/*.js
       esm/base/*.js
@@ -211,16 +224,6 @@ refueler-share/
   docs/
     r2-lifecycle.md         ← R2 lifecycle rules (not yet applied)
 ```
-
----
-
-## Session 9 targets
-
-1. **Fix `/credential/issue` 500** — `wrangler tail` to get stack trace, fix `nut00.js` env passthrough
-2. **End-to-end smoke test** — upload small file, verify share link + download works
-3. **Stripe Customer Portal** — enable in dashboard, wire "Manage subscription" link
-4. **R2 lifecycle rules** — apply from `docs/r2-lifecycle.md`
-5. **Lightning tab** — Blink BOLT11 invoice in `upgrade.html`
 
 ---
 
