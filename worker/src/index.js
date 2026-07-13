@@ -100,9 +100,12 @@ export default {
       }
 
       return new Response('Not found', { status: 404 });
-    } catch (err) {
-      console.error('Worker error:', err);
-      return new Response('Internal server error', { status: 500 });
+    } catch (e) {
+      console.error('Worker error:', e);
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(request) },
+      });
     }
   },
 };
@@ -155,7 +158,8 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     let serial;
     try {
-      serial = await verifyCredential(credential, env.MINT_PRIVATE_KEY);
+      const credentialObj = JSON.parse(credential);
+      serial = await verifyCredential(credentialObj, env.MINT_PRIVATE_KEY);
     } catch {
       return err(401, 'Invalid credential');
     }
