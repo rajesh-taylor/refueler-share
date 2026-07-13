@@ -392,7 +392,7 @@
     background: var(--fg);
     border-radius: 2px;
     width: 0%;
-    transition: width 0.3s ease;
+    transition: width 0.6s ease-out;
   }
   .progress-label {
     font-family: var(--mono);
@@ -833,7 +833,7 @@ async function startUpload() {
   let p2shHashHex = null;
   if (passphraseToggle.checked && passphraseInput.value.trim()) {
     setStage('Hashing passphrase', 8);
-    p2shHashHex = await blake3Hash(new TextEncoder().encode(passphraseInput.value.trim()));
+    p2shHashHex = await sha256Hex(new TextEncoder().encode(passphraseInput.value.trim()));
     passphraseInput.value = '';
   }
 
@@ -845,11 +845,15 @@ async function startUpload() {
 
   setStage('Credentialling', 12);
   const { blindedMsg, blindingFactor } = await generateBlindedCredential();
+  // Animate bar from 12→14 during credential round-trip so it feels alive
+  let _credPct = 12;
+  const _credTick = setInterval(() => { if (_credPct < 14) { _credPct += 0.5; progressBar.style.width = _credPct + '%'; } }, 120);
   const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ turnstile_token: turnstileToken, blinded_message: blindedMsg, tier: 'free' }),
   });
+  clearInterval(_credTick);
   if (!issueRes.ok) throw new Error(`Credential issue failed: ${await issueRes.text()}`);
   const { signed_point, mint_pubkey } = await issueRes.json();
   const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
@@ -1069,6 +1073,11 @@ async function blake3Hash(data) {
   const h = blake3.createHash();
   h.update(data);
   return h.digest('hex');
+}
+
+async function sha256Hex(data) {
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
