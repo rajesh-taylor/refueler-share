@@ -146,7 +146,7 @@ Filename, extension, and byte integrity confirmed via smoke test (13 July 2026).
 
 | Tier | Cap | Expiry options |
 |------|-----|---------------|
-| Skint Tog (free) | **4 GB** | 5 days, no choice |
+| Skint Tog (free) | **4 GB** | 1 / 7 days |
 | Creative Premium (£12/mo or £120/yr) | 100 GB | 1 / 7 / 30 days |
 | Production Max (£24/mo or £240/yr) | 250 GB | 1 / 7 / 30 / 90 days |
 | Enterprise | Unlimited | Custom |

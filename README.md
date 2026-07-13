@@ -92,7 +92,7 @@ Directional benchmarks (500 Mbps UK studio fibre):
 | TransferNow | 5 GB | 7 days | ✗ | None stated | Paid tiers |
 | **SwissTransfer** | **50 GB** | **30 days** | **✗ — Infomaniak holds the key** | **250 downloads** | **Loss leader for hosting upsell** |
 | PrivCloud | 2 GB | — | ✓ (client-side AES) | None stated | Freemium |
-| **share.refueler.io** | **4 GB** | **5 days** | **✓ — reading your files is not technically possible for us** | **None** | **Lightning + Stripe** |
+| **share.refueler.io** | **4 GB** | **1 / 7 days** | **✓ — reading your files is not technically possible for us** | **None** | **Lightning + Stripe** |
 
 \*Smash throttles transfers above 2 GB on the free tier to approximately 25 Mbps.
 
@@ -136,14 +136,9 @@ Their constraints: 2 GB free cap (ours is 4 GB), French legal jurisdiction as th
 
 ## Tiers
 
-| Tier | Price | Cap | Link expiry |
-|------|-------|-----|-------------|
-| **Skint Tog** | Free | 4 GB per transfer | 5 days, no extension |
-| **Creative Premium** | £12/mo or £120/yr | 100 GB per transfer | User-set: 1 / 7 / 30 days |
-| **Production Max** | £24/mo or £240/yr | 250 GB per transfer | User-set: 1 / 7 / 30 / 90 days |
-| **Enterprise** | Contact | Unlimited | Custom |
+Four tiers: **Skint Tog** (free), **Creative Premium**, **Production Max**, and **Enterprise**.
 
-Yearly pricing = 10 months. Two months free.
+Pricing, transfer caps, and link expiry options are listed at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ---
 
@@ -168,9 +163,9 @@ Yearly pricing = 10 months. Two months free.
 
 ## Status
 
-🟢 **Session 2 complete — commit `4152d29`.**  
-Worker scaffold, Supabase migration, BLAKE3 WASM integration, and frontend built.  
-Session 3: NUT-11 P2SH download gating, payment integration, domain routing, Paper-default frontend.
+🟢 **Session 11 complete — commit `ec0c325`.**  
+Full upload → share link → passphrase gate → download flow is end-to-end functional.  
+Filename, extension, and byte integrity confirmed. Session 12: Stripe Customer Portal, R2 lifecycle rules.
 
 ---
 
