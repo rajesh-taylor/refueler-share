@@ -38,6 +38,13 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
 
+**SHA-256 / BLAKE3 integrity gap (known, deferred):**
+Client declares BLAKE3 hash per chunk. Worker re-hashes with Web Crypto SHA-256 —
+it does not verify the client-declared BLAKE3. A compromised client can declare
+a hash that doesn't match the payload; Worker cannot detect this.
+Fix: compile BLAKE3 to WASM binary, check into `worker/`, import statically.
+Do not make integrity/audit claims in marketing or editorial copy until resolved.
+
 ---
 
 ## Session queue

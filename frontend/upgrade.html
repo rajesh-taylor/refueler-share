@@ -202,6 +202,61 @@
     border: 1px solid #2A4A2A;
   }
 
+  /* Manage subscription section */
+  .manage-section {
+    background: var(--carbon-2);
+    border: 1px solid var(--carbon-3);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 40px;
+    display: none;
+  }
+  .manage-section.visible { display: block; }
+  .manage-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .manage-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.3px;
+  }
+  .manage-value {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--paper);
+  }
+  .btn-portal {
+    background: transparent;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .btn-portal:hover { background: var(--gold); color: var(--carbon); }
+  .btn-portal:disabled { opacity: 0.5; cursor: not-allowed; }
+  .manage-divider {
+    border: none;
+    border-top: 1px solid var(--carbon-3);
+    margin: 20px 0;
+  }
+  .manage-email-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .manage-email-row .field { flex: 1; margin-bottom: 0; }
+
   /* Payment section */
   .payment-section {
     background: var(--carbon-2);
@@ -395,6 +450,31 @@
     <span class="saving-badge">2 months free</span>
   </div>
 
+  <!-- Manage existing subscription -->
+  <div class="manage-section" id="manageSection">
+    <div class="manage-row">
+      <div>
+        <div class="manage-label">Current plan</div>
+        <div class="manage-value" id="managePlanName">—</div>
+      </div>
+      <button class="btn-portal" id="portalBtn" onclick="openPortal()">Manage subscription →</button>
+    </div>
+    <hr class="manage-divider">
+    <div style="font-size:13px;color:var(--muted);">Update payment method, switch plan, or cancel — all in your secure billing portal.</div>
+  </div>
+
+  <!-- Or: look up existing subscription -->
+  <div class="manage-lookup" id="manageLookup" style="margin-bottom:32px;">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Already a subscriber? Enter your email to manage your subscription.</div>
+    <div class="manage-email-row">
+      <div class="field">
+        <input type="email" id="lookupEmail" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <button class="btn-portal" id="lookupBtn" onclick="lookupAndOpenPortal()" style="margin-bottom:0;">Go →</button>
+    </div>
+    <div class="status-msg" id="lookupStatus" style="margin-top:10px;font-size:13px;"></div>
+  </div>
+
   <!-- Tier cards -->
   <div class="tiers">
     <div class="tier-card free-card">
@@ -523,6 +603,7 @@ if (params.get('success') === '1') {
   document.getElementById('mainPage').style.display = 'none';
   document.getElementById('successPanel').classList.add('visible');
 }
+// Returning from Stripe portal — just show the page normally, lookup section visible
 
 // Init Stripe
 async function initStripe() {
@@ -595,8 +676,18 @@ async function handleSubmit() {
     document.getElementById('submitBtn').disabled = false;
     document.getElementById('submitBtn').textContent = 'Subscribe now';
   } else {
+    const email = document.getElementById('emailInput').value.trim();
+    const tierName = selectedTier === 'creative' ? 'Creative Premium' : 'Production Max';
     document.getElementById('mainPage').style.display = 'none';
-    document.getElementById('successPanel').classList.add('visible');
+    const successPanel = document.getElementById('successPanel');
+    successPanel.classList.add('visible');
+    // Pre-populate portal email for "manage" link on success panel
+    portalEmail = email;
+    // Add manage link to success panel
+    const manageLink = document.createElement('p');
+    manageLink.style.cssText = 'margin-top:16px;font-size:13px;';
+    manageLink.innerHTML = `<a href="#" onclick="openPortal();return false;" style="color:var(--gold);">Manage subscription →</a>`;
+    successPanel.appendChild(manageLink);
   }
 }
 
@@ -652,9 +743,68 @@ function showStatus(msg, type = '') {
   el.className = `status-msg${type ? ' ' + type : ''}`;
 }
 
-function openPortal() {
-  // Stripe Customer Portal — URL set after first subscriber
-  alert('Visit your email for a link to manage your subscription, or contact support.');
+// portalEmail is set when we know the customer's email (post-checkout or lookup)
+let portalEmail = null;
+
+async function openPortal() {
+  if (!portalEmail) return;
+  const btn = document.getElementById('portalBtn');
+  btn.disabled = true;
+  btn.textContent = 'Opening…';
+  try {
+    const res = await fetch(`${WORKER_URL}/subscription/portal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: portalEmail }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Portal unavailable');
+    window.location.href = data.url;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Manage subscription →';
+    showLookupStatus(e.message, 'error');
+  }
+}
+
+async function lookupAndOpenPortal() {
+  const email = document.getElementById('lookupEmail').value.trim();
+  if (!email || !email.includes('@')) {
+    showLookupStatus('Please enter a valid email address.', 'error');
+    return;
+  }
+  const btn = document.getElementById('lookupBtn');
+  btn.disabled = true;
+  btn.textContent = '…';
+  showLookupStatus('');
+
+  try {
+    const res = await fetch(`${WORKER_URL}/subscription/portal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No active subscription found for this email.');
+    window.location.href = data.url;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Go →';
+    showLookupStatus(e.message, 'error');
+  }
+}
+
+function showLookupStatus(msg, type = '') {
+  const el = document.getElementById('lookupStatus');
+  el.textContent = msg;
+  el.className = `status-msg${type ? ' ' + type : ''}`;
+}
+
+function showManageSection(email, tierName) {
+  portalEmail = email;
+  document.getElementById('managePlanName').textContent = tierName;
+  document.getElementById('manageSection').classList.add('visible');
+  document.getElementById('manageLookup').style.display = 'none';
 }
 
 function stripeAppearance() {

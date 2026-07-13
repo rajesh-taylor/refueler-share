@@ -9,6 +9,7 @@
  *   POST /webhook/stripe                Stripe subscription lifecycle
  *   POST /subscription/checkout         Create Stripe Checkout session (Payment Element)
  *   GET  /subscription/status           Returns tier for current session
+ *   POST /subscription/portal           Create Stripe Customer Portal session
  *
  * Secrets (wrangler secret put):
  *   MINT_PRIVATE_KEY        secp256k1 hex (32 bytes)
@@ -98,6 +99,11 @@ export default {
       // GET /subscription/status
       if (request.method === 'GET' && path === '/subscription/status') {
         return addCors(await handleSubscriptionStatus(request, env), request);
+      }
+
+      // POST /subscription/portal
+      if (request.method === 'POST' && path === '/subscription/portal') {
+        return addCors(await handlePortal(request, env), request);
       }
 
       return new Response('Not found', { status: 404 });
@@ -293,6 +299,55 @@ async function handleDownload(request, env, uuid, chunkIndex) {
   }
 
   return new Response(obj.body, { status, headers });
+}
+
+// ---------------------------------------------------------------------------
+// POST /subscription/portal
+// ---------------------------------------------------------------------------
+async function handlePortal(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return err(400, 'Invalid JSON'); }
+
+  const { email } = body;
+  if (!email) return err(400, 'Missing email');
+
+  // Look up Stripe customer ID from Supabase
+  const res = await supabaseFetch(env, 'GET',
+    `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=stripe_customer_id,status&limit=1`
+  );
+  if (!res.ok) return err(502, 'Database unavailable');
+  const rows = await res.json();
+
+  if (!rows.length || !rows[0].stripe_customer_id) {
+    return err(404, 'No active subscription found for this email');
+  }
+  if (rows[0].status === 'cancelled') {
+    return err(404, 'No active subscription found for this email');
+  }
+
+  const customerId = rows[0].stripe_customer_id;
+
+  // Create Stripe billing portal session
+  const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      customer: customerId,
+      return_url: 'https://share.refueler.io/upgrade.html',
+    }).toString(),
+  });
+
+  if (!portalRes.ok) {
+    const portalErr = await portalRes.json();
+    console.error('Portal session error:', portalErr);
+    return err(502, 'Could not create portal session');
+  }
+
+  const session = await portalRes.json();
+  return json({ url: session.url });
 }
 
 // ---------------------------------------------------------------------------
