@@ -967,7 +967,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
         downloadToken = token;
         unlockInput.value = '';
         unlockScreen.style.display = 'none';
-        await startDownload(uuid, probe);
+        await startDownload(uuid);
       } catch {
         unlockError.textContent = 'Network error. Try again.';
         unlockBtn.disabled = false;
@@ -975,37 +975,47 @@ async function enterDownloadMode({ uuid, key, iv }) {
     });
     unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
   } else if (probe.ok || probe.status === 206) {
-    await startDownload(uuid, probe);
+    await startDownload(uuid);
   } else {
     showDownloadError(`Transfer unavailable (${probe.status}).`);
   }
 }
 
-async function startDownload(uuid, firstChunkResponse) {
+async function startDownload(uuid) {
   downloadCard.classList.remove('hidden');
-  const chunks = [await firstChunkResponse.arrayBuffer()];
-  let chunkIndex = 1;
+  dlStageTag.textContent = 'Downloading';
+  dlPct.textContent = '—';
+
+  const chunks = [];
+  let chunkIndex = 0;
 
   while (true) {
     const headers = {};
     if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
-    const res = await fetch(`${WORKER_URL}/download/${uuid}/${String(chunkIndex).padStart(4, '0')}`, { headers });
+    const padded = String(chunkIndex).padStart(4, '0');
+    const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
     if (res.status === 404) break;
-    if (!res.ok) { showDownloadError(`Download failed at chunk ${chunkIndex}.`); return; }
+    if (!res.ok) { showDownloadError(`Download failed at chunk ${chunkIndex} (${res.status}).`); return; }
     chunks.push(await res.arrayBuffer());
-    dlStageTag.textContent = 'Downloading';
-    dlPct.textContent = '—';
     dlDetail.textContent = `Chunk ${chunkIndex + 1}`;
     chunkIndex++;
   }
 
+  if (chunks.length === 0) { showDownloadError('No chunks received from server.'); return; }
+
   dlStageTag.textContent = 'Decrypting';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
-    const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
-      sessionAesKey, chunks[i]
-    );
+    let plain;
+    try {
+      plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+        sessionAesKey, chunks[i]
+      );
+    } catch (e) {
+      showDownloadError(`Decrypt failed on chunk ${i}: wrong key or corrupted data.`);
+      return;
+    }
     decrypted.push(plain);
     dlPct.textContent = Math.round(((i + 1) / chunks.length) * 100) + '%';
     dlBar.style.width = dlPct.textContent;
