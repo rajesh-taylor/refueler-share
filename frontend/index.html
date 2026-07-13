@@ -882,6 +882,7 @@ async function startUpload() {
       headers['X-Total-Bytes']       = String(selectedFile.size);
       headers['X-Tier']              = 'free';
       headers['X-Expiry-Timestamp']  = String(expiryTimestamp);
+      headers['X-File-Name']         = selectedFile.name;
       if (p2shHashHex) headers['X-P2SH-Secret-Hash'] = p2shHashHex;
     }
 
@@ -988,6 +989,7 @@ async function startDownload(uuid) {
 
   const chunks = [];
   let chunkIndex = 0;
+  let fileName = `refueler-${uuid.slice(0, 8)}`;
 
   while (true) {
     const headers = {};
@@ -996,6 +998,10 @@ async function startDownload(uuid) {
     const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
     if (res.status === 404) break;
     if (!res.ok) { showDownloadError(`Download failed at chunk ${chunkIndex} (${res.status}).`); return; }
+    if (chunkIndex === 0) {
+      const headerName = res.headers.get('X-File-Name');
+      if (headerName) fileName = headerName;
+    }
     chunks.push(await res.arrayBuffer());
     dlDetail.textContent = `Chunk ${chunkIndex + 1}`;
     chunkIndex++;
@@ -1026,7 +1032,7 @@ async function startDownload(uuid) {
   const blobUrl = URL.createObjectURL(blob);
   const a       = document.createElement('a');
   a.href        = blobUrl;
-  a.download    = `refueler-${uuid.slice(0, 8)}`;
+  a.download    = fileName;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -43,7 +43,8 @@ function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name',
+    'Access-Control-Expose-Headers': 'X-File-Name',
   };
 }
 
@@ -151,6 +152,9 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
     const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
     const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
+    const rawFileName = request.headers.get('X-File-Name') ?? '';
+    // Sanitise: strip path separators, limit length, fall back to uuid prefix
+    const fileName    = rawFileName.replace(/[/\\]/g, '').slice(0, 255) || `refueler-${uuid.slice(0, 8)}`;
 
     if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
       return err(400, 'Missing required headers');
@@ -184,6 +188,7 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       blake3Root,
       p2shSecretHash: p2shHash,
     });
+    manifest.file_name = fileName;
     manifest.chunks_received = [0];
     await putManifest(env.BUCKET, uuid, manifest);
 
@@ -281,6 +286,7 @@ async function handleDownload(request, env, uuid, chunkIndex) {
     'Cache-Control': 'private, no-store',
     'X-Transfer-UUID': uuid,
     'X-Chunk-Index': String(chunkIndex),
+    'X-File-Name': manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
   });
   if (obj.range) {
     headers.set('Content-Range', `bytes ${obj.range.offset}-${obj.range.end}/${obj.size}`);
