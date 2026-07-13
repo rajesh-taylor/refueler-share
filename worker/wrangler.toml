@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # R2 bucket binding
 [[r2_buckets]]
-binding = "R2"
+binding = "BUCKET"
 bucket_name = "refueler-share-prod"
 preview_bucket_name = "refueler-share-dev"
 
