@@ -4,214 +4,372 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Refueler Share — Upgrade</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Satoshi:wght@400;500;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<meta name="description" content="Upgrade your Refueler Share plan for larger files and longer expiry." />
+
+<!-- Fonts — canonical match to index.html -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
 <script src="https://js.stripe.com/v3/"></script>
+
+<!-- Theme: applied before first paint to avoid flash -->
+<script>
+  const THEME_KEY = 'rfTheme';
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    const pill = document.getElementById('themePill');
+    if (theme === 'carbon') {
+      root.classList.add('carbon-mode');
+      root.setAttribute('data-theme', 'carbon');
+      if (pill) pill.textContent = 'Carbon / Paper';
+    } else {
+      root.classList.remove('carbon-mode');
+      root.removeAttribute('data-theme');
+      if (pill) pill.textContent = 'Paper / Carbon';
+    }
+  }
+  function toggleTheme() {
+    const current = localStorage.getItem(THEME_KEY) || 'paper';
+    const next = current === 'paper' ? 'carbon' : 'paper';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+    // Re-render Stripe element if mounted, to match new theme
+    if (typeof remountStripeForTheme === 'function') remountStripeForTheme();
+  }
+  (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
+</script>
+
 <style>
+  /* ── Brand tokens — canonical match to index.html ─────────────── */
+  :root {
+    --carbon:          #1A1A1A;
+    --paper:           #F5F0E8;
+    --gold:            #C8A96E;
+    --gold-dim:        #9E8050;
+
+    /* Paper mode (default) */
+    --bg:              var(--paper);
+    --fg:              var(--carbon);
+    --fg-muted:        #5A5550;
+    --fg-subtle:       #9A9590;
+    --border:          rgba(26,26,26,0.12);
+    --nav-bg:          rgba(245,240,232,0.88);
+    --card-bg:         rgba(26,26,26,0.04);
+    --card-border:     rgba(26,26,26,0.08);
+    --card-bg-raised:  rgba(26,26,26,0.06);
+    --input-bg:        #FFFFFF;
+    --input-border:    rgba(26,26,26,0.18);
+    --stripe-bg:       #FFFFFF;
+    --success:         #1E8A4A;
+    --danger:          #C0392B;
+
+    --radius:          6px;
+    --mono:            'IBM Plex Mono', monospace;
+    --sans:            'DM Sans', sans-serif;
+    --display:         'Satoshi', 'DM Sans', sans-serif;
+  }
+
+  html.carbon-mode {
+    --bg:              var(--carbon);
+    --fg:              var(--paper);
+    --fg-muted:        #B0AAA2;
+    --fg-subtle:       #6A6560;
+    --border:          rgba(245,240,232,0.10);
+    --nav-bg:          rgba(26,26,26,0.90);
+    --card-bg:         rgba(245,240,232,0.04);
+    --card-border:     rgba(245,240,232,0.08);
+    --card-bg-raised:  rgba(245,240,232,0.06);
+    --input-bg:        #252525;
+    --input-border:    rgba(245,240,232,0.18);
+    --stripe-bg:       #2E2E2E;
+    --success:         #4CAF82;
+    --danger:          #E05555;
+  }
+
+  /* ── Reset ──────────────────────────────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --carbon: #1A1A1A;
-    --carbon-2: #242424;
-    --carbon-3: #2E2E2E;
-    --gold: #C8A96E;
-    --gold-dim: #A8894E;
-    --paper: #F5F0E8;
-    --paper-dim: #E8E3DB;
-    --white: #FFFFFF;
-    --muted: #888888;
-    --danger: #E05555;
-    --success: #4CAF82;
+  html, body {
+    min-height: 100%;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.35s ease, color 0.25s ease;
   }
 
-  body {
-    background: var(--carbon);
-    color: var(--paper);
-    font-family: 'DM Sans', sans-serif;
-    min-height: 100vh;
-    padding: 0 0 80px;
+  /* ── Site header — canonical from index.html ─────────────────── */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--nav-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 clamp(1.25rem, 4vw, 3rem);
+    transition: background 0.35s ease, border-color 0.25s ease;
   }
-
-  /* Nav */
-  nav {
+  .header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 40px;
-    border-bottom: 1px solid var(--carbon-3);
   }
-  .nav-brand {
-    font-family: 'Satoshi', sans-serif;
-    font-weight: 700;
-    font-size: 18px;
-    color: var(--gold);
+  .wordmark {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: 0.06em;
+    color: var(--fg);
     text-decoration: none;
-    letter-spacing: -0.3px;
+    white-space: nowrap;
   }
-  .nav-back {
-    font-size: 14px;
-    color: var(--muted);
+  .wordmark-divider {
+    font-weight: 300;
+    opacity: 0.3;
+    margin: 0 0.5rem;
+  }
+  .wordmark-section {
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    opacity: 0.55;
+  }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+  .site-nav a {
+    font-family: var(--display);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
     text-decoration: none;
-    transition: color 0.15s;
+    transition: color 0.2s;
   }
-  .nav-back:hover { color: var(--paper); }
+  .site-nav a:hover { color: var(--fg); }
+  .site-nav a.active { color: var(--fg); }
+  .theme-pill {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 0.35rem 0.85rem;
+    background: transparent;
+    color: var(--fg-muted);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .theme-pill:hover {
+    border-color: var(--fg-muted);
+    color: var(--fg);
+  }
 
-  /* Layout */
-  .page { max-width: 900px; margin: 0 auto; padding: 60px 24px 0; }
+  /* ── Page layout ─────────────────────────────────────────────── */
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 24px 80px;
+  }
 
-  h1 {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 36px;
-    font-weight: 700;
-    color: var(--white);
-    letter-spacing: -0.5px;
+  .page-header { margin-bottom: 48px; }
+  .page-header h1 {
+    font-family: var(--display);
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--fg);
     margin-bottom: 8px;
   }
-  .subtitle {
-    color: var(--muted);
-    font-size: 16px;
-    margin-bottom: 48px;
+  .page-header p {
+    font-size: 14px;
+    color: var(--fg-muted);
+    line-height: 1.6;
   }
 
-  /* Tier cards */
+  /* ── Billing toggle ──────────────────────────────────────────── */
+  .billing-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .toggle-label {
+    font-size: 13px;
+    color: var(--fg-muted);
+    transition: color 0.2s;
+  }
+  .toggle-label.active { color: var(--fg); font-weight: 500; }
+
+  .toggle-switch {
+    width: 38px;
+    height: 21px;
+    background: var(--card-border);
+    border-radius: 99px;
+    position: relative;
+    cursor: pointer;
+    border: 1px solid var(--input-border);
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-switch.on { background: var(--gold); border-color: var(--gold); }
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 15px;
+    height: 15px;
+    background: var(--fg-subtle);
+    border-radius: 50%;
+    transition: left 0.15s, background 0.15s;
+  }
+  .toggle-switch.on .toggle-knob { left: 19px; background: var(--carbon); }
+
+  .saving-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--success);
+    border: 1px solid currentColor;
+    padding: 2px 8px;
+    border-radius: 3px;
+    opacity: 0.8;
+  }
+
+  /* ── Tier cards ──────────────────────────────────────────────── */
   .tiers {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-bottom: 48px;
+    gap: 12px;
+    margin-bottom: 40px;
   }
 
   .tier-card {
-    background: var(--carbon-2);
-    border: 1px solid var(--carbon-3);
-    border-radius: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
     padding: 24px;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
     position: relative;
   }
-  .tier-card:hover { border-color: var(--gold-dim); }
+  .tier-card:hover:not(.free-card) { border-color: var(--fg-muted); }
   .tier-card.selected {
     border-color: var(--gold);
-    background: #1E1B15;
+    background: var(--card-bg-raised);
   }
-  .tier-card.free-card { cursor: default; opacity: 0.6; }
+  .tier-card.free-card { cursor: default; }
 
-  .tier-badge {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.8px;
+  .tier-label {
+    font-family: var(--display);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--gold);
+    color: var(--fg-subtle);
+    margin-bottom: 14px;
+  }
+  .tier-label.gold { color: var(--gold); }
+
+  .tier-name {
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--fg);
     margin-bottom: 12px;
   }
-  .tier-name {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--white);
-    margin-bottom: 4px;
-  }
+
   .tier-price {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--gold);
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
     margin-bottom: 4px;
   }
-  .tier-price span { font-size: 14px; font-weight: 400; color: var(--muted); }
+  .tier-price-main {
+    font-family: var(--display);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+  }
+  .tier-price-period {
+    font-size: 13px;
+    color: var(--fg-muted);
+    font-weight: 400;
+  }
+
   .tier-yearly {
-    font-size: 12px;
-    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-subtle);
     margin-bottom: 20px;
   }
-  .tier-yearly strong { color: var(--gold-dim); }
+  .tier-yearly strong { color: var(--gold-dim); font-weight: 500; }
 
   .tier-features {
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
   }
   .tier-features li {
     font-size: 13px;
-    color: var(--paper-dim);
+    color: var(--fg-muted);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
+    line-height: 1.4;
   }
   .tier-features li::before {
     content: '✓';
     color: var(--gold);
-    font-weight: 700;
+    font-weight: 600;
     flex-shrink: 0;
+    font-size: 12px;
+    margin-top: 1px;
   }
+  .tier-features li.dim::before { color: var(--fg-subtle); }
+  .tier-features li.dim { color: var(--fg-subtle); }
 
   .current-plan-tag {
     position: absolute;
     top: 12px;
     right: 12px;
-    background: var(--carbon-3);
-    color: var(--muted);
+    font-family: var(--mono);
     font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: 99px;
-  }
-
-  /* Billing toggle */
-  .billing-toggle {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 32px;
-    font-size: 14px;
-    color: var(--muted);
-  }
-  .toggle-switch {
-    width: 44px;
-    height: 24px;
-    background: var(--carbon-3);
-    border-radius: 99px;
-    position: relative;
-    cursor: pointer;
-    border: 1px solid #444;
-    transition: background 0.15s;
-  }
-  .toggle-switch.on { background: var(--gold); border-color: var(--gold); }
-  .toggle-knob {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 16px;
-    height: 16px;
-    background: white;
-    border-radius: 50%;
-    transition: left 0.15s;
-  }
-  .toggle-switch.on .toggle-knob { left: 23px; }
-  .toggle-label.active { color: var(--paper); font-weight: 500; }
-  .saving-badge {
-    background: #1E2A1A;
-    color: var(--success);
-    font-size: 11px;
-    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--fg-subtle);
+    border: 1px solid var(--card-border);
     padding: 2px 8px;
-    border-radius: 99px;
-    border: 1px solid #2A4A2A;
+    border-radius: 3px;
   }
 
-  /* Manage subscription section */
+  /* ── Manage section ──────────────────────────────────────────── */
   .manage-section {
-    background: var(--carbon-2);
-    border: 1px solid var(--carbon-3);
-    border-radius: 12px;
-    padding: 28px 32px;
-    margin-bottom: 40px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 32px;
     display: none;
   }
   .manage-section.visible { display: block; }
+
   .manage-row {
     display: flex;
     align-items: center;
@@ -219,93 +377,98 @@
     gap: 16px;
     flex-wrap: wrap;
   }
-  .manage-label {
-    font-size: 13px;
-    color: var(--muted);
+  .manage-meta-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
     margin-bottom: 4px;
-    letter-spacing: 0.3px;
   }
-  .manage-value {
-    font-size: 16px;
+  .manage-meta-value {
+    font-size: 15px;
     font-weight: 500;
-    color: var(--paper);
+    color: var(--fg);
   }
-  .btn-portal {
-    background: transparent;
-    border: 1px solid var(--gold);
-    color: var(--gold);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 10px 20px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    white-space: nowrap;
-  }
-  .btn-portal:hover { background: var(--gold); color: var(--carbon); }
-  .btn-portal:disabled { opacity: 0.5; cursor: not-allowed; }
   .manage-divider {
     border: none;
-    border-top: 1px solid var(--carbon-3);
-    margin: 20px 0;
+    border-top: 1px solid var(--border);
+    margin: 18px 0;
   }
-  .manage-email-row {
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
+  .manage-note {
+    font-size: 12px;
+    color: var(--fg-subtle);
   }
-  .manage-email-row .field { flex: 1; margin-bottom: 0; }
 
-  /* Payment section */
+  /* ── Lookup section ──────────────────────────────────────────── */
+  .lookup-section {
+    margin-bottom: 32px;
+  }
+  .lookup-label {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin-bottom: 10px;
+  }
+  .lookup-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .lookup-row input {
+    flex: 1;
+  }
+
+  /* ── Payment section ─────────────────────────────────────────── */
   .payment-section {
-    background: var(--carbon-2);
-    border: 1px solid var(--carbon-3);
-    border-radius: 12px;
-    padding: 32px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 28px 32px;
     display: none;
   }
   .payment-section.visible { display: block; }
 
   .payment-header {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     margin-bottom: 24px;
   }
   .payment-title {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--white);
+    font-family: var(--display);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--fg);
   }
   .payment-summary {
-    font-size: 14px;
-    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-muted);
   }
 
-  /* Lightning tab placeholder */
+  /* Payment tabs */
   .payment-tabs {
     display: flex;
     gap: 0;
     margin-bottom: 24px;
-    border-bottom: 1px solid var(--carbon-3);
+    border-bottom: 1px solid var(--border);
   }
   .pay-tab {
-    padding: 10px 20px;
-    font-size: 14px;
+    padding: 8px 18px;
+    font-size: 13px;
     font-weight: 500;
-    color: var(--muted);
+    color: var(--fg-muted);
     cursor: pointer;
-    border-bottom: 2px solid transparent;
+    border-bottom: 1.5px solid transparent;
     margin-bottom: -1px;
     transition: color 0.15s;
+    font-family: var(--sans);
   }
   .pay-tab.active {
-    color: var(--gold);
-    border-bottom-color: var(--gold);
+    color: var(--fg);
+    border-bottom-color: var(--fg);
   }
-  .pay-tab:hover:not(.active) { color: var(--paper); }
+  .pay-tab:hover:not(.active) { color: var(--fg); }
 
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
@@ -313,136 +476,246 @@
   .lightning-placeholder {
     text-align: center;
     padding: 40px 20px;
-    color: var(--muted);
+    color: var(--fg-subtle);
   }
-  .lightning-placeholder .icon { font-size: 32px; margin-bottom: 12px; }
-  .lightning-placeholder p { font-size: 14px; }
-  .lightning-placeholder strong { color: var(--gold); }
+  .lightning-placeholder .lp-icon { font-size: 28px; margin-bottom: 12px; opacity: 0.5; }
+  .lightning-placeholder p { font-size: 13px; line-height: 1.6; }
 
-  /* Email field */
-  .field { margin-bottom: 20px; }
+  /* ── Inputs / fields ─────────────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
   .field label {
-    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--fg-subtle);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .field input,
+  input[type="email"] {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    padding: 10px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus,
+  input[type="email"]:focus { border-color: var(--fg-muted); }
+  input::placeholder { color: var(--fg-subtle); }
+
+  #stripe-element-container {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+    min-height: 60px;
+    transition: background 0.35s ease;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--sans);
     font-size: 13px;
     font-weight: 500;
-    color: var(--muted);
-    margin-bottom: 8px;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.03em;
+    padding: 10px 20px;
+    transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    border: none;
+    text-decoration: none;
   }
-  .field input {
-    width: 100%;
-    background: var(--carbon-3);
-    border: 1px solid #444;
-    border-radius: 8px;
-    padding: 12px 14px;
-    color: var(--paper);
-    font-size: 14px;
-    font-family: 'DM Sans', sans-serif;
-    outline: none;
-    transition: border-color 0.15s;
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* Primary: gold fill */
+  .btn-primary {
+    background: var(--gold);
+    color: var(--carbon);
+    font-weight: 600;
   }
-  .field input:focus { border-color: var(--gold); }
-  .field input::placeholder { color: var(--muted); }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+  /* Ghost */
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--fg-muted);
+    color: var(--fg);
+  }
+  .btn-full { width: 100%; }
 
-  /* Stripe element container */
-  #stripe-element-container {
-    background: var(--carbon-3);
-    border: 1px solid #444;
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 20px;
-    min-height: 60px;
-  }
-
-  /* Submit button */
+  /* Subscribe button — gold, full width */
   .btn-subscribe {
     width: 100%;
     background: var(--gold);
     color: var(--carbon);
-    font-family: 'Satoshi', sans-serif;
-    font-weight: 700;
-    font-size: 16px;
-    padding: 14px;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 13px;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius);
     cursor: pointer;
-    transition: background 0.15s, opacity 0.15s;
-    letter-spacing: -0.2px;
+    transition: opacity 0.15s;
+    letter-spacing: 0.02em;
   }
-  .btn-subscribe:hover { background: #D4B87A; }
-  .btn-subscribe:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-subscribe:hover:not(:disabled) { opacity: 0.88; }
+  .btn-subscribe:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Status messages ─────────────────────────────────────────── */
+  .status-msg {
+    font-size: 13px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+    display: none;
+    font-family: var(--mono);
+  }
+  .status-msg.error {
+    background: rgba(192,57,43,0.08);
+    color: var(--danger);
+    border: 1px solid rgba(192,57,43,0.2);
+    display: block;
+  }
+  .status-msg.success {
+    background: rgba(30,138,74,0.08);
+    color: var(--success);
+    border: 1px solid rgba(30,138,74,0.2);
+    display: block;
+  }
 
   .payment-note {
     text-align: center;
     font-size: 12px;
-    color: var(--muted);
-    margin-top: 16px;
+    color: var(--fg-subtle);
+    margin-top: 14px;
+    line-height: 1.6;
   }
-  .payment-note a { color: var(--gold-dim); text-decoration: none; }
-
-  /* Status messages */
-  .status-msg {
-    padding: 12px 16px;
-    border-radius: 8px;
-    font-size: 14px;
-    margin-bottom: 16px;
-    display: none;
+  .payment-note a {
+    color: var(--gold-dim);
+    text-decoration: none;
   }
-  .status-msg.error { background: #2A1515; color: var(--danger); border: 1px solid #4A2020; display: block; }
-  .status-msg.success { background: #152A1E; color: var(--success); border: 1px solid #1E4A2A; display: block; }
+  .payment-note a:hover { color: var(--gold); }
 
-  /* Success state */
+  /* ── Success panel ───────────────────────────────────────────── */
   .success-panel {
     text-align: center;
-    padding: 60px 24px;
+    padding: 80px 24px;
     display: none;
   }
   .success-panel.visible { display: block; }
-  .success-icon { font-size: 48px; margin-bottom: 16px; }
+  .success-icon {
+    font-size: 36px;
+    margin-bottom: 20px;
+    opacity: 0.7;
+  }
   .success-panel h2 {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 28px;
-    color: var(--white);
+    font-family: var(--display);
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--fg);
     margin-bottom: 8px;
   }
-  .success-panel p { color: var(--muted); margin-bottom: 24px; }
-  .btn-go {
-    display: inline-block;
-    background: var(--gold);
-    color: var(--carbon);
-    font-family: 'Satoshi', sans-serif;
-    font-weight: 700;
-    font-size: 15px;
-    padding: 12px 28px;
-    border-radius: 8px;
-    text-decoration: none;
-    transition: background 0.15s;
+  .success-panel p {
+    font-size: 14px;
+    color: var(--fg-muted);
+    margin-bottom: 28px;
   }
-  .btn-go:hover { background: #D4B87A; }
 
+  /* ── Site footer ─────────────────────────────────────────────── */
+  .site-footer {
+    border-top: 1px solid var(--border);
+    padding: 20px clamp(1.25rem, 4vw, 3rem);
+    margin-top: auto;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .footer-note {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-subtle);
+    font-family: var(--display);
+  }
+  .footer-links { display: flex; gap: 1.5rem; }
+  .footer-links a {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--fg); }
+
+  /* ── Utility ─────────────────────────────────────────────────── */
+  .hidden { display: none !important; }
+
+  /* ── Responsive ──────────────────────────────────────────────── */
   @media (max-width: 680px) {
-    nav { padding: 16px 20px; }
-    .page { padding: 40px 16px 0; }
-    h1 { font-size: 28px; }
+    .page { padding: 40px 16px 60px; }
     .tiers { grid-template-columns: 1fr; }
+    .site-nav { gap: 1.25rem; }
+    .site-nav a:not(:last-of-type) { display: none; }
+    .payment-section { padding: 20px 16px; }
+    .manage-section { padding: 18px 16px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, html, body { transition: none !important; }
   }
 </style>
 </head>
 <body>
 
-<nav>
-  <a class="nav-brand" href="/">Refueler Share</a>
-  <a class="nav-back" href="/">← Back to upload</a>
-</nav>
+<!-- ── Site header — canonical nav (matches index.html) ─────────── -->
+<header class="site-header">
+  <div class="header-inner">
+    <a href="https://refueler.io/" class="wordmark">
+      Refueler
+      <span class="wordmark-divider">/</span>
+      <span class="wordmark-section">Share</span>
+    </a>
+    <nav class="site-nav">
+      <a href="https://refueler.io/">App</a>
+      <a href="https://refueler.io/editorial/">Editorial</a>
+      <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="/upgrade.html" class="active">Upgrade</a>
+      <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
+    </nav>
+  </div>
+</header>
 
+<!-- ── Main page ─────────────────────────────────────────────────── -->
 <div class="page" id="mainPage">
 
-  <h1>Choose your plan</h1>
-  <p class="subtitle">No account required for free transfers. Upgrade for larger files and longer expiry.</p>
+  <div class="page-header">
+    <h1>Choose your plan</h1>
+    <p>Free transfers need no account. Upgrade for larger files and longer expiry.</p>
+  </div>
 
   <!-- Billing toggle -->
   <div class="billing-toggle">
-    <span class="toggle-label" id="labelMonthly">Monthly</span>
+    <span class="toggle-label active" id="labelMonthly">Monthly</span>
     <div class="toggle-switch" id="billingToggle" onclick="toggleBilling()">
       <div class="toggle-knob"></div>
     </div>
@@ -450,51 +723,58 @@
     <span class="saving-badge">2 months free</span>
   </div>
 
-  <!-- Manage existing subscription -->
+  <!-- Manage existing subscription (post-checkout or portal return) -->
   <div class="manage-section" id="manageSection">
     <div class="manage-row">
       <div>
-        <div class="manage-label">Current plan</div>
-        <div class="manage-value" id="managePlanName">—</div>
+        <div class="manage-meta-label">Current plan</div>
+        <div class="manage-meta-value" id="managePlanName">—</div>
       </div>
-      <button class="btn-portal" id="portalBtn" onclick="openPortal()">Manage subscription →</button>
+      <button class="btn btn-ghost" id="portalBtn" onclick="openPortal()">Manage subscription →</button>
     </div>
     <hr class="manage-divider">
-    <div style="font-size:13px;color:var(--muted);">Update payment method, switch plan, or cancel — all in your secure billing portal.</div>
+    <p class="manage-note">Update payment method, switch plan, or cancel — all in your secure billing portal.</p>
   </div>
 
-  <!-- Or: look up existing subscription -->
-  <div class="manage-lookup" id="manageLookup" style="margin-bottom:32px;">
-    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Already a subscriber? Enter your email to manage your subscription.</div>
-    <div class="manage-email-row">
-      <div class="field">
-        <input type="email" id="lookupEmail" placeholder="you@example.com" autocomplete="email">
-      </div>
-      <button class="btn-portal" id="lookupBtn" onclick="lookupAndOpenPortal()" style="margin-bottom:0;">Go →</button>
+  <!-- Lookup section: existing subscribers -->
+  <div class="lookup-section" id="manageLookup">
+    <p class="lookup-label">Already a subscriber? Enter your email to manage your plan.</p>
+    <div class="lookup-row">
+      <input type="email" id="lookupEmail" placeholder="you@example.com" autocomplete="email" />
+      <button class="btn btn-ghost" id="lookupBtn" onclick="lookupAndOpenPortal()">Go →</button>
     </div>
-    <div class="status-msg" id="lookupStatus" style="margin-top:10px;font-size:13px;"></div>
+    <div class="status-msg" id="lookupStatus" style="margin-top:10px;"></div>
   </div>
 
   <!-- Tier cards -->
   <div class="tiers">
+
+    <!-- Free -->
     <div class="tier-card free-card">
-      <div class="current-plan-tag">Current plan</div>
-      <div class="tier-badge">Free</div>
+      <div class="current-plan-tag">Current</div>
+      <div class="tier-label">Free</div>
       <div class="tier-name">Skint Tog</div>
-      <div class="tier-price">£0 <span>/ forever</span></div>
+      <div class="tier-price">
+        <span class="tier-price-main">£0</span>
+        <span class="tier-price-period">/ forever</span>
+      </div>
       <div class="tier-yearly">&nbsp;</div>
       <ul class="tier-features">
         <li>4 GB per transfer</li>
-        <li>5-day expiry</li>
+        <li>1 / 7 day expiry</li>
         <li>End-to-end encrypted</li>
         <li>No account needed</li>
       </ul>
     </div>
 
+    <!-- Creative Premium -->
     <div class="tier-card selected" id="card-creative" onclick="selectTier('creative')">
-      <div class="tier-badge">Most popular</div>
+      <div class="tier-label gold">Creative</div>
       <div class="tier-name">Creative Premium</div>
-      <div class="tier-price" id="price-creative">£12 <span>/ month</span></div>
+      <div class="tier-price">
+        <span class="tier-price-main" id="price-creative">£12</span>
+        <span class="tier-price-period" id="period-creative">/ month</span>
+      </div>
       <div class="tier-yearly" id="yearly-creative">or £120/yr — <strong>2 months free</strong></div>
       <ul class="tier-features">
         <li>100 GB per transfer</li>
@@ -505,10 +785,14 @@
       </ul>
     </div>
 
+    <!-- Production Max -->
     <div class="tier-card" id="card-max" onclick="selectTier('max')">
-      <div class="tier-badge">Professional</div>
+      <div class="tier-label gold">Professional</div>
       <div class="tier-name">Production Max</div>
-      <div class="tier-price" id="price-max">£24 <span>/ month</span></div>
+      <div class="tier-price">
+        <span class="tier-price-main" id="price-max">£24</span>
+        <span class="tier-price-period" id="period-max">/ month</span>
+      </div>
       <div class="tier-yearly" id="yearly-max">or £240/yr — <strong>2 months free</strong></div>
       <ul class="tier-features">
         <li>250 GB per transfer</li>
@@ -519,6 +803,7 @@
         <li>Priority transfers</li>
       </ul>
     </div>
+
   </div>
 
   <!-- Payment section -->
@@ -530,36 +815,36 @@
 
     <div class="payment-tabs">
       <div class="pay-tab active" onclick="switchTab('card')">Card</div>
-      <div class="pay-tab" onclick="switchTab('lightning')">⚡ Lightning <span style="font-size:10px;color:#666;margin-left:4px;">Coming soon</span></div>
+      <div class="pay-tab" onclick="switchTab('lightning')">⚡ Lightning <span style="font-size:10px;color:var(--fg-subtle);margin-left:4px;">Coming soon</span></div>
     </div>
 
+    <!-- Card tab -->
     <div class="tab-pane active" id="tab-card">
       <div class="status-msg" id="statusMsg"></div>
 
       <div class="field">
         <label>Email address</label>
-        <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email">
+        <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" />
       </div>
 
       <div id="stripe-element-container">
         <div id="payment-element"></div>
       </div>
 
-      <button class="btn-subscribe" id="submitBtn" onclick="handleSubmit()">
-        Subscribe now
-      </button>
+      <button class="btn-subscribe" id="submitBtn" onclick="handleSubmit()">Subscribe now</button>
 
       <p class="payment-note">
-        Secured by <a href="https://stripe.com" target="_blank">Stripe</a> ·
-        Cancel anytime in your account portal ·
-        <a href="#" onclick="openPortal()">Manage subscription</a>
+        Secured by <a href="https://stripe.com" target="_blank" rel="noopener">Stripe</a> ·
+        Cancel anytime in your billing portal ·
+        <a href="#" onclick="openPortal();return false;">Manage subscription</a>
       </p>
     </div>
 
+    <!-- Lightning tab -->
     <div class="tab-pane" id="tab-lightning">
       <div class="lightning-placeholder">
-        <div class="icon">⚡</div>
-        <p>Lightning payments are coming in a future update.<br>Pay with sats via <strong>BOLT11 invoice</strong>.</p>
+        <div class="lp-icon">⚡</div>
+        <p>Lightning payments are coming in a future update.<br>Pay with sats via BOLT11 invoice.</p>
       </div>
     </div>
   </div>
@@ -572,13 +857,26 @@
     <div class="success-icon">✓</div>
     <h2>You're all set</h2>
     <p>Your subscription is active. Start sending large files now.</p>
-    <a class="btn-go" href="/">Go to upload →</a>
+    <a class="btn btn-primary" href="/">Go to upload →</a>
   </div>
 </div>
 
+<!-- ── Site footer ────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <span class="footer-note">© 2026 Refueler · share.refueler.io</span>
+    <div class="footer-links">
+      <a href="https://refueler.io/">App</a>
+      <a href="https://refueler.io/editorial/">Editorial</a>
+      <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="/upgrade.html">Upgrade</a>
+    </div>
+  </div>
+</footer>
+
 <script>
-const WORKER_URL = 'https://refueler-share.rajeshtaylor.workers.dev';
-const STRIPE_PK = 'pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q';
+const WORKER_URL = 'https://refueler-share.rt-fc4.workers.dev';
+const STRIPE_PK  = 'pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q';
 
 const PRICE_IDS = {
   creative: {
@@ -591,21 +889,83 @@ const PRICE_IDS = {
   },
 };
 
-let selectedTier = 'creative';
-let billingYearly = false;
-let stripe = null;
-let elements = null;
-let paymentElement = null;
+const PRICES_DISPLAY = {
+  creative: { monthly: { price: '£12', period: '/ month' }, yearly: { price: '£120', period: '/ year' } },
+  max:      { monthly: { price: '£24', period: '/ month' }, yearly: { price: '£240', period: '/ year' } },
+};
 
-// Check for success/cancel in URL
+let selectedTier   = 'creative';
+let billingYearly  = false;
+let stripe         = null;
+let elements       = null;
+let paymentElement = null;
+let portalEmail    = null;
+
+// ── URL param handling ──────────────────────────────────────────
 const params = new URLSearchParams(location.search);
 if (params.get('success') === '1') {
   document.getElementById('mainPage').style.display = 'none';
   document.getElementById('successPanel').classList.add('visible');
 }
-// Returning from Stripe portal — just show the page normally, lookup section visible
 
-// Init Stripe
+// ── Theme-aware Stripe remount ──────────────────────────────────
+function remountStripeForTheme() {
+  if (!elements) return;
+  const email = document.getElementById('emailInput').value.trim();
+  if (email && email.includes('@') && stripe) {
+    elements = null;
+    paymentElement = null;
+    document.getElementById('payment-element').innerHTML = '';
+    mountPaymentElement();
+  }
+}
+
+// ── Billing toggle ──────────────────────────────────────────────
+function toggleBilling() {
+  billingYearly = !billingYearly;
+  const toggle = document.getElementById('billingToggle');
+  toggle.classList.toggle('on', billingYearly);
+  document.getElementById('labelMonthly').classList.toggle('active', !billingYearly);
+  document.getElementById('labelYearly').classList.toggle('active', billingYearly);
+  updatePriceDisplay();
+  updateSummary();
+  resetPaymentElement();
+}
+
+function updatePriceDisplay() {
+  ['creative', 'max'].forEach(tier => {
+    const d = PRICES_DISPLAY[tier][billingYearly ? 'yearly' : 'monthly'];
+    document.getElementById(`price-${tier}`).textContent = d.price;
+    document.getElementById(`period-${tier}`).textContent = d.period;
+  });
+}
+
+// ── Tier selection ──────────────────────────────────────────────
+function selectTier(tier) {
+  selectedTier = tier;
+  document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById(`card-${tier}`).classList.add('selected');
+  updateSummary();
+  resetPaymentElement();
+}
+
+function updateSummary() {
+  const names   = { creative: 'Creative Premium', max: 'Production Max' };
+  const billing = billingYearly ? 'yearly' : 'monthly';
+  const d       = PRICES_DISPLAY[selectedTier][billing];
+  document.getElementById('paymentSummary').textContent =
+    `${names[selectedTier]} — ${d.price}${d.period.replace('/', '').trim()}`;
+}
+
+function resetPaymentElement() {
+  elements = null;
+  paymentElement = null;
+  document.getElementById('payment-element').innerHTML = '';
+  const email = document.getElementById('emailInput').value.trim();
+  if (email && email.includes('@') && stripe) mountPaymentElement();
+}
+
+// ── Stripe ──────────────────────────────────────────────────────
 async function initStripe() {
   stripe = Stripe(STRIPE_PK);
   await mountPaymentElement();
@@ -613,13 +973,13 @@ async function initStripe() {
 
 async function mountPaymentElement() {
   const priceId = PRICE_IDS[selectedTier][billingYearly ? 'yearly' : 'monthly'];
-  const email = document.getElementById('emailInput').value.trim();
-
-  if (!email) return; // mount after email entered
+  const email   = document.getElementById('emailInput').value.trim();
+  if (!email) return;
 
   showStatus('');
-  document.getElementById('submitBtn').disabled = true;
-  document.getElementById('submitBtn').textContent = 'Loading...';
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
 
   try {
     const res = await fetch(`${WORKER_URL}/subscription/checkout`, {
@@ -631,19 +991,20 @@ async function mountPaymentElement() {
     if (!res.ok) throw new Error(data.error || 'Checkout failed');
 
     if (elements) elements.unmount();
-    elements = stripe.elements({ clientSecret: data.client_secret, appearance: stripeAppearance() });
+    elements = stripe.elements({
+      clientSecret: data.client_secret,
+      appearance: stripeAppearance(),
+    });
     paymentElement = elements.create('payment');
     paymentElement.mount('#payment-element');
-
     paymentElement.on('ready', () => {
-      document.getElementById('submitBtn').disabled = false;
-      document.getElementById('submitBtn').textContent = 'Subscribe now';
+      btn.disabled = false;
+      btn.textContent = 'Subscribe now';
     });
-
   } catch (e) {
     showStatus(e.message, 'error');
-    document.getElementById('submitBtn').disabled = false;
-    document.getElementById('submitBtn').textContent = 'Subscribe now';
+    btn.disabled = false;
+    btn.textContent = 'Subscribe now';
   }
 }
 
@@ -657,33 +1018,29 @@ async function handleSubmit() {
     await mountPaymentElement();
     return;
   }
-
-  document.getElementById('submitBtn').disabled = true;
-  document.getElementById('submitBtn').textContent = 'Processing...';
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
   showStatus('');
 
   const { error } = await stripe.confirmPayment({
     elements,
     confirmParams: {
-      return_url: `${location.origin}/upgrade?success=1`,
-      receipt_email: email,
+      return_url:     `${location.origin}/upgrade.html?success=1`,
+      receipt_email:  email,
     },
     redirect: 'if_required',
   });
 
   if (error) {
     showStatus(error.message, 'error');
-    document.getElementById('submitBtn').disabled = false;
-    document.getElementById('submitBtn').textContent = 'Subscribe now';
+    btn.disabled = false;
+    btn.textContent = 'Subscribe now';
   } else {
-    const email = document.getElementById('emailInput').value.trim();
-    const tierName = selectedTier === 'creative' ? 'Creative Premium' : 'Production Max';
     document.getElementById('mainPage').style.display = 'none';
     const successPanel = document.getElementById('successPanel');
     successPanel.classList.add('visible');
-    // Pre-populate portal email for "manage" link on success panel
     portalEmail = email;
-    // Add manage link to success panel
     const manageLink = document.createElement('p');
     manageLink.style.cssText = 'margin-top:16px;font-size:13px;';
     manageLink.innerHTML = `<a href="#" onclick="openPortal();return false;" style="color:var(--gold);">Manage subscription →</a>`;
@@ -691,61 +1048,32 @@ async function handleSubmit() {
   }
 }
 
-// Mount on email blur
+// Mount Stripe on email blur
 document.getElementById('emailInput').addEventListener('blur', () => {
   const email = document.getElementById('emailInput').value.trim();
-  if (email && email.includes('@') && !elements) {
-    initStripe();
-  }
+  if (email && email.includes('@') && !elements) initStripe();
 });
 
-function selectTier(tier) {
-  selectedTier = tier;
-  document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById(`card-${tier}`).classList.add('selected');
-  updateSummary();
-  elements = null;
-  paymentElement = null;
-  document.getElementById('payment-element').innerHTML = '';
-  const email = document.getElementById('emailInput').value.trim();
-  if (email && email.includes('@') && stripe) mountPaymentElement();
-}
-
-function toggleBilling() {
-  billingYearly = !billingYearly;
-  const toggle = document.getElementById('billingToggle');
-  toggle.classList.toggle('on', billingYearly);
-  document.getElementById('labelMonthly').classList.toggle('active', !billingYearly);
-  document.getElementById('labelYearly').classList.toggle('active', billingYearly);
-  updateSummary();
-  elements = null;
-  paymentElement = null;
-  document.getElementById('payment-element').innerHTML = '';
-  const email = document.getElementById('emailInput').value.trim();
-  if (email && email.includes('@') && stripe) mountPaymentElement();
-}
-
-function updateSummary() {
-  const prices = { creative: { monthly: '£12/month', yearly: '£120/year' }, max: { monthly: '£24/month', yearly: '£240/year' } };
-  const names = { creative: 'Creative Premium', max: 'Production Max' };
-  const billing = billingYearly ? 'yearly' : 'monthly';
-  document.getElementById('paymentSummary').textContent = `${names[selectedTier]} — ${prices[selectedTier][billing]}`;
-}
-
+// ── Tab switching ───────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.pay-tab').forEach((t, i) => t.classList.toggle('active', i === (tab === 'card' ? 0 : 1)));
-  document.querySelectorAll('.tab-pane').forEach((p, i) => p.classList.toggle('active', i === (tab === 'card' ? 0 : 1)));
+  const isCard = tab === 'card';
+  document.querySelectorAll('.pay-tab').forEach((t, i) => t.classList.toggle('active', isCard ? i === 0 : i === 1));
+  document.querySelectorAll('.tab-pane').forEach((p, i) => p.classList.toggle('active', isCard ? i === 0 : i === 1));
 }
 
+// ── Status messages ─────────────────────────────────────────────
 function showStatus(msg, type = '') {
   const el = document.getElementById('statusMsg');
   el.textContent = msg;
   el.className = `status-msg${type ? ' ' + type : ''}`;
 }
+function showLookupStatus(msg, type = '') {
+  const el = document.getElementById('lookupStatus');
+  el.textContent = msg;
+  el.className = `status-msg${type ? ' ' + type : ''}`;
+}
 
-// portalEmail is set when we know the customer's email (post-checkout or lookup)
-let portalEmail = null;
-
+// ── Portal ──────────────────────────────────────────────────────
 async function openPortal() {
   if (!portalEmail) return;
   const btn = document.getElementById('portalBtn');
@@ -777,7 +1105,6 @@ async function lookupAndOpenPortal() {
   btn.disabled = true;
   btn.textContent = '…';
   showLookupStatus('');
-
   try {
     const res = await fetch(`${WORKER_URL}/subscription/portal`, {
       method: 'POST',
@@ -794,12 +1121,6 @@ async function lookupAndOpenPortal() {
   }
 }
 
-function showLookupStatus(msg, type = '') {
-  const el = document.getElementById('lookupStatus');
-  el.textContent = msg;
-  el.className = `status-msg${type ? ' ' + type : ''}`;
-}
-
 function showManageSection(email, tierName) {
   portalEmail = email;
   document.getElementById('managePlanName').textContent = tierName;
@@ -807,16 +1128,18 @@ function showManageSection(email, tierName) {
   document.getElementById('manageLookup').style.display = 'none';
 }
 
+// ── Stripe appearance — theme-aware ────────────────────────────
 function stripeAppearance() {
+  const isDark = document.documentElement.classList.contains('carbon-mode');
   return {
-    theme: 'night',
+    theme: isDark ? 'night' : 'stripe',
     variables: {
-      colorPrimary: '#C8A96E',
-      colorBackground: '#2E2E2E',
-      colorText: '#F5F0E8',
-      colorDanger: '#E05555',
-      fontFamily: 'DM Sans, sans-serif',
-      borderRadius: '8px',
+      colorPrimary:     '#C8A96E',
+      colorBackground:  isDark ? '#252525' : '#FFFFFF',
+      colorText:        isDark ? '#F5F0E8' : '#1A1A1A',
+      colorDanger:      isDark ? '#E05555' : '#C0392B',
+      fontFamily:       'DM Sans, sans-serif',
+      borderRadius:     '6px',
     },
   };
 }
