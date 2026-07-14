@@ -49,7 +49,11 @@ Do not make integrity/audit claims in marketing or editorial copy until resolved
 
 ## Session queue
 
-See `SESSIONS.md`.
+## Session queue
+
+See `SESSIONS.md` for log. Full S19–S120 roadmap lives in `Share-Master-Context.md` §Roadmap.
+Core build: S19–S100. Buffer: S101–S120. Planning sessions are uncounted.
+Integrity/audit marketing claims remain blocked until S42 (BLAKE3 Worker WASM verified).
 
 ---
 

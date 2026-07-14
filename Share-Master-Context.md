@@ -155,7 +155,29 @@ Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
 
 **Latent (deferred):** `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in a snag session.
 
-**Next: Block 2 — Instrumentation (Session 18).**
+**Next: S19 — Supabase aggregation layer (Block 2, roadmap below).**
+
+---
+
+## Roadmap S19–S120 (v1.6 · Share-19 planning session)
+
+Core: S19–S100 (82 sessions). Buffer: S101–S120 (20 sessions, drawn on overrun, logged in SESSIONS.md).
+
+| Block | Sessions | Scope |
+|---|---|---|
+| B2 Instrumentation completion | S19–S26 | Supabase aggregation (MRR/conversion/churn), R2 + crypto metrics, /admin/metrics, dev dashboard, investor snapshot, 13-metric smoke test |
+| B3 Stripe test coverage | S27–S33 | Test mode (4242 card), webhook replay, cancellation, portal, failed payment/dunning, edge cases |
+| B4 Security hardening | S34–S42 | BLAKE3 Worker WASM (S34–S35), AAD ≥256 fix (S36), large-file test, rate limiting, admin hardening, CSP, audits, integrity gap card → green (S42) |
+| B5 Design full pass | S43–S50 | Progress bar, Turnstile placement, QR/copy icon, FREE_EXPIRY, theme cookie, shared nav, brand audit, cross-browser |
+| B6 Testing infra | S51–S58 | Vitest workers pool, unit tests (nut00/nut11/manifest/blake3), integration harness, Playwright E2E, GitHub Actions CI |
+| B7 Lightning/Blink | S59–S68 | Invoice endpoint, settlement detection, credential-on-settlement, anonymous paid tier (S64 — highest design risk), Lightning tab, settlement mix metric, real-sats E2E |
+| B8 NUT-11 Mode 2 | S69–S76 | Keypair challenge-response, keygen UX, Worker verify, manifest v2, Prod Max gating, tests |
+| B9 Documentation | S77–S82 | README, security whitepaper (unblocked by S42), API docs, help/FAQ, ToS/privacy |
+| B10 Enterprise groundwork | S83–S90 | Org/seat schema, custom caps, Stripe invoicing, admin provisioning, sales page, ML-KEM spike |
+| B11 Beta prep | S91–S98 | Week 0 alpha (S91–S93), load test, incident runbook, onboarding, feedback loop, go/no-go |
+| B12 Launch | S99–S100 | Public beta launch + stabilization |
+
+**Critical chains:** S34→S35→S37→S42→S78 (integrity claims) · S18→S22→S24→S49/S66 (dashboard) · S51→S55→S58→S94 (CI/load) · S62→S63→S64 (anonymous paid tier).
 
 ---
 

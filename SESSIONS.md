@@ -164,3 +164,58 @@ GROUP BY tier;
 
 - `worker/src/index.js` — `logEvent` helper + `timed` router wrapper + `download_tier` event in `handleDownload`
 - `worker/wrangler.toml` — `[[analytics_engine_datasets]]` binding `AE`, dataset `share_events`
+
+---
+
+## Session 19 — Roadmap planning S19–S120 (14 July 2026)
+
+**Type:** Planning session (uncounted — does not consume a build session number).
+**Commit:** pending
+
+### Completed
+
+- Full S19–S120 roadmap drafted: 82 core build sessions across Blocks 2–12, buffer S101–S120 (20 sessions)
+- Planning sessions are uncounted by convention — next build session is **S19**
+- Roadmap recorded in full in `Share-Master-Context.md` §Roadmap (v1.6)
+- `CLAUDE.md` §Session queue updated to reference roadmap location
+- Block order rationale: instrumentation first (data from day one) → Stripe test coverage → security hardening (BLAKE3 WASM unblocks integrity claims) → design → testing infra → Lightning → Mode 2 → docs → enterprise → beta → launch
+
+### Block summary
+
+| Block | Sessions | Scope |
+|---|---|---|
+| B2 Instrumentation completion | S19–S26 | Supabase aggregation, R2 + crypto metrics, /admin/metrics, dev dashboard, investor snapshot, 13-metric smoke test |
+| B3 Stripe test coverage | S27–S33 | 4242 card, webhook replay, cancellation, portal, failed payment/dunning, edge cases |
+| B4 Security hardening | S34–S42 | BLAKE3 Worker WASM, AAD ≥256 fix, rate limiting, CSP, audits, integrity gap card → green |
+| B5 Design full pass | S43–S50 | Progress bar, Turnstile placement, QR/copy, FREE_EXPIRY, theme cookie, shared nav, brand audit |
+| B6 Testing infra | S51–S58 | Vitest workers pool, unit tests, integration harness, Playwright E2E, GitHub Actions CI |
+| B7 Lightning/Blink | S59–S68 | Invoice endpoint, settlement, credential-on-settlement, anonymous paid tier, Lightning tab, real-sats E2E |
+| B8 NUT-11 Mode 2 | S69–S76 | Keypair challenge-response, manifest v2, Prod Max gating, tests |
+| B9 Documentation | S77–S82 | README, security whitepaper (unblocked by S42), API docs, help/FAQ, ToS/privacy |
+| B10 Enterprise groundwork | S83–S90 | Org/seat schema, custom caps, Stripe invoicing, admin provisioning, ML-KEM spike |
+| B11 Beta prep | S91–S98 | Week 0 alpha, load test, incident runbook, onboarding, feedback loop, go/no-go |
+| B12 Launch | S99–S100 | Public beta launch + stabilization |
+| Buffer | S101–S120 | Unallocated — drawn on block overrun, logged here immediately |
+
+### Critical dependency chains
+
+- S34→S35→S37→S42→S78 — BLAKE3 Worker WASM → integrity claims → whitepaper (longest lead-time chain)
+- S18→S22→S24→S49/S66 — instrumentation → dashboard → brand + settlement metric
+- S51→S55→S58→S94 — test infra → CI → load test
+- S62→S63→S64 — Lightning settlement → anonymous paid tier (highest design risk in plan)
+
+### Do not retry
+
+- Stripe test card is **4242 4242 4242 4242** — not 4444
+- DO NOT number planning sessions — they are uncounted by convention
+
+### Files changed
+
+- `SESSIONS.md` — this entry
+- `Share-Master-Context.md` — v1.6, §Roadmap added, §Current state updated
+- `CLAUDE.md` — §Session queue updated
+
+---
+
+*Next build session: **S19 — Supabase aggregation layer** (Block 2)*
+*Attach: worker/src/index.js, worker/wrangler.toml, CLAUDE.md, Share-Master-Context.md, SESSIONS.md*
