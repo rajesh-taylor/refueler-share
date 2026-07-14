@@ -140,6 +140,10 @@ export default {
         return timed('admin_metrics', () => handleAdminMetrics(request, env).then(r => addCors(r, request)));
       }
 
+      if (request.method === 'GET' && path === '/admin/ae-metrics') {
+        return timed('admin_ae_metrics', () => handleAdminAeMetrics(request, env).then(r => addCors(r, request)));
+      }
+
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
       return new Response('Not found', { status: 404 });
 
@@ -742,6 +746,145 @@ async function handleAdminMetrics(request, env) {
     console.error('Metrics error:', e);
     return err(500, 'Metrics query failed');
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin AE metrics — GET /admin/ae-metrics
+// X-Admin-Key protected.
+// Proxies three Cloudflare Analytics Engine SQL queries server-side so that
+// CF_AE_TOKEN and CF_ACCOUNT_ID never touch the browser.
+//
+// Returns:
+//   credential_issuances_by_tier  — count per tier (rolling 30d)
+//   r2_bytes_uploaded             — sum of total_bytes on chunk-0 uploads (rolling 90d)
+//   r2_chunk_retrieval_success_rate — fraction of download requests returning 200 (rolling 24h)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAdminAeMetrics(request, env) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+
+  if (!env.CF_ACCOUNT_ID || !env.CF_AE_TOKEN) {
+    return json({
+      error: 'CF_ACCOUNT_ID or CF_AE_TOKEN not set',
+      credential_issuances_by_tier: null,
+      r2_bytes_uploaded: null,
+      r2_chunk_retrieval_success_rate: null,
+    });
+  }
+
+  const AE_URL = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`;
+
+  async function aeQuery(sql) {
+    const res = await fetch(AE_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.CF_AE_TOKEN}`,
+        'Content-Type': 'text/plain',
+      },
+      body: sql,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`AE SQL error ${res.status}: ${text}`);
+    }
+    return res.json();
+  }
+
+  // Run all three queries in parallel
+  const [issuanceResult, uploadResult, downloadResult] = await Promise.allSettled([
+
+    // Metric: credential issuances by tier (rolling 30 days)
+    aeQuery(`
+      SELECT blob2 AS tier, count() AS issued
+      FROM share_events
+      WHERE blob1 = 'credential_issue'
+      AND timestamp > NOW() - INTERVAL '30' DAY
+      GROUP BY tier
+    `),
+
+    // Metric 5: R2 bytes uploaded (chunk-0 events only, rolling 90 days)
+    // doubles[4] = total_bytes, doubles[2] = chunk_index (0 = first chunk)
+    aeQuery(`
+      SELECT sum(doubles[4]) AS total_bytes_uploaded
+      FROM share_events
+      WHERE blob1 = 'upload'
+      AND doubles[2] = 0
+      AND timestamp > NOW() - INTERVAL '90' DAY
+    `),
+
+    // Metric 6: R2 chunk retrieval success rate (rolling 24h)
+    // doubles[1] = HTTP status code; blob2 = error_message (empty on success)
+    aeQuery(`
+      SELECT
+        countIf(doubles[1] = 200) AS successful_chunks,
+        count() AS total_chunks,
+        countIf(doubles[1] = 200) / count() AS success_rate
+      FROM share_events
+      WHERE blob1 = 'download'
+      AND timestamp > NOW() - INTERVAL '1' DAY
+    `),
+  ]);
+
+  // ── Parse issuances ──────────────────────────────────────────────────────────
+  let credentialIssuancesByTier = null;
+  let credentialIssuancesNote = null;
+  if (issuanceResult.status === 'fulfilled') {
+    const rows = issuanceResult.value?.data ?? [];
+    credentialIssuancesByTier = { free: 0, creative: 0, max: 0 };
+    for (const row of rows) {
+      const tier = row.tier ?? 'free';
+      credentialIssuancesByTier[tier] = parseInt(row.issued ?? 0, 10);
+    }
+  } else {
+    credentialIssuancesNote = `AE query failed: ${issuanceResult.reason?.message}`;
+  }
+
+  // ── Parse R2 bytes uploaded ──────────────────────────────────────────────────
+  let r2BytesUploaded = null;
+  let r2BytesNote = null;
+  if (uploadResult.status === 'fulfilled') {
+    const rows = uploadResult.value?.data ?? [];
+    r2BytesUploaded = parseFloat(rows[0]?.total_bytes_uploaded ?? 0);
+  } else {
+    r2BytesNote = `AE query failed: ${uploadResult.reason?.message}`;
+  }
+
+  // ── Parse chunk retrieval success rate ──────────────────────────────────────
+  let r2ChunkSuccessRate = null;
+  let r2ChunkSuccessfulChunks = null;
+  let r2ChunkTotalChunks = null;
+  let r2ChunkNote = null;
+  if (downloadResult.status === 'fulfilled') {
+    const rows = downloadResult.value?.data ?? [];
+    if (rows.length > 0) {
+      r2ChunkSuccessRate        = parseFloat((rows[0]?.success_rate ?? 0).toFixed(4));
+      r2ChunkSuccessfulChunks   = parseInt(rows[0]?.successful_chunks ?? 0, 10);
+      r2ChunkTotalChunks        = parseInt(rows[0]?.total_chunks ?? 0, 10);
+    } else {
+      r2ChunkSuccessRate      = null;
+      r2ChunkNote             = 'No download events in last 24h — rate unavailable';
+    }
+  } else {
+    r2ChunkNote = `AE query failed: ${downloadResult.reason?.message}`;
+  }
+
+  return json({
+    as_of: new Date().toISOString(),
+    window_notes: {
+      credential_issuances: 'Rolling 30 days',
+      r2_bytes_uploaded: 'Rolling 90 days (chunk-0 events only; total_bytes logged on first chunk per transfer)',
+      r2_chunk_retrieval_success_rate: 'Rolling 24 hours',
+    },
+    credential_issuances_by_tier: credentialIssuancesByTier,
+    credential_issuances_note: credentialIssuancesNote,
+    r2_bytes_uploaded: r2BytesUploaded,
+    r2_bytes_purged: null,
+    r2_bytes_note: r2BytesNote ?? 'r2_bytes_purged not measurable until R2 event notifications wired to AE (B4 scope)',
+    r2_chunk_retrieval_success_rate: r2ChunkSuccessRate,
+    r2_chunk_successful_chunks: r2ChunkSuccessfulChunks,
+    r2_chunk_total_chunks: r2ChunkTotalChunks,
+    r2_chunk_note: r2ChunkNote,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

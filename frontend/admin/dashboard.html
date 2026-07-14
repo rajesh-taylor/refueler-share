@@ -1,562 +1,489 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>refueler-share · Admin Dashboard</title>
-  <style>
-    /* ── Tokens ───────────────────────────────────────────────────────────── */
-    :root {
-      --carbon:       #1A1A1A;
-      --carbon-2:     #242424;
-      --carbon-3:     #2E2E2E;
-      --carbon-4:     #3A3A3A;
-      --paper:        #F5F0E8;
-      --paper-dim:    #C8C2B6;
-      --green:        #4ADE80;
-      --green-dim:    #166534;
-      --amber:        #FCD34D;
-      --amber-dim:    #78350F;
-      --red:          #F87171;
-      --red-dim:      #7F1D1D;
-      --blue:         #60A5FA;
-      --mono:         'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
-      --sans:         -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>refueler-share · dev dashboard</title>
+<style>
+  :root {
+    --carbon: #1A1A1A;
+    --carbon-2: #242424;
+    --carbon-3: #2E2E2E;
+    --carbon-border: #3A3A3A;
+    --paper: #F5F0E8;
+    --paper-dim: #C8C2B6;
+    --accent: #E8D5A3;
+    --green: #4CAF72;
+    --amber: #E8A93A;
+    --red: #E85A4A;
+    --blue: #5A9BE8;
+    --mono: 'JetBrains Mono', 'Fira Mono', monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--carbon);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
 
-    /* ── Reset ────────────────────────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; }
+  /* ── Gate ── */
+  #gate {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; flex-direction: column; gap: 16px;
+  }
+  #gate h1 { font-size: 18px; color: var(--accent); letter-spacing: .04em; }
+  #gate input {
+    background: var(--carbon-2); border: 1px solid var(--carbon-border);
+    color: var(--paper); padding: 10px 14px; border-radius: 6px;
+    font-family: var(--mono); font-size: 14px; width: 320px; outline: none;
+  }
+  #gate input:focus { border-color: var(--accent); }
+  #gate button {
+    background: var(--accent); color: var(--carbon); border: none;
+    padding: 10px 24px; border-radius: 6px; font-weight: 600;
+    cursor: pointer; font-size: 14px;
+  }
+  #gate-error { color: var(--red); font-size: 13px; }
 
-    body {
-      background: var(--carbon);
-      color: var(--paper);
-      font-family: var(--sans);
-      font-size: 14px;
-      line-height: 1.5;
-    }
+  /* ── Dashboard ── */
+  #dashboard { display: none; }
+  header {
+    background: var(--carbon-2); border-bottom: 1px solid var(--carbon-border);
+    padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { font-size: 15px; color: var(--accent); letter-spacing: .04em; flex: 1; }
+  #refresh-btn {
+    background: var(--carbon-3); border: 1px solid var(--carbon-border);
+    color: var(--paper-dim); padding: 6px 14px; border-radius: 5px;
+    cursor: pointer; font-size: 12px;
+  }
+  #refresh-btn:hover { color: var(--paper); border-color: var(--accent); }
+  #countdown { font-size: 12px; color: var(--paper-dim); font-family: var(--mono); }
 
-    /* ── Gate ─────────────────────────────────────────────────────────────── */
-    #gate {
-      position: fixed; inset: 0;
-      background: var(--carbon);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 100;
-    }
-    #gate.hidden { display: none; }
+  main { padding: 24px; max-width: 1100px; }
 
-    .gate-card {
-      background: var(--carbon-2);
-      border: 1px solid var(--carbon-4);
-      border-radius: 8px;
-      padding: 32px;
-      width: 320px;
-    }
-    .gate-card h1 {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--paper);
-      margin-bottom: 4px;
-    }
-    .gate-card p {
-      font-size: 12px;
-      color: var(--paper-dim);
-      margin-bottom: 20px;
-    }
-    .gate-card input {
-      width: 100%;
-      padding: 10px 12px;
-      background: var(--carbon-3);
-      border: 1px solid var(--carbon-4);
-      border-radius: 5px;
-      color: var(--paper);
-      font-family: var(--mono);
-      font-size: 13px;
-      outline: none;
-      margin-bottom: 12px;
-    }
-    .gate-card input:focus { border-color: var(--paper-dim); }
-    .gate-card button {
-      width: 100%;
-      padding: 10px;
-      background: var(--paper);
-      color: var(--carbon);
-      border: none;
-      border-radius: 5px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .gate-card button:hover { background: var(--paper-dim); }
-    #gate-error {
-      font-size: 12px;
-      color: var(--red);
-      margin-top: 10px;
-      min-height: 18px;
-    }
+  /* ── Section headings ── */
+  .section-label {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--paper-dim); margin: 28px 0 12px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--carbon-border);
+  }
 
-    /* ── Layout ───────────────────────────────────────────────────────────── */
-    #app { display: none; flex-direction: column; min-height: 100vh; }
-    #app.visible { display: flex; }
+  /* ── Grid ── */
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .grid-wide { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 
-    header {
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--carbon-3);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      position: sticky; top: 0;
-      background: var(--carbon);
-      z-index: 10;
-    }
-    .wordmark {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--paper-dim);
-      letter-spacing: 0.05em;
-    }
-    .wordmark span { color: var(--paper); }
-    .header-right {
-      display: flex; align-items: center; gap: 16px;
-    }
-    #status-pill {
-      font-size: 11px;
-      font-family: var(--mono);
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: var(--carbon-3);
-      color: var(--paper-dim);
-    }
-    #status-pill.ok   { background: var(--green-dim);  color: var(--green); }
-    #status-pill.err  { background: var(--red-dim);    color: var(--red);   }
-    #status-pill.load { background: var(--carbon-3);   color: var(--paper-dim); }
-    #refresh-btn {
-      font-size: 12px;
-      padding: 5px 12px;
-      background: var(--carbon-3);
-      color: var(--paper-dim);
-      border: 1px solid var(--carbon-4);
-      border-radius: 5px;
-      cursor: pointer;
-      font-family: var(--sans);
-    }
-    #refresh-btn:hover { background: var(--carbon-4); color: var(--paper); }
-    #countdown {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--carbon-4);
-    }
+  /* ── Card ── */
+  .card {
+    background: var(--carbon-2); border: 1px solid var(--carbon-border);
+    border-radius: 8px; padding: 16px;
+  }
+  .card-label { font-size: 11px; color: var(--paper-dim); letter-spacing: .04em; margin-bottom: 8px; }
+  .card-value {
+    font-size: 28px; font-weight: 700; font-family: var(--mono);
+    color: var(--paper); line-height: 1;
+  }
+  .card-value.green  { color: var(--green); }
+  .card-value.amber  { color: var(--amber); }
+  .card-value.red    { color: var(--red); }
+  .card-value.blue   { color: var(--blue); }
+  .card-sub { font-size: 11px; color: var(--paper-dim); margin-top: 6px; }
+  .card-note { font-size: 10px; color: #666; margin-top: 8px; line-height: 1.5; }
+  .deferred { opacity: .45; }
+  .deferred .card-value { font-size: 18px; }
 
-    main {
-      padding: 24px;
-      flex: 1;
-    }
+  /* ── Tier breakdown ── */
+  .tier-row { display: flex; gap: 12px; margin-top: 8px; }
+  .tier-pill {
+    background: var(--carbon-3); border-radius: 4px; padding: 4px 10px;
+    font-size: 12px; font-family: var(--mono);
+  }
+  .tier-pill span { color: var(--paper-dim); margin-right: 4px; }
 
-    /* ── Section labels ───────────────────────────────────────────────────── */
-    .section-label {
-      font-size: 10px;
-      font-family: var(--mono);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--paper-dim);
-      margin-bottom: 12px;
-      margin-top: 28px;
-    }
-    .section-label:first-child { margin-top: 0; }
+  /* ── Issuance breakdown ── */
+  .issuance-row { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .issuance-item { display: flex; justify-content: space-between; font-size: 12px; font-family: var(--mono); }
+  .issuance-item .label { color: var(--paper-dim); }
+  .issuance-item .val   { color: var(--paper); }
 
-    /* ── Metric grid ──────────────────────────────────────────────────────── */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-    }
-    .grid-wide {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
-    }
+  /* ── Error banner ── */
+  #error-banner {
+    display: none; background: rgba(232,90,74,.15);
+    border: 1px solid var(--red); border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 16px;
+    font-size: 12px; color: var(--red);
+  }
 
-    /* ── Card ─────────────────────────────────────────────────────────────── */
-    .card {
-      background: var(--carbon-2);
-      border: 1px solid var(--carbon-3);
-      border-radius: 8px;
-      padding: 16px 18px;
-      position: relative;
-    }
-    .card-label {
-      font-size: 10px;
-      font-family: var(--mono);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--paper-dim);
-      margin-bottom: 8px;
-    }
-    .card-value {
-      font-size: 28px;
-      font-family: var(--mono);
-      font-weight: 700;
-      color: var(--paper);
-      line-height: 1;
-    }
-    .card-value.sm  { font-size: 20px; }
-    .card-value.xs  { font-size: 15px; }
-    .card-sub {
-      font-size: 11px;
-      color: var(--paper-dim);
-      margin-top: 6px;
-    }
-    .card-note {
-      font-size: 10px;
-      color: var(--carbon-4);
-      margin-top: 8px;
-      line-height: 1.4;
-      font-family: var(--mono);
-    }
-
-    /* Coloured left-border variants */
-    .card.green { border-left: 3px solid var(--green); }
-    .card.amber { border-left: 3px solid var(--amber); }
-    .card.red   { border-left: 3px solid var(--red);   }
-    .card.blue  { border-left: 3px solid var(--blue);  }
-    .card.null  { border-left: 3px solid var(--carbon-4); opacity: 0.65; }
-
-    /* Badge inside card */
-    .badge {
-      display: inline-block;
-      font-size: 9px;
-      font-family: var(--mono);
-      padding: 2px 7px;
-      border-radius: 999px;
-      vertical-align: middle;
-      margin-left: 6px;
-      position: relative;
-      top: -1px;
-    }
-    .badge.deferred { background: var(--carbon-3); color: var(--paper-dim); }
-    .badge.live     { background: var(--green-dim); color: var(--green); }
-
-    /* Tier breakdown row */
-    .tier-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 5px 0;
-      border-bottom: 1px solid var(--carbon-3);
-      font-size: 13px;
-    }
-    .tier-row:last-child { border-bottom: none; }
-    .tier-row .tier-name {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--paper-dim);
-    }
-    .tier-row .tier-count {
-      font-family: var(--mono);
-      font-weight: 600;
-      color: var(--paper);
-    }
-
-    /* Divider */
-    .divider {
-      height: 1px;
-      background: var(--carbon-3);
-      margin: 28px 0 0;
-    }
-
-    /* As-of line */
-    #as-of {
-      font-size: 10px;
-      font-family: var(--mono);
-      color: var(--carbon-4);
-      padding: 16px 24px 8px;
-      text-align: right;
-    }
-
-    /* Skeleton shimmer */
-    .skel {
-      display: inline-block;
-      background: linear-gradient(90deg, var(--carbon-3) 25%, var(--carbon-4) 50%, var(--carbon-3) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-      border-radius: 4px;
-      height: 1em;
-      width: 60px;
-    }
-    @keyframes shimmer {
-      0%   { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-  </style>
+  /* ── Loading spinner ── */
+  .spinner { display: inline-block; width: 12px; height: 12px;
+    border: 2px solid var(--carbon-border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </head>
 <body>
 
-<!-- ── Password gate ─────────────────────────────────────────────────────── -->
+<!-- ── Password gate ── -->
 <div id="gate">
-  <div class="gate-card">
-    <h1>refueler-share</h1>
-    <p>Admin dashboard · dev only</p>
-    <input id="key-input" type="password" placeholder="ADMIN_KEY" autocomplete="off">
-    <button id="key-submit">Unlock</button>
-    <div id="gate-error"></div>
-  </div>
+  <h1>refueler-share · dev dashboard</h1>
+  <input type="password" id="key-input" placeholder="Admin key" autocomplete="off">
+  <button onclick="tryUnlock()">Unlock</button>
+  <div id="gate-error"></div>
 </div>
 
-<!-- ── App ───────────────────────────────────────────────────────────────── -->
-<div id="app">
+<!-- ── Dashboard ── -->
+<div id="dashboard">
   <header>
-    <div class="wordmark"><span>refueler</span>-share · admin</div>
-    <div class="header-right">
-      <span id="countdown"></span>
-      <button id="refresh-btn">↻ Refresh</button>
-      <span id="status-pill" class="load">loading…</span>
-    </div>
+    <h1>refueler-share · dev dashboard</h1>
+    <span id="countdown"></span>
+    <button id="refresh-btn" onclick="refreshAll()">↺ Refresh</button>
   </header>
 
   <main>
+    <div id="error-banner"></div>
 
-    <!-- Revenue -->
-    <div class="section-label">Revenue</div>
+    <!-- Revenue & Subscribers -->
+    <div class="section-label">Revenue &amp; Subscribers</div>
     <div class="grid">
-      <div class="card green">
-        <div class="card-label">MRR <span class="badge live">live</span></div>
-        <div class="card-value" id="m-mrr"><span class="skel"></span></div>
-        <div class="card-sub">GBP · conservative floor</div>
-        <div class="card-note" id="m-mrr-note"></div>
+      <div class="card">
+        <div class="card-label">MRR (GBP) — floor</div>
+        <div class="card-value" id="mrr">—</div>
+        <div class="card-note" id="mrr-note"></div>
       </div>
       <div class="card">
-        <div class="card-label">Paid Subscribers</div>
-        <div class="card-value" id="m-paid"><span class="skel"></span></div>
-        <div class="card-sub">Creative + Max (active)</div>
+        <div class="card-label">Paid subscribers</div>
+        <div class="card-value blue" id="paid-total">—</div>
+        <div class="tier-row" id="tier-breakdown"></div>
       </div>
       <div class="card">
-        <div class="card-label">Churn Rate MTD</div>
-        <div class="card-value" id="m-churn"><span class="skel"></span></div>
-        <div class="card-sub" id="m-churn-sub"></div>
-        <div class="card-note" id="m-churn-note"></div>
+        <div class="card-label">Churn rate MTD</div>
+        <div class="card-value" id="churn-rate">—</div>
+        <div class="card-sub" id="churn-sub"></div>
+        <div class="card-note" id="churn-note"></div>
       </div>
     </div>
 
-    <!-- Subscribers by tier -->
-    <div class="section-label">Subscribers by tier</div>
-    <div class="grid-wide">
+    <!-- Cryptographic integrity -->
+    <div class="section-label">Cryptographic Integrity</div>
+    <div class="grid">
       <div class="card">
-        <div class="card-label">Tier breakdown <span class="badge live">live</span></div>
-        <div id="m-tiers"><span class="skel" style="width:100%;height:80px;display:block;"></span></div>
+        <div class="card-label">Credential uniqueness rate</div>
+        <div class="card-value" id="uniqueness-rate">—</div>
+        <div class="card-sub" id="uniqueness-sub"></div>
+        <div class="card-note" id="uniqueness-note"></div>
+      </div>
+      <div class="card deferred">
+        <div class="card-label">ZK verification rate</div>
+        <div class="card-value amber">S34</div>
+        <div class="card-note">Requires has_passphrase AE logging (B4 scope)</div>
       </div>
     </div>
 
-    <!-- Credential integrity -->
-    <div class="section-label">Credential integrity</div>
+    <!-- Analytics Engine metrics -->
+    <div class="section-label">Analytics Engine (AE SQL · live)</div>
     <div class="grid">
-      <div class="card" id="card-uniqueness">
-        <div class="card-label">Credential Uniqueness Rate <span class="badge live">live</span></div>
-        <div class="card-value" id="m-uniq"><span class="skel"></span></div>
-        <div class="card-sub" id="m-uniq-sub"></div>
-        <div class="card-note" id="m-uniq-note"></div>
+      <div class="card">
+        <div class="card-label">Credential issuances (30d)</div>
+        <div class="card-value blue" id="ae-issuances-total">—</div>
+        <div class="issuance-row" id="ae-issuances-breakdown"></div>
+        <div class="card-note" id="ae-issuances-note"></div>
       </div>
-      <div class="card null">
-        <div class="card-label">ZK Verification Rate <span class="badge deferred">B4</span></div>
-        <div class="card-value xs">—</div>
-        <div class="card-note">Requires has_passphrase blob4 in upload AE logEvent (B4 scope). AE SQL: countIf(blob4='true')/count() WHERE blob1='upload' AND doubles[2]=0.</div>
+      <div class="card">
+        <div class="card-label">R2 bytes uploaded (90d)</div>
+        <div class="card-value" id="ae-bytes-uploaded">—</div>
+        <div class="card-sub" id="ae-bytes-sub"></div>
+        <div class="card-note" id="ae-bytes-note"></div>
       </div>
-      <div class="card null">
-        <div class="card-label">Credential Issuances <span class="badge deferred">S22</span></div>
-        <div class="card-value xs">—</div>
-        <div class="card-note">Requires Cloudflare AE SQL API (external REST, not Worker-callable). Computed in dashboard layer S22.</div>
+      <div class="card">
+        <div class="card-label">Chunk retrieval success (24h)</div>
+        <div class="card-value" id="ae-retrieval-rate">—</div>
+        <div class="card-sub" id="ae-retrieval-sub"></div>
+        <div class="card-note" id="ae-retrieval-note"></div>
       </div>
     </div>
 
     <!-- Storage -->
-    <div class="section-label">Storage (R2)</div>
+    <div class="section-label">Storage Economics</div>
     <div class="grid">
-      <div class="card null">
-        <div class="card-label">Bytes Uploaded <span class="badge deferred">S22</span></div>
-        <div class="card-value xs">—</div>
-        <div class="card-note">AE SQL: sum(doubles[4]) WHERE blob1='upload' AND doubles[2]=0. Requires AE SQL API (S22).</div>
-      </div>
-      <div class="card null">
-        <div class="card-label">Bytes Purged <span class="badge deferred">B4</span></div>
-        <div class="card-value xs">—</div>
-        <div class="card-note">Not measurable until R2 event notifications wired to AE pipeline (B4). Computed in dashboard layer S22.</div>
-      </div>
-      <div class="card null">
-        <div class="card-label">Chunk Retrieval Success <span class="badge deferred">S22</span></div>
-        <div class="card-value xs">—</div>
-        <div class="card-note">AE SQL: 1−(countIf(blob3≠'')/count()) WHERE blob1='download'. Requires AE SQL API (S22).</div>
+      <div class="card deferred">
+        <div class="card-label">R2 bytes purged</div>
+        <div class="card-value amber">B4</div>
+        <div class="card-note">Requires R2 event notifications wired to AE (B4 scope)</div>
       </div>
     </div>
 
-  </main>
+    <!-- Operational -->
+    <div class="section-label">Operational (Worker latency — via AE · S22)</div>
+    <div class="grid">
+      <div class="card deferred">
+        <div class="card-label">p95 latency /upload</div>
+        <div class="card-value amber">S22</div>
+        <div class="card-note">AE SQL API integration in progress</div>
+      </div>
+      <div class="card deferred">
+        <div class="card-label">p95 latency /download</div>
+        <div class="card-value amber">S22</div>
+        <div class="card-note">AE SQL API integration in progress</div>
+      </div>
+      <div class="card deferred">
+        <div class="card-label">Worker error rate</div>
+        <div class="card-value amber">S22</div>
+        <div class="card-note">AE SQL API integration in progress</div>
+      </div>
+    </div>
 
-  <div id="as-of"></div>
+    <!-- Business -->
+    <div class="section-label">Business Growth</div>
+    <div class="grid">
+      <div class="card deferred">
+        <div class="card-label">Lightning vs Stripe mix</div>
+        <div class="card-value amber">S59</div>
+        <div class="card-note">Requires Blink BOLT11 (B7)</div>
+      </div>
+      <div class="card deferred">
+        <div class="card-label">Free-to-paid conversion</div>
+        <div class="card-value amber">S22</div>
+        <div class="card-note">Issuances vs active subscribers by cohort</div>
+      </div>
+    </div>
+  </main>
 </div>
 
 <script>
   const WORKER = 'https://refueler-share.rt-fc4.workers.dev';
-  const REFRESH_SECS = 60;
-  let countdownTimer = null;
-  let remaining = REFRESH_SECS;
+  let adminKey = '';
+  let refreshTimer = null;
+  let countdown = 60;
 
   // ── Gate ──────────────────────────────────────────────────────────────────
-  const gate       = document.getElementById('gate');
-  const app        = document.getElementById('app');
-  const keyInput   = document.getElementById('key-input');
-  const keySubmit  = document.getElementById('key-submit');
-  const gateError  = document.getElementById('gate-error');
+  document.getElementById('key-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') tryUnlock();
+  });
 
-  function storedKey() { return sessionStorage.getItem('admin_key') ?? ''; }
-
-  async function tryUnlock(key) {
-    gateError.textContent = '';
-    keySubmit.textContent = 'Checking…';
-    keySubmit.disabled = true;
+  async function tryUnlock() {
+    const input = document.getElementById('key-input').value.trim();
+    if (!input) return;
+    // Probe /admin/metrics to verify key before accepting
     try {
       const res = await fetch(`${WORKER}/admin/metrics`, {
-        headers: { 'X-Admin-Key': key }
+        headers: { 'X-Admin-Key': input }
       });
       if (res.status === 401) {
-        gateError.textContent = 'Incorrect key.';
-        keySubmit.textContent = 'Unlock';
-        keySubmit.disabled = false;
+        document.getElementById('gate-error').textContent = 'Invalid key.';
         return;
       }
-      if (!res.ok) {
-        gateError.textContent = `Worker error ${res.status} — key accepted, proceeding.`;
-      }
-      sessionStorage.setItem('admin_key', key);
-      gate.classList.add('hidden');
-      app.classList.add('visible');
-      startDashboard();
+      adminKey = input;
+      sessionStorage.setItem('dash_key', adminKey);
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      await refreshAll();
+      startTimer();
     } catch (e) {
-      gateError.textContent = 'Network error — check Worker URL.';
-      keySubmit.textContent = 'Unlock';
-      keySubmit.disabled = false;
+      document.getElementById('gate-error').textContent = 'Worker unreachable.';
     }
   }
 
-  keySubmit.addEventListener('click', () => tryUnlock(keyInput.value.trim()));
-  keyInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(keyInput.value.trim()); });
-
-  // Auto-unlock if key already in sessionStorage
-  window.addEventListener('DOMContentLoaded', () => {
-    const k = storedKey();
-    if (k) {
-      gate.classList.add('hidden');
-      app.classList.add('visible');
-      startDashboard();
+  // ── Auto-restore from sessionStorage ─────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', async () => {
+    const stored = sessionStorage.getItem('dash_key');
+    if (stored) {
+      adminKey = stored;
+      try {
+        const res = await fetch(`${WORKER}/admin/metrics`, {
+          headers: { 'X-Admin-Key': adminKey }
+        });
+        if (res.status === 401) {
+          sessionStorage.removeItem('dash_key');
+          return;
+        }
+        document.getElementById('gate').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        await refreshAll();
+        startTimer();
+      } catch {}
     }
   });
 
-  // ── Data fetch ────────────────────────────────────────────────────────────
-  const pill = document.getElementById('status-pill');
+  // ── Refresh ───────────────────────────────────────────────────────────────
+  async function refreshAll() {
+    clearInterval(refreshTimer);
+    countdown = 60;
+    updateCountdown();
+
+    const [metrics, aeMetrics] = await Promise.all([
+      fetchMetrics(),
+      fetchAeMetrics(),
+    ]);
+
+    if (metrics) renderMetrics(metrics);
+    if (aeMetrics) renderAeMetrics(aeMetrics);
+
+    startTimer();
+  }
 
   async function fetchMetrics() {
-    pill.className = 'load';
-    pill.textContent = 'loading…';
     try {
       const res = await fetch(`${WORKER}/admin/metrics`, {
-        headers: { 'X-Admin-Key': storedKey() }
+        headers: { 'X-Admin-Key': adminKey }
       });
       if (res.status === 401) {
-        sessionStorage.removeItem('admin_key');
+        sessionStorage.removeItem('dash_key');
         location.reload();
-        return;
+        return null;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json();
-      renderMetrics(d);
-      pill.className = 'ok';
-      pill.textContent = '● live';
+      return res.json();
     } catch (e) {
-      pill.className = 'err';
-      pill.textContent = '✕ error';
-      console.error('Metrics fetch failed:', e);
+      showError(`/admin/metrics fetch failed: ${e.message}`);
+      return null;
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  function fmt(n, prefix = '', suffix = '') {
-    if (n === null || n === undefined) return '—';
-    return prefix + n.toLocaleString('en-GB', { maximumFractionDigits: 2 }) + suffix;
+  async function fetchAeMetrics() {
+    try {
+      const res = await fetch(`${WORKER}/admin/ae-metrics`, {
+        headers: { 'X-Admin-Key': adminKey }
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        showError(`/admin/ae-metrics ${res.status}: ${body.error ?? 'unknown'}`);
+        return null;
+      }
+      return res.json();
+    } catch (e) {
+      showError(`/admin/ae-metrics fetch failed: ${e.message}`);
+      return null;
+    }
   }
 
+  // ── Render: /admin/metrics ────────────────────────────────────────────────
   function renderMetrics(d) {
     // MRR
-    document.getElementById('m-mrr').textContent = fmt(d.mrr_gbp, '£');
-    document.getElementById('m-mrr-note').textContent = d.mrr_note ?? '';
+    setText('mrr', `£${d.mrr_gbp ?? 0}`);
+    setText('mrr-note', d.mrr_note ?? '');
 
-    // Paid total
-    document.getElementById('m-paid').textContent = fmt(d.paid_total);
+    // Paid total + tier breakdown
+    setText('paid-total', d.paid_total ?? 0);
+    const tiers = d.subscribers_by_tier ?? {};
+    document.getElementById('tier-breakdown').innerHTML =
+      Object.entries(tiers).map(([t, n]) =>
+        `<div class="tier-pill"><span>${t}</span>${n}</div>`
+      ).join('');
 
     // Churn
-    const churnCard = document.getElementById('m-churn');
-    const churnVal  = d.churn_rate_mtd_pct;
-    churnCard.textContent = churnVal !== null ? `${churnVal}%` : '—';
-    churnCard.closest('.card').className = 'card ' + (churnVal > 5 ? 'red' : churnVal > 0 ? 'amber' : 'green');
-    document.getElementById('m-churn-sub').textContent =
-      d.cancelled_mtd !== null ? `${d.cancelled_mtd} cancelled · ${d.active_start_of_month_approx} approx base` : '';
-    document.getElementById('m-churn-note').textContent = d.churn_note ?? '';
-
-    // Tier breakdown
-    const t = d.subscribers_by_tier ?? {};
-    const tiers = document.getElementById('m-tiers');
-    tiers.innerHTML = ['free','creative','max'].map(tier => `
-      <div class="tier-row">
-        <span class="tier-name">${tier}</span>
-        <span class="tier-count">${(t[tier] ?? 0).toLocaleString('en-GB')}</span>
-      </div>
-    `).join('');
+    const churn = d.churn_rate_mtd_pct ?? 0;
+    const churnEl = document.getElementById('churn-rate');
+    churnEl.textContent = `${churn}%`;
+    churnEl.className = 'card-value ' + (churn === 0 ? 'green' : churn < 5 ? 'amber' : 'red');
+    setText('churn-sub', `${d.cancelled_mtd ?? 0} cancelled MTD`);
+    setText('churn-note', d.churn_note ?? '');
 
     // Credential uniqueness
-    const rate    = d.credential_uniqueness_rate;
-    const melts   = d.credential_uniqueness_total_melts;
-    const attempts= d.credential_uniqueness_total_attempts;
-    const uniqEl  = document.getElementById('m-uniq');
-    const uniqCard= document.getElementById('card-uniqueness');
-
-    if (rate !== null) {
-      uniqEl.textContent = (rate * 100).toFixed(2) + '%';
-      uniqCard.className = 'card ' + (rate >= 0.999 ? 'green' : rate >= 0.99 ? 'amber' : 'red');
+    const rate = d.credential_uniqueness_rate;
+    const rateEl = document.getElementById('uniqueness-rate');
+    if (rate === null || rate === undefined) {
+      rateEl.textContent = 'n/a';
+      rateEl.className = 'card-value amber';
     } else {
-      uniqEl.textContent = '—';
-      uniqCard.className = 'card amber';
+      rateEl.textContent = `${(rate * 100).toFixed(2)}%`;
+      rateEl.className = 'card-value ' + (rate >= 0.999 ? 'green' : rate >= 0.99 ? 'amber' : 'red');
     }
-    document.getElementById('m-uniq-sub').textContent =
-      melts !== null ? `${melts} melts · ${attempts} replay attempts` : '';
-    document.getElementById('m-uniq-note').textContent = d.credential_uniqueness_note ?? '';
-
-    // As-of
-    document.getElementById('as-of').textContent = `as of ${d.as_of ?? new Date().toISOString()}`;
+    setText('uniqueness-sub',
+      rate !== null
+        ? `${d.credential_uniqueness_total_melts ?? 0} melts · ${d.credential_uniqueness_total_attempts ?? 0} replays`
+        : ''
+    );
+    setText('uniqueness-note', d.credential_uniqueness_note ?? '');
   }
 
-  // ── Countdown & auto-refresh ───────────────────────────────────────────────
-  const countdownEl    = document.getElementById('countdown');
-  const refreshBtn     = document.getElementById('refresh-btn');
+  // ── Render: /admin/ae-metrics ─────────────────────────────────────────────
+  function renderAeMetrics(d) {
+    // Credential issuances by tier
+    const iss = d.credential_issuances_by_tier;
+    if (iss) {
+      const total = (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0);
+      setText('ae-issuances-total', total);
+      document.getElementById('ae-issuances-breakdown').innerHTML = [
+        { label: 'free', val: iss.free ?? 0 },
+        { label: 'creative', val: iss.creative ?? 0 },
+        { label: 'max', val: iss.max ?? 0 },
+      ].map(r =>
+        `<div class="issuance-item"><span class="label">${r.label}</span><span class="val">${r.val}</span></div>`
+      ).join('');
+    } else {
+      setText('ae-issuances-total', 'err');
+      document.getElementById('ae-issuances-total').className = 'card-value red';
+    }
+    setText('ae-issuances-note', d.credential_issuances_note ?? d.window_notes?.credential_issuances ?? '');
 
-  function startCountdown() {
-    clearInterval(countdownTimer);
-    remaining = REFRESH_SECS;
-    countdownEl.textContent = `↻ ${remaining}s`;
-    countdownTimer = setInterval(() => {
-      remaining--;
-      countdownEl.textContent = `↻ ${remaining}s`;
-      if (remaining <= 0) {
-        clearInterval(countdownTimer);
-        fetchMetrics().then(startCountdown);
-      }
+    // R2 bytes uploaded
+    const bytesEl = document.getElementById('ae-bytes-uploaded');
+    if (d.r2_bytes_uploaded !== null && d.r2_bytes_uploaded !== undefined) {
+      const { val, unit } = formatBytes(d.r2_bytes_uploaded);
+      bytesEl.textContent = `${val} ${unit}`;
+      bytesEl.className = 'card-value';
+      setText('ae-bytes-sub', d.window_notes?.r2_bytes_uploaded ?? '');
+    } else {
+      bytesEl.textContent = d.r2_bytes_note ? 'err' : 'n/a';
+      bytesEl.className = 'card-value amber';
+    }
+    setText('ae-bytes-note', d.r2_bytes_note ?? '');
+
+    // Chunk retrieval success rate
+    const retEl = document.getElementById('ae-retrieval-rate');
+    const rate = d.r2_chunk_retrieval_success_rate;
+    if (rate !== null && rate !== undefined) {
+      retEl.textContent = `${(rate * 100).toFixed(2)}%`;
+      retEl.className = 'card-value ' + (rate >= 0.999 ? 'green' : rate >= 0.99 ? 'amber' : 'red');
+      setText('ae-retrieval-sub',
+        `${d.r2_chunk_successful_chunks ?? 0} / ${d.r2_chunk_total_chunks ?? 0} chunks`
+      );
+    } else {
+      retEl.textContent = 'n/a';
+      retEl.className = 'card-value amber';
+    }
+    setText('ae-retrieval-note', d.r2_chunk_note ?? d.window_notes?.r2_chunk_retrieval_success_rate ?? '');
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === 0) return { val: '0', unit: 'B' };
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return { val: (bytes / Math.pow(1024, i)).toFixed(2), unit: units[i] };
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-banner');
+    el.style.display = 'block';
+    el.textContent = msg;
+    setTimeout(() => { el.style.display = 'none'; }, 8000);
+  }
+
+  // ── Timer ─────────────────────────────────────────────────────────────────
+  function startTimer() {
+    clearInterval(refreshTimer);
+    countdown = 60;
+    refreshTimer = setInterval(() => {
+      countdown--;
+      updateCountdown();
+      if (countdown <= 0) refreshAll();
     }, 1000);
   }
 
-  refreshBtn.addEventListener('click', () => {
-    clearInterval(countdownTimer);
-    fetchMetrics().then(startCountdown);
-  });
-
-  function startDashboard() {
-    fetchMetrics().then(startCountdown);
+  function updateCountdown() {
+    const el = document.getElementById('countdown');
+    if (el) el.textContent = `refresh in ${countdown}s`;
   }
+
+  document.getElementById('refresh-btn').addEventListener('click', refreshAll);
 </script>
 </body>
 </html>
