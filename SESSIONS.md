@@ -172,6 +172,49 @@ GROUP BY tier;
 **Type:** Build session (Block 2 — Instrumentation completion).
 **Commit:** pending
 
+## Session 20 — R2 + crypto metrics (14 July 2026)
+
+**Type:** Build session (Block 2).
+**Commit:** pending
+
+### Completed
+
+- Supabase migration `double_spend_attempts` — table with `id`, `serial`, `uuid`, `attempted_at`. Indexes on `serial` and `attempted_at`. RLS deny-all (same pattern as S19).
+- `handleUpload`: fire-and-forget write to `double_spend_attempts` on every 409 (credential already spent). Non-blocking — never delays the 409 response.
+- `GET /admin/metrics` extended with 4 new fields:
+  - **Metric 4 (credential_uniqueness_rate)**: `totalMelts / (totalMelts + totalAttempts)` — both from Supabase via `Prefer: count=exact` header pattern. 1.0 = no replay attacks. Null if either count query fails.
+  - **Metric 5 (r2_bytes_uploaded / r2_bytes_purged)**: null — requires AE SQL API (S22). AE SQL embedded in `_note`.
+  - **Metric 6 (r2_chunk_retrieval_success_rate)**: null — requires AE SQL API (S22). AE SQL embedded in `_note`.
+  - **Metric 3 (zk_verification_rate)**: null — requires `has_passphrase` blob4 in upload AE event (B4 scope). AE SQL embedded in `_note`.
+- refueler-ecash-lab noted for NUT-11 Mode 2 / B8–B10 experimentation.
+
+## Session 21 — Dev dashboard scaffold (14 July 2026)
+Type: Build session (Block 2).
+Commit: pending
+
+Completed:
+- frontend/admin/dashboard.html — self-contained, no build step
+- Password gate: sessionStorage, probe-verified against /admin/metrics before accepting key
+- Live metrics: MRR, paid total, churn rate MTD (colour-coded), tier breakdown, credential uniqueness rate
+- Deferred cards: ZK rate (B4), credential issuances (S22), R2 bytes uploaded/purged (S22/B4), chunk retrieval (S22)
+- Auto-refresh 60s with countdown. Manual refresh resets timer. 401 mid-session clears key + reloads.
+
+Files changed:
+- frontend/admin/dashboard.html — new file
+
+Next: S22 — AE SQL API integration (Block 2)
+Attach: worker/src/index.js, CLAUDE.md, Share-Master-Context.md, SESSIONS.md
+
+### Do not retry
+
+- DO NOT use KV counter for double-spend tracking — eventually consistent, race condition on concurrent 409s. Supabase table is the correct approach.
+- DO NOT await the `double_spend_attempts` write — fire-and-forget only.
+
+### Files changed
+
+- `worker/src/index.js` — double-spend audit write in `handleUpload`, metric 4 in `handleAdminMetrics`, metrics 3/5/6 as null with notes
+- Supabase migration `double_spend_attempts` — applied via MCP
+
 ### Completed
 
 - RLS deny-all policies added to `spent_tokens` and `subscribers` — explicit `RESTRICTIVE` policies for `anon` and `authenticated` roles. RLS was already enabled; missing policies were triggering Supabase security advisor critical alert. `service_role` (Worker) bypasses RLS — zero functional impact.
