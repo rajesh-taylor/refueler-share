@@ -2,6 +2,44 @@
 
 ---
 
+## Session 14 — Eleventy scaffold (14 July 2026)
+
+**Type:** Build session.
+**Commit:** `f52b55f`
+
+### Completed
+
+- Eleventy 3.x installed at repo root (`package.json`, `.eleventy.js`)
+- Input: `src/`, output: `frontend/` — Cloudflare Pages output dir unchanged
+- `src/_includes/` partials created: `head.njk`, `nav.njk`, `footer.njk`, `shared-styles.njk`
+- `src/index.njk` and `src/upgrade.njk` — full migrations of existing HTML
+- Nav partial: `activePage` variable drives `.active` class per page
+- `head.njk`: `extraHead` slot for per-page script tags (Turnstile, Stripe, QR)
+- `stripeThemeRemount` flag in upgrade front matter triggers `remountStripeForTheme()` call in theme toggle
+- Build verified locally: 2 files written, 0 errors (Eleventy v3.1.6)
+- Cloudflare Pages build config to update: build command `npm run build`, output `frontend`
+
+### Do not retry
+
+- DO NOT `cp` from `/tmp/rs-eleventy/` in a new session — sandbox `/tmp` is ephemeral per session
+
+### Latent (carried)
+
+- `secp256k1@1.7.2` v1 API in `index.njk` (`secp.Point.*`) — do not upgrade to v2 without migrating NUT-00 crypto
+- `FREE_EXPIRY` still 5 days in `index.njk` — UI shows "1 / 7 day expiry" — fix in snag session
+
+### Files changed
+
+- `.eleventy.js` — Eleventy config
+- `package.json` — build scripts + Eleventy dep
+- `package-lock.json` — lockfile
+- `src/index.njk` — upload/download page template
+- `src/upgrade.njk` — pricing page template
+- `src/_includes/head.njk` — shared head partial
+- `src/_includes/nav.njk` — shared nav partial
+- `src/_includes/footer.njk` — shared footer partial
+- `src/_includes/shared-styles.njk` — brand tokens + shared CSS
+
 ## Session 13 — upgrade.html design overhaul (14 July 2026)
 
 **Type:** Design session.

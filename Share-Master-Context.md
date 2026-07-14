@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 1.3 | **Last updated:** Session 10 · 13 July 2026
+> **Version:** 1.4 | **Last updated:** Session 14 · 14 July 2026
 > Load this file alongside `CLAUDE.md` (refueler-share) and `SESSIONS.md` for every share session.
 
 ---
@@ -140,7 +140,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-## Current state
+Eleventy scaffold live (Session 14, commit f52b55f). `src/` → `frontend/` build. Cloudflare Pages build config needs updating to `npm run build` / `frontend`.
 
 **Full upload → share link → passphrase gate → download flow is end-to-end functional.**
 Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
@@ -213,13 +213,16 @@ refueler-share/
     wrangler.toml           ← binding = "BUCKET" ✓
     package.json            ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
     src/
-      index.js              ← 7 endpoints + CORS ✓
-      nut00.js              ← NUT-00 BDHKE, noble v2 API ✓
-      nut11.js              ← NUT-11 Mode 1 helpers + download tokens ✓
-      blake3.js             ← verifyChunkHash → return true (passthrough)
-      turnstile.js          ← Turnstile verify ✓
-      manifest.js           ← R2 manifest helpers + TIER_CAPS ✓
-      stripe.js             ← Stripe webhook verify + checkout session ✓
+    index.njk           ← upload/download page (Eleventy source)
+    upgrade.njk         ← pricing page (Eleventy source)
+    _includes/
+      head.njk          ← fonts, theme script, extraHead slot
+      nav.njk           ← wordmark + site-nav + theme pill (activePage var)
+      footer.njk        ← canonical footer
+      shared-styles.njk ← brand tokens, reset, shared components
+  .eleventy.js          ← input: src, output: frontend, passthrough: blake3/
+  package.json          ← build: eleventy, dev: eleventy --serve
+  package-lock.json     ← lockfile
   frontend/
     index.html              ← upload UI ✓ sha256 passphrase hash ✓
     upgrade.html            ← tier cards + Payment Element
