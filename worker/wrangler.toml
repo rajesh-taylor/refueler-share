@@ -25,3 +25,9 @@ ENVIRONMENT = "production"
 [[kv_namespaces]]
 binding = "STATUS_KV"
 id      = "5b1dca6a8f06423f98d0bbc4286e2968"
+
+# Analytics Engine — instrumentation dataset
+# Dataset created automatically on first write
+[[analytics_engine_datasets]]
+binding  = "AE"
+dataset  = "share_events"

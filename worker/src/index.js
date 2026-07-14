@@ -21,6 +21,41 @@ function corsHeaders(request) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Analytics Engine
+// Dataset: share_events (bound as AE in wrangler.toml)
+//
+// Schema (one data point per request):
+//   blobs:  [endpoint, tier, error_message]
+//   doubles: [latency_ms, status_code, chunk_index, total_chunks, total_bytes]
+//   indexes: [endpoint]          ← enables fast group-by in SQL
+//
+// Queried via Cloudflare Analytics Engine SQL API:
+//   SELECT blob1 AS endpoint, quantilesMerge(0.95)(latency_ms) ...
+// ─────────────────────────────────────────────────────────────────────────────
+function logEvent(env, {
+  endpoint,          // string  e.g. 'upload', 'download', 'credential_issue'
+  tier   = 'free',  // string
+  status = 200,     // HTTP status code
+  latency = 0,      // ms (float)
+  chunkIndex = -1,  // -1 = not a chunk endpoint
+  totalChunks = 0,
+  totalBytes  = 0,
+  errorMsg    = '',
+}) {
+  if (!env.AE) return; // AE not bound (local dev without binding)
+  try {
+    env.AE.writeDataPoint({
+      blobs:   [endpoint, tier, errorMsg],
+      doubles: [latency, status, chunkIndex, totalChunks, totalBytes],
+      indexes: [endpoint],
+    });
+  } catch (e) {
+    // Non-fatal — never let telemetry break request handling
+    console.error('AE write failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Router
 // ─────────────────────────────────────────────────────────────────────────────
 export default {
@@ -31,64 +66,101 @@ export default {
 
     const url  = new URL(request.url);
     const path = url.pathname;
+    const t0   = performance.now();
+
+    // Thin wrapper: runs handler, logs event, returns response
+    async function timed(endpoint, handler, logExtra = {}) {
+      try {
+        const response = await handler();
+        const latency  = performance.now() - t0;
+        logEvent(env, { endpoint, status: response.status, latency, ...logExtra });
+        return response;
+      } catch (e) {
+        const latency = performance.now() - t0;
+        logEvent(env, { endpoint, status: 500, latency, errorMsg: e?.message ?? 'unknown', ...logExtra });
+        throw e;
+      }
+    }
 
     try {
       // ── Status (public) ──────────────────────────────────────────────────
       if (request.method === 'GET' && path === '/status') {
-        return addCors(await handleStatus(request, env), request);
+        return timed('status', () => handleStatus(request, env).then(r => addCors(r, request)));
       }
 
       // ── Admin: set status (X-Admin-Key protected) ────────────────────────
       if (request.method === 'POST' && path === '/admin/status') {
-        return addCors(await handleAdminStatus(request, env), request);
+        return timed('admin_status', () => handleAdminStatus(request, env).then(r => addCors(r, request)));
       }
 
       // ── Credential issue ─────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/credential/issue') {
-        return addCors(await handleCredentialIssue(request, env), request);
+        // Tier is in the body — handler logs after parse; peek here for the log
+        // We clone so the handler can still read the body
+        const cloned = request.clone();
+        let credTier = 'free';
+        try { const b = await cloned.json(); credTier = b.tier ?? 'free'; } catch {}
+        return timed('credential_issue', () => handleCredentialIssue(request, env).then(r => addCors(r, request)), { tier: credTier });
       }
 
       // ── Upload ───────────────────────────────────────────────────────────
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'PUT' && uploadMatch) {
-        return addCors(await handleUpload(request, env, uploadMatch[1], parseInt(uploadMatch[2], 10)), request);
+        const chunkIndex  = parseInt(uploadMatch[2], 10);
+        const tier        = request.headers.get('X-Tier') ?? 'free';
+        const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
+        const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
+        return timed('upload', () => handleUpload(request, env, uploadMatch[1], chunkIndex).then(r => addCors(r, request)), {
+          tier, chunkIndex,
+          // Only log totals on chunk 0 (where they're present); subsequent chunks get 0
+          totalChunks: chunkIndex === 0 ? totalChunks : 0,
+          totalBytes:  chunkIndex === 0 ? totalBytes  : 0,
+        });
       }
 
       // ── Auth (passphrase gate) ───────────────────────────────────────────
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
-        return addCors(await handleAuth(request, env, authMatch[1]), request);
+        return timed('auth', () => handleAuth(request, env, authMatch[1]).then(r => addCors(r, request)));
       }
 
       // ── Download ─────────────────────────────────────────────────────────
       const downloadMatch = path.match(/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'GET' && downloadMatch) {
-        return addCors(await handleDownload(request, env, downloadMatch[1], parseInt(downloadMatch[2], 10)), request);
+        const chunkIndex = parseInt(downloadMatch[2], 10);
+        return timed('download', async () => {
+          const response = await handleDownload(request, env, downloadMatch[1], chunkIndex);
+          return addCors(response, request);
+        }, { chunkIndex });
+        // tier is on the manifest — handleDownload logs it internally via logDownloadTier
       }
 
       // ── Stripe webhook ───────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/webhook/stripe') {
-        return handleStripeWebhook(request, env);
+        return timed('webhook_stripe', () => handleStripeWebhook(request, env));
       }
 
       // ── Stripe checkout ──────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/subscription/checkout') {
-        return addCors(await handleCheckout(request, env), request);
+        return timed('subscription_checkout', () => handleCheckout(request, env).then(r => addCors(r, request)));
       }
 
       // ── Subscription status ──────────────────────────────────────────────
       if (request.method === 'GET' && path === '/subscription/status') {
-        return addCors(await handleSubscriptionStatus(request, env), request);
+        return timed('subscription_status', () => handleSubscriptionStatus(request, env).then(r => addCors(r, request)));
       }
 
       // ── Stripe customer portal ───────────────────────────────────────────
       if (request.method === 'POST' && path === '/subscription/portal') {
-        return addCors(await handlePortal(request, env), request);
+        return timed('subscription_portal', () => handlePortal(request, env).then(r => addCors(r, request)));
       }
 
+      logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
       return new Response('Not found', { status: 404 });
 
     } catch (e) {
+      const latency = performance.now() - t0;
+      logEvent(env, { endpoint: 'unhandled', status: 500, latency, errorMsg: e?.message ?? 'unknown' });
       console.error('Worker error:', e);
       return new Response(JSON.stringify({ error: 'Internal server error' }), {
         status: 500,
@@ -348,6 +420,19 @@ async function handleDownload(request, env, uuid, chunkIndex) {
   const manifest = await getManifest(env.BUCKET, uuid);
   if (!manifest) return err(404, 'Transfer not found');
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
+
+  // Emit a tier-enriched download event (supplements the latency event from the router)
+  // Only on chunk 0 to avoid per-chunk tier spam; router already logs latency for every chunk
+  if (chunkIndex === 0) {
+    logEvent(env, {
+      endpoint:   'download_tier',
+      tier:       manifest.tier ?? 'free',
+      status:     200,
+      latency:    0,
+      totalChunks: manifest.total_chunks ?? 0,
+      totalBytes:  manifest.total_bytes  ?? 0,
+    });
+  }
 
   if (requiresPassphrase(manifest)) {
     const authHeader = request.headers.get('Authorization') ?? '';
