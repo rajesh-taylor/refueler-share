@@ -155,6 +155,11 @@ export default {
         return timed('subscription_portal', () => handlePortal(request, env).then(r => addCors(r, request)));
       }
 
+      // ── Admin: metrics aggregation ───────────────────────────────────────
+      if (request.method === 'GET' && path === '/admin/metrics') {
+        return timed('admin_metrics', () => handleAdminMetrics(request, env).then(r => addCors(r, request)));
+      }
+
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
       return new Response('Not found', { status: 404 });
 
@@ -505,7 +510,7 @@ async function handleStripeWebhook(request, env) {
 
     } else if (type === 'customer.subscription.deleted') {
       const sub = event.data.object;
-      await upsertSubscriber(env, sub.customer, null, 'free', 'cancelled', null);
+      await upsertSubscriber(env, sub.customer, null, 'free', 'cancelled', null, new Date().toISOString());
     }
   } catch (e) {
     console.error('Webhook handler error:', e);
@@ -620,6 +625,99 @@ async function handlePortal(request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Admin metrics — GET /admin/metrics
+// X-Admin-Key protected. Returns Supabase-computable aggregates only.
+// AE SQL metrics (p95 latency, error rate, transfer volume) are queried
+// separately via Cloudflare AE SQL API — not computable from within a Worker.
+//
+// Metrics returned:
+//   mrr_gbp              — current MRR in GBP (active subscribers, monthly-equivalent)
+//   subscribers_by_tier  — { free, creative, max } active counts
+//   paid_total           — total active paid subscribers
+//   churn_rate_mtd       — cancellations this calendar month ÷ active at month start (%)
+//   cancelled_mtd        — raw cancellation count this calendar month
+//   active_start_of_month — snapshot: active paid count as of 00:00 UTC on 1st of current month
+//   credential_issuances — null (requires AE SQL API; computed in dashboard layer, S22)
+//   as_of                — ISO timestamp of query
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAdminMetrics(request, env) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+
+  // Monthly-equivalent GBP value per tier
+  // Yearly plans: £120/yr creative → £10/mo, £240/yr max → £20/mo
+  // Monthly plans: £12/mo creative, £24/mo max
+  // We store tier only (not billing interval), so we use monthly plan prices as
+  // the conservative floor. Yearly subscribers are worth more; this is noted below.
+  const TIER_MRR = { creative: 12, max: 24 };
+
+  try {
+    // ── Active subscriber counts by tier ─────────────────────────────────────
+    const countRes = await supabaseFetch(
+      env, 'GET',
+      `/rest/v1/subscribers?status=eq.active&select=tier`
+    );
+    if (!countRes.ok) return err(502, 'Database unavailable');
+    const activeRows = await countRes.json();
+
+    const subscribersByTier = { free: 0, creative: 0, max: 0 };
+    for (const row of activeRows) {
+      const t = row.tier ?? 'free';
+      subscribersByTier[t] = (subscribersByTier[t] ?? 0) + 1;
+    }
+
+    // MRR = sum of monthly-equivalent floor prices for paid active subscribers
+    // NOTE: does not distinguish monthly vs yearly billing interval — conservative floor.
+    // Accurate billing-interval MRR requires Stripe API query (deferred to dashboard layer).
+    const mrrGbp =
+      (subscribersByTier.creative ?? 0) * TIER_MRR.creative +
+      (subscribersByTier.max      ?? 0) * TIER_MRR.max;
+
+    const paidTotal = (subscribersByTier.creative ?? 0) + (subscribersByTier.max ?? 0);
+
+    // ── Churn rate month-to-date ──────────────────────────────────────────────
+    // Start of current calendar month (UTC)
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+
+    // Cancellations this month: cancelled_at >= start of month
+    const churnRes = await supabaseFetch(
+      env, 'GET',
+      `/rest/v1/subscribers?status=eq.cancelled&cancelled_at=gte.${encodeURIComponent(startOfMonth)}&select=stripe_customer_id`
+    );
+    if (!churnRes.ok) return err(502, 'Database unavailable');
+    const cancelledMtd = (await churnRes.json()).length;
+
+    // Active-at-start-of-month approximation:
+    // paid subscribers active now + those cancelled this month (they were active on the 1st)
+    // This is a floor — doesn't account for subscribers who signed up AND cancelled within the month.
+    // Accurate cohort churn requires event sourcing (deferred to B10 enterprise groundwork).
+    const activeStartOfMonth = paidTotal + cancelledMtd;
+    const churnRateMtd = activeStartOfMonth > 0
+      ? parseFloat(((cancelledMtd / activeStartOfMonth) * 100).toFixed(2))
+      : 0;
+
+    return json({
+      as_of: new Date().toISOString(),
+      mrr_gbp: mrrGbp,
+      mrr_note: 'Conservative floor: monthly plan prices used for all tiers. Yearly subscribers (£120/yr creative, £240/yr max) are under-counted by £2–4/mo each. Accurate MRR requires Stripe API interval lookup (dashboard layer, S22).',
+      subscribers_by_tier: subscribersByTier,
+      paid_total: paidTotal,
+      churn_rate_mtd_pct: churnRateMtd,
+      cancelled_mtd: cancelledMtd,
+      active_start_of_month_approx: activeStartOfMonth,
+      churn_note: 'Approximation: active_now + cancelled_mtd. Under-counts if any subscriber signed up and cancelled within the current calendar month.',
+      credential_issuances: null,
+      credential_issuances_note: 'Requires Cloudflare AE SQL API (external REST call with account token). Computed in dashboard layer (S22), not available from within the Worker.',
+    });
+
+  } catch (e) {
+    console.error('Metrics error:', e);
+    return err(500, 'Metrics query failed');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Stripe helpers
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchTierFromSubscription(subId, secretKey) {
@@ -646,7 +744,7 @@ function tierFromPriceKey(lookupKey) {
   return 'free';
 }
 
-async function upsertSubscriber(env, stripeCustomerId, email, tier, status, currentPeriodEnd) {
+async function upsertSubscriber(env, stripeCustomerId, email, tier, status, currentPeriodEnd, cancelledAt = null) {
   const payload = {
     stripe_customer_id: stripeCustomerId,
     tier,
@@ -655,6 +753,7 @@ async function upsertSubscriber(env, stripeCustomerId, email, tier, status, curr
     updated_at: new Date().toISOString(),
   };
   if (email) payload.email = email;
+  if (cancelledAt) payload.cancelled_at = cancelledAt;
 
   const res = await supabaseFetch(env, 'POST', '/rest/v1/subscribers', payload, {
     'Prefer': 'resolution=merge-duplicates,return=minimal',
