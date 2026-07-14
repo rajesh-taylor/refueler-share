@@ -163,9 +163,10 @@ Pricing, transfer caps, and link expiry options are listed at [share.refueler.io
 
 ## Status
 
-🟢 **Session 17 complete — commit pending.**  
-Full upload → share link → passphrase gate → download flow is end-to-end functional.  
-`src/status.njk` built. Ops layer (state, maintenance, incidents) + cryptographic integrity layer (6 architecture cards, honest gap disclosure). Session 18: instrumentation + Analytics Engine.
+🟢 **Session 22 complete — Block 2 instrumentation in progress.**
+Full upload → share link → passphrase gate → download flow is end-to-end functional.
+Analytics Engine instrumentation live (`share_events` dataset). Dev dashboard live at `share.refueler.io/admin/dashboard.html` — MRR, churn rate, credential uniqueness rate (100%, 9 melts, 0 replays), and AE SQL metrics (credential issuances by tier). Supabase RLS hardened. Stripe Customer Portal live. R2 lifecycle rules applied.
+Session 23: fix AE SQL `doubles[N]` syntax + p95/p99 latency + error rate cards.
 
 ---
 
