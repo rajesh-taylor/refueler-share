@@ -1,0 +1,16 @@
+<header class="site-header">
+  <div class="header-inner">
+    <a href="https://refueler.io/" class="wordmark">
+      Refueler
+      <span class="wordmark-divider">/</span>
+      <span class="wordmark-section">Share</span>
+    </a>
+    <nav class="site-nav">
+      <a href="https://refueler.io/"{% if activePage == 'app' %} class="active"{% endif %}>App</a>
+      <a href="https://refueler.io/editorial/"{% if activePage == 'editorial' %} class="active"{% endif %}>Editorial</a>
+      <a href="https://refueler.io/privacy/"{% if activePage == 'privacy' %} class="active"{% endif %}>Privacy</a>
+      <a href="/upgrade.html"{% if activePage == 'upgrade' %} class="active"{% endif %}>Upgrade</a>
+      <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
+    </nav>
+  </div>
+</header>

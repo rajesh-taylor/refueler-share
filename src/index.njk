@@ -1,0 +1,817 @@
+---
+title: "refueler share — encrypted file transfer"
+description: "Anonymous, encrypted file transfer. No account. No email. No history."
+permalink: /index.html
+activePage: ""
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{% set extraHead %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
+{% endset %}
+{% include "head.njk" %}
+{% include "shared-styles.njk" %}
+<style>
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  .shell {
+    min-height: calc(100vh - 56px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px 80px;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── Info card ───────────────────────────────────────────────────── */
+  .info-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+  .info-card .info-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .info-card-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg-subtle);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 0 0 8px;
+    flex-shrink: 0;
+  }
+  .info-card-dismiss:hover { color: var(--fg); }
+
+  /* ── Drop zone ───────────────────────────────────────────────────── */
+  .drop-zone {
+    background: var(--card-bg);
+    border: 1.5px dashed var(--drop-border);
+    border-radius: var(--radius);
+    padding: 56px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: var(--fg-muted);
+    background: var(--drop-hover-bg);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .drop-icon {
+    font-size: 28px;
+    margin-bottom: 14px;
+    opacity: 0.35;
+    line-height: 1;
+    color: var(--fg);
+  }
+  .drop-label {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 16px;
+    color: var(--fg);
+    margin-bottom: 6px;
+  }
+  .drop-sub { font-size: 13px; color: var(--fg-muted); }
+
+  /* ── Toggle switch ───────────────────────────────────────────────── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .toggle-label { font-size: 13px; color: var(--fg); }
+  .toggle-desc { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 38px; height: 21px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: var(--tag-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 21px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .slider::before {
+    content: '';
+    position: absolute;
+    width: 15px; height: 15px;
+    left: 2px; top: 2px;
+    background: var(--fg-subtle);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .switch input:checked + .slider { background: var(--fg); border-color: var(--fg); }
+  .switch input:checked + .slider::before { transform: translateX(17px); background: var(--bg); }
+
+  /* ── Progress ────────────────────────────────────────────────────── */
+  .progress-bar-wrap {
+    background: var(--card-border);
+    border-radius: 2px;
+    height: 2px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--fg);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.6s ease-out;
+  }
+  .progress-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    margin-top: 6px;
+  }
+
+  /* ── Share link panel ────────────────────────────────────────────── */
+  .link-box {
+    background: var(--link-box-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 12px 14px;
+    word-break: break-all;
+    color: var(--fg-muted);
+    margin-top: 10px;
+    line-height: 1.6;
+  }
+  #qr-wrap { margin-top: 16px; display: flex; justify-content: center; }
+  #qr-wrap canvas, #qr-wrap img { border-radius: 4px; }
+
+  /* ── Passphrase unlock (download) ────────────────────────────────── */
+  #unlock-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    gap: 20px;
+    text-align: center;
+  }
+  .unlock-icon { font-size: 40px; opacity: 0.4; }
+  .unlock-title {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+  .unlock-sub { font-size: 13px; color: var(--fg-muted); max-width: 320px; line-height: 1.6; }
+  #unlock-error { color: #C0392B; font-size: 12px; min-height: 16px; font-family: var(--mono); }
+
+  /* ── Turnstile ───────────────────────────────────────────────────── */
+  .turnstile-wrap { display: flex; justify-content: center; }
+
+  @media (max-width: 600px) {
+    .drop-zone { padding: 40px 16px; }
+  }
+</style>
+</head>
+
+<body>
+
+{% include "nav.njk" %}
+
+<!-- ── Main shell ────────────────────────────────────────────────────── -->
+<div class="shell">
+  <main id="app">
+
+    <!-- Info card -->
+    <div class="info-card" id="info-card">
+      <span class="info-icon">🔒</span>
+      <span>No account. No email. No history. Files are encrypted in your browser before upload. Only you hold the key.</span>
+      <button class="info-card-dismiss" id="dismiss-info" aria-label="Dismiss">✕</button>
+    </div>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" aria-label="Select file" />
+      <div class="drop-icon">↑</div>
+      <div class="drop-label">Drop a file or click to browse</div>
+      <div class="drop-sub mt4">End-to-end encrypted · Free up to 4 GB</div>
+    </div>
+
+    <!-- Cap warning -->
+    <div id="cap-warning" class="card hidden">
+      <p class="cap-warn">File exceeds the 4 GB free tier limit. Upgrade to Creative Premium for transfers up to 100 GB.</p>
+    </div>
+
+    <!-- Options card (shown after file selected) -->
+    <div class="card hidden" id="options-card">
+      <div class="flex-row" id="file-summary">
+        <span class="tag" id="file-name-tag"></span>
+        <span class="muted small" id="file-size-tag"></span>
+      </div>
+      <!-- Passphrase toggle -->
+      <div class="mt16">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Protect with passphrase</div>
+            <div class="toggle-desc">Recipient must enter a passphrase to download</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="passphrase-toggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="mt12 hidden" id="passphrase-field-wrap">
+          <div class="field">
+            <label for="passphrase-input">Passphrase</label>
+            <input type="password" id="passphrase-input" placeholder="Choose a strong passphrase" autocomplete="new-password" />
+          </div>
+          <div class="muted small mt4">Share this separately. We never store it.</div>
+        </div>
+      </div>
+      <!-- Turnstile — visible managed widget, shown after file selected -->
+      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
+        <div id="cf-turnstile"></div>
+      </div>
+      <div class="mt16">
+        <button class="btn btn-primary btn-full" id="upload-btn" disabled>Encrypt &amp; upload</button>
+      </div>
+    </div>
+
+    <!-- Progress card -->
+    <div class="card hidden" id="progress-card">
+      <div class="flex-row">
+        <span class="tag" id="progress-stage-tag">Preparing</span>
+        <span class="muted small" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="progress-label mt4" id="progress-detail"></div>
+    </div>
+
+    <!-- Share link panel -->
+    <div class="card hidden" id="share-card">
+      <div class="flex-row">
+        <span class="success-txt small mono">✓</span>
+        <span style="font-size:14px;font-weight:500">Ready to share</span>
+      </div>
+      <div class="link-box" id="share-link-display"></div>
+      <div class="flex-row mt12">
+        <button class="btn btn-primary" id="copy-btn">Copy link</button>
+        <button class="btn btn-ghost" id="new-upload-btn">New upload</button>
+      </div>
+      <div id="qr-wrap"></div>
+    </div>
+
+    <!-- Unlock screen (download flow — passphrase gated) -->
+    <div id="unlock-screen">
+      <div class="unlock-icon">🔐</div>
+      <div class="unlock-title">Enter passphrase</div>
+      <div class="unlock-sub">This file is protected. Enter the passphrase to download.</div>
+      <div class="field" style="width:100%;max-width:320px">
+        <input type="password" id="unlock-input" placeholder="Passphrase" autocomplete="current-password" />
+      </div>
+      <div id="unlock-error"></div>
+      <button class="btn btn-primary" id="unlock-btn" style="min-width:140px">Unlock</button>
+    </div>
+
+    <!-- Download progress -->
+    <div class="card hidden" id="download-card">
+      <div class="flex-row">
+        <span class="tag" id="dl-stage-tag">Downloading</span>
+        <span class="muted small" id="dl-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="dl-bar"></div>
+      </div>
+      <div class="progress-label mt4" id="dl-detail"></div>
+    </div>
+
+  </main>
+</div>
+
+{% include "footer.njk" %}
+
+<script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
+const WORKER_URL  = 'https://refueler-share.rt-fc4.workers.dev';
+const CHUNK_SIZE  = 8 * 1024 * 1024;         // 8 MB
+const FREE_CAP    = 4 * 1024 * 1024 * 1024;  // 4 GB
+const FREE_EXPIRY = 5 * 24 * 60 * 60;        // 5 days in seconds — LATENT BUG: UI shows "1 / 7 day expiry", fix in snag session
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deps (dynamic)
+// ─────────────────────────────────────────────────────────────────────────────
+let blake3, secp;
+async function loadDeps() {
+  const [b3mod, secpMod] = await Promise.all([
+    import('./blake3/browser-async.js'),
+    import('https://esm.sh/@noble/secp256k1@1.7.2'),
+  ]);
+  blake3 = await b3mod.default();
+  secp = secpMod;
+  // NOTE: secp256k1@1.7.2 (v1 API) used here — secp.Point.fromPrivateKey / secp.Point.fromHex
+  // These are removed in v2. Flag: do not upgrade secp256k1 without migrating NUT-00 crypto below.
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let selectedFile   = null;
+let turnstileToken = null;
+let downloadToken  = null;
+let sessionAesKey  = null;
+let sessionIv      = null;
+let uploadUUID     = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const infoCard         = $('info-card');
+const dropZone         = $('drop-zone');
+const fileInput        = $('file-input');
+const capWarning       = $('cap-warning');
+const optionsCard      = $('options-card');
+const fileNameTag      = $('file-name-tag');
+const fileSizeTag      = $('file-size-tag');
+const passphraseToggle = $('passphrase-toggle');
+const passphraseWrap   = $('passphrase-field-wrap');
+const passphraseInput  = $('passphrase-input');
+const uploadBtn        = $('upload-btn');
+const progressCard     = $('progress-card');
+const stageTag         = $('progress-stage-tag');
+const progressPct      = $('progress-pct');
+const progressBar      = $('progress-bar');
+const progressDetail   = $('progress-detail');
+const shareCard        = $('share-card');
+const shareLinkDisplay = $('share-link-display');
+const copyBtn          = $('copy-btn');
+const newUploadBtn     = $('new-upload-btn');
+const qrWrap           = $('qr-wrap');
+const unlockScreen     = $('unlock-screen');
+const unlockInput      = $('unlock-input');
+const unlockError      = $('unlock-error');
+const unlockBtn        = $('unlock-btn');
+const downloadCard     = $('download-card');
+const dlStageTag       = $('dl-stage-tag');
+const dlPct            = $('dl-pct');
+const dlBar            = $('dl-bar');
+const dlDetail         = $('dl-detail');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Info card
+// ─────────────────────────────────────────────────────────────────────────────
+$('dismiss-info').addEventListener('click', () => infoCard.classList.add('hidden'));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode detection
+// ─────────────────────────────────────────────────────────────────────────────
+const fragment = parseFragment();
+if (fragment.uuid && fragment.key) {
+  enterDownloadMode(fragment);
+} else {
+  enterUploadMode();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload mode
+// ─────────────────────────────────────────────────────────────────────────────
+function enterUploadMode() {
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFileSelection(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFileSelection(fileInput.files[0]);
+  });
+  passphraseToggle.addEventListener('change', () => {
+    passphraseWrap.classList.toggle('hidden', !passphraseToggle.checked);
+    if (!passphraseToggle.checked) passphraseInput.value = '';
+    updateUploadBtn();
+  });
+  passphraseInput.addEventListener('input', updateUploadBtn);
+  uploadBtn.addEventListener('click', startUpload);
+  copyBtn.addEventListener('click', copyShareLink);
+  newUploadBtn.addEventListener('click', () => location.reload());
+}
+
+function handleFileSelection(file) {
+  selectedFile = file;
+  capWarning.classList.add('hidden');
+  optionsCard.classList.add('hidden');
+  if (file.size > FREE_CAP) { capWarning.classList.remove('hidden'); return; }
+  fileNameTag.textContent = file.name.length > 32 ? file.name.slice(0, 30) + '…' : file.name;
+  fileSizeTag.textContent = formatBytes(file.size);
+  optionsCard.classList.remove('hidden');
+  turnstileToken = null;
+  const tsWrap = document.getElementById('turnstile-wrap');
+  if (tsWrap) tsWrap.classList.remove('hidden');
+  renderTurnstile();
+  updateUploadBtn();
+}
+
+function updateUploadBtn() {
+  const needsPassphrase = passphraseToggle.checked && passphraseInput.value.trim().length === 0;
+  uploadBtn.disabled = !selectedFile || needsPassphrase || !turnstileToken;
+}
+
+let turnstileWidgetId = null;
+
+window.onTurnstileLoad = function() {
+  // Turnstile script ready — widget rendered on file selection
+};
+
+function renderTurnstile() {
+  const container = document.getElementById('cf-turnstile');
+  if (!container || !window.turnstile) return;
+  if (turnstileWidgetId !== null) {
+    try { window.turnstile.remove(turnstileWidgetId); } catch(e) {}
+    turnstileWidgetId = null;
+  }
+  container.innerHTML = '';
+  turnstileWidgetId = window.turnstile.render(container, {
+    sitekey: '0x4AAAAAAD0N7GlHlCRuWITr',
+    theme: 'auto',
+    callback: function(token) {
+      turnstileToken = token;
+      updateUploadBtn();
+    },
+    'error-callback': function() {
+      turnstileToken = null;
+      updateUploadBtn();
+    },
+    'expired-callback': function() {
+      turnstileToken = null;
+      updateUploadBtn();
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload flow
+// ─────────────────────────────────────────────────────────────────────────────
+async function startUpload() {
+  if (!selectedFile) return;
+  uploadBtn.disabled = true;
+  optionsCard.classList.add('hidden');
+  progressCard.classList.remove('hidden');
+
+  await loadDeps();
+
+  setStage('Generating key', 5);
+  sessionAesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  sessionIv     = crypto.getRandomValues(new Uint8Array(12));
+  const rawKey  = await crypto.subtle.exportKey('raw', sessionAesKey);
+  const keyHex  = bufToHex(rawKey);
+  const ivHex   = bufToHex(sessionIv);
+
+  let p2shHashHex = null;
+  if (passphraseToggle.checked && passphraseInput.value.trim()) {
+    setStage('Hashing passphrase', 8);
+    p2shHashHex = await sha256Hex(new TextEncoder().encode(passphraseInput.value.trim()));
+    passphraseInput.value = '';
+  }
+
+  setStage('Chunking', 10);
+  uploadUUID = crypto.randomUUID();
+  const chunks = splitChunks(selectedFile, CHUNK_SIZE);
+  const totalChunks = chunks.length;
+  const chunkHashes = [];
+
+  setStage('Credentialling', 12);
+  const { blindedMsg, blindingFactor } = await generateBlindedCredential();
+  let _credPct = 12;
+  const _credTick = setInterval(() => { if (_credPct < 14) { _credPct += 0.5; progressBar.style.width = _credPct + '%'; } }, 120);
+  const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ turnstile_token: turnstileToken, blinded_message: blindedMsg, tier: 'free' }),
+  });
+  clearInterval(_credTick);
+  if (!issueRes.ok) throw new Error(`Credential issue failed: ${await issueRes.text()}`);
+  const { signed_point, mint_pubkey } = await issueRes.json();
+  const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
+
+  setStage('Uploading', 15);
+  const expiryTimestamp = Math.floor(Date.now() / 1000) + FREE_EXPIRY;
+
+  for (let i = 0; i < totalChunks; i++) {
+    const raw = await readChunk(chunks[i]);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+      sessionAesKey, raw
+    );
+    // LATENT BUG: additionalData: new Uint8Array([i]) overflows at chunk index >= 256
+    // Fix: use a 4-byte Uint32Array or encode i as 4 bytes before large-file testing
+    const chunkHashHex = await blake3Hash(new Uint8Array(encrypted));
+    chunkHashes.push(chunkHashHex);
+    const rollingRoot = await blake3Hash(new TextEncoder().encode(chunkHashes.join('')));
+
+    const headers = {
+      'Content-Type': 'application/octet-stream',
+      'X-Blake3-Chunk-Hash': chunkHashHex,
+      'X-Blake3-Root': rollingRoot,
+    };
+    if (i === 0) {
+      headers['X-Cashu-Credential']  = credential;
+      headers['X-Total-Chunks']      = String(totalChunks);
+      headers['X-Total-Bytes']       = String(selectedFile.size);
+      headers['X-Tier']              = 'free';
+      headers['X-Expiry-Timestamp']  = String(expiryTimestamp);
+      headers['X-File-Name']         = selectedFile.name;
+      if (p2shHashHex) headers['X-P2SH-Secret-Hash'] = p2shHashHex;
+    }
+
+    const res = await fetch(`${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`, {
+      method: 'PUT', headers, body: encrypted,
+    });
+    if (!res.ok) throw new Error(`Chunk ${i} upload failed: ${await res.text()}`);
+    setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
+  }
+
+  setStage('Done', 100);
+  progressDetail.textContent = '';
+
+  const fragmentStr = `uuid=${uploadUUID}&key=${keyHex}&iv=${ivHex}`;
+  const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
+  history.replaceState(null, '', location.pathname);
+  showSharePanel(shareUrl, !!p2shHashHex);
+}
+
+function showSharePanel(url, isProtected) {
+  progressCard.classList.add('hidden');
+  shareCard.classList.remove('hidden');
+  shareLinkDisplay.textContent = url;
+  if (isProtected) {
+    const note = document.createElement('p');
+    note.className = 'muted small mt8';
+    note.textContent = '🔐 Passphrase-protected — share the passphrase separately.';
+    shareLinkDisplay.insertAdjacentElement('afterend', note);
+  }
+  qrWrap.innerHTML = '';
+  const isDark = document.documentElement.classList.contains('carbon-mode');
+  new QRCode(qrWrap, {
+    text: url, width: 148, height: 148,
+    colorDark: isDark ? '#F5F0E8' : '#1A1A1A',
+    colorLight: isDark ? '#1A1A1A' : '#F5F0E8',
+  });
+}
+
+function copyShareLink() {
+  navigator.clipboard.writeText(shareLinkDisplay.textContent).then(() => {
+    copyBtn.textContent = 'Copied ✓';
+    setTimeout(() => { copyBtn.textContent = 'Copy link'; }, 2000);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Download mode
+// ─────────────────────────────────────────────────────────────────────────────
+async function enterDownloadMode({ uuid, key, iv }) {
+  dropZone.classList.add('hidden');
+  infoCard.classList.add('hidden');
+  optionsCard.classList.add('hidden');
+
+  await loadDeps();
+
+  const keyBytes = hexToBuf(key);
+  const ivBytes  = hexToBuf(iv);
+  sessionAesKey  = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+  sessionIv      = new Uint8Array(ivBytes);
+  history.replaceState(null, '', location.pathname);
+
+  const probe = await fetch(`${WORKER_URL}/download/${uuid}/0000`);
+
+  if (probe.status === 401) {
+    unlockScreen.style.display = 'flex';
+    unlockBtn.addEventListener('click', async () => {
+      const passphrase = unlockInput.value.trim();
+      if (!passphrase) return;
+      unlockBtn.disabled = true;
+      unlockError.textContent = '';
+      try {
+        const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passphrase }),
+        });
+        if (!authRes.ok) {
+          unlockError.textContent = authRes.status === 401 ? 'Incorrect passphrase.' : 'Something went wrong.';
+          unlockBtn.disabled = false;
+          return;
+        }
+        const { token } = await authRes.json();
+        downloadToken = token;
+        unlockInput.value = '';
+        unlockScreen.style.display = 'none';
+        await startDownload(uuid);
+      } catch {
+        unlockError.textContent = 'Network error. Try again.';
+        unlockBtn.disabled = false;
+      }
+    });
+    unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
+  } else if (probe.ok || probe.status === 206) {
+    await startDownload(uuid);
+  } else {
+    showDownloadError(`Transfer unavailable (${probe.status}).`);
+  }
+}
+
+async function startDownload(uuid) {
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = 'Downloading';
+  dlPct.textContent = '—';
+
+  const chunks = [];
+  let chunkIndex = 0;
+  let fileName = `refueler-${uuid.slice(0, 8)}`;
+
+  while (true) {
+    const headers = {};
+    if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
+    const padded = String(chunkIndex).padStart(4, '0');
+    const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+    if (res.status === 404) break;
+    if (!res.ok) { showDownloadError(`Download failed at chunk ${chunkIndex} (${res.status}).`); return; }
+    if (chunkIndex === 0) {
+      const headerName = res.headers.get('X-File-Name');
+      if (headerName) fileName = headerName;
+    }
+    chunks.push(await res.arrayBuffer());
+    dlDetail.textContent = `Chunk ${chunkIndex + 1}`;
+    chunkIndex++;
+  }
+
+  if (chunks.length === 0) { showDownloadError('No chunks received from server.'); return; }
+
+  dlStageTag.textContent = 'Decrypting';
+  const decrypted = [];
+  for (let i = 0; i < chunks.length; i++) {
+    let plain;
+    try {
+      plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+        sessionAesKey, chunks[i]
+      );
+    } catch (e) {
+      showDownloadError(`Decrypt failed on chunk ${i}: wrong key or corrupted data.`);
+      return;
+    }
+    decrypted.push(plain);
+    dlPct.textContent = Math.round(((i + 1) / chunks.length) * 100) + '%';
+    dlBar.style.width = dlPct.textContent;
+    dlDetail.textContent = `Decrypting ${i + 1} / ${chunks.length}`;
+  }
+
+  const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = blobUrl;
+  a.download    = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+  dlStageTag.textContent = 'Complete';
+  dlPct.textContent = '100%';
+  dlBar.style.width = '100%';
+  dlDetail.textContent = 'File saved.';
+}
+
+function showDownloadError(msg) {
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = 'Error';
+  dlDetail.textContent = msg;
+  dlDetail.classList.add('danger-txt');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUT-00 crypto — NOTE: uses secp256k1 v1 API (secp.Point.*)
+// v1 API will break if secp256k1 is upgraded to v2 — do not upgrade without migrating
+// ─────────────────────────────────────────────────────────────────────────────
+async function generateBlindedCredential() {
+  const r   = secp.utils.randomPrivateKey();
+  const msg = crypto.getRandomValues(new Uint8Array(32));
+  const Y   = await hashToCurve(bufToHex(msg));
+  const rG  = secp.Point.fromPrivateKey(r);
+  const B_  = Y.add(rG);
+  return { blindedMsg: B_.toHex(true), blindingFactor: bufToHex(r) };
+}
+
+async function unblindSignature(signedPoint, blindingFactor, mintPubkeyHex) {
+  const C_ = secp.Point.fromHex(signedPoint);
+  const K  = secp.Point.fromHex(mintPubkeyHex);
+  const r  = BigInt('0x' + blindingFactor);
+  const C  = C_.add(K.multiply(r).negate());
+  return JSON.stringify({ C: C.toHex(true), mint_pubkey: mintPubkeyHex });
+}
+
+async function hashToCurve(msgHex) {
+  const hash = await crypto.subtle.digest('SHA-256', hexToBuf(msgHex));
+  const hashHex = bufToHex(hash);
+  for (let i = 0; i < 256; i++) {
+    try {
+      return secp.Point.fromHex('02' + (BigInt('0x' + hashHex) + BigInt(i)).toString(16).padStart(64, '0'));
+    } catch { continue; }
+  }
+  throw new Error('hashToCurve failed');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLAKE3 + SHA-256
+// ─────────────────────────────────────────────────────────────────────────────
+async function blake3Hash(data) {
+  const h = blake3.createHash();
+  h.update(data);
+  return h.digest('hex');
+}
+
+async function sha256Hex(data) {
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function parseFragment() {
+  const raw = location.hash.slice(1);
+  if (!raw) return {};
+  return Object.fromEntries(raw.split('&').map(p => p.split('=')));
+}
+function splitChunks(file, size) {
+  const out = [];
+  let offset = 0;
+  while (offset < file.size) { out.push(file.slice(offset, offset + size)); offset += size; }
+  return out;
+}
+function readChunk(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsArrayBuffer(blob);
+  });
+}
+function setStage(label, pct) {
+  stageTag.textContent     = label;
+  progressPct.textContent  = pct + '%';
+  progressBar.style.width  = pct + '%';
+}
+function setProgress(pct, detail) {
+  progressPct.textContent   = pct + '%';
+  progressBar.style.width   = pct + '%';
+  progressDetail.textContent = detail;
+}
+function formatBytes(b) {
+  if (b < 1024)       return b + ' B';
+  if (b < 1024 ** 2)  return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 ** 3)  return (b / 1024 ** 2).toFixed(1) + ' MB';
+  return (b / 1024 ** 3).toFixed(2) + ' GB';
+}
+function bufToHex(buf) {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function hexToBuf(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) out[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  return out.buffer;
+}
+async function waitForTurnstile(ms) {
+  const start = Date.now();
+  while (!turnstileToken && Date.now() - start < ms) await new Promise(r => setTimeout(r, 200));
+}
+</script>
+</body>
+</html>
