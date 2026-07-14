@@ -25,24 +25,21 @@ function corsHeaders(request) {
 // Dataset: share_events (bound as AE in wrangler.toml)
 //
 // Schema (one data point per request):
-//   blobs:  [endpoint, tier, error_message]
+//   blobs:   [endpoint, tier, error_message]
 //   doubles: [latency_ms, status_code, chunk_index, total_chunks, total_bytes]
-//   indexes: [endpoint]          ← enables fast group-by in SQL
-//
-// Queried via Cloudflare Analytics Engine SQL API:
-//   SELECT blob1 AS endpoint, quantilesMerge(0.95)(latency_ms) ...
+//   indexes: [endpoint]   <- enables fast GROUP BY in AE SQL
 // ─────────────────────────────────────────────────────────────────────────────
 function logEvent(env, {
-  endpoint,          // string  e.g. 'upload', 'download', 'credential_issue'
-  tier   = 'free',  // string
-  status = 200,     // HTTP status code
-  latency = 0,      // ms (float)
-  chunkIndex = -1,  // -1 = not a chunk endpoint
+  endpoint,
+  tier        = 'free',
+  status      = 200,
+  latency     = 0,
+  chunkIndex  = -1,
   totalChunks = 0,
   totalBytes  = 0,
   errorMsg    = '',
 }) {
-  if (!env.AE) return; // AE not bound (local dev without binding)
+  if (!env.AE) return;
   try {
     env.AE.writeDataPoint({
       blobs:   [endpoint, tier, errorMsg],
@@ -50,7 +47,6 @@ function logEvent(env, {
       indexes: [endpoint],
     });
   } catch (e) {
-    // Non-fatal — never let telemetry break request handling
     console.error('AE write failed:', e);
   }
 }
@@ -68,7 +64,6 @@ export default {
     const path = url.pathname;
     const t0   = performance.now();
 
-    // Thin wrapper: runs handler, logs event, returns response
     async function timed(endpoint, handler, logExtra = {}) {
       try {
         const response = await handler();
@@ -83,27 +78,21 @@ export default {
     }
 
     try {
-      // ── Status (public) ──────────────────────────────────────────────────
       if (request.method === 'GET' && path === '/status') {
         return timed('status', () => handleStatus(request, env).then(r => addCors(r, request)));
       }
 
-      // ── Admin: set status (X-Admin-Key protected) ────────────────────────
       if (request.method === 'POST' && path === '/admin/status') {
         return timed('admin_status', () => handleAdminStatus(request, env).then(r => addCors(r, request)));
       }
 
-      // ── Credential issue ─────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/credential/issue') {
-        // Tier is in the body — handler logs after parse; peek here for the log
-        // We clone so the handler can still read the body
         const cloned = request.clone();
         let credTier = 'free';
         try { const b = await cloned.json(); credTier = b.tier ?? 'free'; } catch {}
         return timed('credential_issue', () => handleCredentialIssue(request, env).then(r => addCors(r, request)), { tier: credTier });
       }
 
-      // ── Upload ───────────────────────────────────────────────────────────
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'PUT' && uploadMatch) {
         const chunkIndex  = parseInt(uploadMatch[2], 10);
@@ -112,19 +101,16 @@ export default {
         const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
         return timed('upload', () => handleUpload(request, env, uploadMatch[1], chunkIndex).then(r => addCors(r, request)), {
           tier, chunkIndex,
-          // Only log totals on chunk 0 (where they're present); subsequent chunks get 0
           totalChunks: chunkIndex === 0 ? totalChunks : 0,
           totalBytes:  chunkIndex === 0 ? totalBytes  : 0,
         });
       }
 
-      // ── Auth (passphrase gate) ───────────────────────────────────────────
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
         return timed('auth', () => handleAuth(request, env, authMatch[1]).then(r => addCors(r, request)));
       }
 
-      // ── Download ─────────────────────────────────────────────────────────
       const downloadMatch = path.match(/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'GET' && downloadMatch) {
         const chunkIndex = parseInt(downloadMatch[2], 10);
@@ -132,30 +118,24 @@ export default {
           const response = await handleDownload(request, env, downloadMatch[1], chunkIndex);
           return addCors(response, request);
         }, { chunkIndex });
-        // tier is on the manifest — handleDownload logs it internally via logDownloadTier
       }
 
-      // ── Stripe webhook ───────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/webhook/stripe') {
         return timed('webhook_stripe', () => handleStripeWebhook(request, env));
       }
 
-      // ── Stripe checkout ──────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/subscription/checkout') {
         return timed('subscription_checkout', () => handleCheckout(request, env).then(r => addCors(r, request)));
       }
 
-      // ── Subscription status ──────────────────────────────────────────────
       if (request.method === 'GET' && path === '/subscription/status') {
         return timed('subscription_status', () => handleSubscriptionStatus(request, env).then(r => addCors(r, request)));
       }
 
-      // ── Stripe customer portal ───────────────────────────────────────────
       if (request.method === 'POST' && path === '/subscription/portal') {
         return timed('subscription_portal', () => handlePortal(request, env).then(r => addCors(r, request)));
       }
 
-      // ── Admin: metrics aggregation ───────────────────────────────────────
       if (request.method === 'GET' && path === '/admin/metrics') {
         return timed('admin_metrics', () => handleAdminMetrics(request, env).then(r => addCors(r, request)));
       }
@@ -177,9 +157,6 @@ export default {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status — GET /status
-// Returns current operational state, active incidents, and scheduled
-// maintenance windows. Reads from KV key `status:current`.
-// Falls back to { state: 'operational' } if key is absent (clean install).
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleStatus(request, env) {
   let current = null;
@@ -190,13 +167,12 @@ async function handleStatus(request, env) {
     console.error('KV read error:', e);
   }
 
-  // Default: fully operational, no incidents, no maintenance window
   if (!current) {
     current = {
-      state:       'operational',  // 'operational' | 'degraded' | 'maintenance'
-      message:     null,           // string | null — shown in banner and status page
-      maintenance: null,           // { scheduled_at: unix, duration_minutes: number, description: string } | null
-      incidents:   [],             // [{ id, title, severity, started_at, resolved_at, updates: [] }]
+      state:       'operational',
+      message:     null,
+      maintenance: null,
+      incidents:   [],
       updated_at:  Math.floor(Date.now() / 1000),
     };
   }
@@ -206,26 +182,8 @@ async function handleStatus(request, env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin status — POST /admin/status
-// Protected by X-Admin-Key header (Worker secret ADMIN_KEY).
-// Body: partial or full status object. Worker merges into existing state.
-//
-// Examples:
-//   Set maintenance window:
-//     { "maintenance": { "scheduled_at": 1720987200, "duration_minutes": 60,
-//                        "description": "KV namespace migration" } }
-//   Clear maintenance:
-//     { "maintenance": null }
-//   Mark degraded:
-//     { "state": "degraded", "message": "Upload latency elevated — investigating." }
-//   Add incident:
-//     { "incidents": [{ "id": "inc-001", "title": "Upload latency",
-//                       "severity": "minor", "started_at": 1720980000,
-//                       "resolved_at": null, "updates": [] }] }
-//   Restore operational:
-//     { "state": "operational", "message": null }
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminStatus(request, env) {
-  // Auth check
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) {
     return err(401, 'Unauthorised');
@@ -238,13 +196,11 @@ async function handleAdminStatus(request, env) {
     return err(400, 'Invalid JSON');
   }
 
-  // Validate state value if provided
   const validStates = ['operational', 'degraded', 'maintenance'];
   if (body.state !== undefined && !validStates.includes(body.state)) {
     return err(400, `Invalid state. Must be one of: ${validStates.join(', ')}`);
   }
 
-  // Read existing, merge patch
   let current = null;
   try {
     current = await env.STATUS_KV.get('status:current', { type: 'json' });
@@ -260,7 +216,6 @@ async function handleAdminStatus(request, env) {
     };
   }
 
-  // Merge: only fields provided in body are updated
   const updated = {
     ...current,
     ...body,
@@ -314,16 +269,16 @@ async function handleUpload(request, env, uuid, chunkIndex) {
   const isFirstChunk = chunkIndex === 0;
 
   if (isFirstChunk) {
-    const credential    = request.headers.get('X-Cashu-Credential');
-    const blake3Root    = request.headers.get('X-Blake3-Root');
-    const totalChunks   = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
-    const totalBytes    = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
-    const tier          = request.headers.get('X-Tier') ?? 'free';
-    const expiryTs      = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
-    const chunkHash     = request.headers.get('X-Blake3-Chunk-Hash');
-    const p2shHash      = request.headers.get('X-P2SH-Secret-Hash') ?? null;
-    const rawFileName   = request.headers.get('X-File-Name') ?? '';
-    const fileName      = rawFileName.replace(/[/\\]/g, '').slice(0, 255) || `refueler-${uuid.slice(0, 8)}`;
+    const credential  = request.headers.get('X-Cashu-Credential');
+    const blake3Root  = request.headers.get('X-Blake3-Root');
+    const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
+    const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
+    const tier        = request.headers.get('X-Tier') ?? 'free';
+    const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
+    const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
+    const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
+    const rawFileName = request.headers.get('X-File-Name') ?? '';
+    const fileName    = rawFileName.replace(/[/\\]/g, '').slice(0, 255) || `refueler-${uuid.slice(0, 8)}`;
 
     if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
       return err(400, 'Missing required headers');
@@ -340,7 +295,21 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     const spentRes = await supabaseFetch(env, 'GET', `/rest/v1/spent_tokens?serial=eq.${encodeURIComponent(serial)}&select=serial`);
     if (!spentRes.ok) return err(502, 'Ledger unavailable');
     const spent = await spentRes.json();
-    if (spent.length > 0) return err(409, 'Credential already spent');
+
+    // ── Double-spend detected ────────────────────────────────────────────────
+    // Fire-and-forget audit write — never blocks the 409 response.
+    // On Supabase failure: log and continue (same pattern as NUT-07 melt).
+    if (spent.length > 0) {
+      supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
+        serial,
+        uuid,
+        attempted_at: new Date().toISOString(),
+      }).then(r => {
+        if (!r.ok) r.text().then(t => console.error('double_spend_attempts write failed:', t));
+      }).catch(e => console.error('double_spend_attempts fetch error:', e));
+
+      return err(409, 'Credential already spent');
+    }
 
     const cap = TIER_CAPS[tier] ?? TIER_CAPS.free;
     if (totalBytes > cap) return err(413, `Exceeds ${tier} tier cap`);
@@ -426,14 +395,12 @@ async function handleDownload(request, env, uuid, chunkIndex) {
   if (!manifest) return err(404, 'Transfer not found');
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
 
-  // Emit a tier-enriched download event (supplements the latency event from the router)
-  // Only on chunk 0 to avoid per-chunk tier spam; router already logs latency for every chunk
   if (chunkIndex === 0) {
     logEvent(env, {
-      endpoint:   'download_tier',
-      tier:       manifest.tier ?? 'free',
-      status:     200,
-      latency:    0,
+      endpoint:    'download_tier',
+      tier:        manifest.tier ?? 'free',
+      status:      200,
+      latency:     0,
       totalChunks: manifest.total_chunks ?? 0,
       totalBytes:  manifest.total_bytes  ?? 0,
     });
@@ -460,8 +427,8 @@ async function handleDownload(request, env, uuid, chunkIndex) {
 
   const status = request.headers.has('Range') ? 206 : 200;
   const headers = new Headers({
-    'Content-Type':  'application/octet-stream',
-    'Cache-Control': 'private, no-store',
+    'Content-Type':    'application/octet-stream',
+    'Cache-Control':   'private, no-store',
     'X-Transfer-UUID': uuid,
     'X-Chunk-Index':   String(chunkIndex),
     'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
@@ -491,7 +458,7 @@ async function handleStripeWebhook(request, env) {
 
   try {
     if (type === 'checkout.session.completed') {
-      const session = event.data.object;
+      const session    = event.data.object;
       if (session.mode !== 'subscription') return new Response('ok');
       const customerId = session.customer;
       const email      = session.customer_details?.email ?? session.customer_email ?? '';
@@ -605,8 +572,8 @@ async function handlePortal(request, env) {
   const portalRes  = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
     method: 'POST',
     headers: {
-      'Authorization':  `Bearer ${env.STRIPE_SECRET_KEY}`,
-      'Content-Type':   'application/x-www-form-urlencoded',
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type':  'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
       customer:   customerId,
@@ -626,37 +593,25 @@ async function handlePortal(request, env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin metrics — GET /admin/metrics
-// X-Admin-Key protected. Returns Supabase-computable aggregates only.
-// AE SQL metrics (p95 latency, error rate, transfer volume) are queried
-// separately via Cloudflare AE SQL API — not computable from within a Worker.
+// X-Admin-Key protected.
 //
-// Metrics returned:
-//   mrr_gbp              — current MRR in GBP (active subscribers, monthly-equivalent)
-//   subscribers_by_tier  — { free, creative, max } active counts
-//   paid_total           — total active paid subscribers
-//   churn_rate_mtd       — cancellations this calendar month ÷ active at month start (%)
-//   cancelled_mtd        — raw cancellation count this calendar month
-//   active_start_of_month — snapshot: active paid count as of 00:00 UTC on 1st of current month
-//   credential_issuances — null (requires AE SQL API; computed in dashboard layer, S22)
-//   as_of                — ISO timestamp of query
+// S19: mrr_gbp, subscribers_by_tier, paid_total, churn_rate_mtd
+//
+// S20 additions:
+//   Metric 4 — credential_uniqueness_rate (Supabase: double_spend_attempts vs spent_tokens)
+//   Metric 5 — r2_bytes_uploaded / r2_bytes_purged (null — AE SQL API, S22)
+//   Metric 6 — r2_chunk_retrieval_success_rate (null — AE SQL API, S22)
+//   Metric 3 — zk_verification_rate (null — needs has_passphrase AE logging, B4)
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminMetrics(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
 
-  // Monthly-equivalent GBP value per tier
-  // Yearly plans: £120/yr creative → £10/mo, £240/yr max → £20/mo
-  // Monthly plans: £12/mo creative, £24/mo max
-  // We store tier only (not billing interval), so we use monthly plan prices as
-  // the conservative floor. Yearly subscribers are worth more; this is noted below.
   const TIER_MRR = { creative: 12, max: 24 };
 
   try {
-    // ── Active subscriber counts by tier ─────────────────────────────────────
-    const countRes = await supabaseFetch(
-      env, 'GET',
-      `/rest/v1/subscribers?status=eq.active&select=tier`
-    );
+    // ── Active subscriber counts ──────────────────────────────────────────────
+    const countRes = await supabaseFetch(env, 'GET', '/rest/v1/subscribers?status=eq.active&select=tier');
     if (!countRes.ok) return err(502, 'Database unavailable');
     const activeRows = await countRes.json();
 
@@ -666,21 +621,16 @@ async function handleAdminMetrics(request, env) {
       subscribersByTier[t] = (subscribersByTier[t] ?? 0) + 1;
     }
 
-    // MRR = sum of monthly-equivalent floor prices for paid active subscribers
-    // NOTE: does not distinguish monthly vs yearly billing interval — conservative floor.
-    // Accurate billing-interval MRR requires Stripe API query (deferred to dashboard layer).
     const mrrGbp =
       (subscribersByTier.creative ?? 0) * TIER_MRR.creative +
       (subscribersByTier.max      ?? 0) * TIER_MRR.max;
 
     const paidTotal = (subscribersByTier.creative ?? 0) + (subscribersByTier.max ?? 0);
 
-    // ── Churn rate month-to-date ──────────────────────────────────────────────
-    // Start of current calendar month (UTC)
-    const now = new Date();
+    // ── Churn rate MTD ────────────────────────────────────────────────────────
+    const now          = new Date();
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 
-    // Cancellations this month: cancelled_at >= start of month
     const churnRes = await supabaseFetch(
       env, 'GET',
       `/rest/v1/subscribers?status=eq.cancelled&cancelled_at=gte.${encodeURIComponent(startOfMonth)}&select=stripe_customer_id`
@@ -688,17 +638,54 @@ async function handleAdminMetrics(request, env) {
     if (!churnRes.ok) return err(502, 'Database unavailable');
     const cancelledMtd = (await churnRes.json()).length;
 
-    // Active-at-start-of-month approximation:
-    // paid subscribers active now + those cancelled this month (they were active on the 1st)
-    // This is a floor — doesn't account for subscribers who signed up AND cancelled within the month.
-    // Accurate cohort churn requires event sourcing (deferred to B10 enterprise groundwork).
     const activeStartOfMonth = paidTotal + cancelledMtd;
     const churnRateMtd = activeStartOfMonth > 0
       ? parseFloat(((cancelledMtd / activeStartOfMonth) * 100).toFixed(2))
       : 0;
 
+    // ── Metric 4: Credential uniqueness rate ──────────────────────────────────
+    // Uses Supabase Content-Range header for count without fetching rows:
+    //   Prefer: count=exact + Range: 0-0 → Content-Range: 0-0/TOTAL
+    // Rate = legitimate_melts / (legitimate_melts + replay_attempts)
+    // Target: 1.0 (100%). Any value < 1.0 indicates active replay attacks.
+    // Note: only counts 409s (credential verified but already spent).
+    // Attacks failing verifyCredential() return 401 and are not captured here.
+    const parseSbCount = (res) => {
+      const cr = res.headers.get('Content-Range') ?? '';
+      const m  = cr.match(/\/(\d+)$/);
+      return m ? parseInt(m[1], 10) : null;
+    };
+
+    const [meltsRes, attemptsRes] = await Promise.all([
+      supabaseFetch(env, 'GET', '/rest/v1/spent_tokens?select=serial',
+        null, { 'Prefer': 'count=exact', 'Range': '0-0' }),
+      supabaseFetch(env, 'GET', '/rest/v1/double_spend_attempts?select=id',
+        null, { 'Prefer': 'count=exact', 'Range': '0-0' }),
+    ]);
+
+    const totalMelts    = meltsRes.ok    ? parseSbCount(meltsRes)    : null;
+    const totalAttempts = attemptsRes.ok ? parseSbCount(attemptsRes) : null;
+
+    let credentialUniquenessRate = null;
+    let credentialUniquenessNote;
+
+    if (totalMelts !== null && totalAttempts !== null) {
+      const total = totalMelts + totalAttempts;
+      credentialUniquenessRate = total > 0
+        ? parseFloat((totalMelts / total).toFixed(4))
+        : 1.0;
+      credentialUniquenessNote =
+        'Fraction of credential uses that were first-time (legitimate) melts. ' +
+        '1.0 = no replay attacks observed. Excludes attacks failing verifyCredential() ' +
+        'before the spent_tokens lookup (those return 401, not 409, and are not captured here).';
+    } else {
+      credentialUniquenessNote = 'Supabase count query failed — both spent_tokens and double_spend_attempts counts required.';
+    }
+
     return json({
       as_of: new Date().toISOString(),
+
+      // ── S19: Subscription / revenue metrics ──────────────────────────────
       mrr_gbp: mrrGbp,
       mrr_note: 'Conservative floor: monthly plan prices used for all tiers. Yearly subscribers (£120/yr creative, £240/yr max) are under-counted by £2–4/mo each. Accurate MRR requires Stripe API interval lookup (dashboard layer, S22).',
       subscribers_by_tier: subscribersByTier,
@@ -708,7 +695,47 @@ async function handleAdminMetrics(request, env) {
       active_start_of_month_approx: activeStartOfMonth,
       churn_note: 'Approximation: active_now + cancelled_mtd. Under-counts if any subscriber signed up and cancelled within the current calendar month.',
       credential_issuances: null,
-      credential_issuances_note: 'Requires Cloudflare AE SQL API (external REST call with account token). Computed in dashboard layer (S22), not available from within the Worker.',
+      credential_issuances_note: 'Requires Cloudflare AE SQL API (external REST call with account token). Computed in dashboard layer (S22).',
+
+      // ── S20 Metric 4: Credential uniqueness rate ──────────────────────────
+      credential_uniqueness_rate: credentialUniquenessRate,
+      credential_uniqueness_total_melts: totalMelts,
+      credential_uniqueness_total_attempts: totalAttempts,
+      credential_uniqueness_note: credentialUniquenessNote,
+
+      // ── S20 Metric 5: R2 sinks vs sources ────────────────────────────────
+      // AE SQL for uploaded bytes (chunk 0 only, where total_bytes is logged):
+      //   SELECT sum(doubles[4]) AS total_bytes_uploaded FROM share_events
+      //   WHERE blob1 = 'upload' AND doubles[2] = 0
+      //   AND timestamp > now() - INTERVAL '90' DAY;
+      // Purged bytes: not directly measurable until R2 event notifications
+      // are wired to an AE pipeline (B4 scope, alongside BLAKE3 WASM work).
+      r2_bytes_uploaded: null,
+      r2_bytes_purged: null,
+      r2_storage_note: 'Both require Cloudflare AE SQL API (external REST, not Worker-callable). Uploaded bytes: sum(doubles[4]) WHERE blob1=upload AND doubles[2]=0. Purged bytes: not measurable until R2 event notifications wired to AE (B4). Computed in dashboard layer (S22).',
+
+      // ── S20 Metric 6: R2 chunk retrieval success rate ─────────────────────
+      // AE SQL (rolling 24h):
+      //   SELECT
+      //     countIf(blob3 != '') AS failed_chunks,
+      //     count()              AS total_chunks,
+      //     1 - (countIf(blob3 != '') / count()) AS success_rate
+      //   FROM share_events
+      //   WHERE blob1 = 'download'
+      //   AND timestamp > now() - INTERVAL '1' DAY;
+      r2_chunk_retrieval_success_rate: null,
+      r2_chunk_retrieval_note: "Requires Cloudflare AE SQL API. Query: 1 - (countIf(blob3 != '') / count()) WHERE blob1='download'. Computed in dashboard layer (S22).",
+
+      // ── S20 Metric 3: Zero-knowledge verification rate ────────────────────
+      // Proxy: % of transfers where passphrase gate is active (p2sh_secret_hash set).
+      // R2 manifests not enumerable in aggregate from Worker binding (no safe LIST+scan).
+      // Fix: add has_passphrase as blob4 in upload AE logEvent call (B4 scope).
+      // AE SQL once instrumented:
+      //   SELECT countIf(blob4 = 'true') / count() AS zk_rate
+      //   FROM share_events
+      //   WHERE blob1 = 'upload' AND doubles[2] = 0;
+      zk_verification_rate: null,
+      zk_verification_note: "R2 manifests not enumerable in aggregate from Worker. Add has_passphrase as blob4 to upload logEvent call (B4 scope). AE SQL once instrumented: countIf(blob4='true')/count() WHERE blob1='upload' AND doubles[2]=0.",
     });
 
   } catch (e) {
@@ -770,9 +797,9 @@ async function supabaseFetch(env, method, path, body = null, extraHeaders = {}) 
   const opts = {
     method,
     headers: {
-      'apikey':         env.SUPABASE_SERVICE_KEY,
-      'Authorization':  `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type':   'application/json',
+      'apikey':        env.SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+      'Content-Type':  'application/json',
       ...extraHeaders,
     },
   };
