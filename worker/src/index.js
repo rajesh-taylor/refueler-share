@@ -1,42 +1,13 @@
-/**
- * index.js — Cloudflare Worker — refueler-share
- *
- * Endpoints:
- *   POST /credential/issue              NUT-00 blind sig issuance (free tier)
- *   PUT  /upload/{uuid}/{chunk}         Chunked upload with NUT-00 credential verify
- *   POST /auth/{uuid}                   NUT-11 Mode 1: passphrase verify → download token
- *   GET  /download/{uuid}/{chunk}       R2 chunk proxy
- *   POST /webhook/stripe                Stripe subscription lifecycle
- *   POST /subscription/checkout         Create Stripe Checkout session (Payment Element)
- *   GET  /subscription/status           Returns tier for current session
- *   POST /subscription/portal           Create Stripe Customer Portal session
- *
- * Secrets (wrangler secret put):
- *   MINT_PRIVATE_KEY        secp256k1 hex (32 bytes)
- *   TURNSTILE_SECRET_KEY    Cloudflare Turnstile secret
- *   SUPABASE_URL            https://tihgvdokeofnjxjkenmm.supabase.co
- *   SUPABASE_SERVICE_KEY    service_role JWT
- *   STRIPE_SECRET_KEY       sk_live_...
- *   STRIPE_WEBHOOK_SECRET   whsec_...
- */
-
 import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyCredential } from './nut00.js';
 import { verifyChunkHash } from './blake3.js';
-import {
-  getManifest, putManifest, createManifest,
-  isDownloadBlocked, requiresPassphrase,
-  TIER_CAPS,
-} from './manifest.js';
-import {
-  hashSecret, timingSafeEqual,
-  issueDownloadToken, verifyDownloadToken,
-} from './nut11.js';
+import { getManifest, putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
+import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
 
-// ---------------------------------------------------------------------------
-// CORS headers — allow share.refueler.io and upgrade.refueler.io
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// CORS
+// ─────────────────────────────────────────────────────────────────────────────
 function corsHeaders(request) {
   const origin = request.headers.get('Origin') ?? '';
   const allowed = ['https://share.refueler.io', 'https://upgrade.refueler.io'];
@@ -49,64 +20,74 @@ function corsHeaders(request) {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Router
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
-    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
 
-    const url = new URL(request.url);
+    const url  = new URL(request.url);
     const path = url.pathname;
 
     try {
-      // POST /credential/issue
+      // ── Status (public) ──────────────────────────────────────────────────
+      if (request.method === 'GET' && path === '/status') {
+        return addCors(await handleStatus(request, env), request);
+      }
+
+      // ── Admin: set status (X-Admin-Key protected) ────────────────────────
+      if (request.method === 'POST' && path === '/admin/status') {
+        return addCors(await handleAdminStatus(request, env), request);
+      }
+
+      // ── Credential issue ─────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/credential/issue') {
         return addCors(await handleCredentialIssue(request, env), request);
       }
 
-      // PUT /upload/{uuid}/{chunk-index}
+      // ── Upload ───────────────────────────────────────────────────────────
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'PUT' && uploadMatch) {
         return addCors(await handleUpload(request, env, uploadMatch[1], parseInt(uploadMatch[2], 10)), request);
       }
 
-      // POST /auth/{uuid}
+      // ── Auth (passphrase gate) ───────────────────────────────────────────
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
         return addCors(await handleAuth(request, env, authMatch[1]), request);
       }
 
-      // GET /download/{uuid}/{chunk-index}
+      // ── Download ─────────────────────────────────────────────────────────
       const downloadMatch = path.match(/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'GET' && downloadMatch) {
         return addCors(await handleDownload(request, env, downloadMatch[1], parseInt(downloadMatch[2], 10)), request);
       }
 
-      // POST /webhook/stripe
+      // ── Stripe webhook ───────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/webhook/stripe') {
         return handleStripeWebhook(request, env);
       }
 
-      // POST /subscription/checkout
+      // ── Stripe checkout ──────────────────────────────────────────────────
       if (request.method === 'POST' && path === '/subscription/checkout') {
         return addCors(await handleCheckout(request, env), request);
       }
 
-      // GET /subscription/status
+      // ── Subscription status ──────────────────────────────────────────────
       if (request.method === 'GET' && path === '/subscription/status') {
         return addCors(await handleSubscriptionStatus(request, env), request);
       }
 
-      // POST /subscription/portal
+      // ── Stripe customer portal ───────────────────────────────────────────
       if (request.method === 'POST' && path === '/subscription/portal') {
         return addCors(await handlePortal(request, env), request);
       }
 
       return new Response('Not found', { status: 404 });
+
     } catch (e) {
       console.error('Worker error:', e);
       return new Response(JSON.stringify({ error: 'Internal server error' }), {
@@ -117,12 +98,118 @@ export default {
   },
 };
 
-// ---------------------------------------------------------------------------
-// POST /credential/issue
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Status — GET /status
+// Returns current operational state, active incidents, and scheduled
+// maintenance windows. Reads from KV key `status:current`.
+// Falls back to { state: 'operational' } if key is absent (clean install).
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleStatus(request, env) {
+  let current = null;
+  try {
+    const raw = await env.STATUS_KV.get('status:current', { type: 'json' });
+    current = raw;
+  } catch (e) {
+    console.error('KV read error:', e);
+  }
+
+  // Default: fully operational, no incidents, no maintenance window
+  if (!current) {
+    current = {
+      state:       'operational',  // 'operational' | 'degraded' | 'maintenance'
+      message:     null,           // string | null — shown in banner and status page
+      maintenance: null,           // { scheduled_at: unix, duration_minutes: number, description: string } | null
+      incidents:   [],             // [{ id, title, severity, started_at, resolved_at, updates: [] }]
+      updated_at:  Math.floor(Date.now() / 1000),
+    };
+  }
+
+  return json(current);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin status — POST /admin/status
+// Protected by X-Admin-Key header (Worker secret ADMIN_KEY).
+// Body: partial or full status object. Worker merges into existing state.
+//
+// Examples:
+//   Set maintenance window:
+//     { "maintenance": { "scheduled_at": 1720987200, "duration_minutes": 60,
+//                        "description": "KV namespace migration" } }
+//   Clear maintenance:
+//     { "maintenance": null }
+//   Mark degraded:
+//     { "state": "degraded", "message": "Upload latency elevated — investigating." }
+//   Add incident:
+//     { "incidents": [{ "id": "inc-001", "title": "Upload latency",
+//                       "severity": "minor", "started_at": 1720980000,
+//                       "resolved_at": null, "updates": [] }] }
+//   Restore operational:
+//     { "state": "operational", "message": null }
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAdminStatus(request, env) {
+  // Auth check
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) {
+    return err(401, 'Unauthorised');
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
+
+  // Validate state value if provided
+  const validStates = ['operational', 'degraded', 'maintenance'];
+  if (body.state !== undefined && !validStates.includes(body.state)) {
+    return err(400, `Invalid state. Must be one of: ${validStates.join(', ')}`);
+  }
+
+  // Read existing, merge patch
+  let current = null;
+  try {
+    current = await env.STATUS_KV.get('status:current', { type: 'json' });
+  } catch {}
+
+  if (!current) {
+    current = {
+      state:       'operational',
+      message:     null,
+      maintenance: null,
+      incidents:   [],
+      updated_at:  Math.floor(Date.now() / 1000),
+    };
+  }
+
+  // Merge: only fields provided in body are updated
+  const updated = {
+    ...current,
+    ...body,
+    updated_at: Math.floor(Date.now() / 1000),
+  };
+
+  try {
+    await env.STATUS_KV.put('status:current', JSON.stringify(updated));
+  } catch (e) {
+    console.error('KV write error:', e);
+    return err(502, 'Failed to write status to KV');
+  }
+
+  return json({ ok: true, status: updated });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Credential issue — POST /credential/issue
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleCredentialIssue(request, env) {
   let body;
-  try { body = await request.json(); } catch { return err(400, 'Invalid JSON'); }
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
 
   const { turnstile_token, blinded_message, tier = 'free' } = body;
   if (!turnstile_token || !blinded_message) return err(400, 'Missing turnstile_token or blinded_message');
@@ -143,24 +230,23 @@ async function handleCredentialIssue(request, env) {
   return json({ signed_point: signedPoint, mint_pubkey: mintPubkey, allocation_bytes: allocationBytes });
 }
 
-// ---------------------------------------------------------------------------
-// PUT /upload/{uuid}/{chunk-index}
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload — PUT /upload/:uuid/:chunk
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleUpload(request, env, uuid, chunkIndex) {
   const isFirstChunk = chunkIndex === 0;
 
   if (isFirstChunk) {
-    const credential  = request.headers.get('X-Cashu-Credential');
-    const blake3Root  = request.headers.get('X-Blake3-Root');
-    const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
-    const totalBytes  = parseInt(request.headers.get('X-Total-Bytes') ?? '0', 10);
-    const tier        = request.headers.get('X-Tier') ?? 'free';
-    const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
-    const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
-    const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
-    const rawFileName = request.headers.get('X-File-Name') ?? '';
-    // Sanitise: strip path separators, limit length, fall back to uuid prefix
-    const fileName    = rawFileName.replace(/[/\\]/g, '').slice(0, 255) || `refueler-${uuid.slice(0, 8)}`;
+    const credential    = request.headers.get('X-Cashu-Credential');
+    const blake3Root    = request.headers.get('X-Blake3-Root');
+    const totalChunks   = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
+    const totalBytes    = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
+    const tier          = request.headers.get('X-Tier') ?? 'free';
+    const expiryTs      = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
+    const chunkHash     = request.headers.get('X-Blake3-Chunk-Hash');
+    const p2shHash      = request.headers.get('X-P2SH-Secret-Hash') ?? null;
+    const rawFileName   = request.headers.get('X-File-Name') ?? '';
+    const fileName      = rawFileName.replace(/[/\\]/g, '').slice(0, 255) || `refueler-${uuid.slice(0, 8)}`;
 
     if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
       return err(400, 'Missing required headers');
@@ -188,12 +274,7 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
 
-    const manifest = createManifest({
-      uuid, tier, totalChunks, totalBytes,
-      expiryTimestamp: expiryTs,
-      blake3Root,
-      p2shSecretHash: p2shHash,
-    });
+    const manifest = createManifest({ uuid, tier, totalChunks, totalBytes, expiryTimestamp: expiryTs, blake3Root, p2shSecretHash: p2shHash });
     manifest.file_name = fileName;
     manifest.chunks_received = [0];
     await putManifest(env.BUCKET, uuid, manifest);
@@ -230,12 +311,16 @@ async function handleUpload(request, env, uuid, chunkIndex) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// POST /auth/{uuid}
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth — POST /auth/:uuid
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleAuth(request, env, uuid) {
   let body;
-  try { body = await request.json(); } catch { return err(400, 'Invalid JSON'); }
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
 
   const { passphrase } = body;
   if (!passphrase || typeof passphrase !== 'string') return err(400, 'Missing passphrase');
@@ -247,7 +332,6 @@ async function handleAuth(request, env, uuid) {
 
   const submitted = await hashSecret(passphrase);
   const match = timingSafeEqual(submitted, manifest.p2sh_secret_hash);
-
   if (!match) {
     await new Promise(r => setTimeout(r, 200));
     return err(401, 'Incorrect passphrase');
@@ -257,9 +341,9 @@ async function handleAuth(request, env, uuid) {
   return json({ token });
 }
 
-// ---------------------------------------------------------------------------
-// GET /download/{uuid}/{chunk-index}
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Download — GET /download/:uuid/:chunk
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleDownload(request, env, uuid, chunkIndex) {
   const manifest = await getManifest(env.BUCKET, uuid);
   if (!manifest) return err(404, 'Transfer not found');
@@ -269,7 +353,6 @@ async function handleDownload(request, env, uuid, chunkIndex) {
     const authHeader = request.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) return err(401, 'Download token required');
-
     const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env.MINT_PRIVATE_KEY);
     if (!valid || tokenUuid !== uuid) return err(401, 'Invalid or expired download token');
   }
@@ -283,17 +366,17 @@ async function handleDownload(request, env, uuid, chunkIndex) {
   const obj = await env.BUCKET.get(key, {
     range: request.headers.has('Range') ? parseRange(request.headers.get('Range')) : undefined,
   });
-
   if (!obj) return err(404, 'Chunk not found');
 
   const status = request.headers.has('Range') ? 206 : 200;
   const headers = new Headers({
-    'Content-Type': 'application/octet-stream',
+    'Content-Type':  'application/octet-stream',
     'Cache-Control': 'private, no-store',
     'X-Transfer-UUID': uuid,
-    'X-Chunk-Index': String(chunkIndex),
-    'X-File-Name': manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
+    'X-Chunk-Index':   String(chunkIndex),
+    'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
   });
+
   if (obj.range) {
     headers.set('Content-Range', `bytes ${obj.range.offset}-${obj.range.end}/${obj.size}`);
   }
@@ -301,58 +384,9 @@ async function handleDownload(request, env, uuid, chunkIndex) {
   return new Response(obj.body, { status, headers });
 }
 
-// ---------------------------------------------------------------------------
-// POST /subscription/portal
-// ---------------------------------------------------------------------------
-async function handlePortal(request, env) {
-  let body;
-  try { body = await request.json(); } catch { return err(400, 'Invalid JSON'); }
-
-  const { email } = body;
-  if (!email) return err(400, 'Missing email');
-
-  // Look up Stripe customer ID from Supabase
-  const res = await supabaseFetch(env, 'GET',
-    `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=stripe_customer_id,status&limit=1`
-  );
-  if (!res.ok) return err(502, 'Database unavailable');
-  const rows = await res.json();
-
-  if (!rows.length || !rows[0].stripe_customer_id) {
-    return err(404, 'No active subscription found for this email');
-  }
-  if (rows[0].status === 'cancelled') {
-    return err(404, 'No active subscription found for this email');
-  }
-
-  const customerId = rows[0].stripe_customer_id;
-
-  // Create Stripe billing portal session
-  const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      customer: customerId,
-      return_url: 'https://share.refueler.io/upgrade.html',
-    }).toString(),
-  });
-
-  if (!portalRes.ok) {
-    const portalErr = await portalRes.json();
-    console.error('Portal session error:', portalErr);
-    return err(502, 'Could not create portal session');
-  }
-
-  const session = await portalRes.json();
-  return json({ url: session.url });
-}
-
-// ---------------------------------------------------------------------------
-// POST /webhook/stripe
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Stripe webhook — POST /webhook/stripe
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleStripeWebhook(request, env) {
   let event;
   try {
@@ -369,24 +403,19 @@ async function handleStripeWebhook(request, env) {
     if (type === 'checkout.session.completed') {
       const session = event.data.object;
       if (session.mode !== 'subscription') return new Response('ok');
-
       const customerId = session.customer;
-      const email = session.customer_details?.email ?? session.customer_email ?? '';
-      const subId = session.subscription;
-
-      // Fetch subscription to get price lookup key → tier
-      const tier = await fetchTierFromSubscription(subId, env.STRIPE_SECRET_KEY);
-      const periodEnd = await fetchPeriodEnd(subId, env.STRIPE_SECRET_KEY);
-
+      const email      = session.customer_details?.email ?? session.customer_email ?? '';
+      const subId      = session.subscription;
+      const tier       = await fetchTierFromSubscription(subId, env.STRIPE_SECRET_KEY);
+      const periodEnd  = await fetchPeriodEnd(subId, env.STRIPE_SECRET_KEY);
       await upsertSubscriber(env, customerId, email, tier, 'active', periodEnd);
 
     } else if (type === 'customer.subscription.updated') {
-      const sub = event.data.object;
+      const sub        = event.data.object;
       const customerId = sub.customer;
-      const tier = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
-      const status = sub.status === 'active' ? 'active' : 'inactive';
-      const periodEnd = sub.current_period_end;
-
+      const tier       = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
+      const status     = sub.status === 'active' ? 'active' : 'inactive';
+      const periodEnd  = sub.current_period_end;
       await upsertSubscriber(env, customerId, null, tier, status, periodEnd);
 
     } else if (type === 'customer.subscription.deleted') {
@@ -401,12 +430,16 @@ async function handleStripeWebhook(request, env) {
   return new Response('ok', { status: 200 });
 }
 
-// ---------------------------------------------------------------------------
-// POST /subscription/checkout
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkout — POST /subscription/checkout
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleCheckout(request, env) {
   let body;
-  try { body = await request.json(); } catch { return err(400, 'Invalid JSON'); }
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
 
   const { price_id, email } = body;
   if (!price_id || !email) return err(400, 'Missing price_id or email');
@@ -421,8 +454,7 @@ async function handleCheckout(request, env) {
 
   try {
     const { clientSecret } = await createCheckoutSession(
-      price_id,
-      email,
+      price_id, email,
       'https://share.refueler.io/upgrade?success=1',
       'https://share.refueler.io/upgrade?cancelled=1',
       env.STRIPE_SECRET_KEY
@@ -434,17 +466,15 @@ async function handleCheckout(request, env) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// GET /subscription/status
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscription status — GET /subscription/status
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleSubscriptionStatus(request, env) {
-  const url = new URL(request.url);
+  const url   = new URL(request.url);
   const email = url.searchParams.get('email');
   if (!email) return err(400, 'Missing email');
 
-  const res = await supabaseFetch(env, 'GET',
-    `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=tier,status,current_period_end&limit=1`
-  );
+  const res = await supabaseFetch(env, 'GET', `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=tier,status,current_period_end&limit=1`);
   if (!res.ok) return err(502, 'Database unavailable');
   const rows = await res.json();
 
@@ -456,9 +486,57 @@ async function handleSubscriptionStatus(request, env) {
   return json({ tier, status, current_period_end });
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Portal — POST /subscription/portal
+// ─────────────────────────────────────────────────────────────────────────────
+async function handlePortal(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
+
+  const { email } = body;
+  if (!email) return err(400, 'Missing email');
+
+  const res = await supabaseFetch(env, 'GET', `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=stripe_customer_id,status&limit=1`);
+  if (!res.ok) return err(502, 'Database unavailable');
+  const rows = await res.json();
+
+  if (!rows.length || !rows[0].stripe_customer_id) {
+    return err(404, 'No active subscription found for this email');
+  }
+  if (rows[0].status === 'cancelled') {
+    return err(404, 'No active subscription found for this email');
+  }
+
+  const customerId = rows[0].stripe_customer_id;
+  const portalRes  = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization':  `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type':   'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      customer:   customerId,
+      return_url: 'https://share.refueler.io/upgrade.html',
+    }).toString(),
+  });
+
+  if (!portalRes.ok) {
+    const portalErr = await portalRes.json();
+    console.error('Portal session error:', portalErr);
+    return err(502, 'Could not create portal session');
+  }
+
+  const session = await portalRes.json();
+  return json({ url: session.url });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Stripe helpers
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 async function fetchTierFromSubscription(subId, secretKey) {
   const res = await fetch(`https://api.stripe.com/v1/subscriptions/${subId}`, {
     headers: { 'Authorization': `Bearer ${secretKey}` },
@@ -478,22 +556,17 @@ async function fetchPeriodEnd(subId, secretKey) {
 }
 
 function tierFromPriceKey(lookupKey) {
-  if (lookupKey.includes('max')) return 'max';
+  if (lookupKey.includes('max'))      return 'max';
   if (lookupKey.includes('creative')) return 'creative';
   return 'free';
 }
 
-// ---------------------------------------------------------------------------
-// Supabase helpers
-// ---------------------------------------------------------------------------
 async function upsertSubscriber(env, stripeCustomerId, email, tier, status, currentPeriodEnd) {
   const payload = {
     stripe_customer_id: stripeCustomerId,
     tier,
     status,
-    current_period_end: currentPeriodEnd
-      ? new Date(currentPeriodEnd * 1000).toISOString()
-      : null,
+    current_period_end: currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null,
     updated_at: new Date().toISOString(),
   };
   if (email) payload.email = email;
@@ -506,13 +579,16 @@ async function upsertSubscriber(env, stripeCustomerId, email, tier, status, curr
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Supabase fetch
+// ─────────────────────────────────────────────────────────────────────────────
 async function supabaseFetch(env, method, path, body = null, extraHeaders = {}) {
   const opts = {
     method,
     headers: {
-      'apikey': env.SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
+      'apikey':         env.SUPABASE_SERVICE_KEY,
+      'Authorization':  `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+      'Content-Type':   'application/json',
       ...extraHeaders,
     },
   };
@@ -520,9 +596,9 @@ async function supabaseFetch(env, method, path, body = null, extraHeaders = {}) 
   return fetch(`${env.SUPABASE_URL}${path}`, opts);
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Response helpers
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -538,7 +614,7 @@ function err(status, message) {
 }
 
 function addCors(response, request) {
-  const headers = corsHeaders(request);
+  const headers    = corsHeaders(request);
   const newHeaders = new Headers(response.headers);
   Object.entries(headers).forEach(([k, v]) => newHeaders.set(k, v));
   return new Response(response.body, { status: response.status, headers: newHeaders });
@@ -548,6 +624,6 @@ function parseRange(rangeHeader) {
   const m = rangeHeader.match(/bytes=(\d+)-(\d*)/);
   if (!m) return undefined;
   const offset = parseInt(m[1], 10);
-  const end = m[2] ? parseInt(m[2], 10) : undefined;
+  const end    = m[2] ? parseInt(m[2], 10) : undefined;
   return { offset, length: end !== undefined ? end - offset + 1 : undefined };
 }

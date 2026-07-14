@@ -21,3 +21,7 @@ ENVIRONMENT = "production"
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
 # Rule 2: Expiration backstop — 92 days (90-day Production Max max + 2-day buffer)
+
+[[kv_namespaces]]
+binding = "STATUS_KV"
+id      = "5b1dca6a8f06423f98d0bbc4286e2968"

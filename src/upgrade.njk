@@ -10,6 +10,75 @@ stripeThemeRemount: true
 <head>
 {% set extraHead %}<script src="https://js.stripe.com/v3/"></script>{% endset %}
 {% include "head.njk" %}
+<!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
+<div class="status-banner hidden" id="status-banner" role="alert" aria-live="polite">
+  <span class="status-banner-icon" id="status-banner-icon"></span>
+  <span class="status-banner-text" id="status-banner-text"></span>
+  <a class="status-banner-link" href="/status.html" id="status-banner-link">View status →</a>
+  <button class="status-banner-dismiss" id="status-banner-dismiss" aria-label="Dismiss">✕</button>
+</div>
+
+<script>
+(function () {
+  const WORKER_URL   = 'https://refueler-share.rt-fc4.workers.dev';
+  const DISMISS_KEY  = 'rs-banner-dismissed';
+  const banner       = document.getElementById('status-banner');
+  const bannerIcon   = document.getElementById('status-banner-icon');
+  const bannerText   = document.getElementById('status-banner-text');
+  const bannerDismiss = document.getElementById('status-banner-dismiss');
+
+  bannerDismiss.addEventListener('click', () => {
+    banner.classList.add('hidden');
+    // Store dismissal for this session only (sessionStorage, not localStorage —
+    // we want the banner to reappear on next visit in case situation has changed)
+    try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch {}
+  });
+
+  async function loadStatus() {
+    // Don't show if dismissed this session
+    try { if (sessionStorage.getItem(DISMISS_KEY)) return; } catch {}
+
+    let status;
+    try {
+      const res = await fetch(`${WORKER_URL}/status`, { cache: 'no-store' });
+      if (!res.ok) return;
+      status = await res.json();
+    } catch {
+      return; // network error — fail silently, never block the UI
+    }
+
+    const state = status.state ?? 'operational';
+    if (state === 'operational') return; // nothing to show
+
+    banner.dataset.state = state;
+
+    if (state === 'maintenance') {
+      bannerIcon.textContent = '🔧';
+      const mw = status.maintenance;
+      if (mw && mw.scheduled_at) {
+        const dt = new Date(mw.scheduled_at * 1000);
+        const formatted = dt.toLocaleString('en-GB', {
+          weekday: 'short', day: 'numeric', month: 'short',
+          hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+        });
+        const dur = mw.duration_minutes ? ` (${mw.duration_minutes} min)` : '';
+        const desc = mw.description ? ` — ${mw.description}` : '';
+        bannerText.textContent = `Scheduled maintenance: ${formatted}${dur}${desc}`;
+      } else {
+        bannerText.textContent = status.message ?? 'Maintenance in progress.';
+      }
+    } else if (state === 'degraded') {
+      bannerIcon.textContent = '⚠️';
+      bannerText.textContent = status.message ?? 'Some services are degraded — we are investigating.';
+    }
+
+    banner.classList.remove('hidden');
+  }
+
+  loadStatus();
+})();
+</script>
+
 {% include "shared-styles.njk" %}
 <style>
   /* ── Upgrade-specific tokens ─────────────────────────────────── */

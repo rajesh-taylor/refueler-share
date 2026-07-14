@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Refueler Share — Upgrade</title>
 <meta name="description" content="Upgrade your Refueler Share plan for larger files and longer expiry." />
 
-<!-- Fonts — canonical match to index.html -->
+<!-- Fonts — canonical match to refueler.io -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet" />
@@ -36,14 +37,82 @@
     const next = current === 'paper' ? 'carbon' : 'paper';
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
-    // Re-render Stripe element if mounted, to match new theme
     if (typeof remountStripeForTheme === 'function') remountStripeForTheme();
   }
   (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
 </script>
 
+<!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
+<div class="status-banner hidden" id="status-banner" role="alert" aria-live="polite">
+  <span class="status-banner-icon" id="status-banner-icon"></span>
+  <span class="status-banner-text" id="status-banner-text"></span>
+  <a class="status-banner-link" href="/status.html" id="status-banner-link">View status →</a>
+  <button class="status-banner-dismiss" id="status-banner-dismiss" aria-label="Dismiss">✕</button>
+</div>
+
+<script>
+(function () {
+  const WORKER_URL   = 'https://refueler-share.rt-fc4.workers.dev';
+  const DISMISS_KEY  = 'rs-banner-dismissed';
+  const banner       = document.getElementById('status-banner');
+  const bannerIcon   = document.getElementById('status-banner-icon');
+  const bannerText   = document.getElementById('status-banner-text');
+  const bannerDismiss = document.getElementById('status-banner-dismiss');
+
+  bannerDismiss.addEventListener('click', () => {
+    banner.classList.add('hidden');
+    // Store dismissal for this session only (sessionStorage, not localStorage —
+    // we want the banner to reappear on next visit in case situation has changed)
+    try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch {}
+  });
+
+  async function loadStatus() {
+    // Don't show if dismissed this session
+    try { if (sessionStorage.getItem(DISMISS_KEY)) return; } catch {}
+
+    let status;
+    try {
+      const res = await fetch(`${WORKER_URL}/status`, { cache: 'no-store' });
+      if (!res.ok) return;
+      status = await res.json();
+    } catch {
+      return; // network error — fail silently, never block the UI
+    }
+
+    const state = status.state ?? 'operational';
+    if (state === 'operational') return; // nothing to show
+
+    banner.dataset.state = state;
+
+    if (state === 'maintenance') {
+      bannerIcon.textContent = '🔧';
+      const mw = status.maintenance;
+      if (mw && mw.scheduled_at) {
+        const dt = new Date(mw.scheduled_at * 1000);
+        const formatted = dt.toLocaleString('en-GB', {
+          weekday: 'short', day: 'numeric', month: 'short',
+          hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+        });
+        const dur = mw.duration_minutes ? ` (${mw.duration_minutes} min)` : '';
+        const desc = mw.description ? ` — ${mw.description}` : '';
+        bannerText.textContent = `Scheduled maintenance: ${formatted}${dur}${desc}`;
+      } else {
+        bannerText.textContent = status.message ?? 'Maintenance in progress.';
+      }
+    } else if (state === 'degraded') {
+      bannerIcon.textContent = '⚠️';
+      bannerText.textContent = status.message ?? 'Some services are degraded — we are investigating.';
+    }
+
+    banner.classList.remove('hidden');
+  }
+
+  loadStatus();
+})();
+</script>
+
 <style>
-  /* ── Brand tokens — canonical match to index.html ─────────────── */
+  /* ── Brand tokens — canonical match to refueler.io ─────────────── */
   :root {
     --carbon:          #1A1A1A;
     --paper:           #F5F0E8;
@@ -59,12 +128,12 @@
     --nav-bg:          rgba(245,240,232,0.88);
     --card-bg:         rgba(26,26,26,0.04);
     --card-border:     rgba(26,26,26,0.08);
-    --card-bg-raised:  rgba(26,26,26,0.06);
     --input-bg:        #FFFFFF;
     --input-border:    rgba(26,26,26,0.18);
-    --stripe-bg:       #FFFFFF;
-    --success:         #1E8A4A;
-    --danger:          #C0392B;
+    --drop-border:     rgba(26,26,26,0.20);
+    --drop-hover-bg:   rgba(26,26,26,0.03);
+    --tag-bg:          rgba(26,26,26,0.07);
+    --link-box-bg:     rgba(26,26,26,0.05);
 
     --radius:          6px;
     --mono:            'IBM Plex Mono', monospace;
@@ -72,6 +141,7 @@
     --display:         'Satoshi', 'DM Sans', sans-serif;
   }
 
+  /* Carbon override — canonical match to refueler.io */
   html.carbon-mode {
     --bg:              var(--carbon);
     --fg:              var(--paper);
@@ -81,15 +151,15 @@
     --nav-bg:          rgba(26,26,26,0.90);
     --card-bg:         rgba(245,240,232,0.04);
     --card-border:     rgba(245,240,232,0.08);
-    --card-bg-raised:  rgba(245,240,232,0.06);
     --input-bg:        #252525;
     --input-border:    rgba(245,240,232,0.18);
-    --stripe-bg:       #2E2E2E;
-    --success:         #4CAF82;
-    --danger:          #E05555;
+    --drop-border:     rgba(245,240,232,0.22);
+    --drop-hover-bg:   rgba(245,240,232,0.03);
+    --tag-bg:          rgba(245,240,232,0.08);
+    --link-box-bg:     rgba(245,240,232,0.05);
   }
 
-  /* ── Reset ──────────────────────────────────────────────────────── */
+  /* ── Reset ─────────────────────────────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body {
@@ -104,7 +174,7 @@
     transition: background-color 0.35s ease, color 0.25s ease;
   }
 
-  /* ── Site header — canonical from index.html ─────────────────── */
+  /* ── Site header — canonical spec from refueler.io ──────────────── */
   .site-header {
     position: sticky;
     top: 0;
@@ -132,6 +202,7 @@
     color: var(--fg);
     text-decoration: none;
     white-space: nowrap;
+    text-transform: none;
   }
   .wordmark-divider {
     font-weight: 300;
@@ -142,6 +213,7 @@
     font-weight: 400;
     letter-spacing: 0.08em;
     opacity: 0.55;
+    text-transform: none;
   }
   .site-nav {
     display: flex;
@@ -160,6 +232,7 @@
   }
   .site-nav a:hover { color: var(--fg); }
   .site-nav a.active { color: var(--fg); }
+  /* Theme pill — border only, no fill, no gold on any state */
   .theme-pill {
     font-family: var(--display);
     font-size: 0.65rem;
@@ -181,13 +254,206 @@
     color: var(--fg);
   }
 
+  /* ── Shared components ────────────────────────────────────────────── */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    padding: 10px 20px;
+    transition: opacity 0.2s, background 0.2s;
+  }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { background: var(--fg); color: var(--bg); }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--fg-muted); color: var(--fg); }
+  .btn-full { width: 100%; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--fg-subtle);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  input[type="text"],
+  input[type="password"],
+  input[type="email"] {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus,
+  input[type="password"]:focus,
+  input[type="email"]:focus { border-color: var(--fg-muted); }
+  .tag {
+    display: inline-block;
+    background: var(--tag-bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Utility ─────────────────────────────────────────────────────── */
+  .muted      { color: var(--fg-muted); }
+  .subtle     { color: var(--fg-subtle); }
+  .mono       { font-family: var(--mono); }
+  .small      { font-size: 12px; }
+  .cap-warn   { color: #D97706; font-size: 13px; line-height: 1.5; }
+  .success-txt{ color: #27AE60; }
+  .danger-txt { color: #C0392B; }
+  .hidden     { display: none !important; }
+  .flex-row   { display: flex; align-items: center; gap: 10px; }
+  .mt4        { margin-top: 4px; }
+  .mt8        { margin-top: 8px; }
+  .mt12       { margin-top: 12px; }
+  .mt16       { margin-top: 16px; }
+
+  /* ── Site footer ─────────────────────────────────────────────────── */
+  .site-footer {
+    border-top: 1px solid var(--border);
+    padding: 20px clamp(1.25rem, 4vw, 3rem);
+    margin-top: auto;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .footer-note {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-subtle);
+    font-family: var(--display);
+  }
+  .footer-links { display: flex; gap: 1.5rem; }
+  .footer-links a {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--fg); }
+
+  /* ── Responsive ──────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .shell { padding: 32px 16px 60px; }
+    .site-nav { gap: 1.25rem; }
+    .site-nav a:not(:last-of-type) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress-bar, .btn, .slider, .slider::before,
+    html, body { transition: none; }
+  }
+    /* ── Maintenance / status banner ────────────────────────────────────────── */
+  .status-banner {
+    position: sticky;
+    top: 56px;                         /* sits below the nav */
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    font-size: 13px;
+    line-height: 1.4;
+    border-bottom: 1px solid transparent;
+    animation: banner-in 0.25s ease;
+  }
+  @keyframes banner-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .status-banner[data-state="maintenance"] {
+    background: color-mix(in srgb, #C8A951 12%, var(--bg));
+    border-color: color-mix(in srgb, #C8A951 30%, transparent);
+    color: var(--fg);
+  }
+  .status-banner[data-state="degraded"] {
+    background: color-mix(in srgb, #C0392B 10%, var(--bg));
+    border-color: color-mix(in srgb, #C0392B 25%, transparent);
+    color: var(--fg);
+  }
+  .status-banner-icon { flex-shrink: 0; font-size: 15px; }
+  .status-banner-text { flex: 1; }
+  .status-banner-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+  }
+  .status-banner-link:hover { opacity: 0.75; }
+  .status-banner-dismiss {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg-subtle);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .status-banner-dismiss:hover { color: var(--fg); }
+  .status-banner.hidden { display: none; }
+
+</style>
+
+<style>
+  /* ── Upgrade-specific tokens ─────────────────────────────────── */
+  :root {
+    --card-bg-raised:  rgba(26,26,26,0.06);
+    --stripe-bg:       #FFFFFF;
+    --success:         #1E8A4A;
+    --danger:          #C0392B;
+  }
+  html.carbon-mode {
+    --card-bg-raised:  rgba(245,240,232,0.06);
+    --stripe-bg:       #2E2E2E;
+    --success:         #4CAF82;
+    --danger:          #E05555;
+  }
+
   /* ── Page layout ─────────────────────────────────────────────── */
   .page {
     max-width: 900px;
     margin: 0 auto;
     padding: 60px 24px 80px;
   }
-
   .page-header { margin-bottom: 48px; }
   .page-header h1 {
     font-family: var(--display);
@@ -216,7 +482,6 @@
     transition: color 0.2s;
   }
   .toggle-label.active { color: var(--fg); font-weight: 500; }
-
   .toggle-switch {
     width: 38px;
     height: 21px;
@@ -240,7 +505,6 @@
     transition: left 0.15s, background 0.15s;
   }
   .toggle-switch.on .toggle-knob { left: 19px; background: var(--carbon); }
-
   .saving-badge {
     font-family: var(--mono);
     font-size: 11px;
@@ -258,7 +522,6 @@
     gap: 12px;
     margin-bottom: 40px;
   }
-
   .tier-card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -269,12 +532,8 @@
     position: relative;
   }
   .tier-card:hover:not(.free-card) { border-color: var(--fg-muted); }
-  .tier-card.selected {
-    border-color: var(--gold);
-    background: var(--card-bg-raised);
-  }
+  .tier-card.selected { border-color: var(--gold); background: var(--card-bg-raised); }
   .tier-card.free-card { cursor: default; }
-
   .tier-label {
     font-family: var(--display);
     font-size: 10px;
@@ -285,7 +544,6 @@
     margin-bottom: 14px;
   }
   .tier-label.gold { color: var(--gold); }
-
   .tier-name {
     font-family: var(--display);
     font-size: 17px;
@@ -293,7 +551,6 @@
     color: var(--fg);
     margin-bottom: 12px;
   }
-
   .tier-price {
     display: flex;
     align-items: baseline;
@@ -307,12 +564,7 @@
     color: var(--fg);
     letter-spacing: -0.02em;
   }
-  .tier-price-period {
-    font-size: 13px;
-    color: var(--fg-muted);
-    font-weight: 400;
-  }
-
+  .tier-price-period { font-size: 13px; color: var(--fg-muted); font-weight: 400; }
   .tier-yearly {
     font-family: var(--mono);
     font-size: 11px;
@@ -320,7 +572,6 @@
     margin-bottom: 20px;
   }
   .tier-yearly strong { color: var(--gold-dim); font-weight: 500; }
-
   .tier-features {
     list-style: none;
     display: flex;
@@ -345,7 +596,6 @@
   }
   .tier-features li.dim::before { color: var(--fg-subtle); }
   .tier-features li.dim { color: var(--fg-subtle); }
-
   .current-plan-tag {
     position: absolute;
     top: 12px;
@@ -369,7 +619,6 @@
     display: none;
   }
   .manage-section.visible { display: block; }
-
   .manage-row {
     display: flex;
     align-items: center;
@@ -385,38 +634,15 @@
     color: var(--fg-subtle);
     margin-bottom: 4px;
   }
-  .manage-meta-value {
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--fg);
-  }
-  .manage-divider {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 18px 0;
-  }
-  .manage-note {
-    font-size: 12px;
-    color: var(--fg-subtle);
-  }
+  .manage-meta-value { font-size: 15px; font-weight: 500; color: var(--fg); }
+  .manage-divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+  .manage-note { font-size: 12px; color: var(--fg-subtle); }
 
   /* ── Lookup section ──────────────────────────────────────────── */
-  .lookup-section {
-    margin-bottom: 32px;
-  }
-  .lookup-label {
-    font-size: 13px;
-    color: var(--fg-muted);
-    margin-bottom: 10px;
-  }
-  .lookup-row {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-  }
-  .lookup-row input {
-    flex: 1;
-  }
+  .lookup-section { margin-bottom: 32px; }
+  .lookup-label { font-size: 13px; color: var(--fg-muted); margin-bottom: 10px; }
+  .lookup-row { display: flex; gap: 8px; align-items: stretch; }
+  .lookup-row input { flex: 1; }
 
   /* ── Payment section ─────────────────────────────────────────── */
   .payment-section {
@@ -427,24 +653,14 @@
     display: none;
   }
   .payment-section.visible { display: block; }
-
   .payment-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     margin-bottom: 24px;
   }
-  .payment-title {
-    font-family: var(--display);
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--fg);
-  }
-  .payment-summary {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--fg-muted);
-  }
+  .payment-title { font-family: var(--display); font-size: 16px; font-weight: 600; color: var(--fg); }
+  .payment-summary { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); }
 
   /* Payment tabs */
   .payment-tabs {
@@ -464,24 +680,15 @@
     transition: color 0.15s;
     font-family: var(--sans);
   }
-  .pay-tab.active {
-    color: var(--fg);
-    border-bottom-color: var(--fg);
-  }
+  .pay-tab.active { color: var(--fg); border-bottom-color: var(--fg); }
   .pay-tab:hover:not(.active) { color: var(--fg); }
-
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
-
-  .lightning-placeholder {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--fg-subtle);
-  }
+  .lightning-placeholder { text-align: center; padding: 40px 20px; color: var(--fg-subtle); }
   .lightning-placeholder .lp-icon { font-size: 28px; margin-bottom: 12px; opacity: 0.5; }
   .lightning-placeholder p { font-size: 13px; line-height: 1.6; }
 
-  /* ── Inputs / fields ─────────────────────────────────────────── */
+  /* ── Fields ──────────────────────────────────────────────────── */
   .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
   .field label {
     font-size: 11px;
@@ -490,21 +697,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .field input,
-  input[type="email"] {
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: var(--radius);
-    color: var(--fg);
-    font-family: var(--sans);
-    font-size: 14px;
-    padding: 10px 14px;
-    width: 100%;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  .field input:focus,
-  input[type="email"]:focus { border-color: var(--fg-muted); }
+  .field input { font-family: var(--sans); font-size: 14px; }
   input::placeholder { color: var(--fg-subtle); }
 
   #stripe-element-container {
@@ -517,44 +710,13 @@
     transition: background 0.35s ease;
   }
 
-  /* ── Buttons ─────────────────────────────────────────────────── */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-family: var(--sans);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.03em;
-    padding: 10px 20px;
-    transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
-    border: none;
-    text-decoration: none;
-  }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  /* Primary: gold fill */
+  /* ── Buttons (upgrade page overrides — gold primary) ─────────── */
   .btn-primary {
     background: var(--gold);
     color: var(--carbon);
     font-weight: 600;
+    border: none;
   }
-  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
-  /* Ghost */
-  .btn-ghost {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--fg-muted);
-  }
-  .btn-ghost:hover:not(:disabled) {
-    border-color: var(--fg-muted);
-    color: var(--fg);
-  }
-  .btn-full { width: 100%; }
-
-  /* Subscribe button — gold, full width */
   .btn-subscribe {
     width: 100%;
     background: var(--gold);
@@ -593,32 +755,14 @@
     border: 1px solid rgba(30,138,74,0.2);
     display: block;
   }
-
-  .payment-note {
-    text-align: center;
-    font-size: 12px;
-    color: var(--fg-subtle);
-    margin-top: 14px;
-    line-height: 1.6;
-  }
-  .payment-note a {
-    color: var(--gold-dim);
-    text-decoration: none;
-  }
+  .payment-note { text-align: center; font-size: 12px; color: var(--fg-subtle); margin-top: 14px; line-height: 1.6; }
+  .payment-note a { color: var(--gold-dim); text-decoration: none; }
   .payment-note a:hover { color: var(--gold); }
 
   /* ── Success panel ───────────────────────────────────────────── */
-  .success-panel {
-    text-align: center;
-    padding: 80px 24px;
-    display: none;
-  }
+  .success-panel { text-align: center; padding: 80px 24px; display: none; }
   .success-panel.visible { display: block; }
-  .success-icon {
-    font-size: 36px;
-    margin-bottom: 20px;
-    opacity: 0.7;
-  }
+  .success-icon { font-size: 36px; margin-bottom: 20px; opacity: 0.7; }
   .success-panel h2 {
     font-family: var(--display);
     font-size: 1.75rem;
@@ -627,59 +771,16 @@
     color: var(--fg);
     margin-bottom: 8px;
   }
-  .success-panel p {
-    font-size: 14px;
-    color: var(--fg-muted);
-    margin-bottom: 28px;
-  }
+  .success-panel p { font-size: 14px; color: var(--fg-muted); margin-bottom: 28px; }
 
-  /* ── Site footer ─────────────────────────────────────────────── */
-  .site-footer {
-    border-top: 1px solid var(--border);
-    padding: 20px clamp(1.25rem, 4vw, 3rem);
-    margin-top: auto;
-  }
-  .footer-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .footer-note {
-    font-size: 0.65rem;
-    letter-spacing: 0.06em;
-    color: var(--fg-subtle);
-    font-family: var(--display);
-  }
-  .footer-links { display: flex; gap: 1.5rem; }
-  .footer-links a {
-    font-family: var(--display);
-    font-size: 0.65rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fg-subtle);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .footer-links a:hover { color: var(--fg); }
-
-  /* ── Utility ─────────────────────────────────────────────────── */
   .hidden { display: none !important; }
 
-  /* ── Responsive ──────────────────────────────────────────────── */
   @media (max-width: 680px) {
     .page { padding: 40px 16px 60px; }
     .tiers { grid-template-columns: 1fr; }
-    .site-nav { gap: 1.25rem; }
-    .site-nav a:not(:last-of-type) { display: none; }
     .payment-section { padding: 20px 16px; }
     .manage-section { padding: 18px 16px; }
   }
-
   @media (prefers-reduced-motion: reduce) {
     *, html, body { transition: none !important; }
   }
@@ -687,7 +788,7 @@
 </head>
 <body>
 
-<!-- ── Site header — canonical nav (matches index.html) ─────────── -->
+
 <header class="site-header">
   <div class="header-inner">
     <a href="https://refueler.io/" class="wordmark">
@@ -704,6 +805,7 @@
     </nav>
   </div>
 </header>
+
 
 <!-- ── Main page ─────────────────────────────────────────────────── -->
 <div class="page" id="mainPage">
@@ -861,7 +963,6 @@
   </div>
 </div>
 
-<!-- ── Site footer ────────────────────────────────────────────────── -->
 <footer class="site-footer">
   <div class="footer-inner">
     <span class="footer-note">© 2026 Refueler · share.refueler.io</span>
@@ -873,6 +974,7 @@
     </div>
   </div>
 </footer>
+
 
 <script>
 const WORKER_URL = 'https://refueler-share.rt-fc4.workers.dev';
