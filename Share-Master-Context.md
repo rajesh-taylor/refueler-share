@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 1.5 | **Last updated:** Session 17 · 14 July 2026
+> **Version:** 1.7 | **Last updated:** Session 19 · 14 July 2026
 > Load this file alongside `CLAUDE.md` (refueler-share) and `SESSIONS.md` for every share session.
 
 ---
@@ -140,22 +140,23 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ---
 
-## Current state (Session 17 complete)
+## Current state (Session 19 complete)
 
 **Block 1 — SSG Migration: complete.**
+**Block 2 — Instrumentation: S18–S19 complete, S20–S26 remaining.**
+
 - Eleventy 3.x scaffold live. `src/` → `frontend/` build via `npm run build`.
-- Pages build config: build command `npm run build`, output dir `frontend`.
-- `src/index.njk`, `src/upgrade.njk`, `src/status.njk` — all Eleventy templates.
-- Partials: `src/_includes/head.njk`, `nav.njk`, `footer.njk`, `shared-styles.njk`.
-- KV-backed status system: `GET /status`, `POST /admin/status`, maintenance banner on all pages.
-- Status page: ops layer + cryptographic integrity layer (6 cards, honest gap disclosure).
+- KV-backed status system + maintenance banner + status page all live.
+- Full upload → share link → passphrase gate → download flow is end-to-end functional.
+- Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
+- Analytics Engine instrumentation live (`share_events` dataset, `logEvent` + `timed` wrapper, all endpoints covered).
+- Supabase RLS policies hardened — explicit deny-all on `spent_tokens` and `subscribers`. Security advisor alert resolved.
+- `subscribers.cancelled_at` column live. Churn timestamp recorded on `customer.subscription.deleted`.
+- `GET /admin/metrics` live — MRR, subscribers by tier, churn rate MTD. Honest approximation notes in response JSON.
 
-**Full upload → share link → passphrase gate → download flow is end-to-end functional.**
-Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
+**Latent (deferred):** `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in B5 design session.
 
-**Latent (deferred):** `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in a snag session.
-
-**Next: S19 — Supabase aggregation layer (Block 2, roadmap below).**
+**Next: S20 — R2 + crypto metrics (Block 2).**
 
 ---
 

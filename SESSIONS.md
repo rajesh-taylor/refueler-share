@@ -167,6 +167,39 @@ GROUP BY tier;
 
 ---
 
+## Session 19 — Supabase aggregation layer (14 July 2026)
+
+**Type:** Build session (Block 2 — Instrumentation completion).
+**Commit:** pending
+
+### Completed
+
+- RLS deny-all policies added to `spent_tokens` and `subscribers` — explicit `RESTRICTIVE` policies for `anon` and `authenticated` roles. RLS was already enabled; missing policies were triggering Supabase security advisor critical alert. `service_role` (Worker) bypasses RLS — zero functional impact.
+- `cancelled_at TIMESTAMPTZ` column added to `subscribers` via MCP migration.
+- `upsertSubscriber()` — new `cancelledAt` parameter; written to `cancelled_at` on `customer.subscription.deleted` Stripe event.
+- `GET /admin/metrics` — new `X-Admin-Key` protected endpoint:
+  - **MRR (GBP)** — sum of monthly-equivalent floor prices for active paid subscribers (creative: £12, max: £24). Conservative floor — yearly subscribers under-counted; accurate interval-aware MRR deferred to dashboard layer (S22).
+  - **`subscribers_by_tier`** — `{ free, creative, max }` active counts.
+  - **`paid_total`** — active creative + max count.
+  - **Churn rate MTD** — `cancelled_mtd ÷ active_start_of_month_approx` as %. Approximation: active_now + cancelled_mtd. Under-counts if subscriber signed up and cancelled within same calendar month.
+  - **`cancelled_mtd`** — raw cancellation count since start of current calendar month.
+  - **`credential_issuances: null`** — AE SQL API not callable from Worker binding; computed in dashboard layer (S22).
+  - Honest `_note` fields embedded in JSON response for every approximation.
+- Router: `admin_metrics` added to `timed()` wrapper.
+
+### Do not retry
+
+- DO NOT attempt to call Cloudflare AE SQL API from within the Worker — it is an external REST API requiring an account token, not a Worker binding. `credential_issuances` stays `null` until S22.
+- DO NOT use `service_role` key in RLS policies — it bypasses RLS by design, no policy needed.
+- `spatial_ref_sys` RLS is `false` — PostGIS system table, not ours, leave alone.
+
+### Files changed
+
+- `worker/src/index.js` — `handleAdminMetrics`, updated `upsertSubscriber`, router route
+- Supabase migration `rls_policies_and_cancelled_at` — applied via MCP
+
+---
+
 ## Session 19 — Roadmap planning S19–S120 (14 July 2026)
 
 **Type:** Planning session (uncounted — does not consume a build session number).
