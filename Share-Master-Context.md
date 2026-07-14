@@ -90,6 +90,7 @@ Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
 | Production Max yearly | `price_1Ts7xIGlctwiB9U3JyZB8Kwj` | `share-max-yearly` | £240/yr |
 
 Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe`
+Customer Portal: configured ✓ · redirect → `https://share.refueler.io/upgrade.html` · all 4 plans · cancel at period end · cancellation reasons enabled
 Destination ID: `we_1Ts8epGlctwiB9U3dXT8XBac`
 Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 
@@ -130,6 +131,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - **`secp.Point`** — removed in `@noble/secp256k1@2.x`. Use `secp.ProjectivePoint` throughout.
 - **`binding = "R2"` in wrangler.toml** — Worker uses `env.BUCKET`, binding must be `BUCKET`.
 - **BLAKE3 for passphrase hash** — frontend must use SHA-256 to match `nut11.js hashSecret()`.
+- **`wrangler r2 bucket lifecycle set --rule` inline JSON** — not supported in Wrangler 4.92. Use `add` subcommand with `--abort-multipart-days` / `--expire-days` flags.
+- **`wrangler r2 bucket lifecycle get`** — command is `list`.
 
 ---
 
@@ -137,8 +140,13 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
+## Current state
+
 **Full upload → share link → passphrase gate → download flow is end-to-end functional.**
-Filename, extension, and byte integrity confirmed via smoke test (13 July 2026).
+Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
+upgrade.html rebuilt: Paper default, canonical nav, theme toggle, brand-compliant. (Session 13)
+
+**Latent mismatch (deferred):** `FREE_EXPIRY` in `index.html` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in next snag session.
 
 ---
 
@@ -178,7 +186,7 @@ Yearly = 10 months price (2 months free).
 | POST | `/webhook/stripe` | Stripe subscription lifecycle |
 | POST | `/subscription/checkout` | Create embedded checkout session |
 | GET | `/subscription/status` | Returns tier by email |
-
+| POST | `/subscription/portal` | Create Stripe Customer Portal session |
 ---
 
 ## Design snag list (separate design session)

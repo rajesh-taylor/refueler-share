@@ -2,6 +2,72 @@
 
 ---
 
+## Session 13 — upgrade.html design overhaul (14 July 2026)
+
+**Type:** Design session.
+**Commit:** Session 13 commit
+
+### Completed
+
+- upgrade.html fully rebuilt against BRANDING.md + WEBSITE_DESIGN_SPEC.md
+- Canonical site-header ported from index.html: wordmark, App / Editorial / Privacy / Upgrade nav, theme pill, sticky blur
+- Paper default added: full CSS token system matching index.html, localStorage theme persistence
+- Carbon toggle functional: Stripe appearance remounts on theme switch (theme: 'stripe' Paper / theme: 'night' Carbon)
+- Skint Tog expiry: "5-day expiry" → "1 / 7 day expiry"
+- "Most popular" badge removed from Creative Premium; replaced with "Creative" label (gold, matches "Professional" on Max)
+- WORKER_URL corrected: `rajeshtaylor.workers.dev` → `rt-fc4.workers.dev`
+- Font stack updated: IBM Plex Mono added, canonical match to index.html
+- return_url corrected: `/upgrade?success=1` → `/upgrade.html?success=1`
+- Orange confirmed absent. Gold CTAs correct throughout.
+
+### Deferred
+
+- FREE_EXPIRY in index.html still set to 5 days — mismatch with "1 / 7 day expiry" display. Fix in next snag session.
+
+### Files changed
+
+- `frontend/upgrade.html` — full rebuild
+
+---
+
+## Session 12 — Stripe Customer Portal + R2 lifecycle rules (13 July 2026)
+
+**Type:** Infrastructure session.
+**Commit:** Session 12 commit (post-Session 11)
+
+### Completed
+
+- Stripe Customer Portal configured in Dashboard:
+  - Header: "Manage your Refueler subscription"
+  - Redirect: `https://share.refueler.io/upgrade.html`
+  - Plans: all 4 prices added (Creative £12/mo, £120/yr · Max £24/mo, £240/yr)
+  - Customers can switch plans ✓, update payment method ✓, cancel at end of billing period ✓
+  - Cancellation reasons: all 8 enabled ✓
+- Worker: `POST /subscription/portal` endpoint added
+  - Takes `{ email }`, looks up `stripe_customer_id` in Supabase
+  - Creates Stripe billing portal session, returns `{ url }`
+  - Returns 404 if no active subscription found
+- `upgrade.html`: `openPortal()` stub replaced with real implementation
+  - Manage section (post-checkout): shows plan name + portal button
+  - Lookup section (on load): email field for existing subscribers to access portal directly
+- R2 lifecycle rules applied to both buckets via `wrangler r2 bucket lifecycle add`:
+  - `abort-incomplete-multipart` — abort incomplete multipart uploads after 1 day
+  - `expiry-backstop` — expire all objects after 92 days
+  - Applied to: `refueler-share-prod` ✓ · `refueler-share-dev` ✓
+- Worker deployed: version `c4e78bb2`
+
+### Do not retry
+
+- DO NOT use `wrangler r2 bucket lifecycle set --rule` with inline JSON — not supported in Wrangler 4.92
+- DO NOT use `wrangler r2 bucket lifecycle get` — command is `list`
+- DO NOT use `--abort-incomplete-multipart-uploads-after` — correct flag is `--abort-multipart-days`
+- DO NOT use `--file` with S3-style lifecycle JSON — use `add` subcommand with named flags
+
+### Files changed
+
+- `worker/src/index.js` — POST /subscription/portal endpoint
+- `frontend/upgrade.html` — portal integration + manage/lookup sections
+
 ## Session 11 — Debug: decrypt stall + filename preservation (13 July 2026)
 
 **Type:** Debug session.
