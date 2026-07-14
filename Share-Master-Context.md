@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 1.4 | **Last updated:** Session 14 · 14 July 2026
+> **Version:** 1.5 | **Last updated:** Session 17 · 14 July 2026
 > Load this file alongside `CLAUDE.md` (refueler-share) and `SESSIONS.md` for every share session.
 
 ---
@@ -23,7 +23,7 @@ Licence: **Apache 2.0**
 | Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
 | Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens` + `subscribers` |
-| Frontend | Static HTML5 — `frontend/index.html` + `frontend/upgrade.html` |
+| Frontend | Eleventy 3.x — `src/` → `frontend/` build |
 | Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` (Pages) |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser, local bundle), secp256k1 (@noble) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
@@ -63,17 +63,19 @@ Index: `subscribers_email_idx` on `email`. RLS enabled. Worker service_role key 
 | Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
 | R2 prod bucket | `refueler-share-prod` |
 | R2 dev bucket | `refueler-share-dev` |
+| KV namespace | `refueler-share-kv` — binding `STATUS_KV` in wrangler.toml ✓ |
 | Pages | `share.refueler.io` — LIVE · project `refueler-share` · CNAME → refueler-share.pages.dev |
 | Turnstile | Sitekey `0x4AAAAAAD0N7GlHlCRuWITr` · Secret `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` · Widget: refueler-share (Managed) |
 | DNS | `share.refueler.io` CNAME → `refueler-share.pages.dev` ✓ |
 
 Worker secrets (all set ✓):
 - `MINT_PRIVATE_KEY` — secp256k1 hex (32 bytes) ✓
-- `TURNSTILE_SECRET_KEY` — `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` ✓ (corrected Session 8)
+- `TURNSTILE_SECRET_KEY` — `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` ✓
 - `SUPABASE_URL` → `https://tihgvdokeofnjxjkenmm.supabase.co` ✓
 - `SUPABASE_SERVICE_KEY` → service_role JWT ✓
 - `STRIPE_SECRET_KEY` → `sk_live_...Fyop` ✓
 - `STRIPE_WEBHOOK_SECRET` → rotated Session 6 ✓
+- `ADMIN_KEY` → set Session 16 ✓
 
 ---
 
@@ -99,12 +101,13 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 ## Locked architecture decisions
 
 - **Free tier cap: 4 GB** per transfer
-- **Worker URL: `https://refueler-share.rt-fc4.workers.dev`** — hardcoded in both HTML files ✓
+- **Worker URL: `https://refueler-share.rt-fc4.workers.dev`** — hardcoded in all Eleventy templates ✓
 - **R2 binding name: `BUCKET`** — `wrangler.toml` must use `binding = "BUCKET"`, code uses `env.BUCKET`
+- **KV binding name: `STATUS_KV`** — `wrangler.toml` binding = `STATUS_KV`, KV key `status:current`
 - **`X-Cashu-Credential` header is a JSON string** — must `JSON.parse()` before passing to `verifyCredential()`
 - **Passphrase hashing: SHA-256 only** — frontend uses `crypto.subtle.digest('SHA-256')`, stored in manifest as `p2sh_secret_hash`. BLAKE3 is for chunk integrity only. Never conflate.
 - BLAKE3 = chunk integrity (browser WASM, local bundle at `frontend/blake3/`). Server-side uses Web Crypto SHA-256.
-- `frontend/blake3/` is force-committed via `git add -f` — `dist/` is in `.gitignore`, must use `-f` flag if re-adding
+- `frontend/blake3/` is force-committed via `git add -f` — `dist/` is in `.gitignore`, must use `-f` flag if re-adding.
 - Cashu blind sigs = anonymous auth. Never conflate with BLAKE3.
 - No external mint. No ecash-to-sats path. No Cashu monetary usage.
 - AES-GCM session key lives in URL fragment only. Never in network requests. Never in logs.
@@ -118,6 +121,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Chunk key format: `{uuid}/{0000}` (zero-padded 4 digits)
 - Manifest key: `{uuid}/manifest.json`
 - Direct R2 URL exposure: none. Worker proxies all R2 access.
+- Status banner: `sessionStorage` only for dismiss — reappears on next visit.
+- Status page is banner-linked only (`/status.html`) — no nav entry.
 - curl: always single-line, real key inlined, no backslash continuations.
 - Downloaded files: Rajesh moves manually. Claude gives destination path as one-liner only.
 
@@ -126,27 +131,31 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 ## Known broken / do not retry
 
 - **blake3-wasm CDN imports** — `esm.sh` returns 404, `unpkg.com` blocked by CORS on Cloudflare Pages. Local bundle only.
-- **`import('https://unpkg.com/blake3-wasm...')`** — confirmed broken, do not use.
-- **Invisible Turnstile mode** — doesn't resolve in Chrome/Safari without user interaction. Visible managed widget only.
+- **Invisible Turnstile mode** — doesn't resolve in Chrome/Safari. Visible managed widget only.
 - **`secp.Point`** — removed in `@noble/secp256k1@2.x`. Use `secp.ProjectivePoint` throughout.
 - **`binding = "R2"` in wrangler.toml** — Worker uses `env.BUCKET`, binding must be `BUCKET`.
 - **BLAKE3 for passphrase hash** — frontend must use SHA-256 to match `nut11.js hashSecret()`.
-- **`wrangler r2 bucket lifecycle set --rule` inline JSON** — not supported in Wrangler 4.92. Use `add` subcommand with `--abort-multipart-days` / `--expire-days` flags.
+- **`wrangler r2 bucket lifecycle set --rule` inline JSON** — not supported in Wrangler 4.92. Use `add` subcommand.
 - **`wrangler r2 bucket lifecycle get`** — command is `list`.
 
 ---
 
-## Current blocker (Session 11 priority 0)
+## Current state (Session 17 complete)
 
-## Current state
-
-Eleventy scaffold live (Session 14, commit f52b55f). `src/` → `frontend/` build. Cloudflare Pages build config needs updating to `npm run build` / `frontend`.
+**Block 1 — SSG Migration: complete.**
+- Eleventy 3.x scaffold live. `src/` → `frontend/` build via `npm run build`.
+- Pages build config: build command `npm run build`, output dir `frontend`.
+- `src/index.njk`, `src/upgrade.njk`, `src/status.njk` — all Eleventy templates.
+- Partials: `src/_includes/head.njk`, `nav.njk`, `footer.njk`, `shared-styles.njk`.
+- KV-backed status system: `GET /status`, `POST /admin/status`, maintenance banner on all pages.
+- Status page: ops layer + cryptographic integrity layer (6 cards, honest gap disclosure).
 
 **Full upload → share link → passphrase gate → download flow is end-to-end functional.**
 Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
-upgrade.html rebuilt: Paper default, canonical nav, theme toggle, brand-compliant. (Session 13)
 
-**Latent mismatch (deferred):** `FREE_EXPIRY` in `index.html` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in next snag session.
+**Latent (deferred):** `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in a snag session.
+
+**Next: Block 2 — Instrumentation (Session 18).**
 
 ---
 
@@ -165,13 +174,11 @@ Yearly = 10 months price (2 months free).
 
 ## NUT protocol scope
 
-| Session | NUTs in scope |
-|---------|--------------|
-| Sessions 2-4 (complete) | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
-| Session 11 | Fix decrypt stall, complete smoke test |
-| Session 12+ | Stripe Customer Portal, R2 lifecycle rules, Lightning tab (Blink BOLT11) |
-| Future | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
-| Prod Max Phase 2 | ML-KEM key wrapping (deferred) |
+| Status | NUTs |
+|--------|------|
+| Complete | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
+| Deferred | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
+| Deferred | ML-KEM key wrapping (Prod Max Phase 2) |
 
 ---
 
@@ -179,23 +186,28 @@ Yearly = 10 months price (2 months free).
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| GET | `/status` | Operational state from KV — public ✓ |
+| POST | `/admin/status` | Update KV state — `X-Admin-Key` protected ✓ |
 | POST | `/credential/issue` | NUT-00 blind sig (free tier, Turnstile gate) ✓ |
 | PUT | `/upload/{uuid}/{chunk}` | Chunked upload, credential verify ✓ |
 | POST | `/auth/{uuid}` | NUT-11 Mode 1 passphrase → download token ✓ |
-| GET | `/download/{uuid}/{chunk}` | R2 chunk proxy |
-| POST | `/webhook/stripe` | Stripe subscription lifecycle |
-| POST | `/subscription/checkout` | Create embedded checkout session |
-| GET | `/subscription/status` | Returns tier by email |
-| POST | `/subscription/portal` | Create Stripe Customer Portal session |
+| GET | `/download/{uuid}/{chunk}` | R2 chunk proxy ✓ |
+| POST | `/webhook/stripe` | Stripe subscription lifecycle ✓ |
+| POST | `/subscription/checkout` | Create embedded checkout session ✓ |
+| GET | `/subscription/status` | Returns tier by email ✓ |
+| POST | `/subscription/portal` | Create Stripe Customer Portal session ✓ |
+
 ---
 
 ## Design snag list (separate design session)
 
 - Progress bar: 15%→100% jump is choppy — needs smooth animation during upload chunk loop
-- Turnstile widget should sit above passphrase field in upload UI (logical vertical flow)
+- Turnstile widget should sit above passphrase field in upload UI
 - QR code render is blurry — needs sharper output
 - Copy button: add double-square icon alongside text
 - Brand audit: run refueler.io branding .md against share UI
+- `FREE_EXPIRY` mismatch: 5 days in code, "1 / 7 day expiry" in UI
+- Theme state must persist across domains — write to cookie scoped to `.refueler.io`
 
 ---
 
@@ -206,34 +218,39 @@ refueler-share/
   README.md
   CLAUDE.md
   SESSIONS.md
-  Share-Master-Context.md   ← this file (v1.3)
+  Share-Master-Context.md   ← this file (v1.5)
   LICENSE                   ← Apache 2.0
+  .eleventy.js              ← input: src, output: frontend, passthrough: blake3/
+  package.json              ← build: eleventy, dev: eleventy --serve
+  package-lock.json
   frontend-deps/            ← throwaway npm install dir, not committed
+  src/
+    index.njk               ← upload/download page
+    upgrade.njk             ← pricing page
+    status.njk              ← status page (ops + crypto integrity)
+    _includes/
+      head.njk              ← fonts, theme script, extraHead slot
+      nav.njk               ← wordmark + site-nav + theme pill
+      footer.njk            ← canonical footer
+      shared-styles.njk     ← brand tokens, reset, shared components, banner CSS
+  frontend/                 ← Eleventy output (committed, Pages serves this)
+    index.html
+    upgrade.html
+    status.html
+    blake3/                 ← local blake3-wasm bundle (force-committed)
   worker/
-    wrangler.toml           ← binding = "BUCKET" ✓
+    wrangler.toml           ← binding = "BUCKET" ✓, STATUS_KV binding ✓
     package.json            ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
     src/
-    index.njk           ← upload/download page (Eleventy source)
-    upgrade.njk         ← pricing page (Eleventy source)
-    _includes/
-      head.njk          ← fonts, theme script, extraHead slot
-      nav.njk           ← wordmark + site-nav + theme pill (activePage var)
-      footer.njk        ← canonical footer
-      shared-styles.njk ← brand tokens, reset, shared components
-  .eleventy.js          ← input: src, output: frontend, passthrough: blake3/
-  package.json          ← build: eleventy, dev: eleventy --serve
-  package-lock.json     ← lockfile
-  frontend/
-    index.html              ← upload UI ✓ sha256 passphrase hash ✓
-    upgrade.html            ← tier cards + Payment Element
-    blake3/                 ← local blake3-wasm bundle (force-committed)
-      browser-async.js
-      esm/browser/*.js
-      esm/base/*.js
-      dist/wasm/web/blake3_js.js
-      dist/wasm/web/blake3_js_bg.wasm
+      index.js              ← Worker router + all handlers
+      nut00.js              ← Cashu blind sig (noble v2 API)
+      nut11.js              ← passphrase gate + download token
+      blake3.js             ← verifyChunkHash → return true (passthrough)
+      manifest.js           ← R2 manifest helpers
+      turnstile.js
+      stripe.js
   docs/
-    r2-lifecycle.md         ← R2 lifecycle rules (not yet applied)
+    r2-lifecycle.md
 ```
 
 ---

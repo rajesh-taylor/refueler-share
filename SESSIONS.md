@@ -2,6 +2,40 @@
 
 ---
 
+## Session 17 — status.njk (14 July 2026)
+
+**Type:** Build session.
+**Commit:** pending
+
+### Completed
+
+- `src/status.njk` built — two-section status page:
+  - **Ops layer**: state card (operational / degraded / maintenance), maintenance window block, incident list
+  - **Cryptographic integrity layer**: 6 cards — zero-knowledge guarantee, anonymous auth (NUT-00), chunk integrity (BLAKE3), passphrase gating (NUT-11 Mode 1), server-side chunk verification gap (amber, honest disclosure), storage ephemerality (R2 lifecycle)
+- State card uses CSS `color-mix()` tinted backgrounds + pulsing dot animation for degraded and maintenance states
+- Incident list: severity badge, resolved badge, timeline, per-update log — sorted most-recent-first
+- Maintenance window block: hidden when `maintenance: null`, revealed with formatted datetime + duration
+- All user-facing strings HTML-escaped before render
+- Auto-refresh every 60 s — page stays accurate without reload
+- Fetch failure path: Worker unreachable → degraded state card + error note, never blocks UI
+- Eleventy front matter: `permalink: /status.html`, `activePage: ""`
+- No nav link added — status page is linked from the banner ("View status →") only
+- `.eleventy.js` passthrough unchanged — no new assets
+
+### Do not retry
+
+- DO NOT add `status` to nav partial — status page is banner-linked only
+- DO NOT use `localStorage` for dismiss — `sessionStorage` only (banner reappears on next visit)
+
+### Files changed
+
+- `src/status.njk` — new file
+
+---
+
+
+---
+
 ## Session 14 — Eleventy scaffold (14 July 2026)
 
 **Type:** Build session.

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>System Status — refueler share</title>
+<meta name="description" content="Real-time operational status and cryptographic integrity layer for share.refueler.io." />
+
+<!-- Fonts — canonical match to refueler.io -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+
+
+<!-- Theme: applied before first paint to avoid flash -->
+<script>
+  const THEME_KEY = 'rfTheme';
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    const pill = document.getElementById('themePill');
+    if (theme === 'carbon') {
+      root.classList.add('carbon-mode');
+      root.setAttribute('data-theme', 'carbon');
+      if (pill) pill.textContent = 'Carbon / Paper';
+    } else {
+      root.classList.remove('carbon-mode');
+      root.removeAttribute('data-theme');
+      if (pill) pill.textContent = 'Paper / Carbon';
+    }
+  }
+  function toggleTheme() {
+    const current = localStorage.getItem(THEME_KEY) || 'paper';
+    const next = current === 'paper' ? 'carbon' : 'paper';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+    
+  }
+  (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
+</script>
+
+<style>
+  /* ── Status page layout ────────────────────────────────────────────── */
+  .shell {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 56px clamp(1.25rem, 4vw, 3rem) 80px;
+  }
+
+  .status-hero {
+    margin-bottom: 48px;
+  }
+  .status-hero-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    margin-bottom: 12px;
+  }
+  .status-hero-headline {
+    font-family: var(--display);
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    margin-bottom: 8px;
+  }
+  .status-hero-updated {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-subtle);
+  }
+
+  /* ── State indicator ────────────────────────────────────────────────── */
+  .state-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 20px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    margin-bottom: 32px;
+    transition: background 0.25s, border-color 0.25s;
+  }
+  .state-card[data-state="operational"] {
+    background: color-mix(in srgb, #27AE60 8%, var(--bg));
+    border-color: color-mix(in srgb, #27AE60 22%, transparent);
+  }
+  .state-card[data-state="degraded"] {
+    background: color-mix(in srgb, #C0392B 8%, var(--bg));
+    border-color: color-mix(in srgb, #C0392B 22%, transparent);
+  }
+  .state-card[data-state="maintenance"] {
+    background: color-mix(in srgb, #C8A951 8%, var(--bg));
+    border-color: color-mix(in srgb, #C8A951 22%, transparent);
+  }
+  .state-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  [data-state="operational"] .state-dot { background: #27AE60; }
+  [data-state="degraded"]    .state-dot { background: #C0392B; animation: pulse-red 1.6s ease infinite; }
+  [data-state="maintenance"] .state-dot { background: #C8A951; animation: pulse-amber 1.6s ease infinite; }
+
+  @keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.5); }
+    50%       { box-shadow: 0 0 0 5px rgba(192,57,43,0); }
+  }
+  @keyframes pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(200,169,81,0.5); }
+    50%       { box-shadow: 0 0 0 5px rgba(200,169,81,0); }
+  }
+
+  .state-label {
+    font-family: var(--display);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--fg);
+  }
+  .state-message {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Section headers ───────────────────────────────────────────────── */
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
+    font-family: var(--display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+
+  /* ── Maintenance window ─────────────────────────────────────────────── */
+  .maintenance-block {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 24px;
+  }
+  .maintenance-block-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg);
+    margin-bottom: 4px;
+  }
+  .maintenance-block-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    line-height: 1.7;
+  }
+
+  /* ── Incidents ──────────────────────────────────────────────────────── */
+  .incident-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+  .incident-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .incident-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .incident-severity {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+  .severity-minor    { background: color-mix(in srgb, #C8A951 15%, var(--bg)); color: #C8A951; }
+  .severity-major    { background: color-mix(in srgb, #C0392B 15%, var(--bg)); color: #C0392B; }
+  .severity-critical { background: color-mix(in srgb, #C0392B 25%, var(--bg)); color: #C0392B; font-weight: 600; }
+
+  .incident-title {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--fg);
+  }
+  .incident-resolved-badge {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #27AE60;
+  }
+  .incident-times {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-subtle);
+    margin-bottom: 8px;
+  }
+  .incident-updates { display: flex; flex-direction: column; gap: 6px; }
+  .incident-update {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .incident-update-time {
+    font-family: var(--mono);
+    color: var(--fg-subtle);
+    font-size: 11px;
+  }
+  .incident-update-body { color: var(--fg-muted); line-height: 1.5; }
+
+  .no-incidents {
+    font-size: 13px;
+    color: var(--fg-subtle);
+    font-family: var(--mono);
+    padding: 12px 0;
+  }
+
+  /* ── Cryptographic integrity section ────────────────────────────────── */
+  .integrity-section { margin-top: 48px; }
+
+  .integrity-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 560px) { .integrity-grid { grid-template-columns: 1fr; } }
+
+  .integrity-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .integrity-card-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    margin-bottom: 6px;
+  }
+  .integrity-card-value {
+    font-family: var(--display);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--fg);
+    margin-bottom: 4px;
+  }
+  .integrity-card-note {
+    font-size: 11px;
+    color: var(--fg-muted);
+    line-height: 1.5;
+  }
+
+  /* Known gap — amber treatment */
+  .integrity-card.gap {
+    border-color: color-mix(in srgb, #C8A951 30%, transparent);
+    background: color-mix(in srgb, #C8A951 5%, var(--bg));
+  }
+  .integrity-card.gap .integrity-card-value { color: #C8A951; }
+
+  /* ── Loading / error states ─────────────────────────────────────────── */
+  .loading-state {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-subtle);
+    padding: 20px 0;
+    text-align: center;
+  }
+  .fetch-error {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    padding: 12px 0;
+  }
+</style>
+</head>
+
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a href="https://refueler.io/" class="wordmark">
+      Refueler
+      <span class="wordmark-divider">/</span>
+      <span class="wordmark-section">Share</span>
+    </a>
+    <nav class="site-nav">
+      <a href="https://refueler.io/">App</a>
+      <a href="https://refueler.io/editorial/">Editorial</a>
+      <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="/upgrade.html">Upgrade</a>
+      <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
+    </nav>
+  </div>
+</header>
+
+
+<main class="shell">
+
+  <!-- ── Hero ──────────────────────────────────────────────────────────── -->
+  <div class="status-hero">
+    <p class="status-hero-label">share.refueler.io</p>
+    <h1 class="status-hero-headline">System Status</h1>
+    <p class="status-hero-updated subtle" id="hero-updated">Loading…</p>
+  </div>
+
+  <!-- ── Ops layer ─────────────────────────────────────────────────────── -->
+  <section id="ops-section">
+
+    <!-- State indicator — populated by JS -->
+    <div class="state-card" id="state-card" data-state="operational">
+      <span class="state-dot"></span>
+      <div>
+        <div class="state-label" id="state-label">Loading…</div>
+        <div class="state-message" id="state-message"></div>
+      </div>
+    </div>
+
+    <!-- Maintenance window (hidden if none) -->
+    <div id="maintenance-block" class="hidden">
+      <div class="section-header">
+        <span class="section-title">Scheduled maintenance</span>
+      </div>
+      <div class="maintenance-block">
+        <div class="maintenance-block-title" id="mw-title"></div>
+        <div class="maintenance-block-meta" id="mw-meta"></div>
+      </div>
+    </div>
+
+    <!-- Incidents -->
+    <div class="section-header">
+      <span class="section-title">Incidents</span>
+    </div>
+    <div class="incident-list" id="incident-list">
+      <p class="loading-state">Fetching status…</p>
+    </div>
+
+  </section>
+
+  <!-- ── Cryptographic integrity layer ─────────────────────────────────── -->
+  <section class="integrity-section">
+
+    <div class="section-header">
+      <span class="section-title">Cryptographic integrity layer</span>
+    </div>
+
+    <div class="integrity-grid">
+
+      <div class="integrity-card">
+        <div class="integrity-card-label">Zero-knowledge guarantee</div>
+        <div class="integrity-card-value">✓ Architectural</div>
+        <div class="integrity-card-note">
+          AES-256 keys are generated browser-side and placed in the URL fragment only.
+          The fragment is never transmitted to our Worker per RFC 3986.
+          We receive and store ciphertext. Reading your files is not technically possible for us.
+        </div>
+      </div>
+
+      <div class="integrity-card">
+        <div class="integrity-card-label">Anonymous auth</div>
+        <div class="integrity-card-value">✓ Cashu NUT-00</div>
+        <div class="integrity-card-note">
+          Upload credentials are blind-signed. The server issues a token without
+          learning its serial number. Transfers cannot be linked to identity at the
+          ledger layer. Double-spend prevention via Supabase spent-token table (NUT-07).
+        </div>
+      </div>
+
+      <div class="integrity-card">
+        <div class="integrity-card-label">Chunk integrity</div>
+        <div class="integrity-card-value">✓ BLAKE3 (browser)</div>
+        <div class="integrity-card-note">
+          Each 50 MB chunk is BLAKE3-hashed client-side via a compiled WASM module
+          loaded from a local bundle. Hash roots enable byte-exact resume on
+          interrupted transfers without restarting from chunk 0.
+        </div>
+      </div>
+
+      <div class="integrity-card">
+        <div class="integrity-card-label">Passphrase gating</div>
+        <div class="integrity-card-value">✓ NUT-11 Mode 1</div>
+        <div class="integrity-card-note">
+          Share links can require a passphrase. The SHA-256 hash of the passphrase is
+          stored in the transfer manifest. The Worker issues a time-scoped download
+          token only on hash match. The passphrase never travels the wire in plaintext.
+        </div>
+      </div>
+
+      <div class="integrity-card gap">
+        <div class="integrity-card-label">Server-side chunk verification</div>
+        <div class="integrity-card-value">⚠ Known gap</div>
+        <div class="integrity-card-note">
+          The Worker verifies chunk receipt but does not re-verify the client-declared
+          BLAKE3 hash server-side. A compromised client could declare a hash mismatch
+          undetected. Fix: compile BLAKE3 to a static WASM binary in the Worker.
+          No integrity or audit claims are made until this is resolved.
+        </div>
+      </div>
+
+      <div class="integrity-card">
+        <div class="integrity-card-label">Storage ephemerality</div>
+        <div class="integrity-card-value">✓ R2 lifecycle</div>
+        <div class="integrity-card-note">
+          Hard expiry enforced by Cloudflare R2 lifecycle rules: all objects deleted
+          after 92 days maximum. Incomplete multipart uploads aborted after 1 day.
+          No manual deletion required. No exceptions.
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <span class="footer-note">© 2026 Refueler · share.refueler.io</span>
+    <div class="footer-links">
+      <a href="https://refueler.io/">App</a>
+      <a href="https://refueler.io/editorial/">Editorial</a>
+      <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="/upgrade.html">Upgrade</a>
+    </div>
+  </div>
+</footer>
+
+
+<script>
+(function () {
+  const WORKER_URL = 'https://refueler-share.rt-fc4.workers.dev';
+
+  // ── DOM refs ──────────────────────────────────────────────────────────
+  const stateCard       = document.getElementById('state-card');
+  const stateLabel      = document.getElementById('state-label');
+  const stateMessage    = document.getElementById('state-message');
+  const heroUpdated     = document.getElementById('hero-updated');
+  const maintenanceBlock = document.getElementById('maintenance-block');
+  const mwTitle         = document.getElementById('mw-title');
+  const mwMeta          = document.getElementById('mw-meta');
+  const incidentList    = document.getElementById('incident-list');
+
+  // ── Formatters ────────────────────────────────────────────────────────
+  function fmtDatetime(unix) {
+    return new Date(unix * 1000).toLocaleString('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+    });
+  }
+
+  function fmtRelative(unix) {
+    const diff = Math.floor(Date.now() / 1000) - unix;
+    if (diff < 60)   return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  }
+
+  // ── State card ────────────────────────────────────────────────────────
+  function renderState(status) {
+    const state = status.state ?? 'operational';
+    stateCard.dataset.state = state;
+
+    const labels = {
+      operational: 'All systems operational',
+      degraded:    'Service degradation detected',
+      maintenance: 'Maintenance in progress',
+    };
+    stateLabel.textContent = labels[state] ?? state;
+
+    if (status.message && state !== 'operational') {
+      stateMessage.textContent = status.message;
+    } else {
+      stateMessage.textContent = '';
+    }
+  }
+
+  // ── Maintenance window ────────────────────────────────────────────────
+  function renderMaintenance(mw) {
+    if (!mw) {
+      maintenanceBlock.classList.add('hidden');
+      return;
+    }
+    maintenanceBlock.classList.remove('hidden');
+
+    mwTitle.textContent = mw.description ?? 'Scheduled maintenance';
+
+    const lines = [];
+    if (mw.scheduled_at) lines.push(`Scheduled: ${fmtDatetime(mw.scheduled_at)}`);
+    if (mw.duration_minutes) lines.push(`Duration: ${mw.duration_minutes} min`);
+    mwMeta.textContent = lines.join('\n');
+  }
+
+  // ── Incidents ─────────────────────────────────────────────────────────
+  function renderIncidents(incidents) {
+    if (!incidents || incidents.length === 0) {
+      incidentList.innerHTML = '<p class="no-incidents">No incidents in the current period.</p>';
+      return;
+    }
+
+    // Most recent first
+    const sorted = [...incidents].sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0));
+
+    incidentList.innerHTML = sorted.map(inc => {
+      const severityClass = `severity-${inc.severity ?? 'minor'}`;
+      const resolvedBadge = inc.resolved_at
+        ? `<span class="incident-resolved-badge">Resolved</span>`
+        : '';
+
+      const times = [];
+      if (inc.started_at)  times.push(`Started: ${fmtDatetime(inc.started_at)} (${fmtRelative(inc.started_at)})`);
+      if (inc.resolved_at) times.push(`Resolved: ${fmtDatetime(inc.resolved_at)}`);
+
+      const updates = inc.updates && inc.updates.length
+        ? inc.updates.map(u => `
+            <div class="incident-update">
+              <span class="incident-update-time">${fmtDatetime(u.at)}</span>
+              <span class="incident-update-body">${escHtml(u.body)}</span>
+            </div>`).join('')
+        : '';
+
+      return `
+        <div class="incident-card">
+          <div class="incident-card-head">
+            <span class="incident-severity ${severityClass}">${escHtml(inc.severity ?? 'minor')}</span>
+            <span class="incident-title">${escHtml(inc.title ?? 'Incident')}</span>
+            ${resolvedBadge}
+          </div>
+          ${times.length ? `<div class="incident-times">${times.join(' · ')}</div>` : ''}
+          ${updates ? `<div class="incident-updates">${updates}</div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  // ── Hero timestamp ────────────────────────────────────────────────────
+  function renderUpdated(updated_at) {
+    if (!updated_at) { heroUpdated.textContent = ''; return; }
+    heroUpdated.textContent = `Last updated: ${fmtDatetime(updated_at)}`;
+  }
+
+  // ── Escape helper ─────────────────────────────────────────────────────
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Fetch and render ──────────────────────────────────────────────────
+  async function loadStatus() {
+    let status;
+    try {
+      const res = await fetch(`${WORKER_URL}/status`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      status = await res.json();
+    } catch (e) {
+      stateCard.dataset.state = 'degraded';
+      stateLabel.textContent  = 'Status unavailable';
+      stateMessage.textContent = 'Could not reach the Worker. The service may be down or your network is blocking the request.';
+      incidentList.innerHTML  = `<p class="fetch-error">Could not load incident data: ${escHtml(e.message)}</p>`;
+      heroUpdated.textContent = '';
+      return;
+    }
+
+    renderState(status);
+    renderMaintenance(status.maintenance ?? null);
+    renderIncidents(status.incidents ?? []);
+    renderUpdated(status.updated_at ?? null);
+  }
+
+  loadStatus();
+
+  // Refresh every 60 s — status page stays accurate without a reload
+  setInterval(loadStatus, 60_000);
+})();
+</script>
+
+</body>
+</html>

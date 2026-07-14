@@ -163,9 +163,9 @@ Pricing, transfer caps, and link expiry options are listed at [share.refueler.io
 
 ## Status
 
-🟢 **Session 11 complete — commit `ec0c325`.**  
+🟢 **Session 17 complete — commit pending.**  
 Full upload → share link → passphrase gate → download flow is end-to-end functional.  
-Filename, extension, and byte integrity confirmed. Session 12: Stripe Customer Portal, R2 lifecycle rules.
+`src/status.njk` built. Ops layer (state, maintenance, incidents) + cryptographic integrity layer (6 architecture cards, honest gap disclosure). Session 18: instrumentation + Analytics Engine.
 
 ---
 
