@@ -295,3 +295,40 @@ Attach: worker/src/index.js, CLAUDE.md, Share-Master-Context.md, SESSIONS.md
 
 *Next build session: **S19 — Supabase aggregation layer** (Block 2)*
 *Attach: worker/src/index.js, worker/wrangler.toml, CLAUDE.md, Share-Master-Context.md, SESSIONS.md*
+
+---
+
+## Session 22 — AE SQL API integration (15 July 2026)
+
+**Type:** Build session (Block 2).
+**Commit:** d1bcb5a + f36e385 (CORS fix)
+
+### Completed
+
+- New Worker endpoint `GET /admin/ae-metrics` — `X-Admin-Key` protected, proxies three AE SQL queries server-side so `CF_AE_TOKEN` and `CF_ACCOUNT_ID` never touch the browser
+- Two new Worker secrets set: `CF_ACCOUNT_ID` (`fc4f3e5aeebe483677d14185daf544f5`) + `CF_AE_TOKEN` (scoped `Account Analytics > Read` token `refueler-share-ae-read`)
+- Three AE queries running in parallel via `Promise.allSettled`:
+  - Credential issuances by tier (rolling 30d) — `WHERE blob1 = 'credential_issue' GROUP BY blob2`
+  - R2 bytes uploaded (rolling 90d) — `sum(doubles[4]) WHERE blob1 = 'upload' AND doubles[2] = 0`
+  - Chunk retrieval success rate (rolling 24h) — `countIf(doubles[1] = 200) / count() WHERE blob1 = 'download'`
+- Dev dashboard (`frontend/admin/dashboard.html`) built and live at `share.refueler.io/admin/dashboard.html`
+- `X-Admin-Key` added to CORS `Access-Control-Allow-Headers` — was blocking browser fetch from dashboard
+- Standing pattern confirmed: session-close commit must include `&& git push origin main`
+
+### Known issue (fix in S23)
+
+- AE SQL error 422 on R2 bytes uploaded + chunk retrieval cards: `unsupported expression type: doubles[N]` — AE SQL array column syntax differs from assumed. Fix in S23.
+
+### Do not retry
+
+- DO NOT call AE SQL API from within the Worker binding — external REST API only, proxy via `/admin/ae-metrics`
+- DO NOT reuse broad agent token for `CF_AE_TOKEN` — scoped `Account Analytics > Read` only
+- DO NOT forget `X-Admin-Key` in CORS allowed headers — browser fetches will silently fail
+
+### Files changed
+
+- `worker/src/index.js` — `handleAdminAeMetrics` + `/admin/ae-metrics` router entry + `X-Admin-Key` in CORS headers
+- `frontend/admin/dashboard.html` — full dashboard build
+
+### Next: S23 — fix AE SQL doubles syntax + p95/p99 latency + error rate cards (Block 2)
+Attach: worker/src/index.js, frontend/admin/dashboard.html, CLAUDE.md, Share-Master-Context.md, SESSIONS.md
