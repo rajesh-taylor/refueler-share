@@ -142,7 +142,7 @@ activePage: ""
     background: var(--fg);
     border-radius: 2px;
     width: 0%;
-    transition: width 0.6s ease-out;
+    transition: width 0.3s linear;
   }
   .progress-label {
     font-family: var(--mono);
@@ -165,7 +165,7 @@ activePage: ""
     line-height: 1.6;
   }
   #qr-wrap { margin-top: 16px; display: flex; justify-content: center; }
-  #qr-wrap canvas, #qr-wrap img { border-radius: 4px; }
+  #qr-wrap canvas, #qr-wrap img { border-radius: 4px; width: 128px !important; height: 128px !important; }
 
   /* ── Passphrase unlock (download) ────────────────────────────────── */
   #unlock-screen {
@@ -243,17 +243,17 @@ activePage: ""
             <span class="slider"></span>
           </label>
         </div>
-        <div class="mt12 hidden" id="passphrase-field-wrap">
-          <div class="field">
-            <label for="passphrase-input">Passphrase</label>
-            <input type="password" id="passphrase-input" placeholder="Choose a strong passphrase" autocomplete="new-password" />
-          </div>
-          <div class="muted small mt4">Share this separately. We never store it.</div>
-        </div>
       </div>
-      <!-- Turnstile — visible managed widget, shown after file selected -->
+      <!-- Turnstile — visible managed widget, shown after file selected; sits above passphrase field -->
       <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
         <div id="cf-turnstile"></div>
+      </div>
+      <div class="hidden" id="passphrase-field-wrap">
+        <div class="field mt12">
+          <label for="passphrase-input">Passphrase</label>
+          <input type="password" id="passphrase-input" placeholder="Choose a strong passphrase" autocomplete="new-password" />
+        </div>
+        <div class="muted small mt4">Share this separately. We never store it.</div>
       </div>
       <div class="mt16">
         <button class="btn btn-primary btn-full" id="upload-btn" disabled>Encrypt &amp; upload</button>
@@ -280,7 +280,7 @@ activePage: ""
       </div>
       <div class="link-box" id="share-link-display"></div>
       <div class="flex-row mt12">
-        <button class="btn btn-primary" id="copy-btn">Copy link</button>
+        <button class="btn btn-primary" id="copy-btn"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.25"/><path d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>Copy link</button>
         <button class="btn btn-ghost" id="new-upload-btn">New upload</button>
       </div>
       <div id="qr-wrap"></div>
@@ -580,16 +580,18 @@ function showSharePanel(url, isProtected) {
   qrWrap.innerHTML = '';
   const isDark = document.documentElement.classList.contains('carbon-mode');
   new QRCode(qrWrap, {
-    text: url, width: 148, height: 148,
+    text: url, width: 256, height: 256,
     colorDark: isDark ? '#F5F0E8' : '#1A1A1A',
     colorLight: isDark ? '#1A1A1A' : '#F5F0E8',
+    correctLevel: QRCode.CorrectLevel.H,
   });
 }
 
+const COPY_ICON = '<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.25"/><path d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>';
 function copyShareLink() {
   navigator.clipboard.writeText(shareLinkDisplay.textContent).then(() => {
-    copyBtn.textContent = 'Copied ✓';
-    setTimeout(() => { copyBtn.textContent = 'Copy link'; }, 2000);
+    copyBtn.innerHTML = COPY_ICON + 'Copied ✓';
+    setTimeout(() => { copyBtn.innerHTML = COPY_ICON + 'Copy link'; }, 2000);
   });
 }
 
