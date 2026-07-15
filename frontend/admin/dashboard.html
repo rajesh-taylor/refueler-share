@@ -181,9 +181,16 @@
         <div class="card-note" id="mrr-note"></div>
       </div>
       <div class="card">
-        <div class="card-label">Paid subscribers</div>
+        <div class="card-label">Paid subscribers &amp; conversion</div>
         <div class="card-value blue" id="paid-total">—</div>
         <div class="tier-row" id="tier-breakdown"></div>
+        <div class="card-sub" id="conversion-rate-inline" style="margin-top:10px;"></div>
+        <div class="card-note" id="conversion-note"></div>
+      </div>
+      <div class="card deferred">
+        <div class="card-label">Lightning vs Stripe mix</div>
+        <div class="card-value amber">S59</div>
+        <div class="card-note">Requires Blink BOLT11 (B7)</div>
       </div>
       <div class="card">
         <div class="card-label">Churn rate MTD</div>
@@ -307,21 +314,6 @@
       <div class="snapshot-as-of" id="snap-as-of"></div>
     </div>
 
-    <!-- Business -->
-    <div class="section-label">Business Growth</div>
-    <div class="grid">
-      <div class="card deferred">
-        <div class="card-label">Lightning vs Stripe mix</div>
-        <div class="card-value amber">S59</div>
-        <div class="card-note">Requires Blink BOLT11 (B7)</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Free-to-paid conversion (snapshot)</div>
-        <div class="card-value" id="conversion-rate">—</div>
-        <div class="card-sub" id="conversion-sub"></div>
-        <div class="card-note" id="conversion-note"></div>
-      </div>
-    </div>
   </main>
 </div>
 
@@ -512,13 +504,25 @@
     setText('mrr', `£${d.mrr_gbp ?? 0}`);
     setText('mrr-note', d.mrr_note ?? '');
 
-    // Paid total + tier breakdown
+    // Paid total + tier breakdown (paid tiers only — free excluded)
     setText('paid-total', d.paid_total ?? 0);
     const tiers = d.subscribers_by_tier ?? {};
     document.getElementById('tier-breakdown').innerHTML =
-      Object.entries(tiers).map(([t, n]) =>
-        `<div class="tier-pill"><span>${t}</span>${n}</div>`
-      ).join('');
+      Object.entries(tiers)
+        .filter(([t]) => t !== 'free')
+        .map(([t, n]) => `<div class="tier-pill"><span>${t}</span>${n}</div>`)
+        .join('');
+
+    // Conversion rate — inline in paid subscribers card
+    const conv = d.free_to_paid_conversion_rate;
+    const issuances = d.free_to_paid_conversion_issuances_30d ?? 0;
+    if (conv !== null && conv !== undefined) {
+      setText('conversion-rate-inline',
+        `${conv}% conversion · ${issuances} issuances (30d)`);
+    } else {
+      setText('conversion-rate-inline', issuances > 0 ? `${issuances} issuances (30d)` : 'conversion n/a');
+    }
+    setText('conversion-note', d.free_to_paid_conversion_note ?? '');
 
     // Churn
     const churn = d.churn_rate_mtd_pct ?? 0;
@@ -528,23 +532,9 @@
     setText('churn-sub', `${d.cancelled_mtd ?? 0} cancelled MTD`);
     setText('churn-note', d.churn_note ?? '');
 
-    // Free-to-paid conversion rate
-    const convEl = document.getElementById('conversion-rate');
-    if (convEl) {
-      const conv = d.free_to_paid_conversion_rate;
-      if (conv !== null && conv !== undefined) {
-        convEl.textContent = `${conv}%`;
-        convEl.className = 'card-value ' + (conv >= 5 ? 'green' : conv >= 1 ? 'amber' : 'red');
-        setText('conversion-sub', `${d.free_to_paid_conversion_issuances_30d ?? 0} issuances (30d) · ${d.paid_total ?? 0} paid`);
-      } else {
-        convEl.textContent = 'n/a';
-        convEl.className = 'card-value amber';
-      }
-      setText('conversion-note', d.free_to_paid_conversion_note ?? '');
-    }
-
     // Credential uniqueness
     const rate = d.credential_uniqueness_rate;
+
     const rateEl = document.getElementById('uniqueness-rate');
     if (rate === null || rate === undefined) {
       rateEl.textContent = 'n/a';
