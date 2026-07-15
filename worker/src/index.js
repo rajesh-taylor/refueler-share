@@ -144,6 +144,10 @@ export default {
         return timed('admin_ae_metrics', () => handleAdminAeMetrics(request, env).then(r => addCors(r, request)));
       }
 
+      if (request.method === 'GET' && path === '/admin/snapshot') {
+        return timed('admin_snapshot', () => handleAdminSnapshot(request, env).then(r => addCors(r, request)));
+      }
+
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
       return new Response('Not found', { status: 404 });
 
@@ -610,7 +614,12 @@ async function handlePortal(request, env) {
 async function handleAdminMetrics(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const data = await fetchMetricsData(env);
+  if (data._error) return err(data._status ?? 500, data._error);
+  return json(data);
+}
 
+async function fetchMetricsData(env) {
   const TIER_MRR = { creative: 12, max: 24 };
 
   try {
@@ -686,7 +695,7 @@ async function handleAdminMetrics(request, env) {
       credentialUniquenessNote = 'Supabase count query failed — both spent_tokens and double_spend_attempts counts required.';
     }
 
-    return json({
+    return {
       as_of: new Date().toISOString(),
 
       // ── S19: Subscription / revenue metrics ──────────────────────────────
@@ -740,11 +749,11 @@ async function handleAdminMetrics(request, env) {
       //   WHERE blob1 = 'upload' AND doubles[2] = 0;
       zk_verification_rate: null,
       zk_verification_note: "R2 manifests not enumerable in aggregate from Worker. Add has_passphrase as blob4 to upload logEvent call (B4 scope). AE SQL once instrumented: countIf(blob4='true')/count() WHERE blob1='upload' AND doubles[2]=0.",
-    });
+    };
 
   } catch (e) {
     console.error('Metrics error:', e);
-    return err(500, 'Metrics query failed');
+    return { _error: 'Metrics query failed', _status: 500 };
   }
 }
 
@@ -762,14 +771,17 @@ async function handleAdminMetrics(request, env) {
 async function handleAdminAeMetrics(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  return json(await fetchAeMetricsData(env));
+}
 
+async function fetchAeMetricsData(env) {
   if (!env.CF_ACCOUNT_ID || !env.CF_AE_TOKEN) {
-    return json({
+    return {
       error: 'CF_ACCOUNT_ID or CF_AE_TOKEN not set',
       credential_issuances_by_tier: null,
       r2_bytes_uploaded: null,
       r2_chunk_retrieval_success_rate: null,
-    });
+    };
   }
 
   const AE_URL = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`;
@@ -938,7 +950,7 @@ async function handleAdminAeMetrics(request, env) {
     errorRateNote = `AE query failed: ${errorRateResult.reason?.message}`;
   }
 
-  return json({
+  return {
     as_of: new Date().toISOString(),
     window_notes: {
       credential_issuances: 'Rolling 30 days',
@@ -960,7 +972,51 @@ async function handleAdminAeMetrics(request, env) {
     latency_note: latencyNote,
     error_rate_by_endpoint: errorRateByEndpoint,
     error_rate_note: errorRateNote,
-  });
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin snapshot — GET /admin/snapshot
+// X-Admin-Key protected.
+// Single authenticated JSON blob for investor / partner sharing.
+// Combines 6 key metrics from fetchMetricsData + fetchAeMetricsData — no new queries.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAdminSnapshot(request, env) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+
+  const [metrics, ae] = await Promise.all([
+    fetchMetricsData(env),
+    fetchAeMetricsData(env),
+  ]);
+
+  if (metrics._error) return err(metrics._status ?? 500, metrics._error);
+
+  // ── Aggregate worker error rate across all endpoints ──────────────────────
+  let workerErrorRate = null;
+  const errs = ae.error_rate_by_endpoint;
+  if (errs && !ae.error_rate_note) {
+    let totalErrors = 0, totalReqs = 0;
+    for (const ep of Object.values(errs)) {
+      totalErrors += ep.error_count;
+      totalReqs   += ep.total_count;
+    }
+    workerErrorRate = totalReqs > 0
+      ? parseFloat((totalErrors / totalReqs).toFixed(4))
+      : 0;
+  }
+
+  const snapshot = {
+    generated_at:             new Date().toISOString(),
+    mrr_gbp:                  metrics.mrr_gbp ?? null,
+    paid_subscribers:         metrics.paid_total ?? null,
+    credential_uniqueness_rate: metrics.credential_uniqueness_rate ?? null,
+    p95_upload_latency_ms:    ae.latency_by_endpoint?.upload?.p95_ms ?? null,
+    p95_download_latency_ms:  ae.latency_by_endpoint?.download?.p95_ms ?? null,
+    worker_error_rate:        workerErrorRate,
+  };
+
+  return json(snapshot);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -122,6 +122,33 @@
     border: 2px solid var(--carbon-border); border-top-color: var(--accent);
     border-radius: 50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Snapshot card ── */
+  .snapshot-card {
+    background: var(--carbon-2); border: 1px solid var(--carbon-border);
+    border-radius: 8px; padding: 20px;
+  }
+  .snapshot-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .snapshot-header .card-label { flex: 1; margin: 0; font-size: 11px; }
+  #snapshot-copy-btn {
+    background: var(--carbon-3); border: 1px solid var(--carbon-border);
+    color: var(--paper-dim); padding: 5px 12px; border-radius: 5px;
+    cursor: pointer; font-size: 11px; font-family: var(--mono);
+    display: flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s;
+  }
+  #snapshot-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  #snapshot-copy-btn.copied { color: var(--green); border-color: var(--green); }
+  #snapshot-copy-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .snapshot-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+  .snapshot-metric { display: flex; flex-direction: column; gap: 3px; }
+  .snapshot-metric .sm-label { font-size: 10px; color: var(--paper-dim); letter-spacing: .04em; }
+  .snapshot-metric .sm-value { font-size: 18px; font-weight: 700; font-family: var(--mono); color: var(--paper); }
+  .snapshot-metric .sm-value.green { color: var(--green); }
+  .snapshot-metric .sm-value.amber { color: var(--amber); }
+  .snapshot-as-of { font-size: 10px; color: #555; margin-top: 14px; font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -238,6 +265,48 @@
       </div>
     </div>
 
+    <!-- Investor Snapshot -->
+    <div class="section-label">Investor Snapshot</div>
+    <div class="snapshot-card">
+      <div class="snapshot-header">
+        <div class="card-label">6-metric summary · live</div>
+        <button id="snapshot-copy-btn" onclick="copySnapshot()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+            <path d="M3 11V3a1 1 0 0 1 1-1h8"/>
+          </svg>
+          Copy JSON
+        </button>
+      </div>
+      <div class="snapshot-grid">
+        <div class="snapshot-metric">
+          <span class="sm-label">MRR (GBP floor)</span>
+          <span class="sm-value" id="snap-mrr">—</span>
+        </div>
+        <div class="snapshot-metric">
+          <span class="sm-label">Paid subscribers</span>
+          <span class="sm-value" id="snap-paid">—</span>
+        </div>
+        <div class="snapshot-metric">
+          <span class="sm-label">Credential uniqueness</span>
+          <span class="sm-value" id="snap-uniqueness">—</span>
+        </div>
+        <div class="snapshot-metric">
+          <span class="sm-label">p95 upload latency</span>
+          <span class="sm-value" id="snap-upload-lat">—</span>
+        </div>
+        <div class="snapshot-metric">
+          <span class="sm-label">p95 download latency</span>
+          <span class="sm-value" id="snap-download-lat">—</span>
+        </div>
+        <div class="snapshot-metric">
+          <span class="sm-label">Worker error rate</span>
+          <span class="sm-value" id="snap-error-rate">—</span>
+        </div>
+      </div>
+      <div class="snapshot-as-of" id="snap-as-of"></div>
+    </div>
+
     <!-- Business -->
     <div class="section-label">Business Growth</div>
     <div class="grid">
@@ -311,20 +380,95 @@
   });
 
   // ── Refresh ───────────────────────────────────────────────────────────────
+  let lastSnapshot = null;
+
   async function refreshAll() {
     clearInterval(refreshTimer);
     countdown = 60;
     updateCountdown();
 
-    const [metrics, aeMetrics] = await Promise.all([
+    const [metrics, aeMetrics, snapshot] = await Promise.all([
       fetchMetrics(),
       fetchAeMetrics(),
+      fetchSnapshot(),
     ]);
 
-    if (metrics) renderMetrics(metrics);
+    if (metrics)   renderMetrics(metrics);
     if (aeMetrics) renderAeMetrics(aeMetrics);
+    if (snapshot)  renderSnapshot(snapshot);
 
     startTimer();
+  }
+
+  async function fetchSnapshot() {
+    try {
+      const res = await fetch(`${WORKER}/admin/snapshot`, {
+        headers: { 'X-Admin-Key': adminKey }
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        showError(`/admin/snapshot ${res.status}: ${body.error ?? 'unknown'}`);
+        return null;
+      }
+      const data = await res.json();
+      lastSnapshot = data;
+      return data;
+    } catch (e) {
+      showError(`/admin/snapshot fetch failed: ${e.message}`);
+      return null;
+    }
+  }
+
+  function renderSnapshot(d) {
+    lastSnapshot = d;
+
+    const fmtPct  = v => v === null || v === undefined ? 'n/a' : `${(v * 100).toFixed(2)}%`;
+    const fmtMs   = v => v === null || v === undefined ? 'n/a' : `${v} ms`;
+    const fmtGbp  = v => v === null || v === undefined ? 'n/a' : `£${v}`;
+    const colorPct = (el, v, goodThresh, warnThresh) => {
+      el.className = 'sm-value ' + (v === null ? '' : v >= goodThresh ? 'green' : v >= warnThresh ? 'amber' : '');
+    };
+    const colorMs = (el, v) => {
+      el.className = 'sm-value ' + (v === null ? '' : v < 200 ? 'green' : v < 500 ? 'amber' : '');
+    };
+
+    setText('snap-mrr',          fmtGbp(d.mrr_gbp));
+    setText('snap-paid',         d.paid_subscribers ?? 'n/a');
+    setText('snap-uniqueness',   fmtPct(d.credential_uniqueness_rate));
+    setText('snap-upload-lat',   fmtMs(d.p95_upload_latency_ms));
+    setText('snap-download-lat', fmtMs(d.p95_download_latency_ms));
+    setText('snap-error-rate',   fmtPct(d.worker_error_rate));
+    setText('snap-as-of',        d.generated_at ? `generated ${new Date(d.generated_at).toUTCString()}` : '');
+
+    const uEl = document.getElementById('snap-uniqueness');
+    if (uEl) colorPct(uEl, d.credential_uniqueness_rate, 0.999, 0.99);
+
+    const ulEl = document.getElementById('snap-upload-lat');
+    if (ulEl) colorMs(ulEl, d.p95_upload_latency_ms);
+
+    const dlEl = document.getElementById('snap-download-lat');
+    if (dlEl) colorMs(dlEl, d.p95_download_latency_ms);
+
+    const erEl = document.getElementById('snap-error-rate');
+    if (erEl) {
+      const er = d.worker_error_rate;
+      erEl.className = 'sm-value ' + (er === null ? '' : er === 0 ? 'green' : er < 0.01 ? 'amber' : '');
+    }
+  }
+
+  async function copySnapshot() {
+    const btn = document.getElementById('snapshot-copy-btn');
+    const payload = lastSnapshot ?? {};
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      btn.classList.add('copied');
+      const label = btn.querySelector('span') ?? btn;
+      const prev = btn.innerHTML;
+      btn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,8 6,12 14,4"/></svg> Copied`;
+      setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('copied'); }, 2000);
+    } catch {
+      showError('Clipboard write failed — copy from console: ' + JSON.stringify(payload));
+    }
   }
 
   async function fetchMetrics() {
