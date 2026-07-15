@@ -1,6 +1,6 @@
 # Share-Master-Context — refueler-share
-> **Version:** 1.8 | **Last updated:** Session 22 · 15 July 2026
-> Load this file alongside `CLAUDE.md` (refueler-share) and `SESSIONS.md` for every share session.
+> **Version:** 2.0 | **Last updated:** Session 24 · 15 July 2026
+> Load this file alongside `CLAUDE.md` (refueler-share) and `share-sessions.md` for every share session.
 
 ---
 
@@ -142,10 +142,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ---
 
-## Current state (Session 22 complete)
+## Current state (Session 24 complete)
 
 **Block 1 — SSG Migration: complete.**
-**Block 2 — Instrumentation: S18–S22 complete, S23–S26 remaining.**
+**Block 2 — Instrumentation: S18–S24 complete, S25–S26 remaining.**
 
 - Eleventy 3.x scaffold live. `src/` → `frontend/` build via `npm run build`.
 - KV-backed status system + maintenance banner + status page all live.
@@ -154,23 +154,14 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Analytics Engine instrumentation live (`share_events` dataset, `logEvent` + `timed` wrapper, all endpoints covered).
 - Supabase RLS policies hardened. `subscribers.cancelled_at` live. Churn timestamp recorded on deletion.
 - `GET /admin/metrics` live — MRR, subscribers by tier, churn rate MTD, credential uniqueness rate.
-- `GET /admin/ae-metrics` live — AE SQL proxied server-side, credential issuances by tier (30d), R2 bytes uploaded (90d), chunk retrieval success rate (24h).
-- Dev dashboard live at `share.refueler.io/admin/dashboard.html` — all Supabase metrics rendering, AE issuances card working. R2 bytes + chunk retrieval returning AE SQL error 422 (`doubles[N]` array syntax) — fix in S23.
-- `X-Admin-Key` added to CORS `Access-Control-Allow-Headers` (was blocking dashboard fetch).
-- Standing pattern confirmed: session-close commit must always include `&& git push origin main`.
+- `GET /admin/ae-metrics` live — AE SQL proxied server-side, credential issuances by tier (30d), R2 bytes uploaded (90d), chunk retrieval success rate (24h), p95/p99 latency per endpoint, error rate per endpoint.
+- `GET /admin/snapshot` live — 6-metric authenticated JSON blob: MRR, paid subscribers, credential uniqueness rate, p95 upload latency, p95 download latency, worker error rate.
+- Dev dashboard live at `share.refueler.io/admin/dashboard.html` — all sections rendering. p95/p99 latency cards showing AE SQL error (quantilesTDigest syntax) — fix in S25.
+- `fetchMetricsData` and `fetchAeMetricsData` extracted as inner functions — reused by snapshot handler with no extra queries.
 
 **Latent (deferred):** `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in B5 design session.
 
-**Dashboard snag list (B5 design session):**
-- Fix AE SQL `doubles[N]` array syntax error — S23 (not design)
-- Add p99 latency card alongside p95
-- Clickable cards → drill-down metric page (date range picker, line graph top 50%, table bottom 50%)
-- Eliminate right-side dead space on wide screens
-- Increase sub-text size (10px → 13px minimum)
-- Mobile/tablet responsive pass — single column below 768px
-- Deferred placeholder cards should collapse or be visually separated
-
-**Next: S23 — fix AE SQL doubles syntax + p95/p99 latency + error rate cards (Block 2).**
+**Next: S25 — free-to-paid conversion rate + 13-metric smoke test (Block 2).**
 
 ---
 
@@ -254,7 +245,7 @@ Yearly = 10 months price (2 months free).
 refueler-share/
   README.md
   CLAUDE.md
-  SESSIONS.md
+  share-sessions.md
   Share-Master-Context.md   ← this file (v1.5)
   LICENSE                   ← Apache 2.0
   .eleventy.js              ← input: src, output: frontend, passthrough: blake3/

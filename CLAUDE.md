@@ -1,6 +1,6 @@
 # CLAUDE.md — refueler-share
 > **Version:** 1.0 | **Initialised:** CC-64 · 8 July 2026
-> Load alongside `SESSIONS.md` at the start of every session on this repo.
+> Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Blink, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
 ---
@@ -49,12 +49,18 @@ Do not make integrity/audit claims in marketing or editorial copy until resolved
 
 ## Session queue
 
-## Session queue
-
-See `SESSIONS.md` for log. Full S19–S120 roadmap lives in `Share-Master-Context.md` §Roadmap.
+See `share-sessions.md` for log. Full S19–S120 roadmap lives in `Share-Master-Context.md` §Roadmap.
 Core build: S19–S100. Buffer: S101–S120. Planning sessions are uncounted.
 Integrity/audit marketing claims remain blocked until S42 (BLAKE3 Worker WASM verified).
 
 ---
+
+## Deferred experiments
+
+- **refueler-ecash-lab** — separate repo for NUT-11 Mode 2 and ML-KEM key wrapping
+  experimentation before wiring into production. Flagged S20. Scope decision at B8 (S69)
+  and B10 (S83). Do not start until NUT-11 Mode 2 design is locked.
+
+  ---
 
 *"Nothing stops this train."*
