@@ -614,8 +614,39 @@ async function handlePortal(request, env) {
 async function handleAdminMetrics(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
-  const data = await fetchMetricsData(env);
+  // Fetch AE metrics in parallel so conversion rate can be computed server-side.
+  const [data, aeData] = await Promise.all([
+    fetchMetricsData(env),
+    fetchAeMetricsData(env),
+  ]);
   if (data._error) return err(data._status ?? 500, data._error);
+
+  // ── Metric 11: Free-to-paid conversion rate ────────────────────────────────
+  // paid_total (active paid subscribers now) / total credential issuances last 30d.
+  // Numerator: Supabase subscribers table. Denominator: AE SQL credential_issue events.
+  // Note: issuances are rolling 30d; paid_total is a snapshot — not a cohort rate.
+  // True cohort conversion requires joining subscriber created_at to issuance timestamps,
+  // which needs either Supabase issuance logging or AE→Supabase ETL (B9+ scope).
+  const issByTier = aeData?.credential_issuances_by_tier;
+  if (issByTier && !aeData?.credential_issuances_note) {
+    const totalIssuances = (issByTier.free ?? 0) + (issByTier.creative ?? 0) + (issByTier.max ?? 0);
+    data.free_to_paid_conversion_rate = totalIssuances > 0
+      ? parseFloat((data.paid_total / totalIssuances * 100).toFixed(2))
+      : null;
+    data.free_to_paid_conversion_issuances_30d = totalIssuances;
+    data.free_to_paid_conversion_note =
+      'Snapshot rate: active paid subscribers now ÷ total credential issuances last 30d. ' +
+      'Under-counts if issuances span >30d before conversion. ' +
+      'True cohort rate deferred to B9 (requires issuance→subscriber ETL).';
+  } else {
+    data.free_to_paid_conversion_rate = null;
+    data.free_to_paid_conversion_issuances_30d = null;
+    data.free_to_paid_conversion_note =
+      aeData?.credential_issuances_note
+        ? `AE issuances unavailable: ${aeData.credential_issuances_note}`
+        : 'AE credential_issuances_by_tier not available.';
+  }
+
   return json(data);
 }
 

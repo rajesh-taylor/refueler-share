@@ -315,10 +315,11 @@
         <div class="card-value amber">S59</div>
         <div class="card-note">Requires Blink BOLT11 (B7)</div>
       </div>
-      <div class="card deferred">
-        <div class="card-label">Free-to-paid conversion</div>
-        <div class="card-value amber">S22</div>
-        <div class="card-note">Issuances vs active subscribers by cohort</div>
+      <div class="card">
+        <div class="card-label">Free-to-paid conversion (snapshot)</div>
+        <div class="card-value" id="conversion-rate">—</div>
+        <div class="card-sub" id="conversion-sub"></div>
+        <div class="card-note" id="conversion-note"></div>
       </div>
     </div>
   </main>
@@ -527,6 +528,21 @@
     setText('churn-sub', `${d.cancelled_mtd ?? 0} cancelled MTD`);
     setText('churn-note', d.churn_note ?? '');
 
+    // Free-to-paid conversion rate
+    const convEl = document.getElementById('conversion-rate');
+    if (convEl) {
+      const conv = d.free_to_paid_conversion_rate;
+      if (conv !== null && conv !== undefined) {
+        convEl.textContent = `${conv}%`;
+        convEl.className = 'card-value ' + (conv >= 5 ? 'green' : conv >= 1 ? 'amber' : 'red');
+        setText('conversion-sub', `${d.free_to_paid_conversion_issuances_30d ?? 0} issuances (30d) · ${d.paid_total ?? 0} paid`);
+      } else {
+        convEl.textContent = 'n/a';
+        convEl.className = 'card-value amber';
+      }
+      setText('conversion-note', d.free_to_paid_conversion_note ?? '');
+    }
+
     // Credential uniqueness
     const rate = d.credential_uniqueness_rate;
     const rateEl = document.getElementById('uniqueness-rate');
@@ -680,6 +696,53 @@
   }
 
   document.getElementById('refresh-btn').addEventListener('click', refreshAll);
+
+  // ── 13-Metric smoke test (S25) ─────────────────────────────────────────────
+  // Run in browser console: smokeTest()
+  // Checks each metric returns a value (non-null) or has a documented null reason.
+  window.smokeTest = async function() {
+    console.group('S25 · 13-metric smoke test');
+    const [m, ae] = await Promise.all([
+      fetch(`${WORKER}/admin/metrics`,    { headers: { 'X-Admin-Key': adminKey } }).then(r => r.json()),
+      fetch(`${WORKER}/admin/ae-metrics`, { headers: { 'X-Admin-Key': adminKey } }).then(r => r.json()),
+    ]);
+    const checks = [
+      // LAYER 1 — Cryptographic Infrastructure
+      { id: 1,  label: 'BLAKE3 throughput (ZK rate proxy)',     val: m.zk_verification_rate,                          note: m.zk_verification_note,                    deferred: 'B4' },
+      { id: 2,  label: 'Token melt / double-spend latency',     val: m.credential_uniqueness_rate,                    note: m.credential_uniqueness_note                              },
+      { id: 3,  label: 'Zero-knowledge verification rate',      val: m.zk_verification_rate,                          note: m.zk_verification_note,                    deferred: 'B4' },
+      { id: 4,  label: 'Credential uniqueness rate',            val: m.credential_uniqueness_rate,                    note: m.credential_uniqueness_note                              },
+      // LAYER 2 — Storage Economics
+      { id: 5,  label: 'R2 bytes uploaded (90d)',               val: ae.r2_bytes_uploaded,                            note: ae.r2_bytes_note                                          },
+      { id: 6,  label: 'R2 chunk retrieval success rate (24h)', val: ae.r2_chunk_retrieval_success_rate,              note: ae.r2_chunk_note                                          },
+      // LAYER 3 — Operational Resilience
+      { id: 7,  label: 'Worker p95 latency — upload',          val: ae.latency_by_endpoint?.upload?.p95_ms,          note: ae.latency_note                                           },
+      { id: 8,  label: 'Worker p99 latency — download',        val: ae.latency_by_endpoint?.download?.p99_ms,        note: ae.latency_note                                           },
+      { id: 9,  label: 'Worker error rate (24h)',               val: (() => { const errs = ae.error_rate_by_endpoint; if (!errs) return null; let e=0,t=0; for (const ep of Object.values(errs)){e+=ep.error_count;t+=ep.total_count;} return t>0?e/t:0; })(), note: ae.error_rate_note },
+      // LAYER 4 — Business Growth
+      { id: 10, label: 'Lightning vs Stripe mix',               val: null,                                            note: 'Blink BOLT11 deferred (B7)',               deferred: 'B7' },
+      { id: 11, label: 'Free-to-paid conversion rate',          val: m.free_to_paid_conversion_rate,                  note: m.free_to_paid_conversion_note                            },
+      { id: 12, label: 'MRR (GBP floor)',                       val: m.mrr_gbp,                                       note: m.mrr_note                                                },
+      { id: 13, label: 'Churn rate MTD',                        val: m.churn_rate_mtd_pct,                            note: m.churn_note                                              },
+    ];
+    let pass = 0, deferred = 0, fail = 0;
+    for (const c of checks) {
+      const hasValue = c.val !== null && c.val !== undefined;
+      if (c.deferred) {
+        console.log(`⏸  [${c.id.toString().padStart(2,' ')}] ${c.label} — deferred (${c.deferred})`);
+        deferred++;
+      } else if (hasValue) {
+        console.log(`✅ [${c.id.toString().padStart(2,' ')}] ${c.label} → ${c.val}`);
+        pass++;
+      } else {
+        console.warn(`❌ [${c.id.toString().padStart(2,' ')}] ${c.label} — null · ${c.note ?? 'no note'}`);
+        fail++;
+      }
+    }
+    console.log(`\nResult: ${pass} pass · ${deferred} deferred · ${fail} fail`);
+    console.groupEnd();
+    return { pass, deferred, fail, raw: { metrics: m, ae } };
+  };
 </script>
 </body>
 </html>

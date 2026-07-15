@@ -1,0 +1,2 @@
+cd worker && npx wrangler deploy && cd .. && git add frontend/admin/dashboard.html worker/src/index.js && git commit -m "S24: /admin/snapshot endpoint + investor snapshot dashboard card" && git push origin main
+curl -s -H "X-Admin-Key: YOUR_KEY" https://refueler-share.rt-fc4.workers.dev/admin/snapshot | jq .
