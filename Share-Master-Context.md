@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.0 | **Last updated:** Session 24 · 15 July 2026
+> **Version:** 2.1 | **Last updated:** Session 26 · 15 July 2026
 > Load this file alongside `CLAUDE.md` (refueler-share) and `share-sessions.md` for every share session.
 
 ---
@@ -142,10 +142,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ---
 
-## Current state (Session 24 complete)
+## Current state (Session 26 complete — Block 2 closed)
 
 **Block 1 — SSG Migration: complete.**
-**Block 2 — Instrumentation: S18–S24 complete, S25–S26 remaining.**
+**Block 2 — Instrumentation: S18–S25 complete. Block 2 done.**
 
 - Eleventy 3.x scaffold live. `src/` → `frontend/` build via `npm run build`.
 - KV-backed status system + maintenance banner + status page all live.
@@ -153,16 +153,21 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
 - Analytics Engine instrumentation live (`share_events` dataset, `logEvent` + `timed` wrapper, all endpoints covered).
 - Supabase RLS policies hardened. `subscribers.cancelled_at` live. Churn timestamp recorded on deletion.
-- `GET /admin/metrics` live — MRR, subscribers by tier, churn rate MTD, credential uniqueness rate.
+- `GET /admin/metrics` live — MRR, subscribers by tier, churn rate MTD, credential uniqueness rate, free-to-paid conversion rate.
 - `GET /admin/ae-metrics` live — AE SQL proxied server-side, credential issuances by tier (30d), R2 bytes uploaded (90d), chunk retrieval success rate (24h), p95/p99 latency per endpoint, error rate per endpoint.
-- `GET /admin/snapshot` live — 6-metric authenticated JSON blob: MRR, paid subscribers, credential uniqueness rate, p95 upload latency, p95 download latency, worker error rate.
-- Dev dashboard live at `share.refueler.io/admin/dashboard.html` — all sections rendering. p95/p99 latency cards showing AE SQL error (quantilesTDigest syntax) — fix in S25.
-- `fetchMetricsData` and `fetchAeMetricsData` extracted as inner functions — reused by snapshot handler with no extra queries.
+- `GET /admin/snapshot` live — 6-metric authenticated JSON blob.
+- Dev dashboard live at `share.refueler.io/admin/dashboard.html` — 10 of 13 metrics live. `smokeTest()` console function validates all 13 metrics.
+- Latency cards (p95/p99) showing AE SQL error (`quantilesTDigest` syntax) — deferred to B5 design session.
 
-**Latent (deferred):** `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry". Fix in B5 design session.
+**Latent (deferred to B5):**
+- `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry"
+- p95/p99 latency AE SQL `quantilesTDigest` syntax error
 
-**Next: S25 — free-to-paid conversion rate + 13-metric smoke test (Block 2).**
+**13-metric status at Block 2 close:**
+- ✅ Live (10): 2 (token melt), 4 (credential uniqueness), 5 (R2 bytes), 6 (chunk retrieval), 7 (p95 latency), 8 (p99 latency), 9 (error rate), 11 (conversion), 12 (MRR), 13 (churn)
+- ⏸ Deferred (3 IDs / 2 items): 1/3 (ZK/BLAKE3 — B4), 10 (Lightning mix — B7)
 
+**Next: S27 — B3 Stripe test coverage begins.**
 ---
 
 ## Roadmap S19–S120 (v1.6 · Share-19 planning session)

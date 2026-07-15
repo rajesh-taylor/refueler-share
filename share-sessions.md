@@ -184,6 +184,48 @@
 
 **Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`
 
+
+## Session 25 — Free-to-paid conversion rate + dashboard restructure (15 July 2026)
+
+**Commits:** S25 `fc6cba9` (worker + dashboard) · S25b `99afaaa` (dashboard restructure)
+
+---
+
+## Session 26 — Block 2 close (15 July 2026)
+
+**Type:** Admin/handoff (no code changes)
+
+**Completed:**
+- Share-Master-Context.md updated to v2.1 (current state, 13-metric status, deferred latent items)
+- share-sessions.md S26 entry added
+- B3 scope confirmed (S27–S33 — Stripe test coverage)
+- S27 opening prompt written
+
+**Block 2 final state:** 10 of 13 metrics live. 3 metric IDs deferred (2 items: ZK/BLAKE3 → B4, Lightning mix → B7). No regressions.
+
+**Do not retry:** nothing new this session.
+
+---
+
+*Next: **S27 — B3 Stripe test coverage begins***
+*Attach: worker/src/index.js, worker/wrangler.toml, CLAUDE.md, Share-Master-Context.md, share-sessions.md*
+
+**Completed:**
+- `handleAdminMetrics` now calls `fetchAeMetricsData(env)` in parallel (same pattern as snapshot — no extra round-trip cost vs prior single-query path)
+- `free_to_paid_conversion_rate` added to `/admin/metrics` response: `paid_total / total_credential_issuances_30d × 100`. Null-safe — falls back with AE error as note if AE query fails.
+- `free_to_paid_conversion_issuances_30d` (denominator) and honest `_note` (snapshot rate caveat, true cohort deferred to B9) also returned.
+- Dashboard: "Business Growth" section removed. Lightning vs Stripe mix deferred card moved into Revenue & Subscribers. Free-to-paid conversion merged into Paid subscribers card — free tier pill removed, conversion rate + issuance count rendered as sub-line below creative/max pills.
+- `smokeTest()` console function added to dashboard — logs all 13 metrics with ✅/⏸/❌ and pass/deferred/fail tally.
+
+**13-metric status at Block 2 close:**
+- ✅ Live: 2 (token melt), 4 (credential uniqueness), 5 (R2 bytes), 6 (chunk retrieval), 7 (p95 latency), 8 (p99 latency), 9 (error rate), 11 (conversion), 12 (MRR), 13 (churn) — 10 metrics
+- ⏸ Deferred: 1/3 (ZK/BLAKE3 — B4), 10 (Lightning mix — B7) — 2 metrics (mapped to 3 metric IDs)
+
+**Do not retry:**
+- DO NOT call `handleAdminMetrics`/`handleAdminAeMetrics` from conversion path — use inner data functions + parallel fetch
+- DO NOT show free tier in paid subscribers pill breakdown — filter `t !== 'free'`
+
+**Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`
 ---
 
 *Next: **S25 — free-to-paid conversion rate + 13-metric smoke test (Block 2)***
