@@ -216,22 +216,25 @@
     </div>
 
     <!-- Operational -->
-    <div class="section-label">Operational (Worker latency — via AE · S22)</div>
+    <div class="section-label">Operational (Worker latency — AE SQL · 24h rolling)</div>
     <div class="grid">
-      <div class="card deferred">
-        <div class="card-label">p95 latency /upload</div>
-        <div class="card-value amber">S22</div>
-        <div class="card-note">AE SQL API integration in progress</div>
+      <div class="card">
+        <div class="card-label">p95 / p99 latency · /upload</div>
+        <div class="card-value" id="ae-p95-upload">—</div>
+        <div class="card-sub" id="ae-p99-upload-sub"></div>
+        <div class="card-note" id="ae-latency-upload-note"></div>
       </div>
-      <div class="card deferred">
-        <div class="card-label">p95 latency /download</div>
-        <div class="card-value amber">S22</div>
-        <div class="card-note">AE SQL API integration in progress</div>
+      <div class="card">
+        <div class="card-label">p95 / p99 latency · /download</div>
+        <div class="card-value" id="ae-p95-download">—</div>
+        <div class="card-sub" id="ae-p99-download-sub"></div>
+        <div class="card-note" id="ae-latency-download-note"></div>
       </div>
-      <div class="card deferred">
-        <div class="card-label">Worker error rate</div>
-        <div class="card-value amber">S22</div>
-        <div class="card-note">AE SQL API integration in progress</div>
+      <div class="card">
+        <div class="card-label">Worker error rate · all endpoints</div>
+        <div class="card-value" id="ae-error-rate">—</div>
+        <div class="card-sub" id="ae-error-rate-sub"></div>
+        <div class="card-note" id="ae-error-rate-note"></div>
       </div>
     </div>
 
@@ -445,6 +448,55 @@
       retEl.className = 'card-value amber';
     }
     setText('ae-retrieval-note', d.r2_chunk_note ?? d.window_notes?.r2_chunk_retrieval_success_rate ?? '');
+
+    // p95/p99 latency per endpoint
+    const lat = d.latency_by_endpoint;
+    if (lat && !d.latency_note) {
+      const renderLat = (endpointKey, p95Id, p99SubId, noteId) => {
+        const e = lat[endpointKey];
+        const p95El = document.getElementById(p95Id);
+        if (e) {
+          p95El.textContent = `${e.p95_ms} ms`;
+          p95El.className = 'card-value ' + (e.p95_ms < 200 ? 'green' : e.p95_ms < 500 ? 'amber' : 'red');
+          setText(p99SubId, `p99: ${e.p99_ms} ms · ${e.requests.toLocaleString()} req`);
+        } else {
+          p95El.textContent = 'n/a';
+          p95El.className = 'card-value amber';
+          setText(noteId, 'No events for this endpoint in last 24h');
+        }
+      };
+      renderLat('upload', 'ae-p95-upload', 'ae-p99-upload-sub', 'ae-latency-upload-note');
+      renderLat('download', 'ae-p95-download', 'ae-p99-download-sub', 'ae-latency-download-note');
+    } else {
+      ['ae-p95-upload', 'ae-p95-download'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = d.latency_note ? 'n/a' : '—'; el.className = 'card-value amber'; }
+      });
+      if (d.latency_note) {
+        setText('ae-latency-upload-note', d.latency_note);
+        setText('ae-latency-download-note', d.latency_note);
+      }
+    }
+
+    // Worker error rate (aggregate across all endpoints)
+    const errs = d.error_rate_by_endpoint;
+    const errEl = document.getElementById('ae-error-rate');
+    if (errs && !d.error_rate_note) {
+      let totalErrors = 0, totalReqs = 0;
+      for (const ep of Object.values(errs)) {
+        totalErrors += ep.error_count;
+        totalReqs += ep.total_count;
+      }
+      const aggRate = totalReqs > 0 ? totalErrors / totalReqs : 0;
+      errEl.textContent = `${(aggRate * 100).toFixed(2)}%`;
+      errEl.className = 'card-value ' + (aggRate === 0 ? 'green' : aggRate < 0.01 ? 'amber' : 'red');
+      setText('ae-error-rate-sub', `${totalErrors} errors · ${totalReqs.toLocaleString()} total`);
+      setText('ae-error-rate-note', d.window_notes?.error_rate ?? '');
+    } else {
+      errEl.textContent = d.error_rate_note ? 'n/a' : '—';
+      errEl.className = 'card-value amber';
+      if (d.error_rate_note) setText('ae-error-rate-note', d.error_rate_note);
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

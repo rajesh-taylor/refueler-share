@@ -790,8 +790,14 @@ async function handleAdminAeMetrics(request, env) {
     return res.json();
   }
 
-  // Run all three queries in parallel
-  const [issuanceResult, uploadResult, downloadResult] = await Promise.allSettled([
+  // Run all five queries in parallel.
+  //
+  // AE SQL column naming (NOT array syntax — arrays return 422):
+  //   blobs:   blob1=endpoint, blob2=tier, blob3=error_message
+  //   doubles: double1=latency_ms, double2=status_code, double3=chunk_index,
+  //            double4=total_chunks, double5=total_bytes
+  //   indexes: index1=endpoint
+  const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult] = await Promise.allSettled([
 
     // Metric: credential issuances by tier (rolling 30 days)
     aeQuery(`
@@ -803,25 +809,53 @@ async function handleAdminAeMetrics(request, env) {
     `),
 
     // Metric 5: R2 bytes uploaded (chunk-0 events only, rolling 90 days)
-    // doubles[4] = total_bytes, doubles[2] = chunk_index (0 = first chunk)
+    // double5 = total_bytes, double3 = chunk_index (0 = first chunk)
     aeQuery(`
-      SELECT sum(doubles[4]) AS total_bytes_uploaded
+      SELECT sum(double5) AS total_bytes_uploaded
       FROM share_events
       WHERE blob1 = 'upload'
-      AND doubles[2] = 0
+      AND double3 = 0
       AND timestamp > NOW() - INTERVAL '90' DAY
     `),
 
     // Metric 6: R2 chunk retrieval success rate (rolling 24h)
-    // doubles[1] = HTTP status code; blob2 = error_message (empty on success)
+    // double2 = HTTP status code
     aeQuery(`
       SELECT
-        countIf(doubles[1] = 200) AS successful_chunks,
+        countIf(double2 = 200) AS successful_chunks,
         count() AS total_chunks,
-        countIf(doubles[1] = 200) / count() AS success_rate
+        countIf(double2 = 200) / count() AS success_rate
       FROM share_events
       WHERE blob1 = 'download'
       AND timestamp > NOW() - INTERVAL '1' DAY
+    `),
+
+    // Metric 7: p95 + p99 latency per endpoint (rolling 24h)
+    // double1 = latency_ms
+    aeQuery(`
+      SELECT
+        blob1 AS endpoint,
+        quantilesTDigest(0.95)(double1)[1] AS p95_ms,
+        quantilesTDigest(0.99)(double1)[1] AS p99_ms,
+        count() AS requests
+      FROM share_events
+      WHERE timestamp > NOW() - INTERVAL '1' DAY
+      GROUP BY endpoint
+      ORDER BY p95_ms DESC
+    `),
+
+    // Metric 8: error rate per endpoint (rolling 24h)
+    // double2 = HTTP status code
+    aeQuery(`
+      SELECT
+        blob1 AS endpoint,
+        countIf(double2 >= 500) AS error_count,
+        count() AS total_count,
+        countIf(double2 >= 500) / count() AS error_rate
+      FROM share_events
+      WHERE timestamp > NOW() - INTERVAL '1' DAY
+      GROUP BY endpoint
+      ORDER BY error_rate DESC
     `),
   ]);
 
@@ -868,12 +902,50 @@ async function handleAdminAeMetrics(request, env) {
     r2ChunkNote = `AE query failed: ${downloadResult.reason?.message}`;
   }
 
+  // ── Parse p95/p99 latency ────────────────────────────────────────────────────
+  let latencyByEndpoint = null;
+  let latencyNote = null;
+  if (latencyResult.status === 'fulfilled') {
+    const rows = latencyResult.value?.data ?? [];
+    latencyByEndpoint = {};
+    for (const row of rows) {
+      latencyByEndpoint[row.endpoint] = {
+        p95_ms: parseFloat((row.p95_ms ?? 0).toFixed(1)),
+        p99_ms: parseFloat((row.p99_ms ?? 0).toFixed(1)),
+        requests: parseInt(row.requests ?? 0, 10),
+      };
+    }
+    if (rows.length === 0) latencyNote = 'No events in last 24h';
+  } else {
+    latencyNote = `AE query failed: ${latencyResult.reason?.message}`;
+  }
+
+  // ── Parse error rate ─────────────────────────────────────────────────────────
+  let errorRateByEndpoint = null;
+  let errorRateNote = null;
+  if (errorRateResult.status === 'fulfilled') {
+    const rows = errorRateResult.value?.data ?? [];
+    errorRateByEndpoint = {};
+    for (const row of rows) {
+      errorRateByEndpoint[row.endpoint] = {
+        error_count: parseInt(row.error_count ?? 0, 10),
+        total_count: parseInt(row.total_count ?? 0, 10),
+        error_rate: parseFloat((row.error_rate ?? 0).toFixed(4)),
+      };
+    }
+    if (rows.length === 0) errorRateNote = 'No events in last 24h';
+  } else {
+    errorRateNote = `AE query failed: ${errorRateResult.reason?.message}`;
+  }
+
   return json({
     as_of: new Date().toISOString(),
     window_notes: {
       credential_issuances: 'Rolling 30 days',
       r2_bytes_uploaded: 'Rolling 90 days (chunk-0 events only; total_bytes logged on first chunk per transfer)',
       r2_chunk_retrieval_success_rate: 'Rolling 24 hours',
+      latency: 'Rolling 24 hours — p95/p99 per endpoint',
+      error_rate: 'Rolling 24 hours — 5xx / total per endpoint',
     },
     credential_issuances_by_tier: credentialIssuancesByTier,
     credential_issuances_note: credentialIssuancesNote,
@@ -884,6 +956,10 @@ async function handleAdminAeMetrics(request, env) {
     r2_chunk_successful_chunks: r2ChunkSuccessfulChunks,
     r2_chunk_total_chunks: r2ChunkTotalChunks,
     r2_chunk_note: r2ChunkNote,
+    latency_by_endpoint: latencyByEndpoint,
+    latency_note: latencyNote,
+    error_rate_by_endpoint: errorRateByEndpoint,
+    error_rate_note: errorRateNote,
   });
 }
 
