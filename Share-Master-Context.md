@@ -139,6 +139,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - **BLAKE3 for passphrase hash** — frontend must use SHA-256 to match `nut11.js hashSecret()`.
 - **`wrangler r2 bucket lifecycle set --rule` inline JSON** — not supported in Wrangler 4.92. Use `add` subcommand.
 - **`wrangler r2 bucket lifecycle get`** — command is `list`.
+- **`checkout/sessions` with `ui_mode: embedded`** — returns `cs_test_...` secret incompatible with `stripe.elements()`. Use direct Subscription creation + `expand[0]=latest_invoice.payment_intent` instead.
+- **`decodeURIComponent` on Stripe `client_secret`** — JSON response is already decoded. Do not wrap.
 
 ---
 
@@ -167,7 +169,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - ✅ Live (10): 2 (token melt), 4 (credential uniqueness), 5 (R2 bytes), 6 (chunk retrieval), 7 (p95 latency), 8 (p99 latency), 9 (error rate), 11 (conversion), 12 (MRR), 13 (churn)
 - ⏸ Deferred (3 IDs / 2 items): 1/3 (ZK/BLAKE3 — B4), 10 (Lightning mix — B7)
 
-**Next: S27 — B3 Stripe test coverage begins.**
+**S27/S28 (buffer S101/S102) complete.** 4242 checkout flow end-to-end verified. `stripe.js` now uses direct Subscription + PaymentIntent expansion (not `checkout/sessions`). `subscribers` row manually seeded for `dev@refueler.io`. Webhook upsert silently failing — B3 snag for S29.
+
+**Next: S29 — B3 continued: webhook upsert debug + cancellation flow.**
 ---
 
 ## Roadmap S19–S120 (v1.6 · Share-19 planning session)

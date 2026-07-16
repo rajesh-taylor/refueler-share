@@ -207,26 +207,40 @@
 
 ---
 
-*Next: **S27 — B3 Stripe test coverage begins***
-*Attach: worker/src/index.js, worker/wrangler.toml, CLAUDE.md, Share-Master-Context.md, share-sessions.md*
+## Session 27 — B3 Stripe test flow (buffer S101) (16 July 2026)
+
+**Commit:** (grouped with S28) `5f3cb8e`
 
 **Completed:**
-- `handleAdminMetrics` now calls `fetchAeMetricsData(env)` in parallel (same pattern as snapshot — no extra round-trip cost vs prior single-query path)
-- `free_to_paid_conversion_rate` added to `/admin/metrics` response: `paid_total / total_credential_issuances_30d × 100`. Null-safe — falls back with AE error as note if AE query fails.
-- `free_to_paid_conversion_issuances_30d` (denominator) and honest `_note` (snapshot rate caveat, true cohort deferred to B9) also returned.
-- Dashboard: "Business Growth" section removed. Lightning vs Stripe mix deferred card moved into Revenue & Subscribers. Free-to-paid conversion merged into Paid subscribers card — free tier pill removed, conversion rate + issuance count rendered as sub-line below creative/max pills.
-- `smokeTest()` console function added to dashboard — logs all 13 metrics with ✅/⏸/❌ and pass/deferred/fail tally.
-
-**13-metric status at Block 2 close:**
-- ✅ Live: 2 (token melt), 4 (credential uniqueness), 5 (R2 bytes), 6 (chunk retrieval), 7 (p95 latency), 8 (p99 latency), 9 (error rate), 11 (conversion), 12 (MRR), 13 (churn) — 10 metrics
-- ⏸ Deferred: 1/3 (ZK/BLAKE3 — B4), 10 (Lightning mix — B7) — 2 metrics (mapped to 3 metric IDs)
+- Stripe CLI installed, authenticated
+- 4 test prices created with correct lookup keys (share-creative-monthly/yearly, share-max-monthly/yearly)
+- `STRIPE_SECRET_KEY` set to `sk_test` on Worker, `STRIPE_WEBHOOK_SECRET` set from `stripe listen`
+- `upgrade.njk` updated with `pk_test` key + test price IDs
+- `stripe.js` fixed: `success_url`/`cancel_url` → `return_url` for embedded mode
+- Root cause of `client_secret` corruption identified: `checkout/sessions` with `ui_mode: embedded` returns a session secret incompatible with `stripe.elements()` — wrong Stripe API for this frontend pattern
 
 **Do not retry:**
-- DO NOT call `handleAdminMetrics`/`handleAdminAeMetrics` from conversion path — use inner data functions + parallel fetch
-- DO NOT show free tier in paid subscribers pill breakdown — filter `t !== 'free'`
+- DO NOT use `checkout/sessions` with `ui_mode: embedded` — returns `cs_test_...` secret incompatible with `stripe.elements()`
+- DO NOT call `decodeURIComponent` on Stripe API JSON response values — already decoded
 
-**Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`
 ---
 
-*Next: **S25 — free-to-paid conversion rate + 13-metric smoke test (Block 2)***
-*Attach: worker/src/index.js, frontend/admin/dashboard.html, CLAUDE.md, Share-Master-Context.md, share-sessions.md*
+## Session 28 — B3 Stripe checkout verified (buffer S102) (16 July 2026)
+
+**Commit:** `5f3cb8e`
+
+**Completed:**
+- `stripe.js` `createCheckoutSession` replaced with direct Subscription creation: find-or-create customer by email → create subscription with `payment_behavior=default_incomplete` + `expand[0]=latest_invoice.payment_intent` → return `latest_invoice.payment_intent.client_secret` (a `pi_...` secret, compatible with `stripe.elements()`)
+- Webhook handler extended: `customer.subscription.created` added alongside `customer.subscription.updated` — fetches customer email from Stripe API and upserts to `subscribers`
+- 4242 card checkout flow verified end-to-end: card element loads ✓, payment succeeds ✓, "You're all set" panel shown ✓
+- `subscribers` row manually inserted via Supabase MCP (webhook upsert silently failing — see snag below)
+- `STRIPE_SECRET_KEY` restored to `sk_live` ✓, `upgrade.njk` restored to `pk_live` + live price IDs ✓
+
+**B3 snag (carry to S29):**
+- Webhook upsert to `subscribers` not writing despite Worker returning 200 — root cause unconfirmed. Suspected: `lookup_key` null in resent event payload at API version 2020-03-02, or silent Supabase fetch failure. Needs `wrangler tail` debug with a fresh real checkout in test mode.
+
+**Do not retry:**
+- DO NOT use `checkout/sessions` for embedded Payment Element — use direct Subscription + PaymentIntent expansion
+- DO NOT use `decodeURIComponent` on Stripe `client_secret` — clean string from JSON
+
+*Next: **S29 — B3 continued: webhook upsert debug + cancellation flow test***
