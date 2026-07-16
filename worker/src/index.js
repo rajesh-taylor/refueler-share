@@ -509,11 +509,17 @@ async function handleCheckout(request, env) {
   const { price_id, email } = body;
   if (!price_id || !email) return err(400, 'Missing price_id or email');
 
-  const validPriceIds = [
-    'price_1Ts7lsGlctwiB9U3hdtgChU2',
-    'price_1Ts7sqGlctwiB9U3YRloCFfi',
-    'price_1Ts7vIGlctwiB9U3kb3NCLue',
-    'price_1Ts7xIGlctwiB9U3JyZB8Kwj',
+ const validPriceIds = [
+    // live
+    "price_1Ts7lsGlctwiB9U3hdtgChU2",
+    "price_1Ts7sqGlctwiB9U3YRloCFfi",
+    "price_1Ts7vIGlctwiB9U3kb3NCLue",
+    "price_1Ts7xIGlctwiB9U3JyZB8Kwj",
+    // test
+    "price_1TtnCEGlctwiB9U3tErRazp2",
+    "price_1TtnD0GlctwiB9U3UzFr27Zl",
+    "price_1TtnDVGlctwiB9U3BYGRnWl6",
+    "price_1TtnETGlctwiB9U3UJH3uaA"
   ];
   if (!validPriceIds.includes(price_id)) return err(400, 'Invalid price_id');
 
