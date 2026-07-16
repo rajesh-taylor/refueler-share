@@ -49,27 +49,50 @@ export async function verifyStripeWebhook(request, webhookSecret) {
 }
 
 /**
- * createCheckoutSession(priceId, successUrl, cancelUrl, stripeSecretKey) → { clientSecret, sessionId }
+ * createCheckoutSession(priceId, customerEmail, successUrl, cancelUrl, stripeSecretKey)
+ * → { clientSecret, subscriptionId }
+ *
+ * Creates (or reuses) a Stripe Customer, then creates a Subscription with
+ * payment_behavior=default_incomplete, which surfaces a PaymentIntent client_secret
+ * compatible with stripe.elements() + stripe.confirmPayment() in the frontend.
  */
 export async function createCheckoutSession(priceId, customerEmail, successUrl, cancelUrl, stripeSecretKey) {
-  const params = new URLSearchParams({
-    'mode': 'subscription',
-    'line_items[0][price]': priceId,
-    'line_items[0][quantity]': '1',
-    'success_url': successUrl,
-    'cancel_url': cancelUrl,
-    'ui_mode': 'embedded',
-    'customer_email': customerEmail,
-    'allow_promotion_codes': 'true',
+  // 1. Find or create customer by email
+  const searchRes = await stripeFetch(
+    `/v1/customers?email=${encodeURIComponent(customerEmail)}&limit=1`,
+    'GET', null, stripeSecretKey
+  );
+  if (!searchRes.ok) throw new Error(`Stripe customer search error: ${await searchRes.text()}`);
+  const searchData = await searchRes.json();
+
+  let customerId;
+  if (searchData.data && searchData.data.length > 0) {
+    customerId = searchData.data[0].id;
+  } else {
+    const createRes = await stripeFetch('/v1/customers', 'POST',
+      new URLSearchParams({ email: customerEmail }), stripeSecretKey);
+    if (!createRes.ok) throw new Error(`Stripe customer create error: ${await createRes.text()}`);
+    const customer = await createRes.json();
+    customerId = customer.id;
+  }
+
+  // 2. Create subscription with default_incomplete — produces a PaymentIntent
+  const subParams = new URLSearchParams({
+    'customer': customerId,
+    'items[0][price]': priceId,
+    'payment_behavior': 'default_incomplete',
+    'payment_settings[save_default_payment_method]': 'on_subscription',
+    'expand[0]': 'latest_invoice.payment_intent',
   });
 
-  const res = await stripeFetch('/v1/checkout/sessions', 'POST', params, stripeSecretKey);
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Stripe checkout error: ${err}`);
-  }
-  const session = await res.json();
-  return { clientSecret: session.client_secret, sessionId: session.id };
+  const subRes = await stripeFetch('/v1/subscriptions', 'POST', subParams, stripeSecretKey);
+  if (!subRes.ok) throw new Error(`Stripe subscription error: ${await subRes.text()}`);
+  const sub = await subRes.json();
+
+  const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
+  if (!clientSecret) throw new Error('No client_secret in subscription response');
+
+  return { clientSecret, subscriptionId: sub.id };
 }
 
 /**

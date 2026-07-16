@@ -475,13 +475,20 @@ async function handleStripeWebhook(request, env) {
       const periodEnd  = await fetchPeriodEnd(subId, env.STRIPE_SECRET_KEY);
       await upsertSubscriber(env, customerId, email, tier, 'active', periodEnd);
 
-    } else if (type === 'customer.subscription.updated') {
+    } else if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
       const sub        = event.data.object;
       const customerId = sub.customer;
       const tier       = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
       const status     = sub.status === 'active' ? 'active' : 'inactive';
       const periodEnd  = sub.current_period_end;
-      await upsertSubscriber(env, customerId, null, tier, status, periodEnd);
+      let email = null;
+      try {
+        const custRes = await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
+          headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
+        });
+        if (custRes.ok) { const c = await custRes.json(); email = c.email ?? null; }
+      } catch {}
+      await upsertSubscriber(env, customerId, email, tier, status, periodEnd);
 
     } else if (type === 'customer.subscription.deleted') {
       const sub = event.data.object;
