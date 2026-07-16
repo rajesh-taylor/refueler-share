@@ -479,7 +479,7 @@ async function handleStripeWebhook(request, env) {
       const sub        = event.data.object;
       const customerId = sub.customer;
       const tier       = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
-      const status     = sub.status === 'active' ? 'active' : 'inactive';
+      const status = (sub.status === "active" || sub.status === "incomplete") ? "active" : "inactive";
       const periodEnd  = sub.current_period_end;
       let email = null;
       try {
@@ -1101,7 +1101,7 @@ async function upsertSubscriber(env, stripeCustomerId, email, tier, status, curr
   if (email) payload.email = email;
   if (cancelledAt) payload.cancelled_at = cancelledAt;
 
-  const res = await supabaseFetch(env, 'POST', '/rest/v1/subscribers', payload, {
+const res = await supabaseFetch(env, 'POST', '/rest/v1/subscribers?on_conflict=stripe_customer_id', payload, {
     'Prefer': 'resolution=merge-duplicates,return=minimal',
   });
   if (!res.ok) {
