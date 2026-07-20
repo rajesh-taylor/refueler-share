@@ -977,10 +977,10 @@ async function startUpload() {
   for (let i = 0; i < totalChunks; i++) {
     const raw = await readChunk(chunks[i]);
     const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+      { name: 'AES-GCM', iv: sessionIv, additionalData: (() => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, i, false); return b; })() },
       sessionAesKey, raw
     );
-    // LATENT BUG: additionalData: new Uint8Array([i]) overflows at chunk index >= 256
+    // AAD: 4-byte big-endian chunk index (DataView.setUint32) — overflow-safe for all chunk counts
     // Fix: use a 4-byte Uint32Array or encode i as 4 bytes before large-file testing
     const chunkHashHex = await blake3Hash(new Uint8Array(encrypted));
     chunkHashes.push(chunkHashHex);
@@ -1132,7 +1132,7 @@ async function startDownload(uuid) {
     let plain;
     try {
       plain = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: sessionIv, additionalData: new Uint8Array([i]) },
+        { name: 'AES-GCM', iv: sessionIv, additionalData: (() => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, i, false); return b; })() },
         sessionAesKey, chunks[i]
       );
     } catch (e) {
