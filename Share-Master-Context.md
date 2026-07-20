@@ -73,7 +73,7 @@ Worker secrets (all set ✓):
 - `TURNSTILE_SECRET_KEY` — `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` ✓
 - `SUPABASE_URL` → `https://tihgvdokeofnjxjkenmm.supabase.co` ✓
 - `SUPABASE_SERVICE_KEY` → service_role JWT ✓
-- `STRIPE_SECRET_KEY` → `sk_live_...Fyop` ✓
+- `STRIPE_SECRET_KEY` → `sk_live_...ZehD` (active, set S29) ✓
 - `STRIPE_WEBHOOK_SECRET` → rotated Session 6 ✓
 - `ADMIN_KEY` → set Session 16 ✓
 
@@ -144,34 +144,19 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ---
 
-## Current state (Session 26 complete — Block 2 closed)
+## Current state (Session 29 complete — Block 3 closed)
 
 **Block 1 — SSG Migration: complete.**
-**Block 2 — Instrumentation: S18–S25 complete. Block 2 done.**
+**Block 2 — Instrumentation: complete.**
+**Block 3 — Stripe test coverage: S27–S29 complete. Block 3 done.**
 
-- Eleventy 3.x scaffold live. `src/` → `frontend/` build via `npm run build`.
-- KV-backed status system + maintenance banner + status page all live.
-- Full upload → share link → passphrase gate → download flow is end-to-end functional.
-- Stripe Customer Portal live. R2 lifecycle rules applied to prod and dev buckets.
-- Analytics Engine instrumentation live (`share_events` dataset, `logEvent` + `timed` wrapper, all endpoints covered).
-- Supabase RLS policies hardened. `subscribers.cancelled_at` live. Churn timestamp recorded on deletion.
-- `GET /admin/metrics` live — MRR, subscribers by tier, churn rate MTD, credential uniqueness rate, free-to-paid conversion rate.
-- `GET /admin/ae-metrics` live — AE SQL proxied server-side, credential issuances by tier (30d), R2 bytes uploaded (90d), chunk retrieval success rate (24h), p95/p99 latency per endpoint, error rate per endpoint.
-- `GET /admin/snapshot` live — 6-metric authenticated JSON blob.
-- Dev dashboard live at `share.refueler.io/admin/dashboard.html` — 10 of 13 metrics live. `smokeTest()` console function validates all 13 metrics.
-- Latency cards (p95/p99) showing AE SQL error (`quantilesTDigest` syntax) — deferred to B5 design session.
+- Checkout flow end-to-end verified (4242 card, S28).
+- Webhook upsert fix confirmed (`?on_conflict=stripe_customer_id`, `5d8c1ea`).
+- Portal endpoint confirmed reaching Stripe correctly.
+- Cancellation webhook logic code-complete. Full cancel flow deferred to B11 alpha.
+- `STRIPE_SECRET_KEY` updated to `sk_live_...ZehD`. Old expiring key deleted.
 
-**Latent (deferred to B5):**
-- `FREE_EXPIRY` in `index.njk` is 5 days but free tier UI displays "1 / 7 day expiry"
-- p95/p99 latency AE SQL `quantilesTDigest` syntax error
-
-**13-metric status at Block 2 close:**
-- ✅ Live (10): 2 (token melt), 4 (credential uniqueness), 5 (R2 bytes), 6 (chunk retrieval), 7 (p95 latency), 8 (p99 latency), 9 (error rate), 11 (conversion), 12 (MRR), 13 (churn)
-- ⏸ Deferred (3 IDs / 2 items): 1/3 (ZK/BLAKE3 — B4), 10 (Lightning mix — B7)
-
-**S27/S28 (buffer S101/S102) complete.** 4242 checkout flow end-to-end verified. `stripe.js` now uses direct Subscription + PaymentIntent expansion (not `checkout/sessions`). `subscribers` row manually seeded for `dev@refueler.io`. Webhook upsert silently failing — B3 snag for S29.
-
-**Next: S29 — B3 continued: webhook upsert debug + cancellation flow.**
+**Next: B4 — Security hardening (S34–S42)**
 ---
 
 ## Roadmap S19–S120 (v1.6 · Share-19 planning session)

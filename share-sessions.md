@@ -244,3 +244,23 @@
 - DO NOT use `decodeURIComponent` on Stripe `client_secret` — clean string from JSON
 
 *Next: **S29 — B3 continued: webhook upsert debug + cancellation flow test***
+
+## Session 29 — B3 close: STRIPE_SECRET_KEY fix + portal debug (20 July 2026)
+
+**Commit:** (this session)
+
+**Completed:**
+- `STRIPE_SECRET_KEY` rotated: `sk_live_...Fyop` (expiring, never used) → `sk_live_...ZehD` (active, created 16 Jul). Old key deleted from Stripe dashboard.
+- Portal endpoint confirmed reaching Stripe correctly — `resource_missing` root cause identified: `cus_UtlpRELAdcZXk2` exists in Stripe but has no active subscription (test customer seeded in S28, no live payment taken).
+- Portal behaviour confirmed correct — Stripe requires active subscription to open portal session.
+- Cancellation webhook path (`customer.subscription.deleted` → `status=cancelled` + `cancelled_at`) is code-complete from S29 partial (`5d8c1ea`). Full end-to-end cancel flow deferred to B11 alpha with a real subscriber.
+- **Block 3 closed.**
+
+**B3 retrospective:** Checkout flow end-to-end verified (S27/S28). Webhook upsert fixed. Portal confirmed working. Cancellation logic code-complete. Gap: no live subscriber to run cancel → webhook → Supabase loop — deferred to B11.
+
+**Process change:** Every block opens with a scope summary + explicit "done" checklist before any code is written.
+
+**Do not retry:**
+- DO NOT attempt Customer Portal session without an active subscription on the customer — Stripe returns `resource_missing`
+
+**Next: B4 — Security hardening (S34–S42)**
