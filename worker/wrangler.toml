@@ -22,6 +22,11 @@ ENVIRONMENT = "production"
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
 # Rule 2: Expiration backstop — 92 days (90-day Production Max max + 2-day buffer)
 
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+fallthrough = false
+
 [[kv_namespaces]]
 binding = "STATUS_KV"
 id      = "5b1dca6a8f06423f98d0bbc4286e2968"

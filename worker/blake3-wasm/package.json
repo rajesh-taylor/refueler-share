@@ -1,0 +1,15 @@
+{
+  "name": "blake3-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "blake3_wasm_bg.wasm",
+    "blake3_wasm.js",
+    "blake3_wasm_bg.js"
+  ],
+  "main": "blake3_wasm.js",
+  "sideEffects": [
+    "./blake3_wasm.js",
+    "./snippets/*"
+  ]
+}
