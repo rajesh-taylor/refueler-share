@@ -283,4 +283,18 @@
 - DO NOT use wasm-pack `bundler` output directly without the Workers init wrapper — `__wbg_set_wasm` requires manual instantiation in Workers context
 - DO NOT omit `fallthrough = false` on `[[rules]]` — triggers Wrangler warning about default rule shadowing
 
+## Session S35-emergency — Soft launch prep (20 July 2026)
+
+**Commits:** c9bd344 → e5bd4c3 → 95a12b4 (no session number consumed from B4)
+
+**Completed:**
+- upgrade.njk only — no Worker changes
+- Paid tier cards (Creative Premium, Production Max) greyed out: opacity 0.35, pointer-events none
+- Coming Soon tag positioned top-right on each paid card, opacity: calc(1/0.35) to punch through parent fade
+- Payment section hidden (visible class removed)
+- Soft-launch notice added to page header: green dot + "Free tier open · Paid plans launching soon"
+
+**Do not retry:**
+- DO NOT re-enable paid tiers without explicit instruction from Rajesh at each block close
+
 **Next: B4 — Security hardening (S34–S42)**

@@ -229,7 +229,9 @@ Yearly = 10 months price (2 months free).
 - Brand audit: run refueler.io branding .md against share UI
 - `FREE_EXPIRY` mismatch: 5 days in code, "1 / 7 day expiry" in UI
 - Theme state must persist across domains — write to cookie scoped to `.refueler.io`
-
+- "Logged for future action": paid tier cards to be re-enabled at each block close, initiated by Rajesh only.
+- Update current state: S35-emergency complete, B4 resumes at S35 (AAD ≥256 fix).
+- Do not retry entry to add: opacity: calc(1 / N) on a child element cancels inherited opacity from parent — use this pattern any time a badge or tag needs to punch through a faded card.
 ---
 
 ## File map
