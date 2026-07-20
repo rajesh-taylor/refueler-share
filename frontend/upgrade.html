@@ -773,6 +773,50 @@
   }
   .success-panel p { font-size: 14px; color: var(--fg-muted); margin-bottom: 28px; }
 
+  /* ── Coming soon tier cards ──────────────────────────────────── */
+  .tier-card.coming-soon {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: default;
+    user-select: none;
+  }
+  .coming-soon-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    border: 1px solid var(--card-border);
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-bottom: 14px;
+    display: inline-block;
+  }
+
+  /* ── Soft-launch notice ──────────────────────────────────────── */
+  .soft-launch-notice {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-subtle);
+    border: 1px solid var(--card-border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-top: 14px;
+  }
+  .soft-launch-notice::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+  }
+
   .hidden { display: none !important; }
 
   @media (max-width: 680px) {
@@ -813,6 +857,7 @@
   <div class="page-header">
     <h1>Choose your plan</h1>
     <p>Free transfers need no account. Upgrade for larger files and longer expiry.</p>
+    <div class="soft-launch-notice">Free tier open · Paid plans launching soon</div>
   </div>
 
   <!-- Billing toggle -->
@@ -870,8 +915,8 @@
     </div>
 
     <!-- Creative Premium -->
-    <div class="tier-card selected" id="card-creative" onclick="selectTier('creative')">
-      <div class="tier-label gold">Creative</div>
+    <div class="tier-card coming-soon" id="card-creative">
+      <div class="coming-soon-badge">Coming Soon</div>
       <div class="tier-name">Creative Premium</div>
       <div class="tier-price">
         <span class="tier-price-main" id="price-creative">£12</span>
@@ -888,8 +933,8 @@
     </div>
 
     <!-- Production Max -->
-    <div class="tier-card" id="card-max" onclick="selectTier('max')">
-      <div class="tier-label gold">Professional</div>
+    <div class="tier-card coming-soon" id="card-max">
+      <div class="coming-soon-badge">Coming Soon</div>
       <div class="tier-name">Production Max</div>
       <div class="tier-price">
         <span class="tier-price-main" id="price-max">£24</span>
@@ -909,7 +954,7 @@
   </div>
 
   <!-- Payment section -->
-  <div class="payment-section visible" id="paymentSection">
+  <div class="payment-section" id="paymentSection">
     <div class="payment-header">
       <div class="payment-title">Payment</div>
       <div class="payment-summary" id="paymentSummary">Creative Premium — £12/month</div>
@@ -1044,6 +1089,8 @@ function updatePriceDisplay() {
 
 // ── Tier selection ──────────────────────────────────────────────
 function selectTier(tier) {
+  const card = document.getElementById(`card-${tier}`);
+  if (!card || card.classList.contains('coming-soon')) return;
   selectedTier = tier;
   document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
   document.getElementById(`card-${tier}`).classList.add('selected');
