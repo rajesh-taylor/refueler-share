@@ -422,23 +422,24 @@ stripeThemeRemount: true
 
   /* ── Coming soon tier cards ──────────────────────────────────── */
   .tier-card.coming-soon {
-    opacity: 0.45;
+    opacity: 0.35;
     pointer-events: none;
     cursor: default;
     user-select: none;
   }
-  .coming-soon-badge {
+  .coming-soon-tag {
+    position: absolute;
+    top: 12px;
+    right: 12px;
     font-family: var(--mono);
     font-size: 10px;
     font-weight: 500;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--fg-subtle);
     border: 1px solid var(--card-border);
-    padding: 2px 7px;
+    padding: 2px 8px;
     border-radius: 3px;
-    margin-bottom: 14px;
-    display: inline-block;
   }
 
   /* ── Soft-launch notice ──────────────────────────────────────── */
@@ -547,7 +548,8 @@ stripeThemeRemount: true
 
     <!-- Creative Premium -->
     <div class="tier-card coming-soon" id="card-creative">
-      <div class="coming-soon-badge">Coming Soon</div>
+      <div class="coming-soon-tag">Coming Soon</div>
+      <div class="tier-label gold">Creative</div>
       <div class="tier-name">Creative Premium</div>
       <div class="tier-price">
         <span class="tier-price-main" id="price-creative">£12</span>
@@ -565,7 +567,8 @@ stripeThemeRemount: true
 
     <!-- Production Max -->
     <div class="tier-card coming-soon" id="card-max">
-      <div class="coming-soon-badge">Coming Soon</div>
+      <div class="coming-soon-tag">Coming Soon</div>
+      <div class="tier-label gold">Professional</div>
       <div class="tier-name">Production Max</div>
       <div class="tier-price">
         <span class="tier-price-main" id="price-max">£24</span>
