@@ -144,19 +144,18 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ---
 
-## Current state (Session 29 complete — Block 3 closed)
+## Current state (Session 34 complete)
 
 **Block 1 — SSG Migration: complete.**
 **Block 2 — Instrumentation: complete.**
-**Block 3 — Stripe test coverage: S27–S29 complete. Block 3 done.**
+**Block 3 — Stripe test coverage: complete.**
+**Block 4 — Security hardening: S34 complete (BLAKE3 WASM). S35–S42 remaining.**
 
-- Checkout flow end-to-end verified (4242 card, S28).
-- Webhook upsert fix confirmed (`?on_conflict=stripe_customer_id`, `5d8c1ea`).
-- Portal endpoint confirmed reaching Stripe correctly.
-- Cancellation webhook logic code-complete. Full cancel flow deferred to B11 alpha.
-- `STRIPE_SECRET_KEY` updated to `sk_live_...ZehD`. Old expiring key deleted.
+- BLAKE3 Worker WASM compiled and deployed. Integrity gap closed.
+- `verifyChunkHash` now performs real server-side BLAKE3 verification on every chunk.
+- Integrity/audit marketing claims unblocked after S42 (full B4 audit pass).
 
-**Next: B4 — Security hardening (S34–S42)**
+**Next: S35 — AAD ≥256 fix**
 ---
 
 ## Roadmap S19–S120 (v1.6 · Share-19 planning session)

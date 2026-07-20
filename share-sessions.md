@@ -263,4 +263,24 @@
 **Do not retry:**
 - DO NOT attempt Customer Portal session without an active subscription on the customer — Stripe returns `resource_missing`
 
+## Session 34 — B4 start: BLAKE3 WASM Worker integration (20 July 2026)
+
+**Commit:** S34 commit (post-S29)
+
+**Completed:**
+- Rust toolchain installed (rustup 1.29.0, cargo 1.97.1), wasm-pack 0.13.1
+- BLAKE3 Rust crate v1.8.5 compiled to WASM via wasm-pack `--target bundler` → `worker/blake3-wasm/` (23K binary, wasm-opt applied)
+- `worker/src/blake3_worker.js` — Workers-compatible WASM init wrapper; static import of `.wasm` binary, manual `WebAssembly.instantiate`, exposes `blake3Hash(data: Uint8Array): Uint8Array`
+- `worker/src/blake3.js` — replaces passthrough stub; `verifyChunkHash(chunkBytes, declaredHashHex)` now computes real BLAKE3 hash and constant-time compares against declared hex
+- `worker/wrangler.toml` — `[[rules]]` block added: `type = "CompiledWasm"`, `globs = ["**/*.wasm"]`, `fallthrough = false`
+- WASM binary + glue force-committed to `worker/blake3-wasm/`
+- Deployed: version `7738450f`, Worker startup 13ms, total upload 109.81 KiB
+
+**Integrity gap status:** CLOSED. Client-declared BLAKE3 hash is now verified server-side on every chunk. Hash mismatch returns 400.
+
+**Do not retry:**
+- DO NOT use `./blake3-wasm/...` paths in `src/blake3_worker.js` — must be `../blake3-wasm/...` (one level up from src/)
+- DO NOT use wasm-pack `bundler` output directly without the Workers init wrapper — `__wbg_set_wasm` requires manual instantiation in Workers context
+- DO NOT omit `fallthrough = false` on `[[rules]]` — triggers Wrangler warning about default rule shadowing
+
 **Next: B4 — Security hardening (S34–S42)**

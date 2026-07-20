@@ -2,7 +2,7 @@
 
 > Zero-knowledge, end-to-end encrypted file transfer — built for creative professionals who value speed, privacy, and financial sovereignty.
 
-**Live at:** [share.refueler.io](https://share.refueler.io) *(coming soon)*  
+**Live at:** [share.refueler.io](https://share.refueler.io)  
 **Part of the [Refueler](https://refueler.io) ecosystem**
 
 ---
@@ -24,17 +24,19 @@ It is **not** a standard file host. It is a cryptographic pipeline:
 
 ### Two-Layer Cryptographic Stack
 
-**BLAKE3 — Internal Chunk Integrity**  
-Every file is split into 50MB blocks. Each block is fingerprinted using a BLAKE3 Merkle tree, computed client-side via a compiled WebAssembly module. If a network interruption occurs mid-transfer, the browser performs a rapid BLAKE3 tree-check against the Cloudflare Worker to identify exactly which chunks already exist in R2 — resuming in milliseconds without restarting.
+**BLAKE3 — Chunk Integrity, Client and Server**  
+Every file is split into 50MB blocks. Each block is fingerprinted using BLAKE3, computed client-side via a compiled WebAssembly module. The Cloudflare Worker independently recomputes the BLAKE3 hash of every received chunk and verifies it against the client-declared value before writing to R2. A compromised or corrupted chunk is rejected at the Worker boundary — the server cannot be made to store data that doesn't match the declared hash.
 
-BLAKE3 is used exclusively for **internal indexing and chunk verification**. It does not replace the Cashu blind signature scheme.
+The Worker-side BLAKE3 implementation is compiled from the official Rust `blake3` crate (v1.8.5) to WebAssembly via `wasm-pack`, checked into `worker/blake3-wasm/`, and imported statically. No CDN dependency. No trust assumption on the client declaration.
+
+BLAKE3 is used exclusively for **chunk integrity verification**. It does not replace the Cashu blind signature scheme.
 
 **Cashu Blind Signatures — Anonymous Upload Authentication**  
 Access tokens are issued using the cryptographic primitive underlying the Cashu protocol — specifically the blind signature scheme (NUT-00). The server signs a blinded upload credential without ever learning the token's serial number. The client presents the unblinded proof to the Cloudflare Worker to authorise a transfer.
 
 This is not a monetary use of Cashu. There is no external mint. The blind signature primitive is repurposed as a **zero-knowledge anonymous credential system** for upload access — keeping the server's ledger structurally unable to link a user identity to a specific file transfer.
 
-> **This combination — BLAKE3 chunk trees + Cashu blind sigs as anonymous auth — has not been publicly implemented before.**
+> **This combination — BLAKE3 chunk integrity + Cashu blind sigs as anonymous auth — has not been publicly implemented before.**
 
 ### Protocol Extensions Supported
 
@@ -138,7 +140,14 @@ Their constraints: 2 GB free cap (ours is 4 GB), French legal jurisdiction as th
 
 Four tiers: **Skint Tog** (free), **Creative Premium**, **Production Max**, and **Enterprise**.
 
-Pricing, transfer caps, and link expiry options are listed at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
+| Tier | Cap | Expiry options | Price |
+|------|-----|----------------|-------|
+| Skint Tog | 4 GB | 1 / 7 days | Free |
+| Creative Premium | 100 GB | 1 / 7 / 30 days | £12/mo or £120/yr |
+| Production Max | 250 GB | 1 / 7 / 30 / 90 days | £24/mo or £240/yr |
+| Enterprise | Unlimited | Custom | Contact us |
+
+Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ---
 
@@ -163,10 +172,15 @@ Pricing, transfer caps, and link expiry options are listed at [share.refueler.io
 
 ## Status
 
-🟢 **Session 22 complete — Block 2 instrumentation in progress.**
-Full upload → share link → passphrase gate → download flow is end-to-end functional.
-Analytics Engine instrumentation live (`share_events` dataset). Dev dashboard live at `share.refueler.io/admin/dashboard.html` — MRR, churn rate, credential uniqueness rate (100%, 9 melts, 0 replays), and AE SQL metrics (credential issuances by tier). Supabase RLS hardened. Stripe Customer Portal live. R2 lifecycle rules applied.
-Session 23: fix AE SQL `doubles[N]` syntax + p95/p99 latency + error rate cards.
+🟢 **Session 34 complete — Block 4 security hardening in progress.**
+
+Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io).
+
+**Completed blocks:**
+- **B1 — SSG Migration:** Eleventy 3.x scaffold, `src/` → `frontend/`, Cloudflare Pages auto-deploy live.
+- **B2 — Instrumentation:** Analytics Engine (`share_events`), Supabase aggregation, admin dashboard (`/admin/dashboard.html`), 13-metric smoke test, `/admin/snapshot` endpoint.
+- **B3 — Stripe test coverage:** Checkout flow verified (embedded Payment Element, direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
+- **B4 — Security hardening (in progress):** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5), deployed S34. Server-side chunk hash verification now live on every upload.
 
 ---
 
