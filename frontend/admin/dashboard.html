@@ -119,14 +119,6 @@
   /* ── Main ── */
   main { padding: 28px; max-width: 1280px; }
 
-  /* ── Section label ── */
-  .section-label {
-    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--text-dim); margin: 36px 0 16px; padding-bottom: 8px;
-    border-bottom: 1px solid var(--border); font-weight: 600;
-  }
-  .section-label:first-child { margin-top: 0; }
-
   /* ── Error banner ── */
   #error-banner {
     display: none; background: rgba(232,90,74,.1);
@@ -138,16 +130,17 @@
   /* ── Snapshot strip ── */
   .snapshot-strip {
     background: var(--bg-2); border: 1px solid var(--border);
-    border-radius: 12px; padding: 24px 28px;
+    border-radius: 12px; overflow: hidden;
   }
   .snapshot-strip-header {
-    display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 18px 28px; border-bottom: 1px solid var(--border);
   }
-  .snapshot-strip-title { font-size: 18px; font-weight: 700; flex: 1; color: var(--text); }
+  .snapshot-strip-title { font-size: 15px; font-weight: 600; flex: 1; color: var(--text-dim); letter-spacing: .04em; }
   .strip-as-of { font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
   #snapshot-copy-btn {
-    background: var(--bg-3); border: 1px solid var(--border);
-    color: var(--text-dim); padding: 7px 14px; border-radius: 6px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-dim); padding: 6px 14px; border-radius: 6px;
     cursor: pointer; font-size: 13px; font-family: var(--sans); font-weight: 500;
     display: flex; align-items: center; gap: 6px;
     transition: color .15s, border-color .15s;
@@ -155,26 +148,42 @@
   #snapshot-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
   #snapshot-copy-btn.copied { color: var(--value-green); border-color: var(--value-green); }
   #snapshot-copy-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+  /* Six metrics in a row, hairline dividers between */
   .snapshot-metrics {
-    display: grid; gap: 2px;
+    display: grid;
     grid-template-columns: repeat(6, 1fr);
   }
-  @media (max-width: 1000px) { .snapshot-metrics { grid-template-columns: repeat(3, 1fr); } }
-  .snap-metric {
-    padding: 0 20px 0 0; border-right: 1px solid var(--border);
-    cursor: pointer; transition: opacity .15s;
+  @media (max-width: 960px) {
+    .snapshot-metrics {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .snap-metric:nth-child(3) { border-right: none; }
+    .snap-metric:nth-child(4),
+    .snap-metric:nth-child(5),
+    .snap-metric:nth-child(6) { border-top: 1px solid var(--border); }
   }
-  .snap-metric:last-child { border-right: none; padding-right: 0; }
-  .snap-metric:hover { opacity: .75; }
+  .snap-metric {
+    padding: 24px 24px 28px;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s;
+    min-width: 0; /* prevent bleed */
+  }
+  .snap-metric:last-child { border-right: none; }
+  .snap-metric:hover { background: var(--bg-3); }
+
   .snap-metric .sm-label {
     font-size: 11px; color: var(--text-dim); letter-spacing: .1em;
-    text-transform: uppercase; font-weight: 600; margin-bottom: 4px;
+    text-transform: uppercase; font-weight: 600; margin-bottom: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .snap-metric .sm-plain {
-    font-size: 15px; color: var(--text); font-weight: 500; margin-bottom: 8px;
+    font-size: 14px; color: var(--text-dim); font-weight: 500; margin-bottom: 12px;
   }
   .snap-metric .sm-value {
-    font-size: 38px; font-weight: 900; color: var(--text); line-height: 1;
+    font-size: 30px; font-weight: 900; color: var(--text); line-height: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .snap-metric .sm-value.red   { color: var(--value-red); }
   .snap-metric .sm-value.amber { color: var(--value-amber); }
@@ -319,7 +328,6 @@
     <div id="error-banner"></div>
 
     <!-- ── Snapshot ── -->
-    <div class="section-label">Snapshot</div>
     <div class="snapshot-strip">
       <div class="snapshot-strip-header">
         <div class="snapshot-strip-title">Live overview</div>
@@ -363,92 +371,6 @@
           <div class="sm-plain">Right now</div>
           <div class="sm-value" id="snap-error-rate">—</div>
         </div>
-      </div>
-    </div>
-
-    <!-- ── Money ── -->
-    <div class="section-label">Money</div>
-    <div class="grid">
-      <div class="card" onclick="openModal('mrr')">
-        <div class="card-label">Monthly run rate</div>
-        <div class="card-plain">Revenue this month</div>
-        <div class="card-value blue" id="mrr">—</div>
-        <div class="card-sub" id="mrr-stripe">Stripe total: loading…</div>
-      </div>
-      <div class="card" onclick="openModal('paid')">
-        <div class="card-label">Paid subscribers</div>
-        <div class="card-plain">Paying customers</div>
-        <div class="card-value" id="paid-total">—</div>
-        <div class="tier-row" id="tier-breakdown"></div>
-        <div class="card-sub" id="conversion-rate-inline" style="margin-top:14px;"></div>
-      </div>
-      <div class="card" onclick="openModal('churn')">
-        <div class="card-label">Churn rate MTD</div>
-        <div class="card-plain">Cancellations this month</div>
-        <div class="card-value" id="churn-rate">—</div>
-        <div class="card-sub" id="churn-sub"></div>
-      </div>
-    </div>
-
-    <!-- ── Security ── -->
-    <div class="section-label">Security</div>
-    <div class="grid">
-      <div class="card" onclick="openModal('uniqueness')">
-        <div class="card-label">Credential uniqueness rate</div>
-        <div class="card-plain">Upload tokens used only once</div>
-        <div class="card-value" id="uniqueness-rate">—</div>
-        <div class="card-sub" id="uniqueness-sub"></div>
-      </div>
-      <div class="card deferred">
-        <div class="card-label">ZK verification rate</div>
-        <div class="card-plain">Transfers with password protection</div>
-        <div class="card-value">B4</div>
-      </div>
-    </div>
-
-    <!-- ── Speed & Storage ── -->
-    <div class="section-label">Speed &amp; Storage</div>
-    <div class="grid">
-      <div class="card" onclick="openModal('issuances')">
-        <div class="card-label">Credential issuances (30d)</div>
-        <div class="card-plain">Uploads started in 30 days</div>
-        <div class="card-value" id="ae-issuances-total">—</div>
-        <div class="issuance-row" id="ae-issuances-breakdown"></div>
-      </div>
-      <div class="card" onclick="openModal('storage')">
-        <div class="card-label">R2 bytes uploaded (90d)</div>
-        <div class="card-plain">Data stored in 90 days</div>
-        <div class="card-value" id="ae-bytes-uploaded">—</div>
-        <div class="card-sub" id="ae-bytes-sub"></div>
-      </div>
-      <div class="card" onclick="openModal('retrieval')">
-        <div class="card-label">Chunk retrieval success (24h)</div>
-        <div class="card-plain">Downloads succeeding today</div>
-        <div class="card-value" id="ae-retrieval-rate">—</div>
-        <div class="card-sub" id="ae-retrieval-sub"></div>
-      </div>
-      <div class="card" onclick="openModal('errors')">
-        <div class="card-label">Worker error rate · all endpoints</div>
-        <div class="card-plain">Server errors right now</div>
-        <div class="card-value" id="ae-error-rate">—</div>
-        <div class="card-sub" id="ae-error-rate-sub"></div>
-      </div>
-      <div class="card" onclick="openModal('upload-speed')">
-        <div class="card-label">Upload speed · p95 / p99</div>
-        <div class="card-plain">How fast uploads complete</div>
-        <div class="card-value" id="ae-p95-upload">—</div>
-        <div class="card-sub" id="ae-p99-upload-sub"></div>
-      </div>
-      <div class="card" onclick="openModal('download-speed')">
-        <div class="card-label">Download speed · p95 / p99</div>
-        <div class="card-plain">How fast downloads complete</div>
-        <div class="card-value" id="ae-p95-download">—</div>
-        <div class="card-sub" id="ae-p99-download-sub"></div>
-      </div>
-      <div class="card deferred">
-        <div class="card-label">Storage purged</div>
-        <div class="card-plain">Expired files deleted</div>
-        <div class="card-value">B4</div>
       </div>
     </div>
 
@@ -585,125 +507,48 @@
 
   // ── Render: /admin/metrics ────────────────────────────────────────────────
   function renderMetrics(d) {
-    // MRR
-    setText('mrr', `£${d.mrr_gbp ?? 0}`);
-    setText('mrr-stripe', 'Stripe total: coming next session');
+    // Snapshot MRR
+    const mrrEl = document.getElementById('snap-mrr');
+    mrrEl.textContent = d.mrr_gbp !== null && d.mrr_gbp !== undefined ? `£${d.mrr_gbp}` : 'n/a';
+    mrrEl.className = 'sm-value' + (d.mrr_gbp > 0 ? ' blue' : '');
 
-    // Paid subscribers
-    const paidEl = document.getElementById('paid-total');
+    // Snapshot paid subscribers
+    const paidEl = document.getElementById('snap-paid');
     paidEl.textContent = d.paid_total ?? 0;
-    // Blue only if paid_total > 0 (positive signal)
-    paidEl.className = 'card-value' + (d.paid_total > 0 ? ' blue' : '');
+    paidEl.className = 'sm-value' + (d.paid_total > 0 ? ' blue' : '');
 
-    const tiers = d.subscribers_by_tier ?? {};
-    document.getElementById('tier-breakdown').innerHTML =
-      Object.entries(tiers)
-        .filter(([t]) => t !== 'free')
-        .map(([t, n]) => `<div class="tier-pill"><span>${t}</span>${n}</div>`)
-        .join('');
-
-    const conv = d.free_to_paid_conversion_rate;
-    const issuances = d.free_to_paid_conversion_issuances_30d ?? 0;
-    setText('conversion-rate-inline',
-      conv !== null && conv !== undefined
-        ? `${conv}% conversion · ${issuances} started (30d)`
-        : issuances > 0 ? `${issuances} started (30d)` : ''
-    );
-
-    // Churn — red only if churn > 0
-    const churn = d.churn_rate_mtd_pct ?? 0;
-    const churnEl = document.getElementById('churn-rate');
-    churnEl.textContent = `${churn}%`;
-    churnEl.className = 'card-value' + (churn > 0 ? ' red' : '');
-    setText('churn-sub', `${d.cancelled_mtd ?? 0} cancelled this month`);
-
-    // Credential uniqueness — red if below 99%, amber if below 99.9%
+    // Snapshot credential uniqueness
     const rate = d.credential_uniqueness_rate;
-    const rateEl = document.getElementById('uniqueness-rate');
-    if (rate === null || rate === undefined) {
-      rateEl.textContent = 'n/a'; rateEl.className = 'card-value';
-    } else {
-      rateEl.textContent = `${(rate * 100).toFixed(2)}%`;
-      rateEl.className = 'card-value' +
-        (rate < 0.99 ? ' red' : rate < 0.999 ? ' amber' : '');
-    }
-    setText('uniqueness-sub',
-      rate !== null
-        ? `${d.credential_uniqueness_total_melts ?? 0} melts · ${d.credential_uniqueness_total_attempts ?? 0} replays`
-        : ''
-    );
+    const uEl = document.getElementById('snap-uniqueness');
+    uEl.textContent = rate !== null && rate !== undefined ? `${(rate * 100).toFixed(2)}%` : 'n/a';
+    uEl.className = 'sm-value' + (rate !== null && rate < 0.99 ? ' red' : rate !== null && rate < 0.999 ? ' amber' : '');
+
+    // Store for modal detail
+    lastMetrics = d;
   }
 
   // ── Render: /admin/ae-metrics ─────────────────────────────────────────────
   function renderAeMetrics(d) {
-    // Issuances
+    // Snapshot issuances
     const iss = d.credential_issuances_by_tier;
-    if (iss) {
-      const total = (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0);
-      setText('ae-issuances-total', total);
-      document.getElementById('ae-issuances-breakdown').innerHTML = [
-        { label: 'free', val: iss.free ?? 0 },
-        { label: 'creative', val: iss.creative ?? 0 },
-        { label: 'max', val: iss.max ?? 0 },
-      ].map(r =>
-        `<div class="issuance-item"><span class="ilabel">${r.label}</span><span class="ival">${r.val}</span></div>`
-      ).join('');
-    } else {
-      setText('ae-issuances-total', 'err');
-      document.getElementById('ae-issuances-total').className = 'card-value red';
-    }
+    const issTotal = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
+    const issEl = document.getElementById('snap-issuances');
+    issEl.textContent = issTotal !== null ? issTotal : 'n/a';
+    issEl.className = 'sm-value';
 
-    // R2 bytes
-    const bytesEl = document.getElementById('ae-bytes-uploaded');
+    // Snapshot bytes stored
+    const bytesEl = document.getElementById('snap-bytes');
     if (d.r2_bytes_uploaded !== null && d.r2_bytes_uploaded !== undefined) {
       const { val, unit } = formatBytes(d.r2_bytes_uploaded);
       bytesEl.textContent = `${val} ${unit}`;
-      bytesEl.className = 'card-value';
     } else {
       bytesEl.textContent = 'n/a';
-      bytesEl.className = 'card-value';
     }
+    bytesEl.className = 'sm-value';
 
-    // Chunk retrieval — red below 99%, amber below 99.9%
-    const retEl = document.getElementById('ae-retrieval-rate');
-    const rate = d.r2_chunk_retrieval_success_rate;
-    if (rate !== null && rate !== undefined) {
-      retEl.textContent = `${(rate * 100).toFixed(2)}%`;
-      retEl.className = 'card-value' + (rate < 0.99 ? ' red' : rate < 0.999 ? ' amber' : '');
-      setText('ae-retrieval-sub', `${d.r2_chunk_successful_chunks ?? 0} / ${d.r2_chunk_total_chunks ?? 0} chunks`);
-    } else {
-      retEl.textContent = 'n/a';
-      retEl.className = 'card-value';
-      setText('ae-retrieval-sub', '');
-    }
-
-    // Latency — amber above 200ms, red above 500ms
-    const lat = d.latency_by_endpoint;
-    const renderLat = (key, p95Id, p99SubId) => {
-      const e = lat?.[key];
-      const el = document.getElementById(p95Id);
-      if (e) {
-        el.textContent = `${e.p95_ms} ms`;
-        el.className = 'card-value' + (e.p95_ms > 500 ? ' red' : e.p95_ms > 200 ? ' amber' : '');
-        setText(p99SubId, `p99: ${e.p99_ms} ms · ${e.requests.toLocaleString()} req`);
-      } else {
-        el.textContent = 'n/a'; el.className = 'card-value';
-        setText(p99SubId, '');
-      }
-    };
-    if (lat && !d.latency_note) {
-      renderLat('upload', 'ae-p95-upload', 'ae-p99-upload-sub');
-      renderLat('download', 'ae-p95-download', 'ae-p99-download-sub');
-    } else {
-      ['ae-p95-upload', 'ae-p95-download'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) { el.textContent = 'n/a'; el.className = 'card-value'; }
-      });
-    }
-
-    // Error rate — red if any errors
+    // Snapshot error rate
     const errs = d.error_rate_by_endpoint;
-    const errEl = document.getElementById('ae-error-rate');
+    const errEl = document.getElementById('snap-error-rate');
     if (errs && !d.error_rate_note) {
       let totalErrors = 0, totalReqs = 0;
       for (const ep of Object.values(errs)) {
@@ -711,58 +556,18 @@
       }
       const aggRate = totalReqs > 0 ? totalErrors / totalReqs : 0;
       errEl.textContent = `${(aggRate * 100).toFixed(2)}%`;
-      errEl.className = 'card-value' + (aggRate > 0.01 ? ' red' : aggRate > 0 ? ' amber' : '');
-      setText('ae-error-rate-sub', `${totalErrors} errors · ${totalReqs.toLocaleString()} requests`);
+      errEl.className = 'sm-value' + (aggRate > 0.01 ? ' red' : aggRate > 0 ? ' amber' : '');
     } else {
-      errEl.textContent = 'n/a'; errEl.className = 'card-value';
-      setText('ae-error-rate-sub', '');
+      errEl.textContent = 'n/a'; errEl.className = 'sm-value';
     }
+
+    // Store for modals
+    lastAe = d;
   }
 
   // ── Render: /admin/snapshot ───────────────────────────────────────────────
   function renderSnapshot(d) {
     lastSnapshot = d;
-    const fmtPct = v => v === null || v === undefined ? 'n/a' : `${(v * 100).toFixed(2)}%`;
-    const fmtMs  = v => v === null || v === undefined ? 'n/a' : `${v} ms`;
-
-    // MRR — blue (positive signal)
-    setText('snap-mrr', d.mrr_gbp !== null && d.mrr_gbp !== undefined ? `£${d.mrr_gbp}` : 'n/a');
-    const mrrEl = document.getElementById('snap-mrr');
-    mrrEl.className = 'sm-value' + (d.mrr_gbp > 0 ? ' blue' : '');
-
-    // Paid — blue if > 0
-    setText('snap-paid', d.paid_subscribers ?? 'n/a');
-    const paidEl = document.getElementById('snap-paid');
-    paidEl.className = 'sm-value' + (d.paid_subscribers > 0 ? ' blue' : '');
-
-    // Uniqueness — red/amber if degraded
-    setText('snap-uniqueness', fmtPct(d.credential_uniqueness_rate));
-    const uEl = document.getElementById('snap-uniqueness');
-    const u = d.credential_uniqueness_rate;
-    uEl.className = 'sm-value' + (u !== null && u < 0.99 ? ' red' : u !== null && u < 0.999 ? ' amber' : '');
-
-    // Issuances — cream (count, no health signal)
-    const iss = lastAe?.credential_issuances_by_tier;
-    const issTotal = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : '—';
-    setText('snap-issuances', issTotal);
-    document.getElementById('snap-issuances').className = 'sm-value';
-
-    // Bytes — cream
-    const bytes = lastAe?.r2_bytes_uploaded;
-    if (bytes !== null && bytes !== undefined) {
-      const { val, unit } = formatBytes(bytes);
-      setText('snap-bytes', `${val} ${unit}`);
-    } else {
-      setText('snap-bytes', 'n/a');
-    }
-    document.getElementById('snap-bytes').className = 'sm-value';
-
-    // Error rate — red if any
-    setText('snap-error-rate', fmtPct(d.worker_error_rate));
-    const erEl = document.getElementById('snap-error-rate');
-    const er = d.worker_error_rate;
-    erEl.className = 'sm-value' + (er !== null && er > 0.01 ? ' red' : er !== null && er > 0 ? ' amber' : '');
-
     setText('snap-as-of', d.generated_at ? `as of ${new Date(d.generated_at).toUTCString()}` : '');
   }
 
@@ -782,16 +587,16 @@
 
   // ── Modal ─────────────────────────────────────────────────────────────────
   const MODAL_DEFS = {
-    mrr:            { label: 'Monthly run rate', plain: 'Revenue this month' },
-    paid:           { label: 'Paid subscribers', plain: 'Paying customers' },
-    churn:          { label: 'Churn rate MTD', plain: 'Cancellations this month' },
-    uniqueness:     { label: 'Credential uniqueness rate', plain: 'Upload tokens used only once' },
-    issuances:      { label: 'Credential issuances (30d)', plain: 'Uploads started in 30 days' },
-    storage:        { label: 'R2 bytes uploaded (90d)', plain: 'Data stored in 90 days' },
-    retrieval:      { label: 'Chunk retrieval success (24h)', plain: 'Downloads succeeding today' },
-    errors:         { label: 'Worker error rate', plain: 'Server errors right now' },
-    'upload-speed': { label: 'Upload speed · p95 / p99', plain: 'How fast uploads complete' },
-    'download-speed':{ label: 'Download speed · p95 / p99', plain: 'How fast downloads complete' },
+    mrr:             { label: 'Monthly run rate', plain: 'Revenue this month' },
+    paid:            { label: 'Paid subscribers', plain: 'Paying customers' },
+    uniqueness:      { label: 'Credential uniqueness rate', plain: 'Upload tokens used only once' },
+    issuances:       { label: 'Credential issuances (30d)', plain: 'Uploads started in 30 days' },
+    storage:         { label: 'Data stored (90d)', plain: 'Total encrypted data uploaded' },
+    errors:          { label: 'Server errors', plain: 'Worker error rate across all endpoints' },
+    'upload-speed':  { label: 'Upload speed', plain: 'p95 / p99 latency on uploads' },
+    'download-speed':{ label: 'Download speed', plain: 'p95 / p99 latency on downloads' },
+    retrieval:       { label: 'Download success rate', plain: 'Chunk retrieval success in last 24h' },
+    churn:           { label: 'Churn rate MTD', plain: 'Cancellations this month' },
   };
 
   function openModal(key) {
@@ -800,30 +605,86 @@
     setText('modal-label', def.label);
     setText('modal-plain', def.plain);
 
-    // Pull value and sub from the live card
-    const valueEl = document.getElementById({
-      mrr: 'mrr', paid: 'paid-total', churn: 'churn-rate',
-      uniqueness: 'uniqueness-rate', issuances: 'ae-issuances-total',
-      storage: 'ae-bytes-uploaded', retrieval: 'ae-retrieval-rate',
-      errors: 'ae-error-rate', 'upload-speed': 'ae-p95-upload',
-      'download-speed': 'ae-p95-download',
-    }[key]);
-    const subEl = document.getElementById({
-      mrr: 'mrr-stripe', paid: 'conversion-rate-inline', churn: 'churn-sub',
-      uniqueness: 'uniqueness-sub', issuances: null, storage: 'ae-bytes-sub',
-      retrieval: 'ae-retrieval-sub', errors: 'ae-error-rate-sub',
-      'upload-speed': 'ae-p99-upload-sub', 'download-speed': 'ae-p99-download-sub',
-    }[key]);
+    const m = lastMetrics ?? {};
+    const ae = lastAe ?? {};
+    let value = '—', sub = '', colorClass = '';
+
+    switch (key) {
+      case 'mrr':
+        value = m.mrr_gbp !== null && m.mrr_gbp !== undefined ? `£${m.mrr_gbp}` : 'n/a';
+        sub = 'Stripe total: coming next session';
+        colorClass = m.mrr_gbp > 0 ? ' blue' : '';
+        break;
+      case 'paid':
+        value = m.paid_total ?? 'n/a';
+        const tiers = m.subscribers_by_tier ?? {};
+        const tierStr = Object.entries(tiers).filter(([t]) => t !== 'free')
+          .map(([t, n]) => `${n} ${t}`).join(' · ');
+        sub = tierStr || '';
+        const conv = m.free_to_paid_conversion_rate;
+        if (conv !== null && conv !== undefined) sub += ` · ${conv}% conversion`;
+        colorClass = m.paid_total > 0 ? ' blue' : '';
+        break;
+      case 'uniqueness':
+        const r = m.credential_uniqueness_rate;
+        value = r !== null && r !== undefined ? `${(r * 100).toFixed(2)}%` : 'n/a';
+        sub = `${m.credential_uniqueness_total_melts ?? 0} melts · ${m.credential_uniqueness_total_attempts ?? 0} replays`;
+        colorClass = r !== null && r < 0.99 ? ' red' : r !== null && r < 0.999 ? ' amber' : '';
+        break;
+      case 'issuances':
+        const iss = ae.credential_issuances_by_tier;
+        const total = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
+        value = total !== null ? total : 'n/a';
+        sub = iss ? `free ${iss.free ?? 0} · creative ${iss.creative ?? 0} · max ${iss.max ?? 0}` : '';
+        break;
+      case 'storage':
+        if (ae.r2_bytes_uploaded !== null && ae.r2_bytes_uploaded !== undefined) {
+          const { val, unit } = formatBytes(ae.r2_bytes_uploaded);
+          value = `${val} ${unit}`;
+        } else { value = 'n/a'; }
+        sub = 'Rolling 90 days';
+        break;
+      case 'errors':
+        const errs = ae.error_rate_by_endpoint;
+        if (errs) {
+          let te = 0, tr = 0;
+          for (const ep of Object.values(errs)) { te += ep.error_count; tr += ep.total_count; }
+          const ag = tr > 0 ? te / tr : 0;
+          value = `${(ag * 100).toFixed(2)}%`;
+          sub = `${te} errors · ${tr.toLocaleString()} total requests`;
+          colorClass = ag > 0.01 ? ' red' : ag > 0 ? ' amber' : '';
+        } else { value = 'n/a'; }
+        break;
+      case 'upload-speed':
+        const ul = ae.latency_by_endpoint?.upload;
+        value = ul ? `${ul.p95_ms} ms` : 'n/a';
+        sub = ul ? `p99: ${ul.p99_ms} ms · ${ul.requests?.toLocaleString()} requests` : 'No data in last 24h';
+        colorClass = ul && ul.p95_ms > 500 ? ' red' : ul && ul.p95_ms > 200 ? ' amber' : '';
+        break;
+      case 'download-speed':
+        const dl = ae.latency_by_endpoint?.download;
+        value = dl ? `${dl.p95_ms} ms` : 'n/a';
+        sub = dl ? `p99: ${dl.p99_ms} ms · ${dl.requests?.toLocaleString()} requests` : 'No data in last 24h';
+        colorClass = dl && dl.p95_ms > 500 ? ' red' : dl && dl.p95_ms > 200 ? ' amber' : '';
+        break;
+      case 'retrieval':
+        const ret = ae.r2_chunk_retrieval_success_rate;
+        value = ret !== null && ret !== undefined ? `${(ret * 100).toFixed(2)}%` : 'n/a';
+        sub = `${ae.r2_chunk_successful_chunks ?? 0} / ${ae.r2_chunk_total_chunks ?? 0} chunks`;
+        colorClass = ret !== null && ret < 0.99 ? ' red' : ret !== null && ret < 0.999 ? ' amber' : '';
+        break;
+      case 'churn':
+        value = `${m.churn_rate_mtd_pct ?? 0}%`;
+        sub = `${m.cancelled_mtd ?? 0} cancelled this month`;
+        colorClass = (m.churn_rate_mtd_pct ?? 0) > 0 ? ' red' : '';
+        break;
+    }
 
     const mv = document.getElementById('modal-value');
-    mv.textContent = valueEl ? valueEl.textContent : '—';
-    mv.className = 'modal-value' + (valueEl?.classList.contains('red') ? ' red' :
-      valueEl?.classList.contains('amber') ? ' amber' :
-      valueEl?.classList.contains('blue') ? ' blue' : '');
-
-    setText('modal-sub', subEl ? subEl.textContent : '');
+    mv.textContent = value;
+    mv.className = 'modal-value' + colorClass;
+    setText('modal-sub', sub);
     setText('modal-detail', 'Chart and trend history coming in B5.');
-
     document.getElementById('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
   }
