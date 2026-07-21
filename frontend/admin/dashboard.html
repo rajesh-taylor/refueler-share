@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>refueler-share · dev dashboard</title>
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=satoshi:400,500,700,900&display=swap" rel="stylesheet">
 <style>
   :root {
     --carbon: #1A1A1A;
@@ -11,21 +13,21 @@
     --carbon-3: #2E2E2E;
     --carbon-border: #3A3A3A;
     --paper: #F5F0E8;
-    --paper-dim: #C8C2B6;
+    --paper-dim: #9A9488;
     --accent: #E8D5A3;
     --green: #4CAF72;
     --amber: #E8A93A;
     --red: #E85A4A;
     --blue: #5A9BE8;
     --mono: 'JetBrains Mono', 'Fira Mono', monospace;
-    --sans: 'Inter', system-ui, sans-serif;
+    --sans: 'Satoshi', system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--carbon);
     color: var(--paper);
     font-family: var(--sans);
-    font-size: 14px;
+    font-size: 16px;
     min-height: 100vh;
   }
 
@@ -34,91 +36,108 @@
     display: flex; align-items: center; justify-content: center;
     min-height: 100vh; flex-direction: column; gap: 16px;
   }
-  #gate h1 { font-size: 18px; color: var(--accent); letter-spacing: .04em; }
+  #gate h1 { font-size: 20px; color: var(--accent); letter-spacing: .04em; font-weight: 700; }
   #gate input {
     background: var(--carbon-2); border: 1px solid var(--carbon-border);
     color: var(--paper); padding: 10px 14px; border-radius: 6px;
-    font-family: var(--mono); font-size: 14px; width: 320px; outline: none;
+    font-family: var(--mono); font-size: 15px; width: 320px; outline: none;
   }
   #gate input:focus { border-color: var(--accent); }
   #gate button {
     background: var(--accent); color: var(--carbon); border: none;
-    padding: 10px 24px; border-radius: 6px; font-weight: 600;
-    cursor: pointer; font-size: 14px;
+    padding: 10px 24px; border-radius: 6px; font-weight: 700;
+    cursor: pointer; font-size: 15px; font-family: var(--sans);
   }
-  #gate-error { color: var(--red); font-size: 13px; }
+  #gate-error { color: var(--red); font-size: 15px; }
 
   /* ── Dashboard ── */
   #dashboard { display: none; }
   header {
     background: var(--carbon-2); border-bottom: 1px solid var(--carbon-border);
-    padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+    padding: 16px 28px; display: flex; align-items: center; gap: 16px;
   }
-  header h1 { font-size: 15px; color: var(--accent); letter-spacing: .04em; flex: 1; }
+  header h1 { font-size: 17px; color: var(--accent); letter-spacing: .04em; flex: 1; font-weight: 700; }
   #refresh-btn {
     background: var(--carbon-3); border: 1px solid var(--carbon-border);
-    color: var(--paper-dim); padding: 6px 14px; border-radius: 5px;
-    cursor: pointer; font-size: 12px;
+    color: var(--paper-dim); padding: 7px 16px; border-radius: 5px;
+    cursor: pointer; font-size: 14px; font-family: var(--sans);
   }
   #refresh-btn:hover { color: var(--paper); border-color: var(--accent); }
-  #countdown { font-size: 12px; color: var(--paper-dim); font-family: var(--mono); }
+  #countdown { font-size: 14px; color: var(--paper-dim); font-family: var(--mono); }
 
-  main { padding: 24px; max-width: 1100px; }
+  main { padding: 28px; max-width: 1200px; }
 
   /* ── Section headings ── */
   .section-label {
-    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--paper-dim); margin: 28px 0 12px; padding-bottom: 6px;
-    border-bottom: 1px solid var(--carbon-border);
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--paper-dim); margin: 36px 0 16px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--carbon-border); font-weight: 500;
   }
 
   /* ── Grid ── */
-  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-  .grid-wide { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 
   /* ── Card ── */
   .card {
     background: var(--carbon-2); border: 1px solid var(--carbon-border);
-    border-radius: 8px; padding: 16px;
+    border-radius: 10px; padding: 22px 20px;
   }
-  .card-label { font-size: 11px; color: var(--paper-dim); letter-spacing: .04em; margin-bottom: 8px; }
+
+  /* Technical name — small, dimmed, above the plain label */
+  .card-label {
+    font-size: 12px; color: var(--paper-dim); letter-spacing: .05em;
+    text-transform: uppercase; margin-bottom: 6px; font-weight: 500;
+  }
+
+  /* Plain-English description — large, what you read first */
+  .card-plain {
+    font-size: 19px; color: var(--paper); margin-bottom: 14px;
+    line-height: 1.3; font-weight: 500;
+  }
+
+  /* The number */
   .card-value {
-    font-size: 28px; font-weight: 700; font-family: var(--mono);
+    font-size: 52px; font-weight: 900; font-family: var(--sans);
     color: var(--paper); line-height: 1;
   }
-  .card-value.green  { color: var(--green); }
-  .card-value.amber  { color: var(--amber); }
-  .card-value.red    { color: var(--red); }
-  .card-value.blue   { color: var(--blue); }
-  .card-sub { font-size: 11px; color: var(--paper-dim); margin-top: 6px; }
-  .card-note { font-size: 10px; color: #666; margin-top: 8px; line-height: 1.5; }
-  .deferred { opacity: .45; }
-  .deferred .card-value { font-size: 18px; }
+  .card-value.green { color: var(--green); }
+  .card-value.amber { color: var(--amber); }
+  .card-value.red   { color: var(--red); }
+  .card-value.blue  { color: var(--blue); }
+
+  /* Supporting detail line below the number */
+  .card-sub { font-size: 17px; color: var(--paper-dim); margin-top: 10px; font-weight: 400; }
+
+  /* Fine print / debug notes */
+  .card-note { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.5; }
+
+  .deferred { opacity: .4; }
+  .deferred .card-value { font-size: 32px; }
 
   /* ── Tier breakdown ── */
-  .tier-row { display: flex; gap: 12px; margin-top: 8px; }
+  .tier-row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
   .tier-pill {
-    background: var(--carbon-3); border-radius: 4px; padding: 4px 10px;
-    font-size: 12px; font-family: var(--mono);
+    background: var(--carbon-3); border-radius: 4px; padding: 5px 12px;
+    font-size: 14px; font-family: var(--mono);
   }
-  .tier-pill span { color: var(--paper-dim); margin-right: 4px; }
+  .tier-pill span { color: var(--paper-dim); margin-right: 5px; }
 
   /* ── Issuance breakdown ── */
-  .issuance-row { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-  .issuance-item { display: flex; justify-content: space-between; font-size: 12px; font-family: var(--mono); }
+  .issuance-row { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .issuance-item { display: flex; justify-content: space-between; font-size: 15px; font-family: var(--mono); }
   .issuance-item .label { color: var(--paper-dim); }
-  .issuance-item .val   { color: var(--paper); }
+  .issuance-item .val   { color: var(--paper); font-weight: 700; }
 
   /* ── Error banner ── */
   #error-banner {
     display: none; background: rgba(232,90,74,.15);
     border: 1px solid var(--red); border-radius: 6px;
-    padding: 10px 14px; margin-bottom: 16px;
-    font-size: 12px; color: var(--red);
+    padding: 12px 16px; margin-bottom: 20px;
+    font-size: 14px; color: var(--red);
   }
 
   /* ── Loading spinner ── */
-  .spinner { display: inline-block; width: 12px; height: 12px;
+  .spinner { display: inline-block; width: 14px; height: 14px;
     border: 2px solid var(--carbon-border); border-top-color: var(--accent);
     border-radius: 50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -126,29 +145,30 @@
   /* ── Snapshot card ── */
   .snapshot-card {
     background: var(--carbon-2); border: 1px solid var(--carbon-border);
-    border-radius: 8px; padding: 20px;
+    border-radius: 10px; padding: 24px;
   }
-  .snapshot-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .snapshot-header .card-label { flex: 1; margin: 0; font-size: 11px; }
+  .snapshot-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .snapshot-title { flex: 1; font-size: 19px; font-weight: 700; color: var(--paper); }
   #snapshot-copy-btn {
     background: var(--carbon-3); border: 1px solid var(--carbon-border);
-    color: var(--paper-dim); padding: 5px 12px; border-radius: 5px;
-    cursor: pointer; font-size: 11px; font-family: var(--mono);
+    color: var(--paper-dim); padding: 7px 14px; border-radius: 5px;
+    cursor: pointer; font-size: 13px; font-family: var(--sans);
     display: flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s;
   }
   #snapshot-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
   #snapshot-copy-btn.copied { color: var(--green); border-color: var(--green); }
   #snapshot-copy-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
   .snapshot-grid {
-    display: grid; gap: 10px;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
-  .snapshot-metric { display: flex; flex-direction: column; gap: 3px; }
-  .snapshot-metric .sm-label { font-size: 10px; color: var(--paper-dim); letter-spacing: .04em; }
-  .snapshot-metric .sm-value { font-size: 18px; font-weight: 700; font-family: var(--mono); color: var(--paper); }
+  .snapshot-metric { display: flex; flex-direction: column; gap: 4px; }
+  .snapshot-metric .sm-label { font-size: 11px; color: var(--paper-dim); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; }
+  .snapshot-metric .sm-plain { font-size: 16px; color: var(--paper); font-weight: 500; margin-bottom: 2px; }
+  .snapshot-metric .sm-value { font-size: 36px; font-weight: 900; font-family: var(--sans); color: var(--paper); }
   .snapshot-metric .sm-value.green { color: var(--green); }
   .snapshot-metric .sm-value.amber { color: var(--amber); }
-  .snapshot-as-of { font-size: 10px; color: #555; margin-top: 14px; font-family: var(--mono); }
+  .snapshot-as-of { font-size: 13px; color: #555; margin-top: 16px; font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -173,99 +193,107 @@
     <div id="error-banner"></div>
 
     <!-- Revenue & Subscribers -->
-    <div class="section-label">Revenue &amp; Subscribers</div>
+    <div class="section-label">Money</div>
     <div class="grid">
       <div class="card">
         <div class="card-label">MRR (GBP) — floor</div>
+        <div class="card-plain">Monthly revenue</div>
         <div class="card-value" id="mrr">—</div>
         <div class="card-note" id="mrr-note"></div>
       </div>
       <div class="card">
         <div class="card-label">Paid subscribers &amp; conversion</div>
+        <div class="card-plain">Paying customers</div>
         <div class="card-value blue" id="paid-total">—</div>
         <div class="tier-row" id="tier-breakdown"></div>
-        <div class="card-sub" id="conversion-rate-inline" style="margin-top:10px;"></div>
+        <div class="card-sub" id="conversion-rate-inline" style="margin-top:12px;"></div>
         <div class="card-note" id="conversion-note"></div>
       </div>
       <div class="card deferred">
         <div class="card-label">Lightning vs Stripe mix</div>
+        <div class="card-plain">Bitcoin vs card payments</div>
         <div class="card-value amber">S59</div>
-        <div class="card-note">Requires Blink BOLT11 (B7)</div>
+        <div class="card-note">Coming in Block 7 when Lightning payments go live</div>
       </div>
       <div class="card">
         <div class="card-label">Churn rate MTD</div>
+        <div class="card-plain">Cancellations this month</div>
         <div class="card-value" id="churn-rate">—</div>
         <div class="card-sub" id="churn-sub"></div>
         <div class="card-note" id="churn-note"></div>
       </div>
     </div>
 
-    <!-- Cryptographic integrity -->
-    <div class="section-label">Cryptographic Integrity</div>
+    <!-- Security -->
+    <div class="section-label">Security</div>
     <div class="grid">
       <div class="card">
         <div class="card-label">Credential uniqueness rate</div>
+        <div class="card-plain">Upload tokens used only once</div>
         <div class="card-value" id="uniqueness-rate">—</div>
         <div class="card-sub" id="uniqueness-sub"></div>
         <div class="card-note" id="uniqueness-note"></div>
       </div>
       <div class="card deferred">
         <div class="card-label">ZK verification rate</div>
+        <div class="card-plain">Transfers with password protection</div>
         <div class="card-value amber">S34</div>
-        <div class="card-note">Requires has_passphrase AE logging (B4 scope)</div>
+        <div class="card-note">Requires passphrase logging (B4 scope)</div>
       </div>
     </div>
 
-    <!-- Analytics Engine metrics -->
-    <div class="section-label">Analytics Engine (AE SQL · live)</div>
+    <!-- Usage & Storage -->
+    <div class="section-label">Usage &amp; Storage</div>
     <div class="grid">
       <div class="card">
         <div class="card-label">Credential issuances (30d)</div>
+        <div class="card-plain">Uploads started in 30 days</div>
         <div class="card-value blue" id="ae-issuances-total">—</div>
         <div class="issuance-row" id="ae-issuances-breakdown"></div>
         <div class="card-note" id="ae-issuances-note"></div>
       </div>
       <div class="card">
         <div class="card-label">R2 bytes uploaded (90d)</div>
+        <div class="card-plain">Data stored in 90 days</div>
         <div class="card-value" id="ae-bytes-uploaded">—</div>
         <div class="card-sub" id="ae-bytes-sub"></div>
         <div class="card-note" id="ae-bytes-note"></div>
       </div>
       <div class="card">
         <div class="card-label">Chunk retrieval success (24h)</div>
+        <div class="card-plain">Downloads succeeding today</div>
         <div class="card-value" id="ae-retrieval-rate">—</div>
         <div class="card-sub" id="ae-retrieval-sub"></div>
         <div class="card-note" id="ae-retrieval-note"></div>
       </div>
-    </div>
-
-    <!-- Storage -->
-    <div class="section-label">Storage Economics</div>
-    <div class="grid">
       <div class="card deferred">
         <div class="card-label">R2 bytes purged</div>
+        <div class="card-plain">Expired files deleted</div>
         <div class="card-value amber">B4</div>
-        <div class="card-note">Requires R2 event notifications wired to AE (B4 scope)</div>
+        <div class="card-note">Requires R2 event notifications wired to AE</div>
       </div>
     </div>
 
-    <!-- Operational -->
-    <div class="section-label">Operational (Worker latency — AE SQL · 24h rolling)</div>
+    <!-- Speed & Reliability -->
+    <div class="section-label">Speed &amp; Reliability</div>
     <div class="grid">
       <div class="card">
         <div class="card-label">p95 / p99 latency · /upload</div>
+        <div class="card-plain">Upload speed (95th percentile)</div>
         <div class="card-value" id="ae-p95-upload">—</div>
         <div class="card-sub" id="ae-p99-upload-sub"></div>
         <div class="card-note" id="ae-latency-upload-note"></div>
       </div>
       <div class="card">
         <div class="card-label">p95 / p99 latency · /download</div>
+        <div class="card-plain">Download speed (95th percentile)</div>
         <div class="card-value" id="ae-p95-download">—</div>
         <div class="card-sub" id="ae-p99-download-sub"></div>
         <div class="card-note" id="ae-latency-download-note"></div>
       </div>
       <div class="card">
         <div class="card-label">Worker error rate · all endpoints</div>
+        <div class="card-plain">Server errors right now</div>
         <div class="card-value" id="ae-error-rate">—</div>
         <div class="card-sub" id="ae-error-rate-sub"></div>
         <div class="card-note" id="ae-error-rate-note"></div>
@@ -273,10 +301,10 @@
     </div>
 
     <!-- Investor Snapshot -->
-    <div class="section-label">Investor Snapshot</div>
+    <div class="section-label">Snapshot</div>
     <div class="snapshot-card">
       <div class="snapshot-header">
-        <div class="card-label">6-metric summary · live</div>
+        <div class="snapshot-title">6-metric summary</div>
         <button id="snapshot-copy-btn" onclick="copySnapshot()">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <rect x="5" y="5" width="9" height="9" rx="1.5"/>
@@ -288,26 +316,32 @@
       <div class="snapshot-grid">
         <div class="snapshot-metric">
           <span class="sm-label">MRR (GBP floor)</span>
+          <span class="sm-plain">Monthly revenue</span>
           <span class="sm-value" id="snap-mrr">—</span>
         </div>
         <div class="snapshot-metric">
           <span class="sm-label">Paid subscribers</span>
+          <span class="sm-plain">Paying customers</span>
           <span class="sm-value" id="snap-paid">—</span>
         </div>
         <div class="snapshot-metric">
           <span class="sm-label">Credential uniqueness</span>
+          <span class="sm-plain">Tokens used only once</span>
           <span class="sm-value" id="snap-uniqueness">—</span>
         </div>
         <div class="snapshot-metric">
           <span class="sm-label">p95 upload latency</span>
+          <span class="sm-plain">Upload speed</span>
           <span class="sm-value" id="snap-upload-lat">—</span>
         </div>
         <div class="snapshot-metric">
           <span class="sm-label">p95 download latency</span>
+          <span class="sm-plain">Download speed</span>
           <span class="sm-value" id="snap-download-lat">—</span>
         </div>
         <div class="snapshot-metric">
           <span class="sm-label">Worker error rate</span>
+          <span class="sm-plain">Server errors</span>
           <span class="sm-value" id="snap-error-rate">—</span>
         </div>
       </div>
