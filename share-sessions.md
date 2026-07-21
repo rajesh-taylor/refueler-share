@@ -157,6 +157,33 @@
 - Wrangler updated 3.114.17 → 4.112.0 (`npm install --save-dev wrangler@4` in `worker/`).
 - Smoke test: `client_errors_24h: 0` confirmed in AE response. `latency_note` 422 error pre-existing (quantilesTDigest snag, unchanged).
 
+### S39 — Server-side tier enforcement
+**Commit:** `ab4fc98`
+
+- `CHUNK_SIZE_MAX` constant: 10 MB hard cap per chunk. Checked against `Content-Length` header before body read, and again against actual `chunkBody.byteLength` after read. 413 + AE log on either violation.
+- Tier resolved server-side from Supabase `subscribers` table via `X-Email` header. `X-Tier` header no longer trusted. Falls back to `free` on any Supabase error, missing email, or no active subscriber found.
+- KV byte counter `upload_bytes:{uuid}` in `STATUS_KV`: read before every chunk write, incremented after write, deleted on `upload_complete`. TTL 24h refreshed on each chunk. Fails open on KV error.
+- First-chunk path: early cap check against declared `X-Total-Bytes` before credential verification — avoids burning a Cashu token on an oversized transfer.
+- `X-Email` added to CORS `Access-Control-Allow-Headers`.
+- All 413 rejections logged to AE with `errorMsg`: `chunk_too_large`, `tier_cap_exceeded`, `declared_total_exceeds_cap`, `chunk_body_too_large`.
+
+### S40 — MIME type denylist gate
+**Commit:** (pending)
+
+- `MIME_DENYLIST` constant in `worker/src/index.js` — `Set` of 6 execution-capable MIME types rejected at the upload boundary: `application/x-msdownload`, `application/x-executable`, `application/x-sh`, `application/x-bat`, `text/x-shellscript`, `application/x-php`.
+- Gate applied to chunk 0 only — subsequent chunks are raw AES-GCM ciphertext continuations; Content-Type on those carries no meaningful signal.
+- Missing Content-Type → 415 + AE log (`mime_missing`). Denylisted type → 415 + AE log (`mime_denied`).
+- Gate fires before tier resolution, KV read, credential verification, or body read — zero Supabase/KV cost on rejection.
+- `application/java-archive` (.jar) explicitly excluded from denylist — legitimate developer artefact; requires active JVM invocation.
+- MIME type is never stored — not in R2 manifest, not in Supabase, not in AE (except errorMsg on rejection). Gate reflects declared intent only; Worker receives encrypted payload and cannot inspect content.
+- `CLAUDE.md` locked decisions updated. `README.md` updated. `Share-Master-Context.md` updated.
+
+**Do not retry:**
+- DO NOT trust `X-Tier` from client — ignored since S39, tier is always resolved from Supabase.
+- DO NOT skip `X-Email` in upload requests — without it tier always resolves to `free`.
+- DO NOT apply MIME gate to chunks > 0 — ciphertext continuations have no meaningful Content-Type.
+- DO NOT store MIME type anywhere — it is a gate signal, not a record.
+- DO NOT add `application/java-archive` to the denylist — deliberate exclusion, legitimate dev use.
 ---
 
 *"Nothing stops this train."*

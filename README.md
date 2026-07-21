@@ -27,6 +27,8 @@ It is **not** a standard file host. It is a cryptographic pipeline:
 **BLAKE3 — Chunk Integrity, Client and Server**  
 Every file is split into 50MB blocks. Each block is fingerprinted using BLAKE3, computed client-side via a compiled WebAssembly module. The Cloudflare Worker independently recomputes the BLAKE3 hash of every received chunk and verifies it against the client-declared value before writing to R2. A compromised or corrupted chunk is rejected at the Worker boundary — the server cannot be made to store data that doesn't match the declared hash.
 
+Upload requests are validated against a denylist of execution-capable file types (Windows executables, ELF binaries, shell scripts, PHP). The service does not store or record file types — the check reflects the sender's declared Content-Type only.
+
 The Worker-side BLAKE3 implementation is compiled from the official Rust `blake3` crate (v1.8.5) to WebAssembly via `wasm-pack`, checked into `worker/blake3-wasm/`, and imported statically. No CDN dependency. No trust assumption on the client declaration.
 
 BLAKE3 is used exclusively for **chunk integrity verification**. It does not replace the Cashu blind signature scheme.

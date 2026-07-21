@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.0 | **Initialised:** CC-64 · 8 July 2026
+> **Version:** 1.1 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** S40 · 21 July 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Blink, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -35,6 +35,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 
 - No custodial wallet. Payment settled externally via Blink.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
+- Content-Type header is validated against a denylist of execution-capable types at the upload boundary. The Worker cannot verify payload content — the header check reflects declared intent only. The MIME type is never stored.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
 
@@ -60,6 +61,6 @@ Integrity/audit marketing claims remain blocked until S42 (BLAKE3 Worker WASM ve
   experimentation before wiring into production. Flagged S20. Scope decision at B8 (S69)
   and B10 (S83). Do not start until NUT-11 Mode 2 design is locked.
 
-  ---
+---
 
 *"Nothing stops this train."*

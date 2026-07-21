@@ -12,6 +12,38 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 const CHUNK_SIZE_MAX = 10 * 1024 * 1024; // 10 MB hard cap per chunk
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MIME type denylist (S40)
+//
+// Rejects upload requests whose Content-Type header declares an
+// execution-capable file type with no legitimate anonymous transfer use.
+//
+// This gate checks declared intent only — the Worker receives AES-GCM
+// ciphertext and cannot inspect payload content. A cooperative client
+// sets Content-Type correctly via the browser File API. A malicious client
+// can declare any header; the denylist is a signal gate, not a sandbox.
+//
+// Denylisted types:
+//   application/x-msdownload   — Windows PE executables (.exe, .dll)
+//   application/x-executable   — ELF binaries (Linux/macOS native executables)
+//   application/x-sh           — Shell scripts (.sh) — execution-capable on any Unix host
+//   application/x-bat          — Windows batch files (.bat, .cmd)
+//   text/x-shellscript         — Shell scripts (alternate MIME, same risk)
+//   application/x-php          — PHP source — execution-capable on any PHP host
+//
+// Permitted by deliberate decision:
+//   application/java-archive (.jar) — legitimate developer artefact;
+//   requires JVM invocation, not passive execution.
+// ─────────────────────────────────────────────────────────────────────────────
+const MIME_DENYLIST = new Set([
+  'application/x-msdownload',
+  'application/x-executable',
+  'application/x-sh',
+  'application/x-bat',
+  'text/x-shellscript',
+  'application/x-php',
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CORS
 // ─────────────────────────────────────────────────────────────────────────────
 function corsHeaders(request) {
@@ -339,9 +371,37 @@ async function handleCredentialIssue(request, env) {
 //     Before each chunk write: read counter + Content-Length. If sum exceeds
 //     tier cap → 413. Counter deleted on upload_complete.
 //   - All 413 rejections logged to AE.
+//
+// S40 changes:
+//   - Content-Type header checked against MIME_DENYLIST before any other
+//     processing. Missing Content-Type → 415. Denylisted type → 415.
+//   - Gate applies to chunk 0 only — subsequent chunks carry no meaningful
+//     Content-Type (they are raw ciphertext continuations).
+//   - All 415 rejections logged to AE with errorMsg: 'mime_denied' or
+//     'mime_missing'.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleUpload(request, env, uuid, chunkIndex) {
   const isFirstChunk = chunkIndex === 0;
+
+  // ── MIME type gate (S40) — chunk 0 only ───────────────────────────────────
+  // Subsequent chunks are raw ciphertext continuations; Content-Type on those
+  // is not meaningful. Gate applies exclusively to the first chunk, which
+  // carries the file's declared type from the browser File API.
+  if (isFirstChunk) {
+    const rawContentType = request.headers.get('Content-Type') ?? '';
+    // Strip parameters (e.g. "application/x-sh; charset=utf-8" → "application/x-sh")
+    const mimeType = rawContentType.split(';')[0].trim().toLowerCase();
+
+    if (!mimeType) {
+      logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 415, errorMsg: 'mime_missing' });
+      return err(415, 'Content-Type header is required');
+    }
+
+    if (MIME_DENYLIST.has(mimeType)) {
+      logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 415, errorMsg: 'mime_denied' });
+      return err(415, `File type '${mimeType}' is not permitted`);
+    }
+  }
 
   // ── Chunk size hard cap ────────────────────────────────────────────────────
   // Reject before reading body. Content-Length is required for PUT from our
@@ -783,31 +843,16 @@ async function handlePortal(request, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin metrics — GET /admin/metrics
 // X-Admin-Key protected.
-//
-// S19: mrr_gbp, subscribers_by_tier, paid_total, churn_rate_mtd
-//
-// S20 additions:
-//   Metric 4 — credential_uniqueness_rate (Supabase: double_spend_attempts vs spent_tokens)
-//   Metric 5 — r2_bytes_uploaded / r2_bytes_purged (null — AE SQL API, S22)
-//   Metric 6 — r2_chunk_retrieval_success_rate (null — AE SQL API, S22)
-//   Metric 3 — zk_verification_rate (null — needs has_passphrase AE logging, B4)
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminMetrics(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
-  // Fetch AE metrics in parallel so conversion rate can be computed server-side.
   const [data, aeData] = await Promise.all([
     fetchMetricsData(env),
     fetchAeMetricsData(env),
   ]);
   if (data._error) return err(data._status ?? 500, data._error);
 
-  // ── Metric 11: Free-to-paid conversion rate ────────────────────────────────
-  // paid_total (active paid subscribers now) / total credential issuances last 30d.
-  // Numerator: Supabase subscribers table. Denominator: AE SQL credential_issue events.
-  // Note: issuances are rolling 30d; paid_total is a snapshot — not a cohort rate.
-  // True cohort conversion requires joining subscriber created_at to issuance timestamps,
-  // which needs either Supabase issuance logging or AE→Supabase ETL (B9+ scope).
   const issByTier = aeData?.credential_issuances_by_tier;
   if (issByTier && !aeData?.credential_issuances_note) {
     const totalIssuances = (issByTier.free ?? 0) + (issByTier.creative ?? 0) + (issByTier.max ?? 0);
@@ -835,7 +880,6 @@ async function fetchMetricsData(env) {
   const TIER_MRR = { creative: 12, max: 24 };
 
   try {
-    // ── Active subscriber counts ──────────────────────────────────────────────
     const countRes = await supabaseFetch(env, 'GET', '/rest/v1/subscribers?status=eq.active&select=tier');
     if (!countRes.ok) return err(502, 'Database unavailable');
     const activeRows = await countRes.json();
@@ -852,7 +896,6 @@ async function fetchMetricsData(env) {
 
     const paidTotal = (subscribersByTier.creative ?? 0) + (subscribersByTier.max ?? 0);
 
-    // ── Churn rate MTD ────────────────────────────────────────────────────────
     const now          = new Date();
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 
@@ -868,13 +911,6 @@ async function fetchMetricsData(env) {
       ? parseFloat(((cancelledMtd / activeStartOfMonth) * 100).toFixed(2))
       : 0;
 
-    // ── Metric 4: Credential uniqueness rate ──────────────────────────────────
-    // Uses Supabase Content-Range header for count without fetching rows:
-    //   Prefer: count=exact + Range: 0-0 → Content-Range: 0-0/TOTAL
-    // Rate = legitimate_melts / (legitimate_melts + replay_attempts)
-    // Target: 1.0 (100%). Any value < 1.0 indicates active replay attacks.
-    // Note: only counts 409s (credential verified but already spent).
-    // Attacks failing verifyCredential() return 401 and are not captured here.
     const parseSbCount = (res) => {
       const cr = res.headers.get('Content-Range') ?? '';
       const m  = cr.match(/\/(\d+)$/);
@@ -909,8 +945,6 @@ async function fetchMetricsData(env) {
 
     return {
       as_of: new Date().toISOString(),
-
-      // ── S19: Subscription / revenue metrics ──────────────────────────────
       mrr_gbp: mrrGbp,
       mrr_note: 'Conservative floor: monthly plan prices used for all tiers. Yearly subscribers (£120/yr creative, £240/yr max) are under-counted by £2–4/mo each. Accurate MRR requires Stripe API interval lookup (dashboard layer, S22).',
       subscribers_by_tier: subscribersByTier,
@@ -921,44 +955,15 @@ async function fetchMetricsData(env) {
       churn_note: 'Approximation: active_now + cancelled_mtd. Under-counts if any subscriber signed up and cancelled within the current calendar month.',
       credential_issuances: null,
       credential_issuances_note: 'Requires Cloudflare AE SQL API (external REST call with account token). Computed in dashboard layer (S22).',
-
-      // ── S20 Metric 4: Credential uniqueness rate ──────────────────────────
       credential_uniqueness_rate: credentialUniquenessRate,
       credential_uniqueness_total_melts: totalMelts,
       credential_uniqueness_total_attempts: totalAttempts,
       credential_uniqueness_note: credentialUniquenessNote,
-
-      // ── S20 Metric 5: R2 sinks vs sources ────────────────────────────────
-      // AE SQL for uploaded bytes (chunk 0 only, where total_bytes is logged):
-      //   SELECT sum(doubles[4]) AS total_bytes_uploaded FROM share_events
-      //   WHERE blob1 = 'upload' AND doubles[2] = 0
-      //   AND timestamp > now() - INTERVAL '90' DAY;
-      // Purged bytes: not directly measurable until R2 event notifications
-      // are wired to an AE pipeline (B4 scope, alongside BLAKE3 WASM work).
       r2_bytes_uploaded: null,
       r2_bytes_purged: null,
       r2_storage_note: 'Both require Cloudflare AE SQL API (external REST, not Worker-callable). Uploaded bytes: sum(doubles[4]) WHERE blob1=upload AND doubles[2]=0. Purged bytes: not measurable until R2 event notifications wired to AE (B4). Computed in dashboard layer (S22).',
-
-      // ── S20 Metric 6: R2 chunk retrieval success rate ─────────────────────
-      // AE SQL (rolling 24h):
-      //   SELECT
-      //     countIf(blob3 != '') AS failed_chunks,
-      //     count()              AS total_chunks,
-      //     1 - (countIf(blob3 != '') / count()) AS success_rate
-      //   FROM share_events
-      //   WHERE blob1 = 'download'
-      //   AND timestamp > now() - INTERVAL '1' DAY;
       r2_chunk_retrieval_success_rate: null,
       r2_chunk_retrieval_note: "Requires Cloudflare AE SQL API. Query: 1 - (countIf(blob3 != '') / count()) WHERE blob1='download'. Computed in dashboard layer (S22).",
-
-      // ── S20 Metric 3: Zero-knowledge verification rate ────────────────────
-      // Proxy: % of transfers where passphrase gate is active (p2sh_secret_hash set).
-      // R2 manifests not enumerable in aggregate from Worker binding (no safe LIST+scan).
-      // Fix: add has_passphrase as blob4 in upload AE logEvent call (B4 scope).
-      // AE SQL once instrumented:
-      //   SELECT countIf(blob4 = 'true') / count() AS zk_rate
-      //   FROM share_events
-      //   WHERE blob1 = 'upload' AND doubles[2] = 0;
       zk_verification_rate: null,
       zk_verification_note: "R2 manifests not enumerable in aggregate from Worker. Add has_passphrase as blob4 to upload logEvent call (B4 scope). AE SQL once instrumented: countIf(blob4='true')/count() WHERE blob1='upload' AND doubles[2]=0.",
     };
@@ -971,14 +976,6 @@ async function fetchMetricsData(env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin AE metrics — GET /admin/ae-metrics
-// X-Admin-Key protected.
-// Proxies three Cloudflare Analytics Engine SQL queries server-side so that
-// CF_AE_TOKEN and CF_ACCOUNT_ID never touch the browser.
-//
-// Returns:
-//   credential_issuances_by_tier  — count per tier (rolling 30d)
-//   r2_bytes_uploaded             — sum of total_bytes on chunk-0 uploads (rolling 90d)
-//   r2_chunk_retrieval_success_rate — fraction of download requests returning 200 (rolling 24h)
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminAeMetrics(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
@@ -1014,16 +1011,8 @@ async function fetchAeMetricsData(env) {
     return res.json();
   }
 
-  // Run all five queries in parallel.
-  //
-  // AE SQL column naming (NOT array syntax — arrays return 422):
-  //   blobs:   blob1=endpoint, blob2=tier, blob3=error_message
-  //   doubles: double1=latency_ms, double2=status_code, double3=chunk_index,
-  //            double4=total_chunks, double5=total_bytes
-  //   indexes: index1=endpoint
   const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult, clientErrorsResult] = await Promise.allSettled([
 
-    // Metric: credential issuances by tier (rolling 30 days)
     aeQuery(`
       SELECT blob2 AS tier, count() AS issued
       FROM share_events
@@ -1032,8 +1021,6 @@ async function fetchAeMetricsData(env) {
       GROUP BY tier
     `),
 
-    // Metric 5: R2 bytes uploaded (chunk-0 events only, rolling 90 days)
-    // double5 = total_bytes, double3 = chunk_index (0 = first chunk)
     aeQuery(`
       SELECT sum(double5) AS total_bytes_uploaded
       FROM share_events
@@ -1042,8 +1029,6 @@ async function fetchAeMetricsData(env) {
       AND timestamp > NOW() - INTERVAL '90' DAY
     `),
 
-    // Metric 6: R2 chunk retrieval success rate (rolling 24h)
-    // double2 = HTTP status code
     aeQuery(`
       SELECT
         countIf(double2 = 200) AS successful_chunks,
@@ -1054,8 +1039,6 @@ async function fetchAeMetricsData(env) {
       AND timestamp > NOW() - INTERVAL '1' DAY
     `),
 
-    // Metric 7: p95 + p99 latency per endpoint (rolling 24h)
-    // double1 = latency_ms
     aeQuery(`
       SELECT
         blob1 AS endpoint,
@@ -1068,8 +1051,6 @@ async function fetchAeMetricsData(env) {
       ORDER BY p95_ms DESC
     `),
 
-    // Metric 8: error rate per endpoint (rolling 24h)
-    // double2 = HTTP status code
     aeQuery(`
       SELECT
         blob1 AS endpoint,
@@ -1082,8 +1063,6 @@ async function fetchAeMetricsData(env) {
       ORDER BY error_rate DESC
     `),
 
-    // Metric: client errors reported by browser (rolling 24h)
-    // blob1 = 'client_error' written by /log/error endpoint (S36b)
     aeQuery(`
       SELECT count() AS error_count
       FROM share_events
@@ -1092,7 +1071,6 @@ async function fetchAeMetricsData(env) {
     `),
   ]);
 
-  // ── Parse issuances ──────────────────────────────────────────────────────────
   let credentialIssuancesByTier = null;
   let credentialIssuancesNote = null;
   if (issuanceResult.status === 'fulfilled') {
@@ -1106,7 +1084,6 @@ async function fetchAeMetricsData(env) {
     credentialIssuancesNote = `AE query failed: ${issuanceResult.reason?.message}`;
   }
 
-  // ── Parse R2 bytes uploaded ──────────────────────────────────────────────────
   let r2BytesUploaded = null;
   let r2BytesNote = null;
   if (uploadResult.status === 'fulfilled') {
@@ -1116,7 +1093,6 @@ async function fetchAeMetricsData(env) {
     r2BytesNote = `AE query failed: ${uploadResult.reason?.message}`;
   }
 
-  // ── Parse chunk retrieval success rate ──────────────────────────────────────
   let r2ChunkSuccessRate = null;
   let r2ChunkSuccessfulChunks = null;
   let r2ChunkTotalChunks = null;
@@ -1135,7 +1111,6 @@ async function fetchAeMetricsData(env) {
     r2ChunkNote = `AE query failed: ${downloadResult.reason?.message}`;
   }
 
-  // ── Parse p95/p99 latency ────────────────────────────────────────────────────
   let latencyByEndpoint = null;
   let latencyNote = null;
   if (latencyResult.status === 'fulfilled') {
@@ -1153,7 +1128,6 @@ async function fetchAeMetricsData(env) {
     latencyNote = `AE query failed: ${latencyResult.reason?.message}`;
   }
 
-  // ── Parse error rate ─────────────────────────────────────────────────────────
   let errorRateByEndpoint = null;
   let errorRateNote = null;
   if (errorRateResult.status === 'fulfilled') {
@@ -1171,7 +1145,6 @@ async function fetchAeMetricsData(env) {
     errorRateNote = `AE query failed: ${errorRateResult.reason?.message}`;
   }
 
-  // ── Parse client errors 24h ──────────────────────────────────────────────────
   let clientErrors24h = null;
   let clientErrorsNote = null;
   if (clientErrorsResult.status === 'fulfilled') {
@@ -1210,9 +1183,6 @@ async function fetchAeMetricsData(env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin snapshot — GET /admin/snapshot
-// X-Admin-Key protected.
-// Single authenticated JSON blob for investor / partner sharing.
-// Combines 6 key metrics from fetchMetricsData + fetchAeMetricsData — no new queries.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminSnapshot(request, env) {
   const adminKey = request.headers.get('X-Admin-Key');
@@ -1225,7 +1195,6 @@ async function handleAdminSnapshot(request, env) {
 
   if (metrics._error) return err(metrics._status ?? 500, metrics._error);
 
-  // ── Aggregate worker error rate across all endpoints ──────────────────────
   let workerErrorRate = null;
   const errs = ae.error_rate_by_endpoint;
   if (errs && !ae.error_rate_note) {
@@ -1290,7 +1259,7 @@ async function upsertSubscriber(env, stripeCustomerId, email, tier, status, curr
   if (email) payload.email = email;
   if (cancelledAt) payload.cancelled_at = cancelledAt;
 
-const res = await supabaseFetch(env, 'POST', '/rest/v1/subscribers?on_conflict=stripe_customer_id', payload, {
+  const res = await supabaseFetch(env, 'POST', '/rest/v1/subscribers?on_conflict=stripe_customer_id', payload, {
     'Prefer': 'resolution=merge-duplicates,return=minimal',
   });
   if (!res.ok) {

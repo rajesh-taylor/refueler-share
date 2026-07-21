@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.3 | **Last updated:** S37 · 21 July 2026
+> **Version:** 2.4 | **Last updated:** S40 · 21 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -82,6 +82,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Cashu = anonymous auth (NUT-00/07/11). No monetary usage. No external mint.
 - Passphrase hash = SHA-256 only (`crypto.subtle.digest`). Stored in manifest as `p2sh_secret_hash`.
 - AES-GCM session key lives in URL fragment only — never in requests, never in logs.
+- Upload boundary: `Content-Type` header validated on chunk 0 against a denylist of
+  execution-capable MIME types (`.exe`, `.elf`, `.sh`, `.bat`, `.php` families). 415 on
+  missing or denylisted type, logged to AE. Gate reflects declared intent only — Worker
+  receives AES-GCM ciphertext and cannot inspect payload. MIME type is never stored.
 - AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`. Never `new Uint8Array([i])`.
 
 **Storage:**
@@ -129,6 +133,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | 4242 card in live mode | Test mode only |
 | `await reportError(...)` | `.catch(() => {})` fire-and-forget |
 | Full UUID in `/log/error` | First 8 chars only |
+| Trust `X-Tier` upload header | Ignored since S39 — tier resolved from Supabase via `X-Email` |
+| Apply MIME gate to chunks > 0 | Gate is chunk-0 only — ciphertext continuations carry no meaningful Content-Type |
 
 ---
 
@@ -145,8 +151,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
 | S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell (p95+p99+success+churn), row 3 3-cell (free users, client errors, lightning deferred B7). |
 | S38 | `20da7d4` | `client_errors_24h` AE query live. Three rogue secrets deleted. Wrangler 4.112.0. |
+| S39 | `ab4fc98` | Server-side tier enforcement: X-Email Supabase lookup, 10MB chunk cap, KV byte counter per UUID. |
+| S40 | (pending) | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
 
-**Next: S39 — B4 continuing security hardening.**
+**Next: S41 — B4 continuing security hardening.**
 
 ---
 
