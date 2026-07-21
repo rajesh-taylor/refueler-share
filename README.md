@@ -110,7 +110,7 @@ The AES-256 key is generated inside your browser using the Web Crypto API. It is
 
 Our Cloudflare Worker receives encrypted bytes and stores them in R2. It has no key. It cannot decrypt what it stores. A court order compelling us to hand over file contents would be complied with immediately — and yield nothing readable. A data breach of our R2 bucket exposes only ciphertext.
 
-This is not a policy choice we made. It is the consequence of how the code is written. [Read more about how we structured the architecture →](https://refueler.io/editorial/)
+This is not a policy choice we made. It is the consequence of how the code is written.
 
 ### We also cannot "double-dip"
 
@@ -118,7 +118,7 @@ Most free file transfer services are not file transfer businesses. They are data
 
 We cannot do this. Not because we have chosen not to — because we have no data to extract. We do not know who you are. We do not know what you transferred. We do not know who received it. The anonymous credential system is designed specifically so that this information does not exist on our side in any recoverable form.
 
-One revenue stream. Upload capacity, paid directly via Lightning or card. No behavioural inventory to monetise. [On why this is a better business model →](https://refueler.io/editorial/)
+One revenue stream. Upload capacity, paid directly via Lightning or card. No behavioural inventory to monetise.
 
 ### On SwissTransfer's 50 GB free tier
 
@@ -172,7 +172,7 @@ Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ## Status
 
-🟢 **Session 36 complete — Block 4 security hardening in progress.**
+🟢 **Session 39 complete — Block 4 security hardening in progress.**
 
 Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io).
 
@@ -180,7 +180,7 @@ Full upload → share link → passphrase gate → download flow is end-to-end f
 - **B1 — SSG Migration:** Eleventy 3.x scaffold, `src/` → `frontend/`, Cloudflare Pages auto-deploy live.
 - **B2 — Instrumentation:** Analytics Engine (`share_events`), Supabase aggregation, admin dashboard (`/admin/dashboard.html`), 13-metric smoke test, `/admin/snapshot` endpoint.
 - **B3 — Stripe test coverage:** Checkout flow verified (embedded Payment Element, direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
-- **B4 — Security hardening (in progress):** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5), deployed S34. Server-side chunk hash verification live on every upload. AES-GCM AAD overflow fixed S35 (chunk index ≥256 now safe). KV-backed rate limiting deployed S36: `/credential/issue` (10 req/60s), `/upload` (120 req/60s), `/auth` (5 req/60s) — all 429s logged to Analytics Engine.
+- **B4 — Security hardening (in progress):** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5), deployed S34. Server-side chunk hash verification live on every upload. AES-GCM AAD overflow fixed S35 (chunk index ≥256 now safe). KV-backed rate limiting deployed S36. Frontend error reporting via `/log/error` deployed S36b. Admin dashboard completed S37. AE SQL `client_errors_24h` query live S38. Server-side tier enforcement deployed S39: tier resolved from Supabase via `X-Email`, 10 MB chunk hard cap, KV cumulative byte counter per upload UUID.
 
 ---
 
