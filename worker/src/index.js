@@ -7,6 +7,11 @@ import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Upload enforcement constants (S39)
+// ─────────────────────────────────────────────────────────────────────────────
+const CHUNK_SIZE_MAX = 10 * 1024 * 1024; // 10 MB hard cap per chunk
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CORS
 // ─────────────────────────────────────────────────────────────────────────────
 function corsHeaders(request) {
@@ -16,7 +21,7 @@ function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email',
     'Access-Control-Expose-Headers': 'X-File-Name',
   };
 }
@@ -324,16 +329,77 @@ async function handleCredentialIssue(request, env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload — PUT /upload/:uuid/:chunk
+//
+// S39 changes:
+//   - X-Tier header no longer trusted. Tier resolved from Supabase subscribers
+//     table via X-Email header. Falls back to 'free' on any error or if no
+//     active subscriber found.
+//   - Per-chunk Content-Length hard cap: 10 MB → 413 if exceeded.
+//   - Cumulative byte tracking via STATUS_KV key `upload_bytes:{uuid}`.
+//     Before each chunk write: read counter + Content-Length. If sum exceeds
+//     tier cap → 413. Counter deleted on upload_complete.
+//   - All 413 rejections logged to AE.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleUpload(request, env, uuid, chunkIndex) {
   const isFirstChunk = chunkIndex === 0;
+
+  // ── Chunk size hard cap ────────────────────────────────────────────────────
+  // Reject before reading body. Content-Length is required for PUT from our
+  // client; absence treated as 0 (actual body size is also checked after read).
+  const declaredLength = parseInt(request.headers.get('Content-Length') ?? '0', 10);
+  if (declaredLength > CHUNK_SIZE_MAX) {
+    logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 413, errorMsg: 'chunk_too_large' });
+    return err(413, `Chunk exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
+  }
+
+  // ── Resolve tier from Supabase (S39) ──────────────────────────────────────
+  // X-Tier header is ignored. X-Email is used to look up an active subscriber.
+  // Falls back to 'free' on any Supabase error or missing/inactive subscriber.
+  const email = (request.headers.get('X-Email') ?? '').trim().toLowerCase();
+  let resolvedTier = 'free';
+  if (email) {
+    try {
+      const subRes = await supabaseFetch(
+        env, 'GET',
+        `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&status=eq.active&select=tier&limit=1`
+      );
+      if (subRes.ok) {
+        const rows = await subRes.json();
+        if (rows.length > 0 && rows[0].tier) {
+          resolvedTier = rows[0].tier;
+        }
+      }
+    } catch (e) {
+      console.error('Tier resolution failed, defaulting to free:', e);
+    }
+  }
+
+  const tierCap = TIER_CAPS[resolvedTier] ?? TIER_CAPS.free;
+
+  // ── Cumulative byte cap via KV (S39) ──────────────────────────────────────
+  // Read current byte counter for this UUID. Add Content-Length and check
+  // against tier cap before writing the chunk body to R2.
+  const kvKey = `upload_bytes:${uuid}`;
+  let bytesAlreadyWritten = 0;
+  try {
+    const stored = await env.STATUS_KV.get(kvKey);
+    bytesAlreadyWritten = stored ? parseInt(stored, 10) : 0;
+  } catch (e) {
+    console.error('KV byte counter read failed, proceeding:', e);
+    // Fail open — do not block upload on KV read error.
+  }
+
+  const projectedTotal = bytesAlreadyWritten + declaredLength;
+  if (projectedTotal > tierCap) {
+    logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'tier_cap_exceeded' });
+    return err(413, `Upload would exceed ${resolvedTier} tier cap of ${tierCap} bytes`);
+  }
 
   if (isFirstChunk) {
     const credential  = request.headers.get('X-Cashu-Credential');
     const blake3Root  = request.headers.get('X-Blake3-Root');
     const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
     const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
-    const tier        = request.headers.get('X-Tier') ?? 'free';
     const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
     const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
     const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
@@ -342,6 +408,14 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
       return err(400, 'Missing required headers');
+    }
+
+    // ── Early cap check against declared total (S39) ───────────────────────
+    // If the client's declared total already exceeds the tier cap, reject
+    // before credential verification to avoid burning a Cashu token.
+    if (totalBytes > tierCap) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'declared_total_exceeds_cap' });
+      return err(413, `Declared total ${totalBytes} bytes exceeds ${resolvedTier} tier cap of ${tierCap} bytes`);
     }
 
     let serial;
@@ -371,16 +445,36 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       return err(409, 'Credential already spent');
     }
 
-    const cap = TIER_CAPS[tier] ?? TIER_CAPS.free;
-    if (totalBytes > cap) return err(413, `Exceeds ${tier} tier cap`);
-
     const chunkBody = await request.arrayBuffer();
+
+    // ── Actual body size guard (S39) ──────────────────────────────────────
+    // Body may differ from Content-Length header. Guard the real byte count.
+    if (chunkBody.byteLength > CHUNK_SIZE_MAX) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'chunk_body_too_large' });
+      return err(413, `Chunk body exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
+    }
+
     const hashOk = await verifyChunkHash(new Uint8Array(chunkBody), chunkHash);
     if (!hashOk) return err(400, 'Chunk hash mismatch');
 
     await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
 
-    const manifest = createManifest({ uuid, tier, totalChunks, totalBytes, expiryTimestamp: expiryTs, blake3Root, p2shSecretHash: p2shHash });
+    // ── Increment KV byte counter (S39) ───────────────────────────────────
+    try {
+      await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
+    } catch (e) {
+      console.error('KV byte counter write failed:', e);
+    }
+
+    const manifest = createManifest({
+      uuid,
+      tier: resolvedTier,
+      totalChunks,
+      totalBytes,
+      expiryTimestamp: expiryTs,
+      blake3Root,
+      p2shSecretHash: p2shHash,
+    });
     manifest.file_name = fileName;
     manifest.chunks_received = [0];
     await putManifest(env.BUCKET, uuid, manifest);
@@ -391,6 +485,7 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     return json({ ok: true, chunk: 0, uuid });
 
   } else {
+    // ── Subsequent chunks ──────────────────────────────────────────────────
     const manifest = await getManifest(env.BUCKET, uuid);
     if (!manifest) return err(404, 'Transfer not found');
     if (manifest.upload_complete) return err(409, 'Upload already complete');
@@ -402,14 +497,35 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     if (!chunkHashHeader) return err(400, 'Missing X-Blake3-Chunk-Hash');
 
     const chunkBody = await request.arrayBuffer();
+
+    // ── Actual body size guard (S39) ──────────────────────────────────────
+    if (chunkBody.byteLength > CHUNK_SIZE_MAX) {
+      logEvent(env, { endpoint: 'upload', tier: manifest.tier ?? resolvedTier, status: 413, errorMsg: 'chunk_body_too_large' });
+      return err(413, `Chunk body exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
+    }
+
     const hashOk = await verifyChunkHash(new Uint8Array(chunkBody), chunkHashHeader);
     if (!hashOk) return err(400, 'Chunk hash mismatch');
 
     await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
 
+    // ── Increment KV byte counter (S39) ───────────────────────────────────
+    // TTL refreshed on every chunk write — 24h from last activity.
+    try {
+      await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
+    } catch (e) {
+      console.error('KV byte counter write failed:', e);
+    }
+
     manifest.chunks_received.push(chunkIndex);
     if (manifest.chunks_received.length === manifest.total_chunks) {
       manifest.upload_complete = true;
+      // ── Delete KV counter on completion (S39) ─────────────────────────
+      try {
+        await env.STATUS_KV.delete(kvKey);
+      } catch (e) {
+        console.error('KV byte counter delete failed:', e);
+      }
     }
     await putManifest(env.BUCKET, uuid, manifest);
 
