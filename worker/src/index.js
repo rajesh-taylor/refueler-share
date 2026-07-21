@@ -4,6 +4,7 @@ import { verifyChunkHash } from './blake3.js';
 import { getManifest, putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
+import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS
@@ -87,6 +88,13 @@ export default {
       }
 
       if (request.method === 'POST' && path === '/credential/issue') {
+        // Rate limit: 10 requests / 60s per IP — prevents token farming and Turnstile abuse
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'credential_issue', 10, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
         const cloned = request.clone();
         let credTier = 'free';
         try { const b = await cloned.json(); credTier = b.tier ?? 'free'; } catch {}
@@ -95,6 +103,13 @@ export default {
 
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'PUT' && uploadMatch) {
+        // Rate limit: 120 requests / 60s per IP — generous for legitimate chunked uploads, blocks bulk abuse
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'upload', 120, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'upload', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
         const chunkIndex  = parseInt(uploadMatch[2], 10);
         const tier        = request.headers.get('X-Tier') ?? 'free';
         const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
@@ -108,6 +123,13 @@ export default {
 
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
+        // Rate limit: 5 requests / 60s per IP — passphrase brute-force protection
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'auth', 5, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'auth', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
         return timed('auth', () => handleAuth(request, env, authMatch[1]).then(r => addCors(r, request)));
       }
 

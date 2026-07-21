@@ -172,7 +172,7 @@ Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ## Status
 
-🟢 **Session 34 complete — Block 4 security hardening in progress.**
+🟢 **Session 36 complete — Block 4 security hardening in progress.**
 
 Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io).
 
@@ -180,7 +180,7 @@ Full upload → share link → passphrase gate → download flow is end-to-end f
 - **B1 — SSG Migration:** Eleventy 3.x scaffold, `src/` → `frontend/`, Cloudflare Pages auto-deploy live.
 - **B2 — Instrumentation:** Analytics Engine (`share_events`), Supabase aggregation, admin dashboard (`/admin/dashboard.html`), 13-metric smoke test, `/admin/snapshot` endpoint.
 - **B3 — Stripe test coverage:** Checkout flow verified (embedded Payment Element, direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
-- **B4 — Security hardening (in progress):** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5), deployed S34. Server-side chunk hash verification now live on every upload.
+- **B4 — Security hardening (in progress):** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5), deployed S34. Server-side chunk hash verification live on every upload. AES-GCM AAD overflow fixed S35 (chunk index ≥256 now safe). KV-backed rate limiting deployed S36: `/credential/issue` (10 req/60s), `/upload` (120 req/60s), `/auth` (5 req/60s) — all 429s logged to Analytics Engine.
 
 ---
 
