@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>refueler-share · dashboard</title>
 <link rel="preconnect" href="https://fonts.bunny.net">
-<link href="https://fonts.bunny.net/css?family=satoshi:400,500,700,900|playfair-display:700|source-serif-4:400,500&display=swap" rel="stylesheet">
+<link href="https://fonts.bunny.net/css?family=satoshi:400,500,700,900|source-serif-4:400,500&display=swap" rel="stylesheet">
 <style>
   /* ── Tokens ── */
   :root {
@@ -26,7 +26,7 @@
     --mono: 'JetBrains Mono', 'Fira Mono', monospace;
     --sans: 'Satoshi', system-ui, sans-serif;
     --serif: 'Source Serif 4', Georgia, serif;
-    --figures: 'Playfair Display', Georgia, serif;
+    --figures: 'Satoshi', system-ui, sans-serif;
   }
 
   /* ── Theme: Carbon (default) ── */
@@ -159,7 +159,7 @@
   }
   .snapshot-metrics-row2 {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     border-top: 1px solid var(--border);
   }
   @media (max-width: 960px) {
@@ -395,6 +395,16 @@
           <div class="sm-plain">How fast downloads complete</div>
           <div class="sm-value" id="snap-download-speed">—</div>
         </div>
+        <div class="snap-metric secondary" onclick="openModal('upload-speed-p99')">
+          <div class="sm-label">Upload speed · p99</div>
+          <div class="sm-plain">Worst-case upload tail</div>
+          <div class="sm-value" id="snap-upload-speed-p99">—</div>
+        </div>
+        <div class="snap-metric secondary" onclick="openModal('download-speed-p99')">
+          <div class="sm-label">Download speed · p99</div>
+          <div class="sm-plain">Worst-case download tail</div>
+          <div class="sm-value" id="snap-download-speed-p99">—</div>
+        </div>
         <div class="snap-metric secondary" onclick="openModal('retrieval')">
           <div class="sm-label">Download success (24h)</div>
           <div class="sm-plain">Downloads completing today</div>
@@ -618,6 +628,20 @@
       dlEl.className = 'sm-value' + (dl.p95_ms > 500 ? ' red' : dl.p95_ms > 200 ? ' amber' : '');
     } else { dlEl.textContent = 'n/a'; dlEl.className = 'sm-value'; }
 
+    // Row 2 — upload speed p99
+    const ulP99El = document.getElementById('snap-upload-speed-p99');
+    if (ul) {
+      ulP99El.textContent = `${ul.p99_ms} ms`;
+      ulP99El.className = 'sm-value' + (ul.p99_ms > 1000 ? ' red' : ul.p99_ms > 500 ? ' amber' : '');
+    } else { ulP99El.textContent = 'n/a'; ulP99El.className = 'sm-value'; }
+
+    // Row 2 — download speed p99
+    const dlP99El = document.getElementById('snap-download-speed-p99');
+    if (dl) {
+      dlP99El.textContent = `${dl.p99_ms} ms`;
+      dlP99El.className = 'sm-value' + (dl.p99_ms > 1000 ? ' red' : dl.p99_ms > 500 ? ' amber' : '');
+    } else { dlP99El.textContent = 'n/a'; dlP99El.className = 'sm-value'; }
+
     // Row 2 — retrieval
     const retEl = document.getElementById('snap-retrieval');
     const ret = d.r2_chunk_retrieval_success_rate;
@@ -652,16 +676,18 @@
 
   // ── Modal ─────────────────────────────────────────────────────────────────
   const MODAL_DEFS = {
-    mrr:             { label: 'Monthly run rate', plain: 'Revenue this month' },
-    paid:            { label: 'Paid subscribers', plain: 'Paying customers' },
-    uniqueness:      { label: 'Credential uniqueness rate', plain: 'Upload tokens used only once' },
-    issuances:       { label: 'Credential issuances (30d)', plain: 'Uploads started in 30 days' },
-    storage:         { label: 'Data stored (90d)', plain: 'Total encrypted data uploaded' },
-    errors:          { label: 'Server errors', plain: 'Worker error rate across all endpoints' },
-    'upload-speed':  { label: 'Upload speed', plain: 'p95 / p99 latency on uploads' },
-    'download-speed':{ label: 'Download speed', plain: 'p95 / p99 latency on downloads' },
-    retrieval:       { label: 'Download success rate', plain: 'Chunk retrieval success in last 24h' },
-    churn:           { label: 'Churn rate MTD', plain: 'Cancellations this month' },
+    mrr:                  { label: 'Monthly run rate', plain: 'Revenue this month' },
+    paid:                 { label: 'Paid subscribers', plain: 'Paying customers' },
+    uniqueness:           { label: 'Credential uniqueness rate', plain: 'Upload tokens used only once' },
+    issuances:            { label: 'Credential issuances (30d)', plain: 'Uploads started in 30 days' },
+    storage:              { label: 'Data stored (90d)', plain: 'Total encrypted data uploaded' },
+    errors:               { label: 'Server errors', plain: 'Worker error rate across all endpoints' },
+    'upload-speed':       { label: 'Upload speed · p95', plain: 'p95 latency on uploads' },
+    'upload-speed-p99':   { label: 'Upload speed · p99', plain: 'Worst-case upload tail latency' },
+    'download-speed':     { label: 'Download speed · p95', plain: 'p95 latency on downloads' },
+    'download-speed-p99': { label: 'Download speed · p99', plain: 'Worst-case download tail latency' },
+    retrieval:            { label: 'Download success rate', plain: 'Chunk retrieval success in last 24h' },
+    churn:                { label: 'Churn rate MTD', plain: 'Cancellations this month' },
   };
 
   function openModal(key) {
@@ -723,14 +749,26 @@
       case 'upload-speed':
         const ul = ae.latency_by_endpoint?.upload;
         value = ul ? `${ul.p95_ms} ms` : 'n/a';
-        sub = ul ? `p99: ${ul.p99_ms} ms · ${ul.requests?.toLocaleString()} requests` : 'No data in last 24h';
+        sub = ul ? `${ul.requests?.toLocaleString()} requests in last 24h` : 'No data in last 24h';
         colorClass = ul && ul.p95_ms > 500 ? ' red' : ul && ul.p95_ms > 200 ? ' amber' : '';
+        break;
+      case 'upload-speed-p99':
+        const ulP99 = ae.latency_by_endpoint?.upload;
+        value = ulP99 ? `${ulP99.p99_ms} ms` : 'n/a';
+        sub = ulP99 ? `p95: ${ulP99.p95_ms} ms · ${ulP99.requests?.toLocaleString()} requests` : 'No data in last 24h';
+        colorClass = ulP99 && ulP99.p99_ms > 1000 ? ' red' : ulP99 && ulP99.p99_ms > 500 ? ' amber' : '';
         break;
       case 'download-speed':
         const dl = ae.latency_by_endpoint?.download;
         value = dl ? `${dl.p95_ms} ms` : 'n/a';
-        sub = dl ? `p99: ${dl.p99_ms} ms · ${dl.requests?.toLocaleString()} requests` : 'No data in last 24h';
+        sub = dl ? `${dl.requests?.toLocaleString()} requests in last 24h` : 'No data in last 24h';
         colorClass = dl && dl.p95_ms > 500 ? ' red' : dl && dl.p95_ms > 200 ? ' amber' : '';
+        break;
+      case 'download-speed-p99':
+        const dlP99 = ae.latency_by_endpoint?.download;
+        value = dlP99 ? `${dlP99.p99_ms} ms` : 'n/a';
+        sub = dlP99 ? `p95: ${dlP99.p95_ms} ms · ${dlP99.requests?.toLocaleString()} requests` : 'No data in last 24h';
+        colorClass = dlP99 && dlP99.p99_ms > 1000 ? ' red' : dlP99 && dlP99.p99_ms > 500 ? ' amber' : '';
         break;
       case 'retrieval':
         const ret = ae.r2_chunk_retrieval_success_rate;
