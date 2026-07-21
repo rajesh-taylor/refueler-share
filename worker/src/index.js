@@ -905,7 +905,7 @@ async function fetchAeMetricsData(env) {
   //   doubles: double1=latency_ms, double2=status_code, double3=chunk_index,
   //            double4=total_chunks, double5=total_bytes
   //   indexes: index1=endpoint
-  const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult] = await Promise.allSettled([
+  const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult, clientErrorsResult] = await Promise.allSettled([
 
     // Metric: credential issuances by tier (rolling 30 days)
     aeQuery(`
@@ -964,6 +964,15 @@ async function fetchAeMetricsData(env) {
       WHERE timestamp > NOW() - INTERVAL '1' DAY
       GROUP BY endpoint
       ORDER BY error_rate DESC
+    `),
+
+    // Metric: client errors reported by browser (rolling 24h)
+    // blob1 = 'client_error' written by /log/error endpoint (S36b)
+    aeQuery(`
+      SELECT count() AS error_count
+      FROM share_events
+      WHERE blob1 = 'client_error'
+      AND timestamp > NOW() - INTERVAL '1' DAY
     `),
   ]);
 
@@ -1046,6 +1055,16 @@ async function fetchAeMetricsData(env) {
     errorRateNote = `AE query failed: ${errorRateResult.reason?.message}`;
   }
 
+  // ── Parse client errors 24h ──────────────────────────────────────────────────
+  let clientErrors24h = null;
+  let clientErrorsNote = null;
+  if (clientErrorsResult.status === 'fulfilled') {
+    const rows = clientErrorsResult.value?.data ?? [];
+    clientErrors24h = parseInt(rows[0]?.error_count ?? 0, 10);
+  } else {
+    clientErrorsNote = `AE query failed: ${clientErrorsResult.reason?.message}`;
+  }
+
   return {
     as_of: new Date().toISOString(),
     window_notes: {
@@ -1068,6 +1087,8 @@ async function fetchAeMetricsData(env) {
     latency_note: latencyNote,
     error_rate_by_endpoint: errorRateByEndpoint,
     error_rate_note: errorRateNote,
+    client_errors_24h: clientErrors24h,
+    client_errors_24h_note: clientErrorsNote,
   };
 }
 
