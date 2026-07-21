@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.2 | **Last updated:** S36b · 21 July 2026
+> **Version:** 2.3 | **Last updated:** S37 · 21 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -143,11 +143,11 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S35 | `ab01388` | AAD overflow fix (4-byte uint32, encrypt + decrypt). |
 | S36 | `b877c76` | Rate limiting: `ratelimit.js`, 3 endpoints, KV-backed. |
 | S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
-| S36c | (pending) | Dashboard legibility pass. 36px values, 16px+ sub-text, plain-English sublabels on all cards. |
-| S36c | `2db7b08` | Dashboard: snapshot strip, two rows, Paper/Carbon toggle, modal stubs, Playfair figures, Source Serif body. p99 + row 3 carry to new chat. |
 | S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell (p95+p99+success+churn), row 3 3-cell (free users, client errors, lightning deferred B7). |
 
 **Next: S38 — AE SQL extension (`client_errors_24h`) + wrangler secret list verification + wrangler update (4.92 → current).**
+
+**Design tokens:** Canonical token reference extracted to `DESIGN-TOKENS.md` (repo root, committed). All share divergences noted there — fix in S45.
 
 ---
 
