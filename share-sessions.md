@@ -149,6 +149,14 @@
 **Roadmap additions (uncounted):**
 - S36c — Dashboard legibility pass: larger fonts, plain-English sub-labels, minimum 16px sub-text
 
+### S38 — AE SQL client_errors_24h + secret hygiene + wrangler update
+**Commit:** `20da7d4`
+
+- `client_errors_24h` added to `fetchAeMetricsData`: sixth query in `Promise.allSettled`, counts AE events where `blob1 = 'client_error'` in last 24h. Parse block + return field added. Dashboard cell was already wired from S37 — no dashboard changes needed.
+- Three rogue secrets deleted from Worker: `sk_live_...ZehD`, `whsec_70W1...`, `whsec_MAd6...` — key values had been stored as secret names, not aliases. Clean list now 9 entries.
+- Wrangler updated 3.114.17 → 4.112.0 (`npm install --save-dev wrangler@4` in `worker/`).
+- Smoke test: `client_errors_24h: 0` confirmed in AE response. `latency_note` 422 error pre-existing (quantilesTDigest snag, unchanged).
+
 ---
 
 *"Nothing stops this train."*

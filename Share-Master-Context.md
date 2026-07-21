@@ -102,7 +102,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Turnstile: fail-closed on any error.
 - Rate limits (STATUS_KV, no new resources): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s. All 429s logged to AE.
 - `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
-- Wrangler update pending (3.114.17 → 4.112.0) — schedule end of B4.
+- Wrangler updated to 4.112.0. ✓
 
 ---
 
@@ -144,10 +144,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S36 | `b877c76` | Rate limiting: `ratelimit.js`, 3 endpoints, KV-backed. |
 | S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
 | S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell (p95+p99+success+churn), row 3 3-cell (free users, client errors, lightning deferred B7). |
+| S38 | `20da7d4` | `client_errors_24h` AE query live. Three rogue secrets deleted. Wrangler 4.112.0. |
 
-**Next: S38 — AE SQL extension (`client_errors_24h`) + wrangler secret list verification + wrangler update (4.92 → current).**
-
-**Design tokens:** Canonical token reference extracted to `DESIGN-TOKENS.md` (repo root, committed). All share divergences noted there — fix in S45.
+**Next: S39 — B4 continuing security hardening.**
 
 ---
 
