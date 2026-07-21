@@ -1,88 +1,66 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.1 | **Last updated:** Session 26 · 15 July 2026
-> Load this file alongside `CLAUDE.md` (refueler-share) and `share-sessions.md` for every share session.
+> **Version:** 2.2 | **Last updated:** S36b · 21 July 2026
+> Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
 
 ## What this repo is
 
 `rajesh-taylor/refueler-share` — anonymous, encrypted peer-to-peer file transfer.
-BLAKE3 chunk integrity + Cashu NUT-00 blind signatures as anonymous auth.
-**These are distinct layers. Never conflate.**
+BLAKE3 chunk integrity + Cashu NUT-00 blind signatures as anonymous auth. **Distinct layers — never conflate.**
 
-Local path: `/Users/rajeshtaylor/Documents/refueler-share/`
-Licence: **Apache 2.0**
+Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2.0
 
 ---
 
-## Stack (share only)
+## Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Worker | Cloudflare Workers — `wrangler deploy` |
 | Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
-| Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens` + `subscribers` |
-| Frontend | Eleventy 3.x — `src/` → `frontend/` build |
-| Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` (Pages) |
-| Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser, local bundle), secp256k1 (@noble) |
+| Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens`, `subscribers`, `double_spend_attempts` |
+| Frontend | Eleventy 3.x — `src/` → `frontend/` |
+| Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` |
+| Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | Blink BOLT11 — deferred |
+| Payments (sats) | Blink BOLT11 — deferred (B7) |
 
 ---
 
-## Supabase — share-specific
+## Supabase
 
 Project: `tihgvdokeofnjxjkenmm`
 
-**Table: `spent_tokens`** (Session 2)
-```
-serial     TEXT PRIMARY KEY
-melted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-```
+| Table | Key columns | Notes |
+|-------|-------------|-------|
+| `spent_tokens` | `serial TEXT PK`, `melted_at TIMESTAMPTZ` | RLS deny-all |
+| `subscribers` | `stripe_customer_id TEXT PK`, `email`, `tier` (free/creative/max), `status` (active/inactive/cancelled), `current_period_end`, `cancelled_at`, `created_at`, `updated_at` | RLS deny-all · index on email |
+| `double_spend_attempts` | `id BIGSERIAL PK`, `serial`, `uuid`, `attempted_at` | RLS deny-all · fire-and-forget on 409 |
 
-**Table: `subscribers`** (Session 4)
-```
-stripe_customer_id  TEXT PRIMARY KEY
-email               TEXT
-tier                TEXT CHECK (free | creative | max) DEFAULT free
-status              TEXT CHECK (active | inactive | cancelled) DEFAULT inactive
-current_period_end  TIMESTAMPTZ
-created_at          TIMESTAMPTZ DEFAULT NOW()
-updated_at          TIMESTAMPTZ DEFAULT NOW()
-```
-Index: `subscribers_email_idx` on `email`. RLS enabled. Worker service_role key only.
+Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Content-Range: 0-0/TOTAL`.
 
 ---
 
 ## Cloudflare resources
 
-| Resource | Name / Value |
-|----------|-------------|
+| Resource | Value |
+|----------|-------|
 | Worker | `refueler-share` |
-| Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
-| R2 prod bucket | `refueler-share-prod` |
-| R2 dev bucket | `refueler-share-dev` |
-| KV namespace | `refueler-share-kv` — binding `STATUS_KV` in wrangler.toml ✓ |
-| Pages | `share.refueler.io` — LIVE · project `refueler-share` · CNAME → refueler-share.pages.dev |
-| Turnstile | Sitekey `0x4AAAAAAD0N7GlHlCRuWITr` · Secret `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` · Widget: refueler-share (Managed) |
-| DNS | `share.refueler.io` CNAME → `refueler-share.pages.dev` ✓ |
+| R2 buckets | `refueler-share-prod`, `refueler-share-dev` |
+| KV | `refueler-share-kv` · id `5b1dca6a8f06423f98d0bbc4286e2968` · binding `STATUS_KV` |
+| AE dataset | `share_events` · binding `AE` |
+| Pages | `share.refueler.io` → `refueler-share.pages.dev` |
+| Turnstile | Sitekey `0x4AAAAAAD0N7GlHlCRuWITr` · Managed widget (visible only) |
 
-Worker secrets (all set ✓):
-- `MINT_PRIVATE_KEY` — secp256k1 hex (32 bytes) ✓
-- `TURNSTILE_SECRET_KEY` — `0x4AAAAAAD0N7OIqbRdBAbVR66n3FqTFkLU` ✓
-- `SUPABASE_URL` → `https://tihgvdokeofnjxjkenmm.supabase.co` ✓
-- `SUPABASE_SERVICE_KEY` → service_role JWT ✓
-- `STRIPE_SECRET_KEY` → `sk_live_...ZehD` (active, set S29) ✓
-- `STRIPE_WEBHOOK_SECRET` → rotated Session 6 ✓
-- `ADMIN_KEY` → set Session 16 ✓
+Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `STRIPE_SECRET_KEY` (sk_live_...ZehD, S29), `STRIPE_WEBHOOK_SECRET` (rotated 21 Jul), `ADMIN_KEY`, `CF_ACCOUNT_ID` (fc4f3e5aeebe483677d14185daf544f5), `CF_AE_TOKEN` (Account Analytics Read).
 
 ---
 
 ## Stripe — live mode
 
-Account: Rajesh Taylor (`rt@rajeshtaylor.com`), GBP
-Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
+Account: `rt@rajeshtaylor.com` · GBP · Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
 
 | Product | Price ID | Lookup key | Amount |
 |---------|----------|------------|--------|
@@ -91,105 +69,119 @@ Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
 | Production Max monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo |
 | Production Max yearly | `price_1Ts7xIGlctwiB9U3JyZB8Kwj` | `share-max-yearly` | £240/yr |
 
-Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe`
-Customer Portal: configured ✓ · redirect → `https://share.refueler.io/upgrade.html` · all 4 plans · cancel at period end · cancellation reasons enabled
-Destination ID: `we_1Ts8epGlctwiB9U3dXT8XBac`
+Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe` · Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
+Portal: configured · redirect to `https://share.refueler.io/upgrade.html` · cancel at period end · cancellation reasons enabled
 Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 
 ---
 
 ## Locked architecture decisions
 
-- **Free tier cap: 4 GB** per transfer
-- **Worker URL: `https://refueler-share.rt-fc4.workers.dev`** — hardcoded in all Eleventy templates ✓
-- **R2 binding name: `BUCKET`** — `wrangler.toml` must use `binding = "BUCKET"`, code uses `env.BUCKET`
-- **KV binding name: `STATUS_KV`** — `wrangler.toml` binding = `STATUS_KV`, KV key `status:current`
-- **`X-Cashu-Credential` header is a JSON string** — must `JSON.parse()` before passing to `verifyCredential()`
-- **Passphrase hashing: SHA-256 only** — frontend uses `crypto.subtle.digest('SHA-256')`, stored in manifest as `p2sh_secret_hash`. BLAKE3 is for chunk integrity only. Never conflate.
-- BLAKE3 = chunk integrity (browser WASM, local bundle at `frontend/blake3/`). Server-side uses Web Crypto SHA-256.
-- `frontend/blake3/` is force-committed via `git add -f` — `dist/` is in `.gitignore`, must use `-f` flag if re-adding.
-- Cashu blind sigs = anonymous auth. Never conflate with BLAKE3.
-- No external mint. No ecash-to-sats path. No Cashu monetary usage.
-- AES-GCM session key lives in URL fragment only. Never in network requests. Never in logs.
-- Browser memory only for credentials. Never localStorage. Never sessionStorage.
-- Subscription model (monthly/yearly). Pay-per-transfer deferred to future.
-- Stripe embedded Payment Element (not Checkout redirect) — card in upgrade.html.
-- Lightning tab in upgrade.html is placeholder — Blink BOLT11 deferred.
-- NUT-07 melt fires after first chunk write. On Supabase failure: log and continue.
-- Turnstile: fail-closed on any verification error.
-- R2 manifest is authoritative transfer state. Supabase is ledger only.
-- Chunk key format: `{uuid}/{0000}` (zero-padded 4 digits)
-- Manifest key: `{uuid}/manifest.json`
-- Direct R2 URL exposure: none. Worker proxies all R2 access.
-- Status banner: `sessionStorage` only for dismiss — reappears on next visit.
-- Status page is banner-linked only (`/status.html`) — no nav entry.
-- curl: always single-line, real key inlined, no backslash continuations.
-- Downloaded files: Rajesh moves manually. Claude gives destination path as one-liner only.
-- `double_spend_attempts` table: written fire-and-forget on 409. Never blocks request. On Supabase failure: log and continue.
-- Supabase count pattern: `Prefer: count=exact` + `Range: 0-0` → total in `Content-Range: 0-0/TOTAL` header. No row data transferred.
+**Crypto layers (never conflate):**
+- BLAKE3 = chunk integrity. Browser: local WASM at `frontend/blake3/`. Worker: `worker/blake3-wasm/` via `blake3_worker.js`. Server verifies every chunk — 400 on mismatch.
+- Cashu = anonymous auth (NUT-00/07/11). No monetary usage. No external mint.
+- Passphrase hash = SHA-256 only (`crypto.subtle.digest`). Stored in manifest as `p2sh_secret_hash`.
+- AES-GCM session key lives in URL fragment only — never in requests, never in logs.
+- AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`. Never `new Uint8Array([i])`.
+
+**Storage:**
+- R2 binding: `BUCKET`. KV binding: `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`.
+- R2 manifest is authoritative. Supabase is ledger only. No direct R2 URL exposure.
+
+**Frontend:**
+- Credentials in browser memory only — never localStorage, never sessionStorage.
+- `frontend/blake3/` force-committed via `git add -f`.
+- Status banner: `sessionStorage` dismiss. Status page `/status.html` — no nav entry.
+
+**Stripe:**
+- Direct Subscription + `expand[0]=latest_invoice.payment_intent` → `pi_...` secret for `stripe.elements()`.
+- Paid tier cards greyed out (soft launch). Re-enable only on explicit instruction from Rajesh at each block close.
+
+**Ops:**
+- NUT-07 melt after first chunk write. Supabase failure: log and continue.
+- Turnstile: fail-closed on any error.
+- Rate limits (STATUS_KV, no new resources): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s. All 429s logged to AE.
+- `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
+- Wrangler update pending (3.114.17 → 4.112.0) — schedule end of B4.
 
 ---
 
 ## Known broken / do not retry
 
-- **blake3-wasm CDN imports** — `esm.sh` returns 404, `unpkg.com` blocked by CORS on Cloudflare Pages. Local bundle only.
-- **Invisible Turnstile mode** — doesn't resolve in Chrome/Safari. Visible managed widget only.
-- **`secp.Point`** — removed in `@noble/secp256k1@2.x`. Use `secp.ProjectivePoint` throughout.
-- **`binding = "R2"` in wrangler.toml** — Worker uses `env.BUCKET`, binding must be `BUCKET`.
-- **BLAKE3 for passphrase hash** — frontend must use SHA-256 to match `nut11.js hashSecret()`.
-- **`wrangler r2 bucket lifecycle set --rule` inline JSON** — not supported in Wrangler 4.92. Use `add` subcommand.
-- **`wrangler r2 bucket lifecycle get`** — command is `list`.
-- **`checkout/sessions` with `ui_mode: embedded`** — returns `cs_test_...` secret incompatible with `stripe.elements()`. Use direct Subscription creation + `expand[0]=latest_invoice.payment_intent` instead.
-- **`decodeURIComponent` on Stripe `client_secret`** — JSON response is already decoded. Do not wrap.
+| Pattern | Correct approach |
+|---------|-----------------|
+| blake3-wasm CDN (esm.sh / unpkg) | Local bundle only |
+| Invisible Turnstile | Visible managed widget only |
+| `secp.Point` | `secp.ProjectivePoint` (noble v2) |
+| `binding = "R2"` in wrangler.toml | Must be `BUCKET` |
+| BLAKE3 for passphrase hash | SHA-256 only |
+| `wrangler r2 bucket lifecycle set --rule` inline JSON | Use `add` subcommand |
+| `wrangler r2 bucket lifecycle get` | Command is `list` |
+| `checkout/sessions ui_mode:embedded` | Direct Subscription + PaymentIntent expansion |
+| `decodeURIComponent` on Stripe `client_secret` | Already decoded |
+| `new Uint8Array([i])` for AES-GCM AAD | `DataView.setUint32(0, i, false)` into 4-byte buffer |
+| AE SQL `doubles[N]` / `blob[N]` syntax | Named columns: `double1`, `blob1` etc. |
+| AE SQL from Worker binding | External REST only, proxy via `/admin/ae-metrics` |
+| KV counter for double-spend | Supabase table only (race condition) |
+| `await env.AE.writeDataPoint()` | Synchronous, fire-and-forget |
+| Sub-100ms loop to test KV rate limiter | Use `sleep 0.5` — KV eventual consistency |
+| Customer Portal without active subscription | Stripe returns `resource_missing` |
+| 4242 card in live mode | Test mode only |
+| `await reportError(...)` | `.catch(() => {})` fire-and-forget |
+| Full UUID in `/log/error` | First 8 chars only |
 
 ---
 
-## Current state (Session 34 complete)
+## Current state
 
-**Block 1 — SSG Migration: complete.**
-**Block 2 — Instrumentation: complete.**
-**Block 3 — Stripe test coverage: complete.**
-**Block 4 — Security hardening: S34 complete (BLAKE3 WASM). S35–S42 remaining.**
+**B4 Security hardening — S34 S35-e S35 S36 S36b done. S36c + S37–S42 remaining.**
 
-- BLAKE3 Worker WASM compiled and deployed. Integrity gap closed.
-- `verifyChunkHash` now performs real server-side BLAKE3 verification on every chunk.
-- Integrity/audit marketing claims unblocked after S42 (full B4 audit pass).
+| Session | Commit | Shipped |
+|---------|--------|---------|
+| S34 | `7738450f` | BLAKE3 WASM in Worker. Server-side chunk verification. Integrity gap closed. |
+| S35-emergency | `95a12b4` | Paid tiers greyed out, soft-launch notice. Uncounted. |
+| S35 | `ab01388` | AAD overflow fix (4-byte uint32, encrypt + decrypt). |
+| S36 | `b877c76` | Rate limiting: `ratelimit.js`, 3 endpoints, KV-backed. |
+| S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
 
-**Next: S35 — AAD ≥256 fix**
+**Next: S36c — Dashboard legibility pass.**
+
 ---
 
-## Roadmap S19–S120 (v1.6 · Share-19 planning session)
+## Roadmap
 
-Core: S19–S100 (82 sessions). Buffer: S101–S120 (20 sessions, drawn on overrun, logged in SESSIONS.md).
+Core S19–S100 · Buffer S101–S120.
 
 | Block | Sessions | Scope |
-|---|---|---|
-| B2 Instrumentation completion | S19–S26 | Supabase aggregation (MRR/conversion/churn), R2 + crypto metrics, /admin/metrics, dev dashboard, investor snapshot, 13-metric smoke test |
-| B3 Stripe test coverage | S27–S33 | Test mode (4242 card), webhook replay, cancellation, portal, failed payment/dunning, edge cases |
-| B4 Security hardening | S34–S42 | BLAKE3 Worker WASM (S34–S35), AAD ≥256 fix (S36), large-file test, rate limiting, admin hardening, CSP, audits, integrity gap card → green (S42) |
-| B5 Design full pass | S43–S50 | Progress bar, Turnstile placement, QR/copy icon, FREE_EXPIRY, theme cookie, shared nav, brand audit, cross-browser |
-| B6 Testing infra | S51–S58 | Vitest workers pool, unit tests (nut00/nut11/manifest/blake3), integration harness, Playwright E2E, GitHub Actions CI |
-| B7 Lightning/Blink | S59–S68 | Invoice endpoint, settlement detection, credential-on-settlement, anonymous paid tier (S64 — highest design risk), Lightning tab, settlement mix metric, real-sats E2E |
-| B8 NUT-11 Mode 2 | S69–S76 | Keypair challenge-response, keygen UX, Worker verify, manifest v2, Prod Max gating, tests |
-| B9 Documentation | S77–S82 | README, security whitepaper (unblocked by S42), API docs, help/FAQ, ToS/privacy |
-| B10 Enterprise groundwork | S83–S90 | Org/seat schema, custom caps, Stripe invoicing, admin provisioning, sales page, ML-KEM spike |
-| B11 Beta prep | S91–S98 | Week 0 alpha (S91–S93), load test, incident runbook, onboarding, feedback loop, go/no-go |
-| B12 Launch | S99–S100 | Public beta launch + stabilization |
+|-------|----------|-------|
+| B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
+| B3 ✓ | S27–S33 | Stripe test coverage |
+| **B4** | S34–S42 | Security hardening ← current |
+| B5 | S43–S50 | Design full pass |
+| B6 | S51–S58 | Testing infrastructure |
+| B7 | S59–S68 | Lightning/Blink + anonymous paid tier (S64, highest design risk) |
+| B8 | S69–S76 | NUT-11 Mode 2 keypair auth |
+| B9 | S77–S82 | Documentation + security whitepaper (unblocked S42) |
+| B10 | S83–S90 | Enterprise + ML-KEM spike |
+| B11 | S91–S98 | Week 0 alpha, load test, go/no-go |
+| B12 | S99–S100 | Public beta launch |
 
-**Critical chains:** S34→S35→S37→S42→S78 (integrity claims) · S18→S22→S24→S49/S66 (dashboard) · S51→S55→S58→S94 (CI/load) · S62→S63→S64 (anonymous paid tier).
+Critical chains: S34→S42→S78 (integrity) · S18→S24→S66 (dashboard) · S51→S58→S94 (CI) · S62→S64 (anon paid tier).
+
+B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real live subscriber.
 
 ---
 
 ## Tiers
 
-| Tier | Cap | Expiry options |
-|------|-----|---------------|
-| Skint Tog (free) | **4 GB** | 1 / 7 days |
-| Creative Premium (£12/mo or £120/yr) | 100 GB | 1 / 7 / 30 days |
-| Production Max (£24/mo or £240/yr) | 250 GB | 1 / 7 / 30 / 90 days |
+| Tier | Cap | Expiry |
+|------|-----|--------|
+| Skint Tog (free) | 4 GB | 1 / 7 days |
+| Creative Premium (£12/mo · £120/yr) | 100 GB | 1 / 7 / 30 days |
+| Production Max (£24/mo · £240/yr) | 250 GB | 1 / 7 / 30 / 90 days |
 | Enterprise | Unlimited | Custom |
 
-Yearly = 10 months price (2 months free).
+Yearly = 10 months price.
 
 ---
 
@@ -198,82 +190,65 @@ Yearly = 10 months price (2 months free).
 | Status | NUTs |
 |--------|------|
 | Complete | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
-| Deferred | NUT-11 Mode 2 (keypair challenge-response, Production Max) |
-| Deferred | ML-KEM key wrapping (Prod Max Phase 2) |
+| Deferred B8 | NUT-11 Mode 2 (keypair challenge-response, Prod Max) |
+| Deferred B10 | ML-KEM key wrapping |
 
 ---
 
 ## Worker endpoints
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/status` | Operational state from KV — public ✓ |
-| POST | `/admin/status` | Update KV state — `X-Admin-Key` protected ✓ |
-| POST | `/credential/issue` | NUT-00 blind sig (free tier, Turnstile gate) ✓ |
-| PUT | `/upload/{uuid}/{chunk}` | Chunked upload, credential verify ✓ |
-| POST | `/auth/{uuid}` | NUT-11 Mode 1 passphrase → download token ✓ |
-| GET | `/download/{uuid}/{chunk}` | R2 chunk proxy ✓ |
-| POST | `/webhook/stripe` | Stripe subscription lifecycle ✓ |
-| POST | `/subscription/checkout` | Create embedded checkout session ✓ |
-| GET | `/subscription/status` | Returns tier by email ✓ |
-| POST | `/subscription/portal` | Create Stripe Customer Portal session ✓ |
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/status` | public | Operational state from KV |
+| POST | `/admin/status` | X-Admin-Key | Update KV state |
+| GET | `/admin/metrics` | X-Admin-Key | Supabase aggregation |
+| GET | `/admin/ae-metrics` | X-Admin-Key | AE SQL proxy |
+| GET | `/admin/snapshot` | X-Admin-Key | 6-field combined snapshot |
+| POST | `/credential/issue` | Turnstile | NUT-00 blind sig |
+| PUT | `/upload/{uuid}/{chunk}` | Cashu credential | Chunked upload |
+| POST | `/auth/{uuid}` | — | NUT-11 passphrase → download token |
+| GET | `/download/{uuid}/{chunk}` | Bearer (if protected) | R2 chunk proxy |
+| POST | `/webhook/stripe` | Stripe sig | Subscription lifecycle |
+| POST | `/subscription/checkout` | — | Subscription + PaymentIntent |
+| GET | `/subscription/status` | — | Tier by email |
+| POST | `/subscription/portal` | — | Customer Portal session |
+| POST | `/log/error` | — | Client error → AE (20/60s rate limited) |
 
 ---
 
-## Design snag list (separate design session)
+## Design snag list (B5)
 
-- Progress bar: 15%→100% jump is choppy — needs smooth animation during upload chunk loop
-- Turnstile widget should sit above passphrase field in upload UI
-- QR code render is blurry — needs sharper output
-- Copy button: add double-square icon alongside text
-- Brand audit: run refueler.io branding .md against share UI
+- Progress bar 15%→100% jump — needs smooth animation
+- QR code blurry — sharper output needed
 - `FREE_EXPIRY` mismatch: 5 days in code, "1 / 7 day expiry" in UI
-- Theme state must persist across domains — write to cookie scoped to `.refueler.io`
-- "Logged for future action": paid tier cards to be re-enabled at each block close, initiated by Rajesh only.
-- Update current state: S35-emergency complete, B4 resumes at S35 (AAD ≥256 fix).
-- Do not retry entry to add: opacity: calc(1 / N) on a child element cancels inherited opacity from parent — use this pattern any time a badge or tag needs to punch through a faded card.
+- Theme state: write cookie scoped to `.refueler.io`
+- Dashboard S36c: larger fonts, plain-English sub-labels (16px min), retain technical terms
+- Dashboard B5: "Investor Snapshot" → "System Summary", Satoshi font, 4 latency cards, Copy JSON → bottom-right, Source Serif 4 body
+- Brand audit: BRANDING.md against share UI, Carbon gold edging
+
 ---
 
 ## File map
 
 ```
 refueler-share/
-  README.md
-  CLAUDE.md
-  share-sessions.md
-  Share-Master-Context.md   ← this file (v1.5)
-  LICENSE                   ← Apache 2.0
-  .eleventy.js              ← input: src, output: frontend, passthrough: blake3/
-  package.json              ← build: eleventy, dev: eleventy --serve
-  package-lock.json
-  frontend-deps/            ← throwaway npm install dir, not committed
+  CLAUDE.md  share-sessions.md  Share-Master-Context.md  LICENSE  README.md
+  .eleventy.js   package.json   package-lock.json
   src/
-    index.njk               ← upload/download page
-    upgrade.njk             ← pricing page
-    status.njk              ← status page (ops + crypto integrity)
-    _includes/
-      head.njk              ← fonts, theme script, extraHead slot
-      nav.njk               ← wordmark + site-nav + theme pill
-      footer.njk            ← canonical footer
-      shared-styles.njk     ← brand tokens, reset, shared components, banner CSS
-  frontend/                 ← Eleventy output (committed, Pages serves this)
-    index.html
-    upgrade.html
-    status.html
-    blake3/                 ← local blake3-wasm bundle (force-committed)
+    index.njk  upgrade.njk  status.njk
+    _includes/  head.njk  nav.njk  footer.njk  shared-styles.njk
+  frontend/                    ← Eleventy output (committed, Pages serves)
+    index.html  upgrade.html  status.html
+    blake3/                    ← WASM bundle (force-committed, git add -f)
+    admin/dashboard.html       ← self-contained, no build step
   worker/
-    wrangler.toml           ← binding = "BUCKET" ✓, STATUS_KV binding ✓
-    package.json            ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
+    wrangler.toml              ← BUCKET + STATUS_KV + AE bindings
+    package.json               ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
+    blake3-wasm/               ← compiled WASM + glue (force-committed)
     src/
-      index.js              ← Worker router + all handlers
-      nut00.js              ← Cashu blind sig (noble v2 API)
-      nut11.js              ← passphrase gate + download token
-      blake3.js             ← verifyChunkHash → return true (passthrough)
-      manifest.js           ← R2 manifest helpers
-      turnstile.js
-      stripe.js
-  docs/
-    r2-lifecycle.md
+      index.js  nut00.js  nut11.js  blake3.js  blake3_worker.js
+      manifest.js  turnstile.js  stripe.js  ratelimit.js
+  docs/r2-lifecycle.md
 ```
 
 ---

@@ -1,300 +1,125 @@
 # share-sessions.md — refueler-share
-> Renamed from SESSIONS.md. Reference updated in CLAUDE.md.
 
 ---
 
-## Sessions 1–15 — compact log
+## Sessions 1–26 — compact log (B1 + B2)
 
-| # | Date | Type | Commit | Summary |
-|---|------|------|--------|---------|
-| 1 | 10 Jul | Planning | — | Architecture: token lifetime, upload model, NUT-11 P2SH, storage spec |
-| 2 | 11 Jul | Build | `session-2-build` | Worker scaffold (3 endpoints), `frontend/index.html`, Supabase `spent_tokens` migration |
-| 3 | 11 Jul | Build | `172a2e0` | NUT-11 Mode 1 passphrase gating (`nut11.js`, `manifest.js`), nav alignment |
-| 4 | 11 Jul | Build | `42180c1` | Stripe products + prices (live, GBP), webhook, `subscribers` table, R2 buckets, Worker deployed |
-| 5 | 12 Jul | Build | `9a5fdc1` | Turnstile widget, all 6 secrets set, Pages project, `share.refueler.io` CNAME live |
-| 6 | 12 Jul | Debug | `458bc99` | `STRIPE_WEBHOOK_SECRET` rotated (exposed in git), smoke test stalled at Turnstile |
-| 7 | 12 Jul | Debug | `3b9a9aa` | Visible Turnstile widget replacing invisible mode (Safari ITP fix) |
-| 8 | 12 Jul | Debug | `0369dc8` | blake3-wasm local bundle (`frontend/blake3/`, force-committed), CDN confirmed broken |
-| 9 | 13 Jul | Debug | (with S10) | `@noble/secp256k1` v2 API fix (`secp.ProjectivePoint`), `verifyChunkHash` → passthrough |
-| 10 | 13 Jul | Debug | (with S9) | R2 binding `BUCKET`, credential `JSON.parse()`, CORS on catch, passphrase hash → SHA-256 |
-| 11 | 13 Jul | Debug | `e50b58c`+`ec0c325` | Decrypt stall fixed (`startDownload` refactor), filename preservation. Full flow ✓ |
-| 12 | 13 Jul | Infra | — | Stripe Customer Portal + Worker `/subscription/portal`, R2 lifecycle rules (both buckets) |
-| 13 | 14 Jul | Design | — | `upgrade.html` full rebuild: Paper/Carbon tokens, Stripe remount, WORKER_URL fix |
-| 14 | 14 Jul | Build | `f52b55f` | Eleventy 3.x scaffold: `src/` → `frontend/`, partials, `index.njk`, `upgrade.njk` |
-| 15 | 14 Jul | Build | — | Block 1 completion (absorbed into S14 commit) |
+| # | Date | Commit | Summary |
+|---|------|--------|---------|
+| 1 | 10 Jul | — | Architecture planning: token lifetime, upload model, NUT-11 P2SH, storage spec |
+| 2 | 11 Jul | `session-2-build` | Worker scaffold (3 endpoints), `frontend/index.html`, Supabase `spent_tokens` |
+| 3 | 11 Jul | `172a2e0` | NUT-11 Mode 1 passphrase gating (`nut11.js`, `manifest.js`) |
+| 4 | 11 Jul | `42180c1` | Stripe products + prices (live GBP), webhook, `subscribers` table, R2 buckets |
+| 5 | 12 Jul | `9a5fdc1` | Turnstile widget, all 6 secrets set, Pages project, `share.refueler.io` live |
+| 6 | 12 Jul | `458bc99` | `STRIPE_WEBHOOK_SECRET` rotated (exposed in git) |
+| 7 | 12 Jul | `3b9a9aa` | Visible Turnstile widget (invisible mode broke Safari ITP) |
+| 8 | 12 Jul | `0369dc8` | blake3-wasm local bundle (`frontend/blake3/`, force-committed) — CDN broken |
+| 9–10 | 13 Jul | (grouped) | secp256k1 v2 API fix (`secp.ProjectivePoint`), R2 binding `BUCKET`, SHA-256 passphrase hash |
+| 11 | 13 Jul | `e50b58c`+`ec0c325` | Decrypt stall fixed, filename preservation. Full upload/download flow ✓ |
+| 12 | 13 Jul | — | Stripe Customer Portal, `/subscription/portal`, R2 lifecycle rules |
+| 13 | 14 Jul | — | `upgrade.html` rebuild: Paper/Carbon tokens, Stripe remount |
+| 14–15 | 14 Jul | `f52b55f` | Eleventy 3.x scaffold: `src/` → `frontend/`, partials. B1 complete. |
+| 16 | 14 Jul | grouped | KV status system: `refueler-share-kv` (binding `STATUS_KV`), `GET /status`, `POST /admin/status`, maintenance banner (`sessionStorage` dismiss) |
+| 17 | 14 Jul | grouped | `src/status.njk`: ops + crypto integrity sections, 60s auto-refresh, banner-linked only |
+| 18 | 14 Jul | grouped | AE dataset `share_events` (binding `AE`), `logEvent()` helper, `timed()` router wrapper |
+| 19 | 14 Jul | grouped | `/admin/metrics`: MRR, subscribers_by_tier, paid_total, churn MTD. RLS deny-all on ledger tables. `cancelled_at` added to `subscribers` |
+| 20 | 14 Jul | grouped | `double_spend_attempts` table, `credential_uniqueness_rate` metric |
+| 21 | 14 Jul | grouped | `frontend/admin/dashboard.html` scaffold: password gate, live metric cards, 60s refresh |
+| 19-plan | 14 Jul | — | Roadmap S19–S120 drafted. Critical chains recorded in Share-Master-Context.md |
+| 22 | 15 Jul | `d1bcb5a`+`f36e385` | `GET /admin/ae-metrics`: AE SQL proxy, CF_AE_TOKEN scoped. CORS `X-Admin-Key` fix. |
+| 23 | 15 Jul | `a4bc625` | AE SQL column syntax fix (`double1`/`blob1` not array syntax). p95/p99 latency + error rate cards. |
+| 24 | 15 Jul | `5be5811` | `GET /admin/snapshot`, System Summary dashboard section (6 metric tiles) |
+| 25 | 15 Jul | `fc6cba9`+`99afaaa` | Free-to-paid conversion rate, dashboard restructure |
+| 26 | 15 Jul | — | B2 close. 10/13 metrics live. Context files updated to v2.1. |
 
-**Do not retry (permanent):**
-- blake3-wasm CDN (esm.sh 404, unpkg CORS blocked) — local bundle only
+**Permanent do-not-retry (B1–B2):**
+- blake3-wasm CDN (esm.sh/unpkg) — local bundle only
 - Invisible Turnstile — visible managed widget only
 - `secp.Point` — removed in noble v2, use `secp.ProjectivePoint`
 - `binding = "R2"` in wrangler.toml — must be `BUCKET`
 - BLAKE3 for passphrase hash — must be SHA-256
-- `wrangler r2 bucket lifecycle set --rule` inline JSON — use `add` subcommand
-- `wrangler r2 bucket lifecycle get` — command is `list`
+- `wrangler r2 bucket lifecycle set --rule` inline JSON — use `add` subcommand; `lifecycle get` → `lifecycle list`
+- AE SQL: use `double1`/`blob1` column names, not `doubles[N]`/`blob[N]` array syntax
+- DO NOT await `env.AE.writeDataPoint()` — fire-and-forget
+- DO NOT call AE SQL API from Worker — proxy via `/admin/ae-metrics` only
+- DO NOT use KV counter for double-spend tracking — race condition; Supabase table only
+- `spatial_ref_sys` RLS is false — PostGIS system table, leave alone
+- `sessionStorage` only for banner dismiss (not localStorage)
+- DO NOT add `/status` to nav — banner-linked only
 
 ---
 
-## Sessions 16–17 — KV status system + status page (14 July 2026)
+## Sessions 27–29 — B3 Stripe test coverage (16–20 July 2026)
 
-**Commits:** grouped
+| # | Commit | Summary |
+|---|--------|---------|
+| 27 | `5f3cb8e` | Stripe CLI installed. 4 test prices created. Root cause of `client_secret` mismatch identified: `checkout/sessions ui_mode:embedded` incompatible with `stripe.elements()` |
+| 28 | `5f3cb8e` | Direct Subscription creation pattern confirmed. 4242 card flow ✓. Webhook handler extended with `customer.subscription.created`. |
+| 29 | `5d8c1ea` | `STRIPE_SECRET_KEY` rotated to `sk_live_...ZehD`. Portal `resource_missing` confirmed correct (no active sub). Cancellation code-complete. **B3 closed.** |
 
-**S16 — KV status system + maintenance banner:**
-- KV namespace `refueler-share-kv` created (id `5b1dca6a8f06423f98d0bbc4286e2968`), binding `STATUS_KV`
-- `GET /status` — reads `status:current` KV key, falls back to `{ state: 'operational' }`
-- `POST /admin/status` — `X-Admin-Key` protected, merges partial patch
-- `ADMIN_KEY` Worker secret set ✓
-- Maintenance banner: sticky, dismissible via `sessionStorage`, polls `/status` on load
-- Status schema: `{ state, message, maintenance: { scheduled_at, duration_minutes, description }, incidents[], updated_at }`
+**B3 do-not-retry:**
+- DO NOT use `checkout/sessions ui_mode:embedded` — use direct Subscription + `expand[0]=latest_invoice.payment_intent`
+- DO NOT `decodeURIComponent` Stripe `client_secret` — already decoded
+- DO NOT attempt Customer Portal without active subscription — Stripe returns `resource_missing`
+- 4242 card is test-mode only — never works in live mode
 
-**S17 — `src/status.njk`:**
-- Two-section page: ops layer (state card, maintenance window, incident list) + cryptographic integrity layer (6 cards)
-- Auto-refresh 60s. Fetch failure → degraded state, never blocks UI
-- No nav link — banner-linked only (`/status.html`)
-
-**Do not retry:**
-- DO NOT use `localStorage` for banner dismiss — `sessionStorage` only
-- DO NOT add `status` to nav partial
-
-**Files changed:** `worker/wrangler.toml`, `worker/src/index.js`, `src/_includes/shared-styles.njk`, `src/_includes/head.njk`, `src/_includes/nav.njk`, `src/status.njk`
+**B3 gap (deferred to B11):** Full cancel → webhook → Supabase loop requires a real live subscriber. `cus_UtlpRELAdcZXk2` has no active subscription.
 
 ---
 
-## Session 18 — Analytics Engine instrumentation (14 July 2026)
+## Sessions 34–36b — B4 Security hardening (20–21 July 2026)
 
-**Commit:** pending (grouped with S19–S21)
+### S34 — BLAKE3 WASM Worker integration
+**Commit:** `7738450f` (version)
 
-**Completed:**
-- AE dataset `share_events` declared in `wrangler.toml` (binding `AE`) — created on first write, no dashboard setup
-- `logEvent(env, opts)` helper: `blobs[endpoint, tier, error_msg]` · `doubles[latency_ms, status_code, chunk_index, total_chunks, total_bytes]` · `indexes[endpoint]`
-- `timed(endpoint, handler, logExtra)` router wrapper — measures latency, calls `logEvent` on success and throw
-- All endpoints covered. `upload` logs tier + chunk metadata on chunk 0 only. `download` fires additional `download_tier` event on chunk 0.
+- Rust toolchain (rustup 1.29.0, cargo 1.97.1), wasm-pack 0.13.1
+- BLAKE3 v1.8.5 compiled via `wasm-pack --target bundler` → `worker/blake3-wasm/` (23K, wasm-opt applied)
+- `blake3_worker.js` — Workers WASM init wrapper (manual `WebAssembly.instantiate`, `__wbg_set_wasm`)
+- `blake3.js` — `verifyChunkHash()` now computes real server-side BLAKE3, constant-time compare, 400 on mismatch
+- `wrangler.toml` `[[rules]]`: `type="CompiledWasm"`, `globs=["**/*.wasm"]`, `fallthrough=false`
+- **Integrity gap: CLOSED.**
 
 **Do not retry:**
-- DO NOT use pre-existing dataset ID — AE datasets created on first write
-- DO NOT await `env.AE.writeDataPoint()` — synchronous, fire-and-forget
-- DO NOT log `logEvent` inside `handleDownload` per-chunk — chunk-0 only
+- Paths in `blake3_worker.js` must be `../blake3-wasm/...` (not `./`)
+- DO NOT use wasm-pack bundler output directly — Workers requires manual `WebAssembly.instantiate`
+- DO NOT omit `fallthrough = false` on `[[rules]]`
 
-**Files changed:** `worker/src/index.js`, `worker/wrangler.toml`
+### S35-emergency — Soft launch prep (uncounted)
+**Commits:** `c9bd344` → `e5bd4c3` → `95a12b4`
+
+- Paid tier cards greyed out (opacity 0.35, pointer-events none). Coming Soon tag punches through via `opacity: calc(1/0.35)`.
+- Payment section hidden. Soft-launch notice in header.
+- DO NOT re-enable paid tiers without explicit instruction from Rajesh.
+
+### S35 — AAD overflow fix
+**Commit:** `ab01388`
+
+- `new Uint8Array([i])` → `DataView.setUint32(0, i, false)` into 4-byte buffer. Applied at both encrypt + decrypt in `src/index.njk`.
+- **Do not retry:** AAD is always 4-byte big-endian uint32. `new Uint8Array([i])` wraps silently at chunk 256.
+
+### S36 — Rate limiting
+**Commit:** `b877c76`
+
+- `worker/src/ratelimit.js` — KV-backed sliding window, per-IP, fails open on KV error. Uses STATUS_KV (no new resource).
+- Limits: `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s. All 429s logged to AE.
+- **Do not retry:** Sub-100ms synthetic load will not trigger KV rate limiter — KV eventual consistency. Use `sleep 0.5` between requests.
+
+### S36b — Frontend error reporting
+**Commit:** `0cc4de9`
+
+- `reportError(context, message, detail)` helper in `src/index.njk` — fire-and-forget POST to `/log/error`, never blocks flow, never shown to user.
+- `POST /log/error` Worker endpoint — rate-limited 20/60s per IP (STATUS_KV), always returns 200, writes AE event: `blobs=['client_error', context, message]`.
+- Six capture points: `credential_issue`, `upload_chunk`, `blake3_hash`, `download_chunk`, `decrypt`, `manifest_fetch`.
+- UUID truncated to 8 chars. detail truncated to 200 chars. No filename, no full UUID, no user identity.
+- Smoke test: rate-limited on first hit (correct — KV window from deploy). Endpoint confirmed live.
+
+**Do not retry:**
+- DO NOT await `reportError` fetch — `.catch(() => {})` must be present
+- DO NOT send full UUID — first 8 chars only
+
+**Roadmap additions (uncounted):**
+- S36c — Dashboard legibility pass: larger fonts, plain-English sub-labels, minimum 16px sub-text
 
 ---
 
-## Sessions 19–21 — Supabase aggregation + crypto metrics + dashboard scaffold (14 July 2026)
-
-**Commits:** pending (grouped)
-
-**S19 — Supabase aggregation layer (`GET /admin/metrics`):**
-- RLS deny-all policies added to `spent_tokens` + `subscribers` (was triggering Supabase security advisor alert)
-- `cancelled_at TIMESTAMPTZ` added to `subscribers`
-- `upsertSubscriber()` updated — writes `cancelled_at` on `customer.subscription.deleted`
-- `GET /admin/metrics` (X-Admin-Key): MRR (floor), `subscribers_by_tier`, `paid_total`, churn rate MTD, `cancelled_mtd`
-- Honest `_note` fields on every approximation
-
-**S20 — R2 + crypto metrics:**
-- Supabase table `double_spend_attempts` (`id`, `serial`, `uuid`, `attempted_at`) — RLS deny-all
-- `handleUpload`: fire-and-forget write to `double_spend_attempts` on every 409
-- `/admin/metrics` extended: `credential_uniqueness_rate` = `totalMelts / (totalMelts + totalAttempts)` via Supabase `Prefer: count=exact` header pattern. Metrics 3/5/6 stubbed null with AE SQL notes.
-- refueler-ecash-lab flagged for NUT-11 Mode 2 / B8–B10 experimentation
-
-**S21 — Dev dashboard scaffold:**
-- `frontend/admin/dashboard.html` — self-contained, no build step
-- Password gate: `sessionStorage`, probe-verified against `/admin/metrics`
-- Live cards: MRR, paid total, churn MTD, tier breakdown, credential uniqueness rate
-- Deferred cards: ZK rate (B4), credential issuances (S22), R2 bytes (S22/B4), chunk retrieval (S22)
-- Auto-refresh 60s with countdown. 401 mid-session clears key + reloads.
-
-**Do not retry:**
-- DO NOT call Cloudflare AE SQL API from Worker — external REST API only, proxy via `/admin/ae-metrics`
-- DO NOT use `service_role` key in RLS policies — bypasses RLS by design
-- DO NOT use KV counter for double-spend tracking — race condition. Supabase table only.
-- DO NOT await `double_spend_attempts` write — fire-and-forget only
-- `spatial_ref_sys` RLS is `false` — PostGIS system table, leave alone
-
-**Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`, Supabase migrations: `rls_policies_and_cancelled_at`, `double_spend_attempts`
-
----
-
-## Session 19-plan — Roadmap planning S19–S120 (14 July 2026)
-
-**Type:** Planning session (uncounted).
-
-- Full S19–S120 roadmap drafted: 82 core build sessions (B2–B12) + 20 buffer (S101–S120)
-- Roadmap recorded in `Share-Master-Context.md` §Roadmap
-- Critical chains: S34→S42→S78 (integrity) · S18→S24→S66 (dashboard) · S51→S58→S94 (CI) · S62→S64 (anon paid tier)
-- Stripe test card: **4242 4242 4242 4242**
-
----
-
-## Session 22 — AE SQL API integration (15 July 2026)
-
-**Commit:** d1bcb5a + f36e385 (CORS fix)
-
-**Completed:**
-- `GET /admin/ae-metrics` — X-Admin-Key protected, proxies AE SQL server-side (CF_AE_TOKEN never touches browser)
-- Secrets set: `CF_ACCOUNT_ID` (`fc4f3e5aeebe483677d14185daf544f5`) + `CF_AE_TOKEN` (scoped `Account Analytics > Read`)
-- Three parallel AE queries via `Promise.allSettled`: credential issuances by tier (30d), R2 bytes uploaded (90d), chunk retrieval success rate (24h)
-- `X-Admin-Key` added to CORS `Access-Control-Allow-Headers` — was silently blocking browser fetches
-- Dashboard wired to `/admin/ae-metrics`
-
-**Do not retry:**
-- DO NOT reuse broad agent token for `CF_AE_TOKEN` — scoped read only
-- DO NOT forget `X-Admin-Key` in CORS allowed headers
-
-**Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`
-
----
-
-## Session 23 — AE SQL column syntax fix + latency + error rate (15 July 2026)
-
-**Commit:** a4bc625
-
-**Completed:**
-- Fixed AE SQL 422: `doubles[N]`/`blob[N]` array syntax → named columns `double1`–`double5`, `blob1`–`blob3`
-- Two new AE queries: p95/p99 latency per endpoint (24h) + 5xx error rate per endpoint (24h)
-- Dashboard operational section un-deferred: p95/p99 latency /upload, p95/p99 latency /download, aggregate error rate
-- Colour thresholds: latency green <200ms / amber <500ms / red over · error rate green 0% / amber <1% / red over
-
-**Do not retry:**
-- DO NOT use `doubles[N]` or `blob[N]` array syntax in AE SQL — use `double1`, `blob1` etc.
-
-**Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`
-
----
-
-## Session 24 — /admin/snapshot endpoint + System Summary dashboard card (15 July 2026)
-
-**Commit:** 5be5811
-
-**Completed:**
-- `handleAdminMetrics` refactored → delegates to `fetchMetricsData(env)` (plain object, not Response)
-- `handleAdminAeMetrics` refactored → delegates to `fetchAeMetricsData(env)` (same pattern)
-- `GET /admin/snapshot` — X-Admin-Key protected, calls both data functions in parallel, returns 6-field blob: `generated_at`, `mrr_gbp`, `paid_subscribers`, `credential_uniqueness_rate`, `p95_upload_latency_ms`, `p95_download_latency_ms`, `worker_error_rate`. No new queries.
-- Dashboard: Investor Snapshot section (renamed System Summary in B5) with 6 metric tiles, colour coding, Copy JSON button, `generated_at` timestamp
-
-**Do not retry:**
-- DO NOT call `handleAdminMetrics`/`handleAdminAeMetrics` from snapshot — use inner data functions directly
-
-**Dashboard design snag list (B5 — do not build in B2):**
-- Rename "Investor Snapshot" → "System Summary"
-- Satoshi font for all labels + values (Bunny Fonts)
-- Increase all font sizes — readable at a glance on MacBook
-- Copy JSON button → bottom-right of System Summary card
-- Split p95/p99 latency → 4 separate cards (p95 upload, p99 upload, p95 download, p99 download)
-- Sub-text minimum 13px
-- Full editorial treatment (Paper/Carbon toggle, Source Serif 4) — review after Satoshi lands
-
-**Files changed:** `worker/src/index.js`, `frontend/admin/dashboard.html`
-
-
-## Session 25 — Free-to-paid conversion rate + dashboard restructure (15 July 2026)
-
-**Commits:** S25 `fc6cba9` (worker + dashboard) · S25b `99afaaa` (dashboard restructure)
-
----
-
-## Session 26 — Block 2 close (15 July 2026)
-
-**Type:** Admin/handoff (no code changes)
-
-**Completed:**
-- Share-Master-Context.md updated to v2.1 (current state, 13-metric status, deferred latent items)
-- share-sessions.md S26 entry added
-- B3 scope confirmed (S27–S33 — Stripe test coverage)
-- S27 opening prompt written
-
-**Block 2 final state:** 10 of 13 metrics live. 3 metric IDs deferred (2 items: ZK/BLAKE3 → B4, Lightning mix → B7). No regressions.
-
-**Do not retry:** nothing new this session.
-
----
-
-## Session 27 — B3 Stripe test flow (buffer S101) (16 July 2026)
-
-**Commit:** (grouped with S28) `5f3cb8e`
-
-**Completed:**
-- Stripe CLI installed, authenticated
-- 4 test prices created with correct lookup keys (share-creative-monthly/yearly, share-max-monthly/yearly)
-- `STRIPE_SECRET_KEY` set to `sk_test` on Worker, `STRIPE_WEBHOOK_SECRET` set from `stripe listen`
-- `upgrade.njk` updated with `pk_test` key + test price IDs
-- `stripe.js` fixed: `success_url`/`cancel_url` → `return_url` for embedded mode
-- Root cause of `client_secret` corruption identified: `checkout/sessions` with `ui_mode: embedded` returns a session secret incompatible with `stripe.elements()` — wrong Stripe API for this frontend pattern
-
-**Do not retry:**
-- DO NOT use `checkout/sessions` with `ui_mode: embedded` — returns `cs_test_...` secret incompatible with `stripe.elements()`
-- DO NOT call `decodeURIComponent` on Stripe API JSON response values — already decoded
-
----
-
-## Session 28 — B3 Stripe checkout verified (buffer S102) (16 July 2026)
-
-**Commit:** `5f3cb8e`
-
-**Completed:**
-- `stripe.js` `createCheckoutSession` replaced with direct Subscription creation: find-or-create customer by email → create subscription with `payment_behavior=default_incomplete` + `expand[0]=latest_invoice.payment_intent` → return `latest_invoice.payment_intent.client_secret` (a `pi_...` secret, compatible with `stripe.elements()`)
-- Webhook handler extended: `customer.subscription.created` added alongside `customer.subscription.updated` — fetches customer email from Stripe API and upserts to `subscribers`
-- 4242 card checkout flow verified end-to-end: card element loads ✓, payment succeeds ✓, "You're all set" panel shown ✓
-- `subscribers` row manually inserted via Supabase MCP (webhook upsert silently failing — see snag below)
-- `STRIPE_SECRET_KEY` restored to `sk_live` ✓, `upgrade.njk` restored to `pk_live` + live price IDs ✓
-
-**B3 snag (carry to S29):**
-- Webhook upsert to `subscribers` not writing despite Worker returning 200 — root cause unconfirmed. Suspected: `lookup_key` null in resent event payload at API version 2020-03-02, or silent Supabase fetch failure. Needs `wrangler tail` debug with a fresh real checkout in test mode.
-
-**Do not retry:**
-- DO NOT use `checkout/sessions` for embedded Payment Element — use direct Subscription + PaymentIntent expansion
-- DO NOT use `decodeURIComponent` on Stripe `client_secret` — clean string from JSON
-
-*Next: **S29 — B3 continued: webhook upsert debug + cancellation flow test***
-
-## Session 29 — B3 close: STRIPE_SECRET_KEY fix + portal debug (20 July 2026)
-
-**Commit:** (this session)
-
-**Completed:**
-- `STRIPE_SECRET_KEY` rotated: `sk_live_...Fyop` (expiring, never used) → `sk_live_...ZehD` (active, created 16 Jul). Old key deleted from Stripe dashboard.
-- Portal endpoint confirmed reaching Stripe correctly — `resource_missing` root cause identified: `cus_UtlpRELAdcZXk2` exists in Stripe but has no active subscription (test customer seeded in S28, no live payment taken).
-- Portal behaviour confirmed correct — Stripe requires active subscription to open portal session.
-- Cancellation webhook path (`customer.subscription.deleted` → `status=cancelled` + `cancelled_at`) is code-complete from S29 partial (`5d8c1ea`). Full end-to-end cancel flow deferred to B11 alpha with a real subscriber.
-- **Block 3 closed.**
-
-**B3 retrospective:** Checkout flow end-to-end verified (S27/S28). Webhook upsert fixed. Portal confirmed working. Cancellation logic code-complete. Gap: no live subscriber to run cancel → webhook → Supabase loop — deferred to B11.
-
-**Process change:** Every block opens with a scope summary + explicit "done" checklist before any code is written.
-
-**Do not retry:**
-- DO NOT attempt Customer Portal session without an active subscription on the customer — Stripe returns `resource_missing`
-
-## Session 34 — B4 start: BLAKE3 WASM Worker integration (20 July 2026)
-
-**Commit:** S34 commit (post-S29)
-
-**Completed:**
-- Rust toolchain installed (rustup 1.29.0, cargo 1.97.1), wasm-pack 0.13.1
-- BLAKE3 Rust crate v1.8.5 compiled to WASM via wasm-pack `--target bundler` → `worker/blake3-wasm/` (23K binary, wasm-opt applied)
-- `worker/src/blake3_worker.js` — Workers-compatible WASM init wrapper; static import of `.wasm` binary, manual `WebAssembly.instantiate`, exposes `blake3Hash(data: Uint8Array): Uint8Array`
-- `worker/src/blake3.js` — replaces passthrough stub; `verifyChunkHash(chunkBytes, declaredHashHex)` now computes real BLAKE3 hash and constant-time compares against declared hex
-- `worker/wrangler.toml` — `[[rules]]` block added: `type = "CompiledWasm"`, `globs = ["**/*.wasm"]`, `fallthrough = false`
-- WASM binary + glue force-committed to `worker/blake3-wasm/`
-- Deployed: version `7738450f`, Worker startup 13ms, total upload 109.81 KiB
-
-**Integrity gap status:** CLOSED. Client-declared BLAKE3 hash is now verified server-side on every chunk. Hash mismatch returns 400.
-
-**Do not retry:**
-- DO NOT use `./blake3-wasm/...` paths in `src/blake3_worker.js` — must be `../blake3-wasm/...` (one level up from src/)
-- DO NOT use wasm-pack `bundler` output directly without the Workers init wrapper — `__wbg_set_wasm` requires manual instantiation in Workers context
-- DO NOT omit `fallthrough = false` on `[[rules]]` — triggers Wrangler warning about default rule shadowing
-
-## Session S35-emergency — Soft launch prep (20 July 2026)
-
-**Commits:** c9bd344 → e5bd4c3 → 95a12b4 (no session number consumed from B4)
-
-**Completed:**
-- upgrade.njk only — no Worker changes
-- Paid tier cards (Creative Premium, Production Max) greyed out: opacity 0.35, pointer-events none
-- Coming Soon tag positioned top-right on each paid card, opacity: calc(1/0.35) to punch through parent fade
-- Payment section hidden (visible class removed)
-- Soft-launch notice added to page header: green dot + "Free tier open · Paid plans launching soon"
-
-**Do not retry:**
-- DO NOT re-enable paid tiers without explicit instruction from Rajesh at each block close
-
-**Next: B4 — Security hardening (S34–S42)**
+*"Nothing stops this train."*
