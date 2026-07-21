@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>refueler-share · dashboard</title>
 <link rel="preconnect" href="https://fonts.bunny.net">
-<link href="https://fonts.bunny.net/css?family=satoshi:400,500,700,900&display=swap" rel="stylesheet">
+<link href="https://fonts.bunny.net/css?family=satoshi:400,500,700,900|playfair-display:700|source-serif-4:400,500&display=swap" rel="stylesheet">
 <style>
   /* ── Tokens ── */
   :root {
@@ -25,6 +25,8 @@
     --dim: #888;
     --mono: 'JetBrains Mono', 'Fira Mono', monospace;
     --sans: 'Satoshi', system-ui, sans-serif;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --figures: 'Playfair Display', Georgia, serif;
   }
 
   /* ── Theme: Carbon (default) ── */
@@ -62,7 +64,7 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: var(--sans);
+    font-family: var(--serif);
     font-size: 16px;
     min-height: 100vh;
     transition: background .2s, color .2s;
@@ -153,38 +155,45 @@
   .snapshot-metrics {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
+    border-top: 1px solid var(--border);
+  }
+  .snapshot-metrics-row2 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--border);
   }
   @media (max-width: 960px) {
-    .snapshot-metrics {
-      grid-template-columns: repeat(3, 1fr);
-    }
-    .snap-metric:nth-child(3) { border-right: none; }
-    .snap-metric:nth-child(4),
-    .snap-metric:nth-child(5),
-    .snap-metric:nth-child(6) { border-top: 1px solid var(--border); }
+    .snapshot-metrics,
+    .snapshot-metrics-row2 { grid-template-columns: repeat(3, 1fr); }
   }
   .snap-metric {
-    padding: 24px 24px 28px;
+    padding: 22px 22px 26px;
     border-right: 1px solid var(--border);
     cursor: pointer;
     transition: background .12s;
-    min-width: 0; /* prevent bleed */
+    min-width: 0;
   }
+  .snap-metric.secondary { padding: 18px 22px 22px; }
   .snap-metric:last-child { border-right: none; }
   .snap-metric:hover { background: var(--bg-3); }
 
   .snap-metric .sm-label {
-    font-size: 11px; color: var(--text-dim); letter-spacing: .1em;
-    text-transform: uppercase; font-weight: 600; margin-bottom: 5px;
+    font-size: 10px; color: var(--text-dim); letter-spacing: .12em;
+    text-transform: uppercase; font-weight: 600; margin-bottom: 4px;
+    font-family: var(--sans);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .snap-metric .sm-plain {
-    font-size: 14px; color: var(--text-dim); font-weight: 500; margin-bottom: 12px;
-  }
-  .snap-metric .sm-value {
-    font-size: 30px; font-weight: 900; color: var(--text); line-height: 1;
+    font-size: 13px; color: var(--text-dim); font-weight: 500; margin-bottom: 10px;
+    font-family: var(--sans);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .snap-metric .sm-value {
+    font-size: 30px; font-weight: 700; color: var(--text); line-height: 1;
+    font-family: var(--figures);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .snap-metric.secondary .sm-value { font-size: 24px; }
   .snap-metric .sm-value.red   { color: var(--value-red); }
   .snap-metric .sm-value.amber { color: var(--value-amber); }
   .snap-metric .sm-value.blue  { color: var(--value-blue); }
@@ -269,8 +278,8 @@
   #modal-close:hover { border-color: var(--accent); color: var(--accent); }
   .modal-body { padding: 40px 32px; flex: 1; max-width: 900px; }
   .modal-value {
-    font-size: 80px; font-weight: 900; color: var(--text); line-height: 1;
-    margin-bottom: 8px;
+    font-size: 80px; font-weight: 700; color: var(--text); line-height: 1;
+    margin-bottom: 8px; font-family: var(--figures);
   }
   .modal-value.red   { color: var(--value-red); }
   .modal-value.amber { color: var(--value-amber); }
@@ -340,6 +349,7 @@
           Copy JSON
         </button>
       </div>
+      <!-- Row 1: primary metrics -->
       <div class="snapshot-metrics">
         <div class="snap-metric" onclick="openModal('mrr')">
           <div class="sm-label">Monthly run rate</div>
@@ -350,11 +360,6 @@
           <div class="sm-label">Paid subscribers</div>
           <div class="sm-plain">Paying customers</div>
           <div class="sm-value" id="snap-paid">—</div>
-        </div>
-        <div class="snap-metric" onclick="openModal('uniqueness')">
-          <div class="sm-label">Credential uniqueness</div>
-          <div class="sm-plain">Tokens used only once</div>
-          <div class="sm-value" id="snap-uniqueness">—</div>
         </div>
         <div class="snap-metric" onclick="openModal('issuances')">
           <div class="sm-label">Issuances (30d)</div>
@@ -370,6 +375,35 @@
           <div class="sm-label">Server errors</div>
           <div class="sm-plain">Right now</div>
           <div class="sm-value" id="snap-error-rate">—</div>
+        </div>
+        <div class="snap-metric" onclick="openModal('uniqueness')">
+          <div class="sm-label">Token security</div>
+          <div class="sm-plain">No double-spends</div>
+          <div class="sm-value" id="snap-uniqueness">—</div>
+        </div>
+      </div>
+
+      <!-- Row 2: supporting metrics -->
+      <div class="snapshot-metrics-row2">
+        <div class="snap-metric secondary" onclick="openModal('upload-speed')">
+          <div class="sm-label">Upload speed · p95</div>
+          <div class="sm-plain">How fast uploads complete</div>
+          <div class="sm-value" id="snap-upload-speed">—</div>
+        </div>
+        <div class="snap-metric secondary" onclick="openModal('download-speed')">
+          <div class="sm-label">Download speed · p95</div>
+          <div class="sm-plain">How fast downloads complete</div>
+          <div class="sm-value" id="snap-download-speed">—</div>
+        </div>
+        <div class="snap-metric secondary" onclick="openModal('retrieval')">
+          <div class="sm-label">Download success (24h)</div>
+          <div class="sm-plain">Downloads completing today</div>
+          <div class="sm-value" id="snap-retrieval">—</div>
+        </div>
+        <div class="snap-metric secondary" onclick="openModal('churn')">
+          <div class="sm-label">Churn rate MTD</div>
+          <div class="sm-plain">Cancellations this month</div>
+          <div class="sm-value" id="snap-churn">—</div>
         </div>
       </div>
     </div>
@@ -523,6 +557,12 @@
     uEl.textContent = rate !== null && rate !== undefined ? `${(rate * 100).toFixed(2)}%` : 'n/a';
     uEl.className = 'sm-value' + (rate !== null && rate < 0.99 ? ' red' : rate !== null && rate < 0.999 ? ' amber' : '');
 
+    // Snapshot churn — row 2
+    const churn = d.churn_rate_mtd_pct ?? 0;
+    const churnEl = document.getElementById('snap-churn');
+    churnEl.textContent = `${churn}%`;
+    churnEl.className = 'sm-value' + (churn > 0 ? ' red' : '');
+
     // Store for modal detail
     lastMetrics = d;
   }
@@ -560,6 +600,31 @@
     } else {
       errEl.textContent = 'n/a'; errEl.className = 'sm-value';
     }
+
+    // Row 2 — upload speed
+    const lat = d.latency_by_endpoint;
+    const ulEl = document.getElementById('snap-upload-speed');
+    const ul = lat?.upload;
+    if (ul) {
+      ulEl.textContent = `${ul.p95_ms} ms`;
+      ulEl.className = 'sm-value' + (ul.p95_ms > 500 ? ' red' : ul.p95_ms > 200 ? ' amber' : '');
+    } else { ulEl.textContent = 'n/a'; ulEl.className = 'sm-value'; }
+
+    // Row 2 — download speed
+    const dlEl = document.getElementById('snap-download-speed');
+    const dl = lat?.download;
+    if (dl) {
+      dlEl.textContent = `${dl.p95_ms} ms`;
+      dlEl.className = 'sm-value' + (dl.p95_ms > 500 ? ' red' : dl.p95_ms > 200 ? ' amber' : '');
+    } else { dlEl.textContent = 'n/a'; dlEl.className = 'sm-value'; }
+
+    // Row 2 — retrieval
+    const retEl = document.getElementById('snap-retrieval');
+    const ret = d.r2_chunk_retrieval_success_rate;
+    if (ret !== null && ret !== undefined) {
+      retEl.textContent = `${(ret * 100).toFixed(2)}%`;
+      retEl.className = 'sm-value' + (ret < 0.99 ? ' red' : ret < 0.999 ? ' amber' : '');
+    } else { retEl.textContent = 'n/a'; retEl.className = 'sm-value'; }
 
     // Store for modals
     lastAe = d;
