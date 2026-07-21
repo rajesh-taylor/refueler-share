@@ -586,7 +586,11 @@ async function startUpload() {
     body: JSON.stringify({ turnstile_token: turnstileToken, blinded_message: blindedMsg, tier: 'free' }),
   });
   clearInterval(_credTick);
-  if (!issueRes.ok) throw new Error(`Credential issue failed: ${await issueRes.text()}`);
+  if (!issueRes.ok) {
+    const errText = await issueRes.text();
+    reportError('credential_issue', `HTTP ${issueRes.status}`, errText.slice(0, 200));
+    throw new Error(`Credential issue failed: ${errText}`);
+  }
   const { signed_point, mint_pubkey } = await issueRes.json();
   const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
 
@@ -601,7 +605,13 @@ async function startUpload() {
     );
     // AAD: 4-byte big-endian chunk index (DataView.setUint32) — overflow-safe for all chunk counts
     // Fix: use a 4-byte Uint32Array or encode i as 4 bytes before large-file testing
-    const chunkHashHex = await blake3Hash(new Uint8Array(encrypted));
+    let chunkHashHex;
+    try {
+      chunkHashHex = await blake3Hash(new Uint8Array(encrypted));
+    } catch (e) {
+      reportError('blake3_hash', e.message, `uuid:${uploadUUID.slice(0,8)} chunk:${i}`);
+      throw e;
+    }
     chunkHashes.push(chunkHashHex);
     const rollingRoot = await blake3Hash(new TextEncoder().encode(chunkHashes.join('')));
 
@@ -623,7 +633,11 @@ async function startUpload() {
     const res = await fetch(`${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`, {
       method: 'PUT', headers, body: encrypted,
     });
-    if (!res.ok) throw new Error(`Chunk ${i} upload failed: ${await res.text()}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      reportError('upload_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
+      throw new Error(`Chunk ${i} upload failed: ${errText}`);
+    }
     setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
   }
 
@@ -714,6 +728,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
   } else if (probe.ok || probe.status === 206) {
     await startDownload(uuid);
   } else {
+    reportError('manifest_fetch', `HTTP ${probe.status}`, `uuid:${uuid.slice(0,8)}`);
     showDownloadError(`Transfer unavailable (${probe.status}).`);
   }
 }
@@ -733,7 +748,11 @@ async function startDownload(uuid) {
     const padded = String(chunkIndex).padStart(4, '0');
     const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
     if (res.status === 404) break;
-    if (!res.ok) { showDownloadError(`Download failed at chunk ${chunkIndex} (${res.status}).`); return; }
+    if (!res.ok) {
+      reportError('download_chunk', `HTTP ${res.status} chunk ${chunkIndex}`, `uuid:${uuid.slice(0,8)} chunk:${chunkIndex}`);
+      showDownloadError(`Download failed at chunk ${chunkIndex} (${res.status}).`);
+      return;
+    }
     if (chunkIndex === 0) {
       const headerName = res.headers.get('X-File-Name');
       if (headerName) fileName = headerName;
@@ -755,6 +774,7 @@ async function startDownload(uuid) {
         sessionAesKey, chunks[i]
       );
     } catch (e) {
+      reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
       showDownloadError(`Decrypt failed on chunk ${i}: wrong key or corrupted data.`);
       return;
     }
@@ -879,7 +899,24 @@ function hexToBuf(hex) {
   for (let i = 0; i < hex.length; i += 2) out[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   return out.buffer;
 }
-async function waitForTurnstile(ms) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Error reporting (S36b) — fire-and-forget, never blocks flow, never surfaces to user
+// ─────────────────────────────────────────────────────────────────────────────
+function reportError(context, message, detail) {
+  try {
+    fetch(`${WORKER_URL}/log/error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: String(context).slice(0, 64),
+        message: String(message || '').slice(0, 200),
+        detail:  String(detail  || '').slice(0, 200),
+        ts:      Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {}
+}
+
   const start = Date.now();
   while (!turnstileToken && Date.now() - start < ms) await new Promise(r => setTimeout(r, 200));
 }

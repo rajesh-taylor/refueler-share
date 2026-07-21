@@ -158,6 +158,10 @@ export default {
         return timed('subscription_portal', () => handlePortal(request, env).then(r => addCors(r, request)));
       }
 
+      if (request.method === 'POST' && path === '/log/error') {
+        return handleLogError(request, env).then(r => addCors(r, request));
+      }
+
       if (request.method === 'GET' && path === '/admin/metrics') {
         return timed('admin_metrics', () => handleAdminMetrics(request, env).then(r => addCors(r, request)));
       }
@@ -208,6 +212,32 @@ async function handleStatus(request, env) {
   }
 
   return json(current);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Client error reporting — POST /log/error (S36b)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleLogError(request, env) {
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(env, ip, 'log_error', 20, 60);
+  if (rl) return new Response('Too Many Requests', { status: 429 });
+
+  let body;
+  try { body = await request.json(); } catch { return new Response('OK', { status: 200 }); }
+
+  const context = String(body.context || '').slice(0, 64);
+  const message = String(body.message || '').slice(0, 200);
+  const detail  = String(body.detail  || '').slice(0, 200);
+
+  try {
+    env.AE.writeDataPoint({
+      blobs:   ['client_error', context, message],
+      doubles: [Date.now()],
+      indexes: ['client_error'],
+    });
+  } catch {}
+
+  return new Response('OK', { status: 200 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
