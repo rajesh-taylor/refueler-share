@@ -143,8 +143,11 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S35 | `ab01388` | AAD overflow fix (4-byte uint32, encrypt + decrypt). |
 | S36 | `b877c76` | Rate limiting: `ratelimit.js`, 3 endpoints, KV-backed. |
 | S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
+| S36c | (pending) | Dashboard legibility pass. 36px values, 16px+ sub-text, plain-English sublabels on all cards. |
+| S36c | `2db7b08` | Dashboard: snapshot strip, two rows, Paper/Carbon toggle, modal stubs, Playfair figures, Source Serif body. p99 + row 3 carry to new chat. |
+| S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell (p95+p99+success+churn), row 3 3-cell (free users, client errors, lightning deferred B7). |
 
-**Next: S36c — Dashboard legibility pass.**
+**Next: S38 — AE SQL extension (`client_errors_24h`) + wrangler secret list verification + wrangler update (4.92 → current).**
 
 ---
 
@@ -225,7 +228,7 @@ Yearly = 10 months price.
 - Dashboard S36c: larger fonts, plain-English sub-labels (16px min), retain technical terms
 - Dashboard B5: "Investor Snapshot" → "System Summary", Satoshi font, 4 latency cards, Copy JSON → bottom-right, Source Serif 4 body
 - Brand audit: BRANDING.md against share UI, Carbon gold edging
-
+- Modal full build — own session allocation in B5
 ---
 
 ## File map

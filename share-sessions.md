@@ -113,6 +113,35 @@
 - UUID truncated to 8 chars. detail truncated to 200 chars. No filename, no full UUID, no user identity.
 - Smoke test: rate-limited on first hit (correct — KV window from deploy). Endpoint confirmed live.
 
+### S36c — Dashboard legibility pass (extended)
+**Commits:** `f909d96` → `9d8dbf7` → `2db7b08`
+
+- Satoshi → Source Serif 4 body, Playfair Display 700 figures (revisit B5)
+- Snapshot strip: single surface, hairline dividers, two rows (6 primary + 4 secondary)
+- Row 1 order: Revenue · Paying customers · Uploads started · Data stored · Server errors · Token security
+- Row 2: Upload speed p95 · Download speed p95 · Download success · Churn
+- card-note removed entirely. No duplicate card sections.
+- Paper/Carbon toggle: cookie scoped to `.refueler.io`
+- Modal stub on every metric: full viewport, ← Back button, CSV placeholder
+- "Credential uniqueness" → "Token security" / "No double-spends"
+- p99 blocks and third row to be added S36c continuation in new chat
+- Modal full build deferred to B5 (own session allocation needed)
+- Rogue secret names in wrangler secret list to be cleaned: `sk_live_...ZehD`, `whsec_70W1...`, `whsec_MAd6...`
+
+### S37 — Dashboard completion
+**Commits:** `fb22a29` → `7684118`
+
+- Playfair Display dropped — figures font reverted to Satoshi 700 throughout (strip cells + modal value).
+- Bunny Fonts link updated (Playfair removed).
+- Row 2 expanded to 6 cells: Upload p95 · Download p95 · Upload p99 · Download p99 · Download success / Last 24 hours · Churn.
+- Row 2 label cleanup: p95/p99 cells have no plain-English sub-line. Download success label no longer truncates. Churn label simplified, sub-line removed.
+- Row 3 added (3-column, stretches full width): Free users · Client errors (24h) · Lightning settlement (greyed out, deferred B7).
+- `client_errors_24h` field will show n/a until AE SQL query in `/admin/ae-metrics` is extended — flagged for S38 or snag session.
+- Free users populates immediately from existing `subscribers_by_tier.free` in `/admin/metrics`.
+- Modal MODAL_DEFS and switch cases updated for all new keys: `upload-speed-p99`, `download-speed-p99`, `free-users`, `client-errors`. Churn modal sub updated to "cancelled" (no timeframe — modal will carry that in B5).
+- Secret cleanup (3 rogue names) — pending confirmation of `wrangler secret list` output.
+- Third row deferred discussion: row 3 will gain Lightning settlement cell live data at B7. No further rows until B7.
+
 **Do not retry:**
 - DO NOT await `reportError` fetch — `.catch(() => {})` must be present
 - DO NOT send full UUID — first 8 chars only
