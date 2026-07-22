@@ -847,7 +847,7 @@
     const rate = d.credential_uniqueness_rate;
     const uEl = document.getElementById('snap-uniqueness');
     uEl.textContent = rate !== null && rate !== undefined ? `${(rate * 100).toFixed(2)}%` : 'n/a';
-    uEl.className = 'sm-value' + (rate !== null && rate < 0.99 ? ' red' : rate !== null && rate < 0.999 ? ' amber' : '');
+    uEl.className = 'sm-value' + (rate !== null && rate < 0.99 ? ' red' : rate !== null && rate < 0.999 ? ' amber' : rate !== null ? ' green' : '');
 
     const churn = d.churn_rate_mtd_pct ?? 0;
     const churnEl = document.getElementById('snap-churn');
@@ -923,7 +923,7 @@
     const ret = d.r2_chunk_retrieval_success_rate;
     if (ret !== null && ret !== undefined) {
       retEl.textContent = `${(ret * 100).toFixed(2)}%`;
-      retEl.className = 'sm-value' + (ret < 0.99 ? ' red' : ret < 0.999 ? ' amber' : '');
+      retEl.className = 'sm-value' + (ret < 0.99 ? ' red' : ret < 0.999 ? ' amber' : ' green');
     } else { retEl.textContent = 'n/a'; retEl.className = 'sm-value'; }
 
     const ceEl = document.getElementById('snap-client-errors');
@@ -1044,6 +1044,8 @@
     // ── Data rendering ───────────────────────────────────────────────────────
     const m = lastMetrics ?? {};
     const ae = lastAe ?? {};
+    // Safety check: if ae has no credential data at all, farming will appear n/a correctly
+    // rather than falsely green. This is correct behaviour.
     let value, sub = '', colorClass = '', isNA = false;
 
     switch (key) {
