@@ -5,357 +5,467 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>refueler-share · dashboard</title>
 <link rel="preconnect" href="https://fonts.bunny.net">
-<link href="https://fonts.bunny.net/css?family=satoshi:400,500,700,900|source-serif-4:400,500&display=swap" rel="stylesheet">
+<link href="https://fonts.bunny.net/css?family=ibm-plex-mono:400,500|source-serif-4:300,400&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
 <style>
-  /* ── Tokens ── */
+  /* ─── Tokens · DESIGN-TOKENS.md v1.0 ─── */
   :root {
-    --carbon: #1A1A1A;
-    --carbon-2: #242424;
-    --carbon-3: #2E2E2E;
-    --carbon-border: #3A3A3A;
-    --paper: #F5F0E8;
-    --paper-2: #EDE8DF;
-    --paper-3: #E0D9CE;
-    --paper-border: #C8C0B0;
-    --accent: #C8A84B;
-    --green: #2E7D4F;
-    --amber: #B87A1A;
-    --red: #C0392B;
-    --blue: #2563A8;
-    --dim: #888;
-    --mono: 'JetBrains Mono', 'Fira Mono', monospace;
-    --sans: 'Satoshi', system-ui, sans-serif;
-    --serif: 'Source Serif 4', Georgia, serif;
-    --figures: 'Satoshi', system-ui, sans-serif;
+    --bg:             #F7F4EF;
+    --surface:        #EDEAE4;
+    --surface-raised: #E4E1DA;
+    --text-primary:   #3D3A36;
+    --text-secondary: #5A5751;
+    --text-tertiary:  #9A948D;
+    --border:         #D6D1C8;
+    --border-mid:     #B8B2A8;
+    --inset-rule:     var(--border);
+    --accent:         #C8A96E;
+    --accent-hover:   #E0C48A;
+    --c-green:        #1C7C4A;
+    --c-green-bg:     #EBF7F0;
+    --c-amber:        #B85C00;
+    --c-amber-bg:     #FEF3E6;
+    --c-red:          #C0392B;
+    --c-red-bg:       #FDF0EE;
+    --warn:           #B87333;
+    --c-blue:         #2563A8;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'DM Sans', sans-serif;
+    --serif:   'Source Serif 4', Georgia, serif;
+    --heading: 'Satoshi', 'DM Sans', sans-serif;
   }
-
-  /* ── Theme: Carbon (default) ── */
   [data-theme="carbon"] {
-    --bg: var(--carbon);
-    --bg-2: var(--carbon-2);
-    --bg-3: var(--carbon-3);
-    --border: var(--carbon-border);
-    --text: var(--paper);
-    --text-dim: #888;
-    --text-faint: #555;
-    --value-green: #4CAF72;
-    --value-amber: #E8A93A;
-    --value-red: #E85A4A;
-    --value-blue: #5A9BE8;
-  }
-
-  /* ── Theme: Paper ── */
-  [data-theme="paper"] {
-    --bg: var(--paper);
-    --bg-2: var(--paper-2);
-    --bg-3: var(--paper-3);
-    --border: var(--paper-border);
-    --text: var(--carbon);
-    --text-dim: #666;
-    --text-faint: #999;
-    --value-green: var(--green);
-    --value-amber: var(--amber);
-    --value-red: var(--red);
-    --value-blue: var(--blue);
+    --bg:             #1E1F22;
+    --surface:        #26282C;
+    --surface-raised: #2E3035;
+    --text-primary:   #E4E2DC;
+    --text-secondary: #8A8680;
+    --text-tertiary:  #5A5751;
+    --border:         #35373B;
+    --border-mid:     #4A4D52;
+    --inset-rule:     #C8A96E;
+    --c-green:        #3DCA7A;
+    --c-green-bg:     #0D2B1A;
+    --c-amber:        #E8A23A;
+    --c-amber-bg:     #2B1D08;
+    --c-red:          #E05050;
+    --c-red-bg:       #2B1010;
+    --warn:           #C8943A;
+    --c-blue:         #5A9BE8;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
     background: var(--bg);
-    color: var(--text);
-    font-family: var(--serif);
+    color: var(--text-primary);
+    font-family: var(--sans);
     font-size: 16px;
     min-height: 100vh;
-    transition: background .2s, color .2s;
+    transition: background 0.35s, color 0.35s;
   }
 
-  /* ── Gate ── */
+  /* ─── Sidebar ─── */
+  #sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 200px;
+    background: var(--surface);
+    border-right: 0.5px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 1.5rem 0 1.25rem;
+    font-family: var(--mono);
+    transition: background 0.35s, border-color 0.35s;
+    z-index: 20;
+  }
+  .sb-wordmark {
+    padding: 0 1rem;
+    font-family: var(--heading);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .sb-wordmark .wm-div { font-weight: 300; opacity: 0.3; padding: 0 2px; }
+  .sb-wordmark .wm-sub { font-weight: 400; opacity: 0.55; }
+
+  .sb-nav { flex: 1; overflow-y: auto; }
+  .sb-section {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+    padding: 0 1rem;
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  .sb-item {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 0.45rem 1rem;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .sb-item:hover { color: var(--text-primary); }
+  .sb-item.active {
+    color: var(--text-primary);
+    border-left: 2px solid var(--accent);
+    background: var(--bg);
+    padding-left: calc(1rem - 0px); /* border consumes 2px; padding kept — text aligns via border-box */
+  }
+  .sb-item.stub {
+    color: var(--text-tertiary);
+    pointer-events: none;
+  }
+
+  .sb-footer {
+    padding: 1rem 1rem 0;
+    border-top: 0.5px solid var(--border);
+    display: flex; flex-direction: column; gap: 0.6rem;
+  }
+  .sb-auth {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sb-theme { display: flex; gap: 0.35rem; }
+  .sb-theme button {
+    flex: 1;
+    background: transparent;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.35rem 0;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .sb-theme button.active {
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    border-color: var(--border-mid);
+  }
+  .sb-signout {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    background: none; border: none; text-align: left; padding: 0;
+  }
+  .sb-signout:hover { text-decoration: underline; }
+
+  /* ─── Main ─── */
+  #main {
+    margin-left: 200px;
+    padding: 2rem 2.5rem;
+    min-height: 100vh;
+  }
+
+  .content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    gap: 1rem;
+  }
+  .section-title {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-tertiary);
+  }
+  .header-right { display: flex; align-items: center; gap: 0.75rem; }
+  #refreshed-at, #countdown {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+  }
+  .ghost-btn {
+    background: transparent;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+    display: inline-flex; align-items: center; gap: 0.35rem;
+  }
+  .ghost-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+  .ghost-btn.copied { color: var(--c-green); border-color: var(--c-green); }
+  .ghost-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+  /* ─── Gate (centred in main) ─── */
   #gate {
     display: flex; align-items: center; justify-content: center;
-    min-height: 100vh; flex-direction: column; gap: 16px;
+    min-height: calc(100vh - 4rem);
+    flex-direction: column; gap: 16px;
   }
-  #gate h1 { font-size: 22px; color: var(--accent); font-weight: 700; letter-spacing: .02em; }
+  #gate h1 {
+    font-family: var(--heading); font-weight: 700;
+    font-size: 1.1rem; color: var(--accent); letter-spacing: 0.02em;
+  }
   #gate input {
-    background: var(--bg-2); border: 1px solid var(--border);
-    color: var(--text); padding: 12px 16px; border-radius: 8px;
-    font-family: var(--mono); font-size: 15px; width: 320px; outline: none;
+    background: var(--surface); border: 0.5px solid var(--border);
+    color: var(--text-primary); padding: 12px 16px; border-radius: 8px;
+    font-family: var(--mono); font-size: 0.85rem; width: 320px; outline: none;
   }
   #gate input:focus { border-color: var(--accent); }
   #gate button {
-    background: var(--accent); color: #1A1A1A; border: none;
+    background: var(--accent); color: #1E1F22; border: none;
     padding: 12px 28px; border-radius: 8px; font-weight: 700;
-    cursor: pointer; font-size: 16px; font-family: var(--sans);
+    cursor: pointer; font-size: 0.9rem; font-family: var(--heading);
   }
-  #gate-error { color: var(--value-red); font-size: 15px; }
+  #gate button:hover { background: var(--accent-hover); }
+  #gate-error { color: var(--c-red); font-size: 0.85rem; font-family: var(--sans); }
 
-  /* ── Dashboard ── */
   #dashboard { display: none; }
 
-  /* ── Header ── */
-  header {
-    background: var(--bg-2); border-bottom: 1px solid var(--border);
-    padding: 14px 28px; display: flex; align-items: center; gap: 16px;
-    position: sticky; top: 0; z-index: 10;
-  }
-  header h1 { font-size: 16px; color: var(--accent); font-weight: 700; flex: 1; letter-spacing: .02em; }
-  #countdown { font-size: 13px; color: var(--text-dim); font-family: var(--mono); }
-  #refresh-btn {
-    background: var(--bg-3); border: 1px solid var(--border);
-    color: var(--text-dim); padding: 7px 16px; border-radius: 6px;
-    cursor: pointer; font-size: 14px; font-family: var(--sans); font-weight: 500;
-    transition: color .15s, border-color .15s;
-  }
-  #refresh-btn:hover { color: var(--text); border-color: var(--accent); }
-
-  /* ── Theme toggle ── */
-  #theme-toggle {
-    background: var(--bg-3); border: 1px solid var(--border);
-    color: var(--text-dim); padding: 7px 14px; border-radius: 6px;
-    cursor: pointer; font-size: 13px; font-family: var(--sans); font-weight: 500;
-    display: flex; align-items: center; gap: 6px;
-    transition: color .15s, border-color .15s;
-  }
-  #theme-toggle:hover { color: var(--text); border-color: var(--accent); }
-
-  /* ── Main ── */
-  main { padding: 28px; max-width: 1280px; }
-
-  /* ── Error banner ── */
+  /* ─── Error banner ─── */
   #error-banner {
-    display: none; background: rgba(232,90,74,.1);
-    border: 1px solid var(--value-red); border-radius: 8px;
+    display: none; background: var(--c-red-bg);
+    border: 0.5px solid var(--c-red); border-radius: 8px;
     padding: 12px 16px; margin-bottom: 24px;
-    font-size: 14px; color: var(--value-red);
+    font-size: 0.85rem; color: var(--c-red); font-family: var(--sans);
   }
 
-  /* ── Snapshot strip ── */
-  .snapshot-strip {
-    background: var(--bg-2); border: 1px solid var(--border);
-    border-radius: 12px; overflow: hidden;
+  /* ─── Card group ─── */
+  .card-group {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: background 0.35s, border-color 0.35s;
   }
-  .snapshot-strip-header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 18px 28px; border-bottom: 1px solid var(--border);
+  .row-6 { display: grid; grid-template-columns: repeat(6, 1fr); }
+  .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .row-6 + .row-6, .row-6 + .row-3 { border-top: 0.5px solid var(--border); }
+  @media (max-width: 1100px) {
+    .row-6 { grid-template-columns: repeat(3, 1fr); }
+    .row-6 .snap-metric:nth-child(3n) { border-right: none; }
+    .row-6 .snap-metric:nth-child(-n+3) { border-bottom: 0.5px solid var(--border); }
   }
-  .snapshot-strip-title { font-size: 15px; font-weight: 600; flex: 1; color: var(--text-dim); letter-spacing: .04em; }
-  .strip-as-of { font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
-  #snapshot-copy-btn {
-    background: transparent; border: 1px solid var(--border);
-    color: var(--text-dim); padding: 6px 14px; border-radius: 6px;
-    cursor: pointer; font-size: 13px; font-family: var(--sans); font-weight: 500;
-    display: flex; align-items: center; gap: 6px;
-    transition: color .15s, border-color .15s;
-  }
-  #snapshot-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
-  #snapshot-copy-btn.copied { color: var(--value-green); border-color: var(--value-green); }
-  #snapshot-copy-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
 
-  /* Six metrics in a row, hairline dividers between */
-  .snapshot-metrics {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    border-top: 1px solid var(--border);
-  }
-  .snapshot-metrics-row2 {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    border-top: 1px solid var(--border);
-  }
-  .snapshot-metrics-row3 {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    border-top: 1px solid var(--border);
-  }
-  @media (max-width: 960px) {
-    .snapshot-metrics,
-    .snapshot-metrics-row2 { grid-template-columns: repeat(3, 1fr); }
-  }
   .snap-metric {
-    padding: 22px 22px 26px;
-    border-right: 1px solid var(--border);
+    padding: 1rem 1rem 1rem;
+    border-right: 0.5px solid var(--border);
     cursor: pointer;
-    transition: background .12s;
+    transition: background 0.12s;
     min-width: 0;
   }
-  .snap-metric.secondary { padding: 18px 22px 22px; }
   .snap-metric:last-child { border-right: none; }
-  .snap-metric:hover { background: var(--bg-3); }
+  .snap-metric:hover { background: var(--surface-raised); }
 
-  .snap-metric .sm-label {
-    font-size: 10px; color: var(--text-dim); letter-spacing: .12em;
-    text-transform: uppercase; font-weight: 600; margin-bottom: 4px;
+  .sm-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-tertiary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sm-plain {
     font-family: var(--sans);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .snap-metric .sm-plain {
-    font-size: 13px; color: var(--text-dim); font-weight: 500; margin-bottom: 10px;
-    font-family: var(--sans);
+  .sm-value {
+    font-family: var(--heading);
+    font-weight: 700;
+    font-size: 2rem;
+    color: var(--text-primary);
+    line-height: 1.05;
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .snap-metric .sm-value {
-    font-size: 30px; font-weight: 700; color: var(--text); line-height: 1;
-    font-family: var(--figures);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .snap-metric.secondary .sm-value { font-size: 24px; }
-  .snap-metric .sm-value.red   { color: var(--value-red); }
-  .snap-metric .sm-value.amber { color: var(--value-amber); }
-  .snap-metric .sm-value.blue  { color: var(--value-blue); }
+  .sm-value.red   { color: var(--c-red); }
+  .sm-value.amber { color: var(--c-amber); }
+  .sm-value.blue  { color: var(--c-blue); }
 
-  /* ── Card grid ── */
-  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-
-  /* ── Card ── */
-  .card {
-    background: var(--bg-2); border: 1px solid var(--border);
-    border-radius: 10px; padding: 22px 22px 18px;
-    cursor: pointer; transition: border-color .15s;
-    display: flex; flex-direction: column; gap: 0;
-  }
-  .card:hover { border-color: var(--accent); }
-
-  .card-label {
-    font-size: 11px; color: var(--text-dim); letter-spacing: .1em;
-    text-transform: uppercase; font-weight: 600; margin-bottom: 6px;
-  }
-  .card-plain {
-    font-size: 18px; color: var(--text); font-weight: 500;
-    line-height: 1.25; margin-bottom: 16px;
-  }
-  .card-value {
-    font-size: 52px; font-weight: 900; color: var(--text); line-height: 1;
-  }
-  .card-value.red   { color: var(--value-red); }
-  .card-value.amber { color: var(--value-amber); }
-  .card-value.blue  { color: var(--value-blue); }
-
-  .card-sub {
-    font-size: 16px; color: var(--text-dim); margin-top: 10px; font-weight: 400;
+  .deferred { opacity: 0.38; cursor: default; }
+  .deferred:hover { background: transparent; }
+  .b7-badge {
+    display: inline-block;
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--c-amber); background: var(--c-amber-bg);
+    border-radius: 3px; padding: 1px 6px; margin-left: 6px;
+    vertical-align: middle;
   }
 
-  /* Deferred cards */
-  .deferred { opacity: .38; cursor: default; }
-  .deferred:hover { border-color: var(--border); }
-  .deferred .card-value { font-size: 28px; color: var(--value-amber); }
-
-  /* ── Tier pills ── */
-  .tier-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .tier-pill {
-    background: var(--bg-3); border-radius: 4px; padding: 4px 12px;
-    font-size: 14px; font-family: var(--mono);
+  .group-footer {
+    display: flex; flex-direction: row-reverse;
+    margin-top: 0.5rem;
   }
-  .tier-pill span { color: var(--text-dim); margin-right: 5px; }
 
-  /* ── Issuance breakdown ── */
-  .issuance-row { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-  .issuance-item {
-    display: flex; justify-content: space-between;
-    font-size: 16px; font-family: var(--mono);
-  }
-  .issuance-item .ilabel { color: var(--text-dim); }
-  .issuance-item .ival   { color: var(--text); font-weight: 700; }
-
-  /* ── Modal ── */
+  /* ─── Modal ─── */
   #modal {
     display: none; position: fixed; inset: 0; z-index: 100;
     background: var(--bg); overflow-y: auto;
   }
   #modal.open { display: flex; flex-direction: column; }
   .modal-header {
-    background: var(--bg-2); border-bottom: 1px solid var(--border);
+    background: var(--surface); border-bottom: 0.5px solid var(--border);
     padding: 20px 32px; display: flex; align-items: center; gap: 16px;
     position: sticky; top: 0; z-index: 10;
   }
   .modal-titles { flex: 1; }
   .modal-label {
-    font-size: 12px; color: var(--text-dim); letter-spacing: .1em;
-    text-transform: uppercase; font-weight: 600; margin-bottom: 4px;
+    font-family: var(--mono);
+    font-size: 0.65rem; color: var(--text-tertiary); letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 4px;
   }
-  .modal-plain { font-size: 22px; font-weight: 700; color: var(--text); }
+  .modal-plain { font-family: var(--heading); font-size: 1.25rem; font-weight: 700; color: var(--text-primary); }
   #modal-close {
-    background: var(--bg-3); border: 1px solid var(--border);
-    color: var(--text); padding: 10px 24px; border-radius: 8px;
-    cursor: pointer; font-size: 16px; font-weight: 700; font-family: var(--sans);
+    background: var(--surface-raised); border: 0.5px solid var(--border);
+    color: var(--text-primary); padding: 10px 24px; border-radius: 8px;
+    cursor: pointer; font-size: 0.9rem; font-weight: 700; font-family: var(--heading);
     display: flex; align-items: center; gap: 8px;
-    transition: border-color .15s, color .15s;
+    transition: border-color 0.15s ease, color 0.15s ease;
   }
   #modal-close:hover { border-color: var(--accent); color: var(--accent); }
   .modal-body { padding: 40px 32px; flex: 1; max-width: 900px; }
   .modal-value {
-    font-size: 80px; font-weight: 700; color: var(--text); line-height: 1;
-    margin-bottom: 8px; font-family: var(--figures);
+    font-family: var(--heading);
+    font-size: 5rem; font-weight: 700; color: var(--text-primary); line-height: 1;
+    margin-bottom: 8px;
   }
-  .modal-value.red   { color: var(--value-red); }
-  .modal-value.amber { color: var(--value-amber); }
-  .modal-value.blue  { color: var(--value-blue); }
-  .modal-sub { font-size: 20px; color: var(--text-dim); margin-bottom: 40px; }
+  .modal-value.red   { color: var(--c-red); }
+  .modal-value.amber { color: var(--c-amber); }
+  .modal-value.blue  { color: var(--c-blue); }
+  .modal-sub { font-family: var(--sans); font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 40px; }
   .modal-section-title {
-    font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--text-dim); font-weight: 600; margin-bottom: 12px;
-    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-tertiary); margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 0.5px solid var(--border);
   }
   .modal-placeholder {
-    background: var(--bg-2); border: 1px dashed var(--border);
+    background: var(--surface); border: 1px dashed var(--border);
     border-radius: 10px; padding: 48px; text-align: center;
-    color: var(--text-dim); font-size: 15px; margin-bottom: 32px;
+    color: var(--text-secondary); font-family: var(--sans); font-size: 0.85rem; margin-bottom: 32px;
   }
   .modal-csv-btn {
-    background: var(--bg-3); border: 1px solid var(--border);
-    color: var(--text-dim); padding: 10px 20px; border-radius: 7px;
-    cursor: not-allowed; font-size: 15px; font-family: var(--sans);
-    font-weight: 500; opacity: .5;
+    background: var(--surface-raised); border: 0.5px solid var(--border);
+    color: var(--text-secondary); padding: 10px 20px; border-radius: 8px;
+    cursor: not-allowed; font-size: 0.85rem; font-family: var(--sans);
+    font-weight: 500; opacity: 0.5;
   }
 
-  /* ── Spinner ── */
-  .spinner { display: inline-block; width: 14px; height: 14px;
-    border: 2px solid var(--border); border-top-color: var(--accent);
-    border-radius: 50%; animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  /* ─── Print / PDF export ─── */
+  @media print {
+    :root, [data-theme="carbon"] {
+      --bg:             #F7F4EF;
+      --surface:        #EDEAE4;
+      --surface-raised: #E4E1DA;
+      --text-primary:   #3D3A36;
+      --text-secondary: #5A5751;
+      --text-tertiary:  #9A948D;
+      --border:         #D6D1C8;
+      --border-mid:     #B8B2A8;
+      --inset-rule:     var(--border);
+      --c-green:        #1C7C4A;
+      --c-amber:        #B85C00;
+      --c-red:          #C0392B;
+      --c-blue:         #2563A8;
+    }
+    #sidebar { display: none; }
+    #main { margin-left: 0; padding: 0.5cm; }
+    .content-header, #error-banner, #modal { display: none !important; }
+    #main::before {
+      content: "Refueler Share — System Summary · " attr(data-print-ts);
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+    .card-group { border-radius: 0; border-color: #D6D1C8; }
+    .row-6, .row-3 { grid-template-columns: repeat(2, 1fr); }
+    .snap-metric { page-break-inside: avoid; border-right: 0.5px solid #D6D1C8 !important; border-bottom: 0.5px solid #D6D1C8; }
+    .snap-metric:nth-child(2n) { border-right: none !important; }
+    .group-footer { display: none; }
+    body { background: #F7F4EF !important; color: #3D3A36 !important; }
+  }
 </style>
 </head>
 <body>
 
-<!-- ── Password gate ── -->
-<div id="gate">
-  <h1>refueler-share</h1>
-  <input type="password" id="key-input" placeholder="Admin key" autocomplete="off">
-  <button onclick="tryUnlock()">Unlock</button>
-  <div id="gate-error"></div>
-</div>
+<!-- ─── Sidebar ─── -->
+<aside id="sidebar">
+  <div class="sb-wordmark">refueler-share<span class="wm-div">/</span><span class="wm-sub">dashboard</span></div>
 
-<!-- ── Dashboard ── -->
-<div id="dashboard">
-  <header>
-    <h1>refueler-share · dashboard</h1>
-    <span id="countdown"></span>
-    <button id="theme-toggle" onclick="toggleTheme()">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5V13.5A5.5 5.5 0 0 1 8 2.5z"/>
-      </svg>
-      <span id="theme-label">Paper</span>
-    </button>
-    <button id="refresh-btn" onclick="refreshAll()">↺ Refresh</button>
-  </header>
+  <nav class="sb-nav">
+    <div class="sb-section">Overview</div>
+    <a class="sb-item active">System Summary</a>
 
-  <main>
+    <div class="sb-section">Metrics</div>
+    <a class="sb-item stub">Upload latency</a>
+    <a class="sb-item stub">Download latency</a>
+    <a class="sb-item stub">Token security</a>
+    <a class="sb-item stub">Client errors</a>
+
+    <div class="sb-section">Data</div>
+    <a class="sb-item stub">Transfers</a>
+    <a class="sb-item stub">Subscribers</a>
+
+    <div class="sb-section">Ops</div>
+    <a class="sb-item stub">Maintenance mode</a>
+    <a class="sb-item stub">Rate limits</a>
+  </nav>
+
+  <div class="sb-footer">
+    <div class="sb-auth" id="sb-auth">not signed in</div>
+    <div class="sb-theme">
+      <button id="theme-paper" onclick="setTheme('paper')">Paper</button>
+      <button id="theme-carbon" onclick="setTheme('carbon')">Carbon</button>
+    </div>
+    <button class="sb-signout" onclick="signOut()">Sign out</button>
+  </div>
+</aside>
+
+<!-- ─── Main ─── -->
+<div id="main">
+
+  <!-- Password gate -->
+  <div id="gate">
+    <h1>refueler-share</h1>
+    <input type="password" id="key-input" placeholder="Admin key" autocomplete="off">
+    <button onclick="tryUnlock()">Unlock</button>
+    <div id="gate-error"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard">
+    <div class="content-header">
+      <div class="section-title">System Summary</div>
+      <div class="header-right">
+        <span id="refreshed-at"></span>
+        <span id="countdown"></span>
+        <button class="ghost-btn" id="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+        <button class="ghost-btn" onclick="window.print()">Print / Export PDF</button>
+      </div>
+    </div>
+
     <div id="error-banner"></div>
 
-    <!-- ── Snapshot ── -->
-    <div class="snapshot-strip">
-      <div class="snapshot-strip-header">
-        <div class="snapshot-strip-title">Live overview</div>
-        <span class="strip-as-of" id="snap-as-of"></span>
-        <button id="snapshot-copy-btn" onclick="copySnapshot()">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
-            <path d="M3 11V3a1 1 0 0 1 1-1h8"/>
-          </svg>
-          Copy JSON
-        </button>
-      </div>
+    <div class="card-group">
       <!-- Row 1: primary metrics -->
-      <div class="snapshot-metrics">
+      <div class="row-6">
         <div class="snap-metric" onclick="openModal('mrr')">
           <div class="sm-label">Monthly run rate</div>
           <div class="sm-plain">Revenue</div>
@@ -388,59 +498,73 @@
         </div>
       </div>
 
-      <!-- Row 2: supporting metrics -->
-      <div class="snapshot-metrics-row2">
-        <div class="snap-metric secondary" onclick="openModal('upload-speed')">
+      <!-- Row 2: latency + reliability -->
+      <div class="row-6">
+        <div class="snap-metric" onclick="openModal('upload-speed')">
           <div class="sm-label">Upload speed · p95</div>
+          <div class="sm-plain">Typical worst case</div>
           <div class="sm-value" id="snap-upload-speed">—</div>
         </div>
-        <div class="snap-metric secondary" onclick="openModal('download-speed')">
+        <div class="snap-metric" onclick="openModal('download-speed')">
           <div class="sm-label">Download speed · p95</div>
+          <div class="sm-plain">Typical worst case</div>
           <div class="sm-value" id="snap-download-speed">—</div>
         </div>
-        <div class="snap-metric secondary" onclick="openModal('upload-speed-p99')">
+        <div class="snap-metric" onclick="openModal('upload-speed-p99')">
           <div class="sm-label">Upload speed · p99</div>
+          <div class="sm-plain">Extreme tail</div>
           <div class="sm-value" id="snap-upload-speed-p99">—</div>
         </div>
-        <div class="snap-metric secondary" onclick="openModal('download-speed-p99')">
+        <div class="snap-metric" onclick="openModal('download-speed-p99')">
           <div class="sm-label">Download speed · p99</div>
+          <div class="sm-plain">Extreme tail</div>
           <div class="sm-value" id="snap-download-speed-p99">—</div>
         </div>
-        <div class="snap-metric secondary" onclick="openModal('retrieval')">
+        <div class="snap-metric" onclick="openModal('retrieval')">
           <div class="sm-label">Download success</div>
           <div class="sm-plain">Last 24 hours</div>
           <div class="sm-value" id="snap-retrieval">—</div>
         </div>
-        <div class="snap-metric secondary" onclick="openModal('churn')">
+        <div class="snap-metric" onclick="openModal('churn')">
           <div class="sm-label">Churn</div>
+          <div class="sm-plain">Month to date</div>
           <div class="sm-value" id="snap-churn">—</div>
         </div>
       </div>
 
       <!-- Row 3: growth + deferred -->
-      <div class="snapshot-metrics-row3">
-        <div class="snap-metric secondary" onclick="openModal('free-users')">
+      <div class="row-3">
+        <div class="snap-metric" onclick="openModal('free-users')">
           <div class="sm-label">Free users</div>
           <div class="sm-plain">Total on free tier</div>
           <div class="sm-value" id="snap-free-users">—</div>
         </div>
-        <div class="snap-metric secondary" onclick="openModal('client-errors')">
+        <div class="snap-metric" onclick="openModal('client-errors')">
           <div class="sm-label">Client errors (24h)</div>
           <div class="sm-plain">Browser-side failures</div>
           <div class="sm-value" id="snap-client-errors">—</div>
         </div>
-        <div class="snap-metric secondary deferred" title="Deferred — B7 Lightning/Blink">
-          <div class="sm-label">Lightning settlement</div>
+        <div class="snap-metric deferred" title="Deferred — B7 Lightning/Blink">
+          <div class="sm-label">Lightning settlement<span class="b7-badge">B7</span></div>
           <div class="sm-plain">Sats vs fiat mix</div>
-          <div class="sm-value amber">B7</div>
+          <div class="sm-value amber">—</div>
         </div>
       </div>
     </div>
 
-  </main>
+    <div class="group-footer">
+      <button class="ghost-btn" id="snapshot-copy-btn" onclick="copySnapshot()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+          <path d="M3 11V3a1 1 0 0 1 1-1h8"/>
+        </svg>
+        Copy JSON
+      </button>
+    </div>
+  </div>
 </div>
 
-<!-- ── Modal ── -->
+<!-- ─── Modal ─── -->
 <div id="modal">
   <div class="modal-header">
     <div class="modal-titles">
@@ -480,20 +604,28 @@
   }
   function setTheme(t) {
     document.documentElement.setAttribute('data-theme', t);
-    document.getElementById('theme-label').textContent = t === 'carbon' ? 'Paper' : 'Carbon';
+    document.getElementById('theme-paper').classList.toggle('active', t === 'paper');
+    document.getElementById('theme-carbon').classList.toggle('active', t === 'carbon');
     document.cookie = `theme=${t};path=/;domain=.refueler.io;max-age=31536000;SameSite=Lax`;
   }
-  function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme');
-    setTheme(current === 'carbon' ? 'paper' : 'carbon');
-  }
-  // Apply on load
   setTheme(getTheme());
+
+  // ── Sign out ──────────────────────────────────────────────────────────────
+  function signOut() {
+    sessionStorage.removeItem('dash_key');
+    location.reload();
+  }
 
   // ── Gate ──────────────────────────────────────────────────────────────────
   document.getElementById('key-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') tryUnlock();
   });
+
+  function showDashboard() {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('sb-auth').textContent = 'admin · authenticated';
+  }
 
   async function tryUnlock() {
     const input = document.getElementById('key-input').value.trim();
@@ -508,8 +640,7 @@
       }
       adminKey = input;
       sessionStorage.setItem('dash_key', adminKey);
-      document.getElementById('gate').style.display = 'none';
-      document.getElementById('dashboard').style.display = 'block';
+      showDashboard();
       await refreshAll();
       startTimer();
     } catch {
@@ -526,8 +657,7 @@
           headers: { 'X-Admin-Key': adminKey }
         });
         if (res.status === 401) { sessionStorage.removeItem('dash_key'); return; }
-        document.getElementById('gate').style.display = 'none';
-        document.getElementById('dashboard').style.display = 'block';
+        showDashboard();
         await refreshAll();
         startTimer();
       } catch {}
@@ -543,6 +673,9 @@
     if (m)    { lastMetrics = m;   renderMetrics(m); }
     if (ae)   { lastAe = ae;       renderAeMetrics(ae); }
     if (snap) { lastSnapshot = snap; renderSnapshot(snap); }
+    const ts = new Date();
+    setText('refreshed-at', `Refreshed ${ts.toLocaleTimeString('en-GB')}`);
+    document.getElementById('main').setAttribute('data-print-ts', ts.toUTCString());
     startTimer();
   }
 
@@ -570,47 +703,39 @@
 
   // ── Render: /admin/metrics ────────────────────────────────────────────────
   function renderMetrics(d) {
-    // Snapshot MRR
     const mrrEl = document.getElementById('snap-mrr');
     mrrEl.textContent = d.mrr_gbp !== null && d.mrr_gbp !== undefined ? `£${d.mrr_gbp}` : 'n/a';
     mrrEl.className = 'sm-value' + (d.mrr_gbp > 0 ? ' blue' : '');
 
-    // Snapshot paid subscribers
     const paidEl = document.getElementById('snap-paid');
     paidEl.textContent = d.paid_total ?? 0;
     paidEl.className = 'sm-value' + (d.paid_total > 0 ? ' blue' : '');
 
-    // Snapshot credential uniqueness
     const rate = d.credential_uniqueness_rate;
     const uEl = document.getElementById('snap-uniqueness');
     uEl.textContent = rate !== null && rate !== undefined ? `${(rate * 100).toFixed(2)}%` : 'n/a';
     uEl.className = 'sm-value' + (rate !== null && rate < 0.99 ? ' red' : rate !== null && rate < 0.999 ? ' amber' : '');
 
-    // Snapshot churn — row 2
     const churn = d.churn_rate_mtd_pct ?? 0;
     const churnEl = document.getElementById('snap-churn');
     churnEl.textContent = `${churn}%`;
     churnEl.className = 'sm-value' + (churn > 0 ? ' red' : '');
 
-    // Row 3 — free users
     const freeEl = document.getElementById('snap-free-users');
     freeEl.textContent = d.subscribers_by_tier?.free ?? 'n/a';
     freeEl.className = 'sm-value';
 
-    // Store for modal detail
     lastMetrics = d;
   }
 
   // ── Render: /admin/ae-metrics ─────────────────────────────────────────────
   function renderAeMetrics(d) {
-    // Snapshot issuances
     const iss = d.credential_issuances_by_tier;
     const issTotal = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
     const issEl = document.getElementById('snap-issuances');
     issEl.textContent = issTotal !== null ? issTotal : 'n/a';
     issEl.className = 'sm-value';
 
-    // Snapshot bytes stored
     const bytesEl = document.getElementById('snap-bytes');
     if (d.r2_bytes_uploaded !== null && d.r2_bytes_uploaded !== undefined) {
       const { val, unit } = formatBytes(d.r2_bytes_uploaded);
@@ -620,7 +745,6 @@
     }
     bytesEl.className = 'sm-value';
 
-    // Snapshot error rate
     const errs = d.error_rate_by_endpoint;
     const errEl = document.getElementById('snap-error-rate');
     if (errs && !d.error_rate_note) {
@@ -635,38 +759,33 @@
       errEl.textContent = 'n/a'; errEl.className = 'sm-value';
     }
 
-    // Row 2 — upload speed
     const lat = d.latency_by_endpoint;
-    const ulEl = document.getElementById('snap-upload-speed');
     const ul = lat?.upload;
+    const ulEl = document.getElementById('snap-upload-speed');
     if (ul) {
       ulEl.textContent = `${ul.p95_ms} ms`;
       ulEl.className = 'sm-value' + (ul.p95_ms > 500 ? ' red' : ul.p95_ms > 200 ? ' amber' : '');
     } else { ulEl.textContent = 'n/a'; ulEl.className = 'sm-value'; }
 
-    // Row 2 — download speed
-    const dlEl = document.getElementById('snap-download-speed');
     const dl = lat?.download;
+    const dlEl = document.getElementById('snap-download-speed');
     if (dl) {
       dlEl.textContent = `${dl.p95_ms} ms`;
       dlEl.className = 'sm-value' + (dl.p95_ms > 500 ? ' red' : dl.p95_ms > 200 ? ' amber' : '');
     } else { dlEl.textContent = 'n/a'; dlEl.className = 'sm-value'; }
 
-    // Row 2 — upload speed p99
     const ulP99El = document.getElementById('snap-upload-speed-p99');
     if (ul) {
       ulP99El.textContent = `${ul.p99_ms} ms`;
       ulP99El.className = 'sm-value' + (ul.p99_ms > 1000 ? ' red' : ul.p99_ms > 500 ? ' amber' : '');
     } else { ulP99El.textContent = 'n/a'; ulP99El.className = 'sm-value'; }
 
-    // Row 2 — download speed p99
     const dlP99El = document.getElementById('snap-download-speed-p99');
     if (dl) {
       dlP99El.textContent = `${dl.p99_ms} ms`;
       dlP99El.className = 'sm-value' + (dl.p99_ms > 1000 ? ' red' : dl.p99_ms > 500 ? ' amber' : '');
     } else { dlP99El.textContent = 'n/a'; dlP99El.className = 'sm-value'; }
 
-    // Row 2 — retrieval
     const retEl = document.getElementById('snap-retrieval');
     const ret = d.r2_chunk_retrieval_success_rate;
     if (ret !== null && ret !== undefined) {
@@ -674,7 +793,6 @@
       retEl.className = 'sm-value' + (ret < 0.99 ? ' red' : ret < 0.999 ? ' amber' : '');
     } else { retEl.textContent = 'n/a'; retEl.className = 'sm-value'; }
 
-    // Row 3 — client errors 24h
     const ceEl = document.getElementById('snap-client-errors');
     const ce = d.client_errors_24h;
     if (ce !== null && ce !== undefined) {
@@ -682,14 +800,12 @@
       ceEl.className = 'sm-value' + (ce > 10 ? ' red' : ce > 0 ? ' amber' : '');
     } else { ceEl.textContent = 'n/a'; ceEl.className = 'sm-value'; }
 
-    // Store for modals
     lastAe = d;
   }
 
   // ── Render: /admin/snapshot ───────────────────────────────────────────────
   function renderSnapshot(d) {
     lastSnapshot = d;
-    setText('snap-as-of', d.generated_at ? `as of ${new Date(d.generated_at).toUTCString()}` : '');
   }
 
   // ── Snapshot copy ─────────────────────────────────────────────────────────
@@ -875,10 +991,8 @@
 
   function updateCountdown() {
     const el = document.getElementById('countdown');
-    if (el) el.textContent = `refresh in ${countdown}s`;
+    if (el) el.textContent = `↻ ${countdown}s`;
   }
-
-  document.getElementById('refresh-btn').addEventListener('click', refreshAll);
 
   // ── Smoke test ────────────────────────────────────────────────────────────
   window.smokeTest = async function() {
