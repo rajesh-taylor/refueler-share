@@ -176,7 +176,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
 | S41 | `b2a4ba0` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
 | S42a | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. |
-| S42b | pending | Per-UUID auth rate limit. Download rate limiting. Upload continuation expiry enforcement. Chunk count manipulation defence. |
+| S42b | 18d85351 | Per-UUID auth rate limit. Download rate limiting (300/60s). Upload continuation expiry confirmed pre-existing. Chunk count manipulation defence. |
 | S42c | pending | UUID-bound credential issuance. Worker generates UUID at `/credential/issue`. Blind sig commits to H(uuid‖tier‖expiry_window). Frontend consumes UUID from response. |
 | S42d | pending | Free tier hardening review. Turnstile nonce binding assessment. Residual abuse exposure documented. |
 | S42e | pending | Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff. |

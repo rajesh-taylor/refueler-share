@@ -210,13 +210,13 @@
 - DO NOT call `getManifest` directly from handlers — use `safeGetManifest` wrapper which enforces the 64KB ceiling.
 
 ### S42b — Rate limiting + upload integrity hardening
-**Commit:** pending
+**Commit:** 18d85351
 
-**Scope:**
-- Per-UUID passphrase brute-force protection: `handleAuth` currently rate-limits by IP only. Distributed attack across many IPs has no per-transfer throttle. Add KV key `rl:auth_uuid:{uuid}` — 10 attempts / 60s per transfer, regardless of IP. 429 + AE log.
-- Download rate limiting: no rate limit exists on `/download` at all. Add `download` endpoint to `checkRateLimit` — 300/60s per IP (generous for legitimate chunked downloads, blocks flood). 429 + AE log.
-- Upload continuation expiry enforcement: expiry currently checked on download but not on upload continuation (chunks > 0). Add `now > manifest.expiry_timestamp` guard to the subsequent-chunk path in `handleUpload`. 410 + AE log (`upload_expired`).
-- Chunk count manipulation defence: `chunks_received.push(chunkIndex)` currently has no ceiling. A client could push chunk indices beyond declared `total_chunks`, corrupting the completion check. Cap writes to `manifest.total_chunks` — ignore and 400 any chunk index ≥ declared total.
+- Per-UUID auth rate limit: `checkRateLimit(env, authMatch[1], 'auth_uuid', 10, 60)` layered on top of existing per-IP limit. Both must fire independently. 429 + AE log with `errorMsg: 'rate_limit_uuid'` vs `'rate_limit_ip'`.
+- Download rate limiting: `checkRateLimit(env, ip, 'download', 300, 60)` added to router before `handleDownload`. 429 + AE log.
+- Upload continuation expiry: confirmed already present at line 669 (`now > manifest.expiry_timestamp` → 410). Not re-added.
+- Chunk count manipulation defence: `chunkIndex >= manifest.total_chunks` guard before `chunks_received.push`. 400 + AE log (`chunk_index_out_of_bounds`).
+- Smoke test: 404×5 + 429 on 6th auth attempt confirmed per-IP limit live. `as_of` 2026-07-22T09:33:10.898Z confirmed Worker healthy.
 
 **Do not retry:**
 - DO NOT apply per-UUID auth rate limit instead of per-IP — both are needed. Layer them.
