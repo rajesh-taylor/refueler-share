@@ -200,7 +200,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S42c | `c053cbc` | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
 | S42d | `0b32e69` | Turnstile nonce binding (`tt_nonce:` KV, 600s TTL). Safari polling fallback. Wrangler 4.113.0. |
 | S42e | — | Full B4 audit pass. 20 claims verified against source. Marketing claim rulings. Critical chain S34→S42→S78 closed. UK regulatory language drafted. B5 handoff complete. |
-
+| S43 | `5c54802` | Token alignment: Paper/Carbon --bg corrected, --surface-raised added, IBM Plex Mono loaded, --accent declared. Eleventy pages only (index, upgrade, status). Dashboard token alignment deferred to S44. |
+| S44 | `b15f407` | Dashboard design pass I: sidebar layout, DESIGN-TOKENS.md alignment (dashboard was on pre-token palette — S43 only covered Eleventy pages), Satoshi 700 figures 2rem, 4 latency cards, Copy JSON bottom-right, sidebar Paper/Carbon toggle + sign out, @media print PDF export, Refresh double-bind bug fixed. |
 ---
 
 ## Roadmap
@@ -212,7 +213,7 @@ Core S19–S100 · Buffer S101–S120. B5 expanded to S43–S52 (10 sessions) to
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
 | B4 ✓ | S34–S42 | Security hardening |
-| **B5** | S43–S52 | Design full pass ← current |
+| B5 | S43–S52 | Design full pass ← current |
 | B6 | S53–S60 | Testing infrastructure |
 | B7 | S61–S70 | Lightning/Blink + anonymous paid tier (highest design risk) |
 | B8 | S71–S78 | NUT-11 Mode 2 keypair auth |
@@ -232,7 +233,7 @@ B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real l
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
 | S43 | Token alignment | Apply `DESIGN-TOKENS.md` to `index.html`, `upgrade.html`, `status.html`: fix `--bg` Paper (`#F5F0E8` → `#F7F4EF`), Carbon (`#1A1A1A` → `#1E1F22`), add `--surface-raised`, load IBM Plex Mono, declare `--accent: #C8A96E`. | S |
-| S44 | Dashboard design pass I | Satoshi 700 for all figures and labels; `--heading` font stack applied throughout. "Investor Snapshot" → "System Summary". Copy JSON → bottom-right. Split latency into 4 separate cards (p95 upload, p99 upload, p95 download, p99 download). Minimum 16px sub-text. Plain-English sub-labels. | M |
+| S44 | Dashboard design pass I | ✅ Complete — b15f407 | M |
 | S45 | Dashboard design pass II | Deep pass on spacing, hierarchy, and readability. Source Serif 4 editorial moments. Farming signal card: `credentials_issued_24h ÷ uploads_completed_24h` ratio, normal band 0.8–1.2, amber highlight >3.0. AE data wiring for new card. | M |
 | S46a | Modal build I | Full-viewport modal scaffold for all 13 metric cards: panel shell, ← Back button, data wiring from existing endpoints, n/a and loading states. | L |
 | S46b | Modal build II | Modal polish: CSV export stub, trend stub, error states, edge cases (zero data, AE unavailable). Smoke test all 13 panels. | M |

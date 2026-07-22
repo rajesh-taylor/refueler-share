@@ -306,7 +306,44 @@
 - DO NOT assert "audit-certified" — no external audit conducted.
 
 ---
+### S43 — Token alignment
+**Commit:** `5c54802`
 
+- Applied DESIGN-TOKENS.md v1.0 to frontend/index.html, frontend/upgrade.html, frontend/status.html.
+- Paper --bg corrected: #F5F0E8 → #F7F4EF.
+- Carbon --bg corrected: #1A1A1A → #1E1F22.
+- --surface-raised token added to all three files.
+- IBM Plex Mono loaded via Bunny Fonts and declared as --mono.
+- --accent: #C8A96E declared.
+- No Worker changes. No wrangler deploy.
+
+---
+
+### S44 — Dashboard design pass I
+**Commit:** `b15f407`
+
+- Full layout rebuild: fixed 200px sidebar (IBM Plex Mono throughout, section labels, stub nav for Metrics/Data/Ops), old top bar removed entirely.
+- Token alignment: dashboard.html brought onto DESIGN-TOKENS.md v1.0 (Paper #F7F4EF / Carbon #1E1F22, --surface-raised, --accent #C8A96E, full status palette). Note: S43 covered Eleventy pages only — dashboard was still on the pre-token palette.
+- Fonts: IBM Plex Mono (Bunny), Satoshi (Fontshare), DM Sans (Google) loaded. JetBrains Mono and Playfair remnants confirmed absent.
+- All figures Satoshi 700 2rem. All labels --mono 0.6rem uppercase. Sub-labels DM Sans 0.75rem minimum.
+- 4 separate latency cards (Upload p95, Download p95, Upload p99, Download p99) each with sub-labels. "Live overview" removed. Copy JSON moved to bottom-right of card group.
+- Paper/Carbon two-button toggle in sidebar footer (cookie scoped to .refueler.io unchanged). Sign out link added.
+- Content header: SYSTEM SUMMARY label (--mono 0.65rem uppercase), Refreshed timestamp + countdown, ghost Refresh + Print/Export PDF buttons.
+- @media print: Paper tokens forced on both :root and [data-theme="carbon"], sidebar hidden, 2-column grid, printed header with refresh timestamp via data-print-ts, page-break-inside: avoid on all cards.
+- Bug fix: Refresh button was bound twice (onclick + addEventListener) — fired two full fetch rounds per click. Now once only.
+- Gate centred in main content area; sidebar visible behind it at all times.
+
+**S45 snag notes (from visual review):**
+1. Smoke test checks 1–4 duplicate each other (ZK × 2, uniqueness × 2) — tidy when farming card lands.
+2. Carbon sidebar stub text hard to read — lift stubs from --text-tertiary to --text-secondary in Carbon. Wordmark "refueler-share" to use var(--accent) #C8A96E as seen on gate heading.
+3. Sidebar width 200px tight — try 240px to allow larger type without wrapping.
+4. Sidebar font sizes slightly small — uplift all sidebar type ~1-2 steps once width is resolved.
+
+**Do not retry:**
+- DO NOT reintroduce sticky top header — sidebar owns chrome now.
+- DO NOT bind refresh via both onclick and addEventListener.
+
+---
 ## Planning notes — mint architecture (locked 22 July 2026)
 
 - Live mint lives inside its own product repo (Share mint in `refueler-share`, loyalty mint in `refueler-mint`/`refueler.io`, ticketing mint in future `refueler-tickets`)
