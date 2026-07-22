@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.6 | **Last updated:** S42a · 22 July 2026
+> **Version:** 2.7 | **Last updated:** S42d · 22 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -158,6 +158,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `getManifest()` direct from handlers | Use `safeGetManifest()` wrapper — enforces 64KB manifest ceiling |
 | Generate UUID client-side | Worker generates UUID at /credential/issue since S42c |
 | `if (rl)` to check rate limit | `checkRateLimit` returns object — always truthy; use `if (rl.limited)` |
+| Turnstile nonce TTL = 7 days | Cloudflare expires tokens ~300s; use 600s KV TTL |
+| Fail-closed on nonce KV error | Fail open — KV blip must not block legitimate uploads |
+| Await nonce KV write | Fire-and-forget only |
+| `renderTurnstile()` from `onTurnstileLoad` without flag | Use `pendingTurnstileRender` flag to prevent double-render |
 
 ---
 
@@ -180,10 +184,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S42a | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. |
 | S42b | 18d85351 | Per-UUID auth rate limit. Download rate limiting (300/60s). Upload continuation expiry confirmed pre-existing. Chunk count manipulation defence. |
 | S42c | c053cbc | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
-| S42d | pending | Free tier hardening review. Turnstile nonce binding assessment. Residual abuse exposure documented. |
+| S42d | pending | Free tier hardening review. Turnstile nonce binding implemented (`tt_nonce:` KV, 600s TTL). Safari Turnstile polling fallback. Residual abuse documented. |
 | S42e | pending | Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff. |
 
-**Next: S42d — Free tier hardening review.**
+**Next: S42e — Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff.**
 ---
 
 ## Roadmap

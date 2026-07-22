@@ -514,14 +514,45 @@ function updateUploadBtn() {
 }
 
 let turnstileWidgetId = null;
+let turnstileScriptReady = false;
+let pendingTurnstileRender = false;
 
+// onTurnstileLoad is called by the Turnstile script via ?onload=onTurnstileLoad.
+// On Safari/mobile Safari, ITP can block this callback — so we also poll in
+// renderTurnstile. The flag avoids a double-render if both paths fire.
 window.onTurnstileLoad = function() {
-  // Turnstile script ready — widget rendered on file selection
+  turnstileScriptReady = true;
+  if (pendingTurnstileRender) {
+    pendingTurnstileRender = false;
+    renderTurnstile();
+  }
 };
 
 function renderTurnstile() {
   const container = document.getElementById('cf-turnstile');
-  if (!container || !window.turnstile) return;
+  if (!container) return;
+  if (!window.turnstile) {
+    // Script not ready yet — set flag and start polling (Safari ITP fallback).
+    // Polls every 200ms up to 15s. Once the script loads, renderTurnstile is
+    // called again by the poll. The onTurnstileLoad callback above also fires
+    // on non-Safari browsers, whichever arrives first wins.
+    if (!pendingTurnstileRender) {
+      pendingTurnstileRender = true;
+      const deadline = Date.now() + 15000;
+      const poll = setInterval(() => {
+        if (window.turnstile) {
+          clearInterval(poll);
+          pendingTurnstileRender = false;
+          renderTurnstile();
+        } else if (Date.now() > deadline) {
+          clearInterval(poll);
+          pendingTurnstileRender = false;
+          reportError('turnstile_load', 'Turnstile script did not load within 15s', navigator.userAgent.slice(0, 100));
+        }
+      }, 200);
+    }
+    return;
+  }
   if (turnstileWidgetId !== null) {
     try { window.turnstile.remove(turnstileWidgetId); } catch(e) {}
     turnstileWidgetId = null;

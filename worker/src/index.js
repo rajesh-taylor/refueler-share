@@ -436,6 +436,36 @@ async function handleCredentialIssue(request, env) {
   const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
   if (!turnstileOk) return err(403, 'Turnstile verification failed');
 
+  // ── Turnstile nonce binding (S42d) ────────────────────────────────────────
+  // One Turnstile solve must produce at most one credential.
+  // Cloudflare expires tokens server-side after ~300s; we extend that to 600s
+  // (10 min) to cover clock skew and replay within the Cloudflare window.
+  // The token is hashed one-way before storage — cannot reverse to identify user.
+  // Key: tt_nonce:{sha256_hex}. Fails open on KV error (privacy over abuse prevention).
+  // 429 on second use of the same Turnstile token within the TTL window.
+  const nonceHash = await (async () => {
+    const bytes = new TextEncoder().encode(turnstile_token);
+    const hash  = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  })();
+  const nonceKey = `tt_nonce:${nonceHash}`;
+  let nonceSeen = false;
+  try {
+    const existing = await env.STATUS_KV.get(nonceKey);
+    nonceSeen = existing !== null;
+  } catch (e) {
+    // KV read error — fail open. Privacy takes precedence; do not block on infra hiccup.
+    console.error('Turnstile nonce KV read failed, proceeding:', e);
+  }
+  if (nonceSeen) {
+    logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: 0, errorMsg: 'turnstile_nonce_replay' });
+    return err(429, 'Turnstile token already used');
+  }
+  // Store nonce — fire-and-forget, never block issuance on write failure.
+  env.STATUS_KV.put(nonceKey, '1', { expirationTtl: 600 }).catch(e =>
+    console.error('Turnstile nonce KV write failed:', e)
+  );
+
   // Canonicalise tier — unknown values fall back to free silently.
   const issuedTier      = EXPIRY_WINDOWS[tier] !== undefined ? tier : 'free';
   const expiryWindow    = EXPIRY_WINDOWS[issuedTier];

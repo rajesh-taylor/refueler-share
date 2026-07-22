@@ -266,15 +266,24 @@
 ---
 
 ### S42d — Free tier hardening review
-**Commit:** pending (may be no-deploy)
+**Commit:** pending
 
-**Scope:**
-- Assess full attack surface after S42a–c: what's closed, what's residual, what's accepted.
-- Turnstile nonce binding: hash Turnstile response token, store in KV with TTL = free tier expiry window. Reject second credential request with same nonce hash within window. One-way — cannot reverse to identify user. Implement if S42c assessment shows farming still viable at scale.
-- Document residual abuse exposure honestly:
-  - IP-rotation farming: bounded by Turnstile cost × 10/window. Business risk, not security risk. Architectural fix: B8 UUID-bound Rust mint.
-  - X-Email spoofing: paid tiers greyed out, no live impact. Architectural fix: B7 signed transfer token.
-  - Per-account aggregate cap: KV counter is per-UUID. Accepted until B8.
+**Delivered:**
+- Full attack surface review completed (S34–S42c). See assessment table in session notes.
+- Turnstile nonce binding implemented in `handleCredentialIssue`. SHA-256 one-way hash of Turnstile token stored in KV as `tt_nonce:{hash}` with 600s TTL. 429 + AE log (`turnstile_nonce_replay`) on second use. Fails open on KV error. Closes token-replay amplifier: one Turnstile solve → at most one credential.
+- Safari / mobile Safari Turnstile fix implemented in `src/index.njk`. `renderTurnstile()` now polls for `window.turnstile` every 200ms up to 15s when called before the script is ready. `pendingTurnstileRender` flag prevents double-render if both `onTurnstileLoad` callback and poll fire. `reportError('turnstile_load', ...)` on 15s timeout for visibility. Upload button now enables correctly on all browsers.
+- Residual abuse exposure documented (see below).
+**Residual abuse exposure (accepted):**
+- IP-rotation farming: attacker requests fresh credential per IP, each requiring a fresh Turnstile solve + rate limit slot. Cost per credential = one bot-challenged Turnstile interaction. Realistic throughput very low. Business risk, not security risk. Architectural fix: B8 UUID-bound Rust mint (NUT-20 quote signatures).
+- X-Email spoofing for paid tiers: attacker sends arbitrary email to claim paid tier. No live impact — paid tiers greyed out, Supabase lookup fails unless email matches active subscriber. Architectural fix: B7 signed transfer token.
+- Per-account aggregate KV byte cap: counter is per-UUID, not per-identity. A user can start multiple transfers each up to the free cap. Accepted until B8 UUID binding tightens this.
+- Turnstile nonce race: two near-simultaneous requests with the same token could both pass the KV read before the write lands. Rate limit at 10/60s + Turnstile's own server-side invalidation make this negligible. Architectural fix: atomic KV or Durable Object — not warranted at current scale.
+
+**Do not retry:**
+- DO NOT set Turnstile nonce TTL to 7 days — Cloudflare expires tokens after ~300s. 600s is the correct window.
+- DO NOT fail-closed on nonce KV error — privacy takes precedence; a KV blip must not block legitimate uploads.
+- DO NOT await the KV nonce write — fire-and-forget, never block issuance.
+- DO NOT deduplicate on `pendingTurnstileRender` with a global `renderTurnstile()` call from `onTurnstileLoad` directly — the flag already handles re-entry; calling render from both paths without the flag causes double-render and a broken widget.
 
 ---
 
