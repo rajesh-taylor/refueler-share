@@ -382,6 +382,25 @@
 - DO NOT use `.row-3` for Row 3 — it is now `.row-4`. `.row-3` retained in CSS for future use only.
 ---
 
+### S46a — Modal build I
+**Commits:** `954d843` → `f8a14f3` → `6f2e1c1` → `bbf271a`
+
+- Full-viewport modal scaffold for all 13 metric keys + `lightning` (14th).
+- Loading skeleton: CSS `@keyframes skpulse` pulse on `.modal-value.skeleton` / `.modal-sub.skeleton` while both `lastMetrics` and `lastAe` are null.
+- n/a state: `.modal-value.na` → `var(--text-tertiary)` — distinct from status colours.
+- Deferred modal: Lightning card now clickable; opens amber B7 panel + "live at Block 7" copy.
+- SVG/CSS sparkline stub: dashed box, 80px, no Canvas (Canvas breaks `@media print`).
+- CSV button: enabled, `onclick` reveals "CSV export available from B6" inline note.
+- Focus trap: `_trapFocus` on modal keydown, Tab/Shift-Tab cycles within modal; focus restored to trigger card on close via `:focus-visible` gold outline.
+- Patches: lightning skeleton fix; green on healthy metrics (uniqueness, farming, retrieval) on both cards and modals; focus ring on `snap-metric` cards.
+- Refactor: `dashboard.html` (1321 lines) extracted to three files — `dashboard.html` (208), `dashboard.css` (510), `dashboard.js` (586). CSS tokens at top of `dashboard.css` — single source of truth per `DESIGN-TOKENS.md`.
+
+**Do not retry:**
+- DO NOT use Canvas for sparklines — use SVG/CSS only; Canvas does not print.
+- DO NOT inline styles/scripts in `dashboard.html` — edit `dashboard.css` / `dashboard.js` only.
+
+---
+
 ## Sessions 43–52 — B5 Design full pass
 
 | Session | Label | Scope | Size |
