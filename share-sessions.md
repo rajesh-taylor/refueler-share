@@ -168,7 +168,7 @@
 - All 413 rejections logged to AE with `errorMsg`: `chunk_too_large`, `tier_cap_exceeded`, `declared_total_exceeds_cap`, `chunk_body_too_large`.
 
 ### S40 — MIME type denylist gate
-**Commit:** (pending)
+**Commit:** `c6f1a7a`
 
 - `MIME_DENYLIST` constant in `worker/src/index.js` — `Set` of 6 execution-capable MIME types rejected at the upload boundary: `application/x-msdownload`, `application/x-executable`, `application/x-sh`, `application/x-bat`, `text/x-shellscript`, `application/x-php`.
 - Gate applied to chunk 0 only — subsequent chunks are raw AES-GCM ciphertext continuations; Content-Type on those carries no meaningful signal.
@@ -179,7 +179,7 @@
 - `CLAUDE.md` locked decisions updated. `README.md` updated. `Share-Master-Context.md` updated.
 
 ### S41 — UUID validation + chunk bounds
-**Commit:** (pending)
+**Commit:** `b2a4ba0`
 
 - `UUID_RE` constant: RFC 4122 `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i` — validated at entry to `handleUpload` and `handleDownload` before any R2/Supabase/KV touch. 400 + AE log (`invalid_uuid`) on mismatch.
 - Chunk index bounds check in `handleDownload`: explicit `chunkIndex < 0 || chunkIndex > 9999` guard. 400 + AE log (`invalid_chunk_index`). Belt-and-braces over router regex.
@@ -187,8 +187,8 @@
 - Smoke tests: 400 on 36-hyphen UUID, 404 on non-matching path, 404 on all-zeros UUID (gate passed, R2 reached). ✓
 - Named transfers (client-side label in fragment, never stored) flagged as paid-tier feature for B5/B7 planning.
 
-### S42 — Input validation hardening
-**Commit:** (pending)
+### S42a — Input validation hardening
+**Commit:** `c8a57a42`
 
 - `handleLogError` truthy bug fixed: `if (rl)` → `if (rl.limited)`. `checkRateLimit` returns an object (always truthy) — every client error report was silently dropped before reaching AE. Now correctly rate-limits on `.limited` property.
 - `X-File-Name` sanitisation hardened: strips path separators, null bytes, C0/C1 control characters (U+0000–U+001F, U+007F), and Unicode bidirectional override codepoints (U+202A–U+202E, U+2066–U+2069). Truncates to 255 *bytes* (not chars) after sanitisation via `TextEncoder`/`TextDecoder` round-trip.
@@ -208,6 +208,83 @@
 - DO NOT use `if (rl)` to check rate limit result — `checkRateLimit` always returns an object; use `if (rl.limited)`.
 - DO NOT use `10_000` numeric separators if targeting environments that predate ES2021 — confirmed fine in Workers V8.
 - DO NOT call `getManifest` directly from handlers — use `safeGetManifest` wrapper which enforces the 64KB ceiling.
+
+### S42b — Rate limiting + upload integrity hardening
+**Commit:** pending
+
+**Scope:**
+- Per-UUID passphrase brute-force protection: `handleAuth` currently rate-limits by IP only. Distributed attack across many IPs has no per-transfer throttle. Add KV key `rl:auth_uuid:{uuid}` — 10 attempts / 60s per transfer, regardless of IP. 429 + AE log.
+- Download rate limiting: no rate limit exists on `/download` at all. Add `download` endpoint to `checkRateLimit` — 300/60s per IP (generous for legitimate chunked downloads, blocks flood). 429 + AE log.
+- Upload continuation expiry enforcement: expiry currently checked on download but not on upload continuation (chunks > 0). Add `now > manifest.expiry_timestamp` guard to the subsequent-chunk path in `handleUpload`. 410 + AE log (`upload_expired`).
+- Chunk count manipulation defence: `chunks_received.push(chunkIndex)` currently has no ceiling. A client could push chunk indices beyond declared `total_chunks`, corrupting the completion check. Cap writes to `manifest.total_chunks` — ignore and 400 any chunk index ≥ declared total.
+
+**Do not retry:**
+- DO NOT apply per-UUID auth rate limit instead of per-IP — both are needed. Layer them.
+- DO NOT set download rate limit below 200/60s — legitimate 250GB transfers at 1MB chunks = 250 chunks, multiple concurrent downloads possible.
+
+---
+
+### S42c — UUID-bound credential issuance
+**Commit:** pending
+
+**Scope:**
+- Worker generates UUID at `/credential/issue` and returns it alongside the signed credential.
+- Blind signature commits to `H(uuid || tier || expiry_window)` using SHA-256 — unforgeable binding between credential and specific transfer UUID.
+- `/credential/issue` request body gains optional `uuid` field; if absent Worker generates one via `crypto.randomUUID()`.
+- Worker verifies binding on upload: recomputes `H(uuid || tier || expiry_window)` and checks it matches the credential's committed value. 401 on mismatch (`credential_uuid_mismatch`).
+- Frontend (`src/index.njk`) updated: stops generating UUID client-side, reads UUID from credential issue response instead.
+- Closes cross-transfer farming vector: a farmed credential is cryptographically invalid for any UUID other than the one it was issued for.
+- Migration path documented for B8 Rust mint (NUT-20 quote signatures replace this Worker-based precursor).
+
+**Deferred to B8:**
+- Full NUT-20 quote signature scheme with Rust mint
+- Tiered denomination embedding in credential
+- Rate-limited issuance at mint layer
+
+**Do not retry:**
+- DO NOT store the UUID→credential binding in KV or Supabase — the binding is in the cryptographic commitment, not a lookup table.
+- DO NOT break existing upload flow if `uuid` absent from credential response — fail loudly in dev, not silently in prod.
+
+---
+
+### S42d — Free tier hardening review
+**Commit:** pending (may be no-deploy)
+
+**Scope:**
+- Assess full attack surface after S42a–c: what's closed, what's residual, what's accepted.
+- Turnstile nonce binding: hash Turnstile response token, store in KV with TTL = free tier expiry window. Reject second credential request with same nonce hash within window. One-way — cannot reverse to identify user. Implement if S42c assessment shows farming still viable at scale.
+- Document residual abuse exposure honestly:
+  - IP-rotation farming: bounded by Turnstile cost × 10/window. Business risk, not security risk. Architectural fix: B8 UUID-bound Rust mint.
+  - X-Email spoofing: paid tiers greyed out, no live impact. Architectural fix: B7 signed transfer token.
+  - Per-account aggregate cap: KV counter is per-UUID. Accepted until B8.
+
+---
+
+### S42e — Full B4 audit pass
+**Commit:** pending (no deploy)
+
+**Scope:**
+- Full security audit: every claim verified vs asserted vs deferred with evidence.
+- `CLAUDE.md` integrity/audit marketing claims — unblock with precise language where verified, maintain block where deferred.
+- Critical chain S34→S42→S78 formally closed — integrity claim chain complete for B9 whitepaper.
+- UK regulatory constraint documented for B9: Share mint = capability token issuer, not e-money issuer. FCA authorisation not required. Must be stated in whitepaper.
+- Mint architecture decisions recorded: separate live mints per product repo, `refueler-ecash-lab` at B8.
+- B5 handoff brief: full design snag list reviewed, session allocation proposed, token alignment (S45) confirmed as first B5 item.
+- Share-Master-Context.md version bump to 3.0 at B4 close.
+
+---
+
+## Planning notes — mint architecture (locked 22 July 2026)
+
+- Live mint lives inside its own product repo (Share mint in `refueler-share`, loyalty mint in `refueler-mint`/`refueler.io`, ticketing mint in future `refueler-tickets`)
+- Test mint and shared cryptographic lab lives in `refueler-ecash-lab` — B8 planning task
+- Separate mints = separate failure domains. One mint down does not affect other products.
+- All three are capability/loyalty token issuers — none handle e-money (UK FCA regulatory constraint)
+- NUT-14 (HTLCs): not suitable for farming defence — attacker still gets credential after secret exchange
+- NUT-20 (Signature on mint quote): most promising for UUID-binding at B8 — mint signs `{uuid, tier, expiry_window}`
+- NUT-10 (Spending conditions): compound AND/OR; could require fresh Turnstile at melt time — explore in lab
+- NUT-29 (Batch mint): worsens farming if applied naively — not applicable
+- `refueler-ecash-lab` to contain: shared Rust crate, attack simulations, NUT compliance tests, integration tests mimicking Share Worker environment
 
 ---
 

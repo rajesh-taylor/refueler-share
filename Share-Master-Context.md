@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.4 | **Last updated:** S40 · 21 July 2026
+> **Version:** 2.5 | **Last updated:** S42a · 22 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -108,6 +108,24 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
 - Wrangler updated to 4.112.0. ✓
 
+**Regulatory (UK):**
+- Refueler cannot operate as an e-money issuer without FCA authorisation.
+- Share mint issues access credentials only — capability tokens, not monetary instruments.
+- Cashu in Share = anonymous authentication mechanism, not payment instrument.
+- Must be stated explicitly in B9 security whitepaper.
+
+**Payment flow (locked):**
+- Lightning → Blink API (Blink holds custodial wallet, carries regulatory cover)
+- PayNym → Sparrow cold storage wallet, manual/semi-manual settlement
+- Share mint → upload credentials only, zero monetary value, no e-money
+
+**Mint architecture (locked):**
+- Live mint lives inside its own product repo. Share mint in `refueler-share`. Loyalty mint in `refueler-mint` / `refueler.io`. Ticketing mint in future `refueler-tickets`.
+- Test mint lives in `refueler-ecash-lab` — B8 planning task. Create empty repo now; no code until B8 architecture is locked.
+- Resilience rationale: one mint down must not affect other products. Maintenance overhead accepted.
+- All mints are capability/loyalty token issuers — none handle e-money.
+- UUID-bound credentials (NUT-20 pattern) are the long-term resolution to credential farming. Deferred to B8 Rust mint. S42c implements a Worker-based precursor.
+
 ---
 
 ## Known broken / do not retry
@@ -143,7 +161,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B4 Security hardening — S34 S35-e S35 S36 S36b done. S36c + S37–S42 remaining.**
+**B4 Security hardening — S42a complete. S42b · S42c · S42d · S42e remaining.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -156,10 +174,14 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S38 | `20da7d4` | `client_errors_24h` AE query live. Three rogue secrets deleted. Wrangler 4.112.0. |
 | S39 | `ab4fc98` | Server-side tier enforcement: X-Email Supabase lookup, 10MB chunk cap, KV byte counter per UUID. |
 | S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
-| S41 | `f2d775e5` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
-| S42 | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. **B4 complete.** |
+| S41 | `b2a4ba0` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
+| S42a | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. |
+| S42b | pending | Per-UUID auth rate limit. Download rate limiting. Upload continuation expiry enforcement. Chunk count manipulation defence. |
+| S42c | pending | UUID-bound credential issuance. Worker generates UUID at `/credential/issue`. Blind sig commits to H(uuid‖tier‖expiry_window). Frontend consumes UUID from response. |
+| S42d | pending | Free tier hardening review. Turnstile nonce binding assessment. Residual abuse exposure documented. |
+| S42e | pending | Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff. |
 
-**Next: S43 — B5 design full pass begins.**
+**Next: S42b — rate limiting + upload integrity hardening.**
 ---
 
 ## Roadmap
@@ -170,8 +192,8 @@ Core S19–S100 · Buffer S101–S120.
 |-------|----------|-------|
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
-| **B4** ✓ | S34–S42 | Security hardening |
-| B5 | S43–S50 | Design full pass ← current |
+| **B4** | S34–S42 | Security hardening ← current (S42b–e remaining) |
+| B5 | S43–S50 | Design full pass |
 | B6 | S51–S58 | Testing infrastructure |
 | B7 | S59–S68 | Lightning/Blink + anonymous paid tier (S64, highest design risk) |
 | B8 | S69–S76 | NUT-11 Mode 2 keypair auth |
