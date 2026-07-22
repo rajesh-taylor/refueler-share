@@ -248,6 +248,9 @@ Notes:
 - Paid tier cards remain greyed out throughout B5. Re-enable only on Rajesh's explicit instruction at B7 close.
 - Nav snag (Upgrade link breaking on `refueler.io`) deferred — review at B5 when iterating Share index page.
 - X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review in B5 S47 or B7.
+- Upgrade nudge snag (S47): free-tier users have no visible path to upgrade.html from index.html when they hit the 4GB cap or try to select a longer expiry. Fix: contextual upgrade prompt on cap hit / expiry-tier gate, independent of nav snag.
+- Status page editorial snag (S49b): status.html is written for developers, not users. Cryptographic integrity section uses NUT-00, NUT-11, BLAKE3 terminology — opaque to a normal user. Fix in S49b editorial pass: lead with plain-English service health ("Refueler Share is running normally" + pulsing green dot), rename integrity cards to human language ("Files encrypted in your browser", "Transfers can't be linked to you", "Files delete themselves automatically"), keep technical labels as secondary text only for the curious. Status tile (compact operational indicator) also needed in admin dashboard — add as S45 addition or S52 snag sweep item.
+- "Could not load incident data: Load failed" on status.html is a local file:// preview artefact — Worker fetch fails on file protocol. Displays correctly at share.refueler.io. Soften error copy in S49b regardless: never show raw fetch error to a user visiting the live page.
 
 ---
 
