@@ -174,15 +174,16 @@ Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ## Status
 
-🟢 **Session 39 complete — Block 4 security hardening in progress.**
+🟢 **Session 46a complete — Block 5 design full pass in progress.**
 
 Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io).
 
 **Completed blocks:**
 - **B1 — SSG Migration:** Eleventy 3.x scaffold, `src/` → `frontend/`, Cloudflare Pages auto-deploy live.
 - **B2 — Instrumentation:** Analytics Engine (`share_events`), Supabase aggregation, admin dashboard (`/admin/dashboard.html`), 13-metric smoke test, `/admin/snapshot` endpoint.
-- **B3 — Stripe test coverage:** Checkout flow verified (embedded Payment Element, direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
-- **B4 — Security hardening (in progress):** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5), deployed S34. Server-side chunk hash verification live on every upload. AES-GCM AAD overflow fixed S35 (chunk index ≥256 now safe). KV-backed rate limiting deployed S36. Frontend error reporting via `/log/error` deployed S36b. Admin dashboard completed S37. AE SQL `client_errors_24h` query live S38. Server-side tier enforcement deployed S39: tier resolved from Supabase via `X-Email`, 10 MB chunk hard cap, KV cumulative byte counter per upload UUID.
+- **B3 — Stripe test coverage:** Checkout flow verified (direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
+- **B4 — Security hardening ✓:** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5). Server-side chunk hash verification on every upload. AES-GCM AAD overflow fixed (chunk index ≥256). KV-backed rate limiting on all public endpoints. Frontend error reporting via `/log/error`. MIME type denylist gate on chunk 0. UUID format validation and chunk bounds checks. Filename sanitisation (path separators, null bytes, bidi overrides). 64KB manifest cap. Server-side tier enforcement via `X-Email` → Supabase lookup, 10MB chunk hard cap, KV cumulative byte counter per UUID. UUID-bound credential issuance — `H(uuid:tier:window)` commitment verified on upload. Turnstile nonce binding (one solve → one credential). Full audit pass — 20 security claims verified against deployed source.
+- **B5 — Design full pass (in progress):** DESIGN-TOKENS.md v1.0 applied across all frontend surfaces. Admin dashboard rebuilt: 240px sidebar, Satoshi 700 figures, 4 latency cards, farming signal card, Source Serif 4 editorial line, Paper/Carbon toggle cookie scoped to `.refueler.io`, `@media print` PDF export. Dashboard extracted to three files (`dashboard.html` / `dashboard.css` / `dashboard.js`). Full-viewport metric modals for all 14 keys: loading skeleton, n/a state, deferred Lightning panel, SVG/CSS sparkline stub, CSV export note, keyboard focus trap.
 
 ---
 
