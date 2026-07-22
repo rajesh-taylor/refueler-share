@@ -286,6 +286,11 @@
   }
   .snap-metric:last-child { border-right: none; }
   .snap-metric:hover { background: var(--surface-raised); }
+  .snap-metric:focus-visible {
+    outline: 1.5px solid var(--accent);
+    outline-offset: -1.5px;
+    background: var(--surface-raised);
+  }
 
   .sm-label {
     font-family: var(--mono);
@@ -580,32 +585,32 @@
     <div class="card-group">
       <!-- Row 1: primary metrics -->
       <div class="row-6">
-        <div class="snap-metric" onclick="openModal('mrr', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('mrr', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('mrr', this)">
           <div class="sm-label">Monthly run rate</div>
           <div class="sm-plain">Revenue</div>
           <div class="sm-value blue" id="snap-mrr">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('paid', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('paid', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('paid', this)">
           <div class="sm-label">Paid subscribers</div>
           <div class="sm-plain">Paying customers</div>
           <div class="sm-value" id="snap-paid">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('issuances', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('issuances', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('issuances', this)">
           <div class="sm-label">Issuances (30d)</div>
           <div class="sm-plain">Uploads started</div>
           <div class="sm-value" id="snap-issuances">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('storage', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('storage', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('storage', this)">
           <div class="sm-label">Data stored (90d)</div>
           <div class="sm-plain">Total uploaded</div>
           <div class="sm-value" id="snap-bytes">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('errors', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('errors', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('errors', this)">
           <div class="sm-label">Server errors</div>
           <div class="sm-plain">Right now</div>
           <div class="sm-value" id="snap-error-rate">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('uniqueness', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('uniqueness', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('uniqueness', this)">
           <div class="sm-label">Token security</div>
           <div class="sm-plain">No double-spends</div>
           <div class="sm-value" id="snap-uniqueness">—</div>
@@ -614,32 +619,32 @@
 
       <!-- Row 2: latency + reliability -->
       <div class="row-6">
-        <div class="snap-metric" onclick="openModal('upload-speed', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('upload-speed', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('upload-speed', this)">
           <div class="sm-label">Upload speed · p95</div>
           <div class="sm-plain">Typical worst case</div>
           <div class="sm-value" id="snap-upload-speed">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('download-speed', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('download-speed', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('download-speed', this)">
           <div class="sm-label">Download speed · p95</div>
           <div class="sm-plain">Typical worst case</div>
           <div class="sm-value" id="snap-download-speed">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('upload-speed-p99', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('upload-speed-p99', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('upload-speed-p99', this)">
           <div class="sm-label">Upload speed · p99</div>
           <div class="sm-plain">Extreme tail</div>
           <div class="sm-value" id="snap-upload-speed-p99">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('download-speed-p99', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('download-speed-p99', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('download-speed-p99', this)">
           <div class="sm-label">Download speed · p99</div>
           <div class="sm-plain">Extreme tail</div>
           <div class="sm-value" id="snap-download-speed-p99">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('retrieval', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('retrieval', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('retrieval', this)">
           <div class="sm-label">Download success</div>
           <div class="sm-plain">Last 24 hours</div>
           <div class="sm-value" id="snap-retrieval">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('churn', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('churn', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('churn', this)">
           <div class="sm-label">Churn</div>
           <div class="sm-plain">Month to date</div>
           <div class="sm-value" id="snap-churn">—</div>
@@ -649,23 +654,23 @@
       <!-- Row 3: growth + farming signal (4-column) -->
       <!-- S45: row-3 → row-4; farming signal card added as 4th cell -->
       <div class="row-4">
-        <div class="snap-metric" onclick="openModal('free-users', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('free-users', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('free-users', this)">
           <div class="sm-label">Free users</div>
           <div class="sm-plain">Total on free tier</div>
           <div class="sm-value" id="snap-free-users">—</div>
         </div>
-        <div class="snap-metric" onclick="openModal('client-errors', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('client-errors', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('client-errors', this)">
           <div class="sm-label">Client errors (24h)</div>
           <div class="sm-plain">Browser-side failures</div>
           <div class="sm-value" id="snap-client-errors">—</div>
         </div>
-        <div class="snap-metric deferred" title="Deferred — B7 Lightning/Blink" onclick="openModal('lightning', this)" style="pointer-events:auto;cursor:pointer;">
+        <div class="snap-metric deferred" tabindex="0" title="Deferred — B7 Lightning/Blink" onclick="openModal('lightning', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('lightning', this)" style="pointer-events:auto;cursor:pointer;">
           <div class="sm-label">Lightning settlement<span class="b7-badge">B7</span></div>
           <div class="sm-plain">Sats vs fiat mix</div>
           <div class="sm-value amber">—</div>
         </div>
         <!-- Farming signal card -->
-        <div class="snap-metric" onclick="openModal('farming', this)">
+        <div class="snap-metric" tabindex="0" onclick="openModal('farming', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('farming', this)">
           <div class="sm-label">Farming signal</div>
           <div class="sm-plain">Credentials per upload</div>
           <div class="sm-value" id="snap-farming">—</div>
@@ -1027,7 +1032,7 @@
     // ── Skeleton while no data ───────────────────────────────────────────────
     const mv = document.getElementById('modal-value');
     const ms = document.getElementById('modal-sub');
-    if (lastMetrics === null && lastAe === null && !isLightning) {
+    if (lastMetrics === null && lastAe === null && key !== 'lightning') {
       mv.textContent = '\u00A0'; // non-breaking space — keeps block height
       mv.className = 'modal-value skeleton';
       ms.textContent = '\u00A0';
@@ -1064,7 +1069,7 @@
         const r = m.credential_uniqueness_rate;
         if (r !== null && r !== undefined) {
           value = `${(r * 100).toFixed(2)}%`;
-          colorClass = r < 0.99 ? ' red' : r < 0.999 ? ' amber' : '';
+          colorClass = r < 0.99 ? ' red' : r < 0.999 ? ' amber' : ' green';
         } else { value = 'n/a'; isNA = true; }
         sub = `${m.credential_uniqueness_total_melts ?? 0} melts · ${m.credential_uniqueness_total_attempts ?? 0} replays`;
         break;
@@ -1174,7 +1179,7 @@
         if (ratio !== null) {
           value = ratio.toFixed(2);
           sub = `${farmIssued} issued · ${farmCompleted} uploads completed · proxy — B6`;
-          colorClass = ratio > 3.0 || ratio < 0.5 ? ' red' : ratio >= 1.2 ? ' amber' : '';
+          colorClass = ratio > 3.0 || ratio < 0.5 ? ' red' : ratio >= 1.2 ? ' amber' : ' green';
         } else { value = 'n/a'; isNA = true; sub = 'No credential issuances in last 24h'; }
         break;
       }
