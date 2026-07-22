@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.8 | **Last updated:** S42d close · 22 July 2026
+> **Version:** 3.0 | **Last updated:** S42e close · 22 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -91,6 +91,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 **Storage:**
 - R2 binding: `BUCKET`. KV binding: `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`.
 - R2 manifest is authoritative. Supabase is ledger only. No direct R2 URL exposure.
+- `safeGetManifest()` double-read note: wrapper checks `obj.size` on the first R2 `.get()`, then delegates to `getManifest()` for a second read. Minor inefficiency — flag for optimisation if R2 costs become material. Not a security gap.
 
 **Frontend:**
 - Credentials in browser memory only — never localStorage, never sessionStorage.
@@ -104,7 +105,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 **Ops:**
 - NUT-07 melt after first chunk write. Supabase failure: log and continue.
 - Turnstile: fail-closed on any error.
-- Rate limits (STATUS_KV, no new resources): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s. All 429s logged to AE.
+- Rate limits (STATUS_KV, no new resources): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s · `download` 300/60s. All 429s logged to AE.
 - `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
 - Wrangler updated to 4.113.0. ✓
 
@@ -112,7 +113,16 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Refueler cannot operate as an e-money issuer without FCA authorisation.
 - Share mint issues access credentials only — capability tokens, not monetary instruments.
 - Cashu in Share = anonymous authentication mechanism, not payment instrument.
-- Must be stated explicitly in B9 security whitepaper.
+- Exact whitepaper language drafted S42e. Must be reviewed by qualified legal counsel before any public claims are made.
+
+**Whitepaper language (B9 §Regulatory — drafted S42e):**
+> The Refueler Share mint issues upload credentials — opaque capability tokens that grant the right to perform a single anonymous file transfer of a defined size and expiry. These tokens carry no monetary value, are not redeemable for currency or goods, and are not transferable between users. They function solely as anonymous authentication artefacts within the Refueler Share system.
+>
+> Under the UK Electronic Money Regulations 2011 (SI 2011/99) and the Payment Services Regulations 2017, e-money is defined as electronically stored monetary value issued on receipt of funds, used to make payment transactions, and accepted by persons other than the issuer. Refueler Share credentials satisfy none of these criteria: they represent system access, not stored monetary value, and are accepted only by Refueler Share infrastructure, not by third parties.
+>
+> Refueler Share does not require FCA authorisation as an e-money institution. Lightning payments are processed via Blink, a licensed custodial wallet provider that carries its own regulatory cover. Refueler holds no custodial funds.
+>
+> This analysis should be reviewed by qualified legal counsel before any public claims are made.
 
 **Payment flow (locked):**
 - Lightning → Blink API (Blink holds custodial wallet, carries regulatory cover)
@@ -125,6 +135,11 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Resilience rationale: one mint down must not affect other products. Maintenance overhead accepted.
 - All mints are capability/loyalty token issuers — none handle e-money.
 - UUID-bound credentials (NUT-20 pattern) are the long-term resolution to credential farming. Deferred to B8 Rust mint. S42c implements a Worker-based precursor.
+
+**Marketing claim rulings (S42e — update again after B8, B9, B10):**
+- ✅ Safe to assert: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting on all public endpoints; UUID-bound credential issuance (Worker precursor to NUT-20); Turnstile nonce binding (one solve, one credential); anonymous transfer (no account required for free tier).
+- 🔒 Blocked: full Merkle tree verification (assembled file vs BLAKE3 root); NUT-11 Mode 2 keypair auth; "audit-certified" / "security-audited"; ML-KEM key wrapping; any "end-to-end file integrity" claim without the server-side-chunks-only qualifier.
+- 📅 Resolution path: B8 unblocks NUT-11 Mode 2 · B9 unblocks whitepaper + Merkle claim · B10 unblocks ML-KEM.
 
 ---
 
@@ -157,7 +172,6 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `if (rl)` to check rate limit | `checkRateLimit` returns object — always truthy; use `if (rl.limited)` |
 | `getManifest()` direct from handlers | Use `safeGetManifest()` wrapper — enforces 64KB manifest ceiling |
 | Generate UUID client-side | Worker generates UUID at /credential/issue since S42c |
-| `if (rl)` to check rate limit | `checkRateLimit` returns object — always truthy; use `if (rl.limited)` |
 | Turnstile nonce TTL = 7 days | Cloudflare expires tokens ~300s; use 600s KV TTL |
 | Fail-closed on nonce KV error | Fail open — KV blip must not block legitimate uploads |
 | Await nonce KV write | Fire-and-forget only |
@@ -167,7 +181,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B4 Security hardening — S42d complete. S42e remaining (audit pass, no deploy).**
+**B4 Security hardening — COMPLETE. B5 Design full pass — current.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -184,32 +198,56 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S42a | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. |
 | S42b | `18d85351` | Per-UUID auth rate limit. Download rate limiting (300/60s). Upload continuation expiry confirmed pre-existing. Chunk count manipulation defence. |
 | S42c | `c053cbc` | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
-| S42d | `0b32e69` | Turnstile nonce binding (`tt_nonce:` KV, 600s TTL). Safari polling fallback. Wrangler 4.113.0. Farming signal card scoped to B5. |
+| S42d | `0b32e69` | Turnstile nonce binding (`tt_nonce:` KV, 600s TTL). Safari polling fallback. Wrangler 4.113.0. |
+| S42e | — | Full B4 audit pass. 20 claims verified against source. Marketing claim rulings. Critical chain S34→S42→S78 closed. UK regulatory language drafted. B5 handoff complete. |
 
-**Next: S42e — Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff.**
 ---
 
 ## Roadmap
 
-Core S19–S100 · Buffer S101–S120.
+Core S19–S100 · Buffer S101–S120. B5 expanded to S43–S52 (10 sessions) to accommodate modal full build (2 sessions), dashboard depth (2 sessions), and brand pass (2 sessions).
 
 | Block | Sessions | Scope |
 |-------|----------|-------|
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
-| **B4** | S34–S42 | Security hardening ← current (S42e remaining — audit pass only, no deploy) |
-| B5 | S43–S50 | Design full pass |
-| B6 | S51–S58 | Testing infrastructure |
-| B7 | S59–S68 | Lightning/Blink + anonymous paid tier (S64, highest design risk) |
-| B8 | S69–S76 | NUT-11 Mode 2 keypair auth |
-| B9 | S77–S82 | Documentation + security whitepaper (unblocked S42) |
-| B10 | S83–S90 | Enterprise + ML-KEM spike |
-| B11 | S91–S98 | Week 0 alpha, load test, go/no-go |
-| B12 | S99–S100 | Public beta launch |
+| B4 ✓ | S34–S42 | Security hardening |
+| **B5** | S43–S52 | Design full pass ← current |
+| B6 | S53–S60 | Testing infrastructure |
+| B7 | S61–S70 | Lightning/Blink + anonymous paid tier (highest design risk) |
+| B8 | S71–S78 | NUT-11 Mode 2 keypair auth |
+| B9 | S79–S84 | Documentation + security whitepaper (unblocked S42) |
+| B10 | S85–S92 | Enterprise + ML-KEM spike |
+| B11 | S93–S100 | Week 0 alpha, load test, go/no-go |
+| B12 | S101–S102 | Public beta launch |
 
-Critical chains: S34→S42→S78 (integrity) · S18→S24→S66 (dashboard) · S51→S58→S94 (CI) · S62→S64 (anon paid tier).
+Critical chains: S34→S42→S79 (integrity, renumbered) · S18→S24→S67 (dashboard) · S53→S60→S95 (CI) · S63→S65 (anon paid tier).
 
 B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real live subscriber.
+
+---
+
+## B5 session plan (S43–S52)
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| S43 | Token alignment | Apply `DESIGN-TOKENS.md` to `index.html`, `upgrade.html`, `status.html`: fix `--bg` Paper (`#F5F0E8` → `#F7F4EF`), Carbon (`#1A1A1A` → `#1E1F22`), add `--surface-raised`, load IBM Plex Mono, declare `--accent: #C8A96E`. | S |
+| S44 | Dashboard design pass I | Satoshi 700 for all figures and labels; `--heading` font stack applied throughout. "Investor Snapshot" → "System Summary". Copy JSON → bottom-right. Split latency into 4 separate cards (p95 upload, p99 upload, p95 download, p99 download). Minimum 16px sub-text. Plain-English sub-labels. | M |
+| S45 | Dashboard design pass II | Deep pass on spacing, hierarchy, and readability. Source Serif 4 editorial moments. Farming signal card: `credentials_issued_24h ÷ uploads_completed_24h` ratio, normal band 0.8–1.2, amber highlight >3.0. AE data wiring for new card. | M |
+| S46a | Modal build I | Full-viewport modal scaffold for all 13 metric cards: panel shell, ← Back button, data wiring from existing endpoints, n/a and loading states. | L |
+| S46b | Modal build II | Modal polish: CSV export stub, trend stub, error states, edge cases (zero data, AE unavailable). Smoke test all 13 panels. | M |
+| S47 | Upload/download UX | Progress bar smooth animation (15%→100% jump fix). QR code resolution fix. `FREE_EXPIRY` constant mismatch fix (5 days in code → 7 days). | S |
+| S48 | Theme persistence + named transfers | Paper/Carbon cookie scoped to `.refueler.io`. Review `privacy/index.html` + `README.md` for "no cookies" language; update to "no tracking cookies". Named transfers UI plan (fragment-only label, paid tier differentiator). | S |
+| S49a | Carbon gold edging | Apply `--inset-rule: #C8A96E` throughout Carbon theme. Card borders, rule lines, active states per `DESIGN-TOKENS.md`. | S |
+| S49b | Brand audit pass | Share UI against `BRANDING.md`. Source Serif 4 body text in editorial moments. Head of Design reference review. Full Paper/Carbon consistency sweep. | M |
+| S52 | B5 close | Snag sweep. Context files. Version bump to 4.0. B6 planning brief. | S |
+
+Notes:
+- S49a and S49b replace the single S49 slot, which was too compressed for both the gold edging implementation and the full brand audit.
+- S52 is the close session number after the 10-session B5 block (S43–S52). No sessions S50–S51 are skipped — the table above uses S50 and S51 for S49a and S49b respectively; renumber at session start if preferred.
+- Paid tier cards remain greyed out throughout B5. Re-enable only on Rajesh's explicit instruction at B7 close.
+- Nav snag (Upgrade link breaking on `refueler.io`) deferred — review at B5 when iterating Share index page.
+- X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review in B5 S47 or B7.
 
 ---
 
@@ -254,21 +292,6 @@ Yearly = 10 months price.
 | GET | `/subscription/status` | — | Tier by email |
 | POST | `/subscription/portal` | — | Customer Portal session |
 | POST | `/log/error` | — | Client error → AE (20/60s rate limited) |
-
----
-
-## Design snag list (B5)
-
-- Progress bar 15%→100% jump — needs smooth animation
-- QR code blurry — sharper output needed
-- `FREE_EXPIRY` mismatch: 5 days in code, "1 / 7 day expiry" in UI
-- Theme state: write cookie scoped to `.refueler.io`
-- Dashboard S36c: larger fonts, plain-English sub-labels (16px min), retain technical terms
-- Dashboard B5: "Investor Snapshot" → "System Summary", Satoshi font, 4 latency cards, Copy JSON → bottom-right, Source Serif 4 body
-- Brand audit: BRANDING.md against share UI, Carbon gold edging
-- Modal full build — own session allocation in B5
-- Named transfers: user-supplied label in URL fragment only, never stored server-side. Paid tier differentiator. Plan in B5 or B7.
-- Farming signal card (dashboard): `credentials_issued_24h` ÷ `uploads_completed_24h` ratio. Normal band 0.8–1.2. Alarm threshold >3.0 (highlight amber). Both numerator and denominator derivable from existing AE data — no new schema. Add alongside existing row 3 cells or as a fourth row 3 cell next to client errors.
 
 ---
 

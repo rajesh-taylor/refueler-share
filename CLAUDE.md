@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.1 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** S40 · 21 July 2026
+> **Version:** 1.2 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** S42e · 22 July 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Blink, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -39,11 +39,13 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
 
-**SHA-256 / BLAKE3 integrity gap (known, deferred):**
-Client declares BLAKE3 hash per chunk. Worker re-hashes with Web Crypto SHA-256 —
-it does not verify the client-declared BLAKE3. A compromised client can declare
-a hash that doesn't match the payload; Worker cannot detect this.
-Fixed S34. BLAKE3 WASM compiled, checked into worker/blake3-wasm/, imported statically via blake3_worker.js. Server-side verification live on every chunk. Integrity/audit marketing claims remain blocked until full B4 audit pass (S42).
+**BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
+Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via `blake3_worker.js`. 400 on hash mismatch. This claim is safe to assert with correct scope (server-side chunk integrity). Full Merkle root verification (assembled file vs BLAKE3 tree root) remains unimplemented — do not claim end-to-end file integrity until B9 audit.
+
+**Integrity/audit marketing claims — current ruling (S42e):**
+- ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase ledger. Rate limiting on all public endpoints. UUID-bound credential issuance (Worker precursor to NUT-20).
+- 🔒 **Still blocked:** Full Merkle tree verification. NUT-11 Mode 2 (keypair auth). "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim without the Merkle qualifier.
+- 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 (whitepaper + Merkle) → B10 (ML-KEM). Claims updated again after each block.
 
 ---
 
@@ -51,7 +53,7 @@ Fixed S34. BLAKE3 WASM compiled, checked into worker/blake3-wasm/, imported stat
 
 See `share-sessions.md` for log. Full S19–S120 roadmap lives in `Share-Master-Context.md` §Roadmap.
 Core build: S19–S100. Buffer: S101–S120. Planning sessions are uncounted.
-Integrity/audit marketing claims remain blocked until S42 (BLAKE3 Worker WASM verified).
+**Current block: B5 (Design full pass) — S43–S52.**
 
 ---
 

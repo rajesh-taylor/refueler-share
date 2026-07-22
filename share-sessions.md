@@ -289,16 +289,21 @@
 ---
 
 ### S42e — Full B4 audit pass
-**Commit:** pending (no deploy)
+**Commit:** — (no deploy)
 
-**Scope:**
-- Full security audit: every claim verified vs asserted vs deferred with evidence.
-- `CLAUDE.md` integrity/audit marketing claims — unblock with precise language where verified, maintain block where deferred.
-- Critical chain S34→S42→S78 formally closed — integrity claim chain complete for B9 whitepaper.
-- UK regulatory constraint documented for B9: Share mint = capability token issuer, not e-money issuer. FCA authorisation not required. Must be stated in whitepaper.
-- Mint architecture decisions recorded: separate live mints per product repo, `refueler-ecash-lab` at B8.
-- B5 handoff brief: full design snag list reviewed, session allocation proposed, token alignment (S45) confirmed as first B5 item.
-- Share-Master-Context.md version bump to 3.0 at B4 close.
+**Delivered:**
+- 20 B4 security claims audited against `index.js` commit `0b32e69`. All confirmed shipped and smoke-tested. Evidence table: commit hash + verified behaviour for every claim.
+- Marketing claim rulings issued: server-side BLAKE3 chunk integrity and double-spend detection are unblocked with precise scope language. Full Merkle tree verification, NUT-11 Mode 2, "audit-certified", and ML-KEM remain blocked. Resolution path: B8 → B9 → B10.
+- Critical chain S34→S42→S79 (renumbered) formally closed. S79 (B9 whitepaper) inherits: BLAKE3 integrity architecture, double-spend ledger, UUID-bound credential design, rate limiting topology, filename sanitisation rationale, Turnstile nonce binding, UK regulatory position. S79 must still establish: full Merkle root verification, NUT-11 Mode 2, external audit (if pursued).
+- UK regulatory language drafted (exact whitepaper §Regulatory text). Share mint = capability token issuer under UK EMR 2011 and PSR 2017. FCA authorisation not required. Blink carries Lightning regulatory cover. Legal counsel review flagged before public claims.
+- B5 handoff: 10-session allocation S43–S52. Two sessions for modal (S46a data layer + S46b polish), two for dashboard (S44 + S45), two for brand/gold edging (S49a + S49b). Session plan in Share-Master-Context.md §B5 session plan.
+- `CLAUDE.md` bumped to v1.2. `Share-Master-Context.md` bumped to v3.0. B4 marked complete. B5 marked current.
+- Roadmap renumbered: B5 absorbs 4 extra sessions (S43–S52), downstream blocks shift by +2 each.
+- `safeGetManifest` double-read noted as minor R2 inefficiency — flag for optimisation if costs become material, not a security gap.
+
+**Do not retry:**
+- DO NOT assert end-to-end file integrity — server-side chunk integrity only until Merkle verification is implemented (B9).
+- DO NOT assert "audit-certified" — no external audit conducted.
 
 ---
 
@@ -313,6 +318,25 @@
 - NUT-10 (Spending conditions): compound AND/OR; could require fresh Turnstile at melt time — explore in lab
 - NUT-29 (Batch mint): worsens farming if applied naively — not applicable
 - `refueler-ecash-lab` to contain: shared Rust crate, attack simulations, NUT compliance tests, integration tests mimicking Share Worker environment
+
+---
+
+---
+
+## Sessions 43–52 — B5 Design full pass
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| S43 | Token alignment | Apply DESIGN-TOKENS.md to index.html, upgrade.html, status.html. Fix Paper/Carbon bg tokens, add --surface-raised, load IBM Plex Mono, declare --accent. | S |
+| S44 | Dashboard design pass I | Satoshi 700 figures/labels, --heading font stack, System Summary rename, Copy JSON bottom-right, 4 latency cards, 16px min sub-text. | M |
+| S45 | Dashboard design pass II | Spacing/hierarchy deep pass, Source Serif 4 editorial moments, farming signal card (AE wired). | M |
+| S46a | Modal build I | Full-viewport scaffold for all 13 metric cards, data wiring, n/a and loading states. | L |
+| S46b | Modal build II | Modal polish: CSV export stub, trend stub, error states, smoke test all 13 panels. | M |
+| S47 | Upload/download UX | Progress bar animation fix, QR resolution fix, FREE_EXPIRY constant fix. | S |
+| S48 | Theme persistence + named transfers | Cookie scoped to .refueler.io, privacy copy update, named transfers UI plan. | S |
+| S49a | Carbon gold edging | --inset-rule #C8A96E throughout Carbon. Card borders, rule lines, active states. | S |
+| S49b | Brand audit pass | Share UI vs BRANDING.md. Source Serif 4 editorial moments. Head of Design review. Paper/Carbon consistency sweep. | M |
+| S52 | B5 close | Snag sweep, context files, version bump to 4.0, B6 planning brief. | S |
 
 ---
 
