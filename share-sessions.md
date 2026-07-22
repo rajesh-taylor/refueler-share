@@ -357,7 +357,26 @@
 - `refueler-ecash-lab` to contain: shared Rust crate, attack simulations, NUT compliance tests, integration tests mimicking Share Worker environment
 
 ---
+### S45 — Dashboard design pass II
+**Commit:** `7187e41`
 
+- Sidebar widened 200px → 240px. `#main` margin-left updated to match. All sidebar padding updated to 1.25rem horizontal.
+- Wordmark: `.wm-brand` span wraps `refueler-share` in `var(--accent)` gold. `/` and `dashboard` unchanged.
+- Stub nav items: `[data-theme="carbon"] .sb-item.stub` override lifts colour to `--text-secondary` in Carbon only. Paper unchanged.
+- Sidebar font sizes: nav items 0.8rem (up from 0.75rem), section labels 0.65rem (up from 0.6rem), footer labels 0.7rem (up from 0.65rem).
+- Row 3 converted from `.row-3` to `.row-4`. Farming signal card added as 4th cell. `.row-4` grid class added with responsive 2-column breakpoint at 1200px and print 2-column.
+- Farming signal: `credentials_issued_24h ÷ uploads_completed_24h`. `credentials_issued_24h` = sum of `credential_issuances_by_tier` (free+creative+max) from AE. `uploads_completed_24h` proxy = `ae.uploads_completed_24h ?? issued` — until AE query extended in B6, ratio always reads 1.00 (no false alarm). Status: green 0.5–1.2, amber 1.2–3.0, red >3.0 or <0.5. `renderFarming()` called after both datasets arrive. Swap-in comment at line ~875 for when B6 lands the real field.
+- `MODAL_DEFS.farming` entry added. Modal switch case handles null/zero state gracefully.
+- Cell padding: `1.25rem` top and bottom (up from `1rem`). `sm-value` margin-bottom cleared to 0.
+- `sm-value` margin-top: 0.5rem → 0.6rem.
+- Content header `margin-bottom`: 1.25rem → 1.5rem.
+- Source Serif 4 editorial line added below card group (`.editorial-note`, 0.85rem, weight 300, `--text-secondary`). Hidden in `@media print`. Single use of `--serif` on this page.
+- Smoke test deduped: 11 sequential checks (was 13 with ZK×2 and uniqueness×2 duplicates). Farming ratio added as check 11. ZK deferred checks removed entirely.
+- `.sm-value.green` colour class added for farming card normal-band colouring.
+
+**Do not retry:**
+- DO NOT add `uploads_completed_24h` to AE query until B6 — the proxy (ratio = 1.00) is intentional and non-alarming.
+- DO NOT use `.row-3` for Row 3 — it is now `.row-4`. `.row-3` retained in CSS for future use only.
 ---
 
 ## Sessions 43–52 — B5 Design full pass

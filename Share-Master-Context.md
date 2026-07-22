@@ -202,6 +202,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S42e | — | Full B4 audit pass. 20 claims verified against source. Marketing claim rulings. Critical chain S34→S42→S78 closed. UK regulatory language drafted. B5 handoff complete. |
 | S43 | `5c54802` | Token alignment: Paper/Carbon --bg corrected, --surface-raised added, IBM Plex Mono loaded, --accent declared. Eleventy pages only (index, upgrade, status). Dashboard token alignment deferred to S44. |
 | S44 | `b15f407` | Dashboard design pass I: sidebar layout, DESIGN-TOKENS.md alignment (dashboard was on pre-token palette — S43 only covered Eleventy pages), Satoshi 700 figures 2rem, 4 latency cards, Copy JSON bottom-right, sidebar Paper/Carbon toggle + sign out, @media print PDF export, Refresh double-bind bug fixed. |
+| S45 | `7187e41` | Dashboard design pass II: sidebar 240px, gold wordmark, farming signal card (row-4), Source Serif editorial line, smoke test deduped to 11 checks. |
 ---
 
 ## Roadmap
@@ -234,7 +235,7 @@ B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real l
 |---------|-------|-------|------|
 | S43 | Token alignment | Apply `DESIGN-TOKENS.md` to `index.html`, `upgrade.html`, `status.html`: fix `--bg` Paper (`#F5F0E8` → `#F7F4EF`), Carbon (`#1A1A1A` → `#1E1F22`), add `--surface-raised`, load IBM Plex Mono, declare `--accent: #C8A96E`. | S |
 | S44 | Dashboard design pass I | ✅ Complete — b15f407 | M |
-| S45 | Dashboard design pass II | Deep pass on spacing, hierarchy, and readability. Source Serif 4 editorial moments. Farming signal card: `credentials_issued_24h ÷ uploads_completed_24h` ratio, normal band 0.8–1.2, amber highlight >3.0. AE data wiring for new card. | M |
+| S45 | Dashboard design pass II | ✅ Complete — 7187e41 | M |
 | S46a | Modal build I | Full-viewport modal scaffold for all 13 metric cards: panel shell, ← Back button, data wiring from existing endpoints, n/a and loading states. | L |
 | S46b | Modal build II | Modal polish: CSV export stub, trend stub, error states, edge cases (zero data, AE unavailable). Smoke test all 13 panels. | M |
 | S47 | Upload/download UX | Progress bar smooth animation (15%→100% jump fix). QR code resolution fix. `FREE_EXPIRY` constant mismatch fix (5 days in code → 7 days). | S |
