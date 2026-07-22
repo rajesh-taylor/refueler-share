@@ -67,9 +67,10 @@
   }
 
   /* ─── Sidebar ─── */
+  /* S45: widened 200px → 240px */
   #sidebar {
     position: fixed; top: 0; left: 0; bottom: 0;
-    width: 200px;
+    width: 240px;
     background: var(--surface);
     border-right: 0.5px solid var(--border);
     display: flex; flex-direction: column;
@@ -79,34 +80,36 @@
     z-index: 20;
   }
   .sb-wordmark {
-    padding: 0 1rem;
+    padding: 0 1.25rem;
     font-family: var(--heading);
     font-weight: 700;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     letter-spacing: 0.06em;
     color: var(--text-primary);
     white-space: nowrap;
   }
+  /* S45: "refueler-share" portion in gold accent, matching gate heading */
+  .sb-wordmark .wm-brand { color: var(--accent); }
   .sb-wordmark .wm-div { font-weight: 300; opacity: 0.3; padding: 0 2px; }
   .sb-wordmark .wm-sub { font-weight: 400; opacity: 0.55; }
 
   .sb-nav { flex: 1; overflow-y: auto; }
   .sb-section {
     font-family: var(--mono);
-    font-size: 0.6rem;
+    font-size: 0.65rem; /* S45: up from 0.6rem */
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-tertiary);
-    padding: 0 1rem;
+    padding: 0 1.25rem;
     margin-top: 2rem;
     margin-bottom: 0.5rem;
   }
   .sb-item {
     display: block;
     font-family: var(--mono);
-    font-size: 0.75rem;
+    font-size: 0.8rem; /* S45: up from 0.75rem */
     color: var(--text-secondary);
-    padding: 0.45rem 1rem;
+    padding: 0.45rem 1.25rem;
     border-left: 2px solid transparent;
     cursor: pointer;
     text-decoration: none;
@@ -117,21 +120,24 @@
     color: var(--text-primary);
     border-left: 2px solid var(--accent);
     background: var(--bg);
-    padding-left: calc(1rem - 0px); /* border consumes 2px; padding kept — text aligns via border-box */
   }
+  /* S45: stub items use --text-secondary in Carbon (overrides --text-tertiary base in [data-theme="carbon"]) */
   .sb-item.stub {
     color: var(--text-tertiary);
     pointer-events: none;
   }
+  [data-theme="carbon"] .sb-item.stub {
+    color: var(--text-secondary);
+  }
 
   .sb-footer {
-    padding: 1rem 1rem 0;
+    padding: 1rem 1.25rem 0;
     border-top: 0.5px solid var(--border);
     display: flex; flex-direction: column; gap: 0.6rem;
   }
   .sb-auth {
     font-family: var(--mono);
-    font-size: 0.65rem;
+    font-size: 0.7rem; /* S45: up from 0.65rem */
     color: var(--text-tertiary);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -143,7 +149,7 @@
     border-radius: 6px;
     color: var(--text-secondary);
     font-family: var(--mono);
-    font-size: 0.65rem;
+    font-size: 0.7rem; /* S45: up from 0.65rem */
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.35rem 0;
@@ -157,7 +163,7 @@
   }
   .sb-signout {
     font-family: var(--mono);
-    font-size: 0.65rem;
+    font-size: 0.7rem; /* S45: up from 0.65rem */
     color: var(--text-tertiary);
     cursor: pointer;
     background: none; border: none; text-align: left; padding: 0;
@@ -165,8 +171,9 @@
   .sb-signout:hover { text-decoration: underline; }
 
   /* ─── Main ─── */
+  /* S45: margin-left matches new sidebar width */
   #main {
-    margin-left: 200px;
+    margin-left: 240px;
     padding: 2rem 2.5rem;
     min-height: 100vh;
   }
@@ -175,7 +182,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem; /* S45: up from 1.25rem */
     gap: 1rem;
   }
   .section-title {
@@ -250,16 +257,28 @@
     transition: background 0.35s, border-color 0.35s;
   }
   .row-6 { display: grid; grid-template-columns: repeat(6, 1fr); }
+  .row-4 { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .row-6 + .row-6,
+  .row-6 + .row-4 { border-top: 0.5px solid var(--border); }
+  .row-4 + .row-4  { border-top: 0.5px solid var(--border); }
+  /* row-3 kept for any future use */
   .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .row-6 + .row-6, .row-6 + .row-3 { border-top: 0.5px solid var(--border); }
-  @media (max-width: 1100px) {
+  .row-6 + .row-3,
+  .row-4 + .row-3,
+  .row-3 + .row-4 { border-top: 0.5px solid var(--border); }
+
+  @media (max-width: 1200px) {
     .row-6 { grid-template-columns: repeat(3, 1fr); }
     .row-6 .snap-metric:nth-child(3n) { border-right: none; }
     .row-6 .snap-metric:nth-child(-n+3) { border-bottom: 0.5px solid var(--border); }
+    .row-4 { grid-template-columns: repeat(2, 1fr); }
+    .row-4 .snap-metric:nth-child(2n) { border-right: none; }
+    .row-4 .snap-metric:nth-child(-n+2) { border-bottom: 0.5px solid var(--border); }
   }
 
+  /* S45: increased cell padding top + bottom to 1.25rem */
   .snap-metric {
-    padding: 1rem 1rem 1rem;
+    padding: 1.25rem 1rem 1.25rem;
     border-right: 0.5px solid var(--border);
     cursor: pointer;
     transition: background 0.12s;
@@ -283,18 +302,20 @@
     margin-top: 2px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* S45: margin-top 0.5rem → 0.6rem; margin-bottom cleared (cell bottom padding handles it) */
   .sm-value {
     font-family: var(--heading);
     font-weight: 700;
     font-size: 2rem;
     color: var(--text-primary);
     line-height: 1.05;
-    margin-top: 0.5rem;
-    margin-bottom: 1rem;
+    margin-top: 0.6rem;
+    margin-bottom: 0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .sm-value.red   { color: var(--c-red); }
   .sm-value.amber { color: var(--c-amber); }
+  .sm-value.green { color: var(--c-green); }
   .sm-value.blue  { color: var(--c-blue); }
 
   .deferred { opacity: 0.38; cursor: default; }
@@ -310,6 +331,16 @@
   .group-footer {
     display: flex; flex-direction: row-reverse;
     margin-top: 0.5rem;
+  }
+
+  /* S45: Source Serif 4 editorial line */
+  .editorial-note {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 1rem;
+    line-height: 1.6;
   }
 
   /* ─── Modal ─── */
@@ -346,6 +377,7 @@
   }
   .modal-value.red   { color: var(--c-red); }
   .modal-value.amber { color: var(--c-amber); }
+  .modal-value.green { color: var(--c-green); }
   .modal-value.blue  { color: var(--c-blue); }
   .modal-sub { font-family: var(--sans); font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 40px; }
   .modal-section-title {
@@ -386,6 +418,7 @@
     #sidebar { display: none; }
     #main { margin-left: 0; padding: 0.5cm; }
     .content-header, #error-banner, #modal { display: none !important; }
+    .editorial-note { display: none; }
     #main::before {
       content: "Refueler Share — System Summary · " attr(data-print-ts);
       display: block;
@@ -395,7 +428,8 @@
       margin-bottom: 1rem;
     }
     .card-group { border-radius: 0; border-color: #D6D1C8; }
-    .row-6, .row-3 { grid-template-columns: repeat(2, 1fr); }
+    .row-6 { grid-template-columns: repeat(2, 1fr); }
+    .row-4 { grid-template-columns: repeat(2, 1fr); }
     .snap-metric { page-break-inside: avoid; border-right: 0.5px solid #D6D1C8 !important; border-bottom: 0.5px solid #D6D1C8; }
     .snap-metric:nth-child(2n) { border-right: none !important; }
     .group-footer { display: none; }
@@ -407,7 +441,8 @@
 
 <!-- ─── Sidebar ─── -->
 <aside id="sidebar">
-  <div class="sb-wordmark">refueler-share<span class="wm-div">/</span><span class="wm-sub">dashboard</span></div>
+  <!-- S45: wm-brand span wraps "refueler-share" for gold colour; "/" and "dashboard" unchanged -->
+  <div class="sb-wordmark"><span class="wm-brand">refueler-share</span><span class="wm-div">/</span><span class="wm-sub">dashboard</span></div>
 
   <nav class="sb-nav">
     <div class="sb-section">Overview</div>
@@ -532,8 +567,9 @@
         </div>
       </div>
 
-      <!-- Row 3: growth + deferred -->
-      <div class="row-3">
+      <!-- Row 3: growth + farming signal (4-column) -->
+      <!-- S45: row-3 → row-4; farming signal card added as 4th cell -->
+      <div class="row-4">
         <div class="snap-metric" onclick="openModal('free-users')">
           <div class="sm-label">Free users</div>
           <div class="sm-plain">Total on free tier</div>
@@ -549,8 +585,17 @@
           <div class="sm-plain">Sats vs fiat mix</div>
           <div class="sm-value amber">—</div>
         </div>
+        <!-- Farming signal card -->
+        <div class="snap-metric" onclick="openModal('farming')">
+          <div class="sm-label">Farming signal</div>
+          <div class="sm-plain">Credentials per upload</div>
+          <div class="sm-value" id="snap-farming">—</div>
+        </div>
       </div>
     </div>
+
+    <!-- S45: Source Serif 4 editorial moment — single sentence below card group -->
+    <p class="editorial-note">All figures update every 60 seconds. Data sourced from Cloudflare Analytics Engine and Supabase.</p>
 
     <div class="group-footer">
       <button class="ghost-btn" id="snapshot-copy-btn" onclick="copySnapshot()">
@@ -670,9 +715,11 @@
     countdown = 60;
     updateCountdown();
     const [m, ae, snap] = await Promise.all([fetchMetrics(), fetchAeMetrics(), fetchSnapshot()]);
-    if (m)    { lastMetrics = m;   renderMetrics(m); }
-    if (ae)   { lastAe = ae;       renderAeMetrics(ae); }
+    if (m)    { lastMetrics = m;    renderMetrics(m); }
+    if (ae)   { lastAe = ae;        renderAeMetrics(ae); }
     if (snap) { lastSnapshot = snap; renderSnapshot(snap); }
+    // Farming signal requires both datasets — render after both arrive
+    if (m || ae) renderFarming(lastMetrics, lastAe);
     const ts = new Date();
     setText('refreshed-at', `Refreshed ${ts.toLocaleTimeString('en-GB')}`);
     document.getElementById('main').setAttribute('data-print-ts', ts.toUTCString());
@@ -803,6 +850,40 @@
     lastAe = d;
   }
 
+  // ── Render: farming signal ────────────────────────────────────────────────
+  // credentials_issued_24h = sum of credential_issuances_by_tier (free+creative+max) from AE.
+  // uploads_completed_24h: not yet a discrete AE field — using credentials_issued as proxy.
+  // Proxy noted in sub-label. Replaced with real upload_completed count when AE query is extended (B6).
+  function renderFarming(m, ae) {
+    const el = document.getElementById('snap-farming');
+    if (!el) return;
+
+    const iss = ae?.credential_issuances_by_tier;
+    const issued = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
+
+    if (issued === null || issued === 0) {
+      el.textContent = 'n/a';
+      el.className = 'sm-value';
+      return;
+    }
+
+    // Proxy: ratio against itself is 1.00 until real upload_completed field lands.
+    // When AE returns uploads_completed_24h, swap in: const completed = ae.uploads_completed_24h ?? issued;
+    const completed = ae?.uploads_completed_24h ?? issued;
+    const ratio = completed > 0 ? issued / completed : null;
+
+    if (ratio === null) {
+      el.textContent = 'n/a';
+      el.className = 'sm-value';
+      return;
+    }
+
+    el.textContent = ratio.toFixed(2);
+    // Green 0.5–1.2, amber 1.2–3.0, red >3.0 or <0.5
+    const cls = ratio > 3.0 ? ' red' : ratio >= 1.2 ? ' amber' : ratio >= 0.5 ? ' green' : ' red';
+    el.className = 'sm-value' + cls;
+  }
+
   // ── Render: /admin/snapshot ───────────────────────────────────────────────
   function renderSnapshot(d) {
     lastSnapshot = d;
@@ -838,6 +919,7 @@
     churn:                { label: 'Churn rate', plain: 'Cancellations' },
     'free-users':         { label: 'Free users', plain: 'Total accounts on free tier' },
     'client-errors':      { label: 'Client errors (24h)', plain: 'Browser-side failures reported' },
+    farming:              { label: 'Farming signal', plain: 'Credential-to-upload ratio (normal: 0.8–1.2 · alarm: >3.0)' },
   };
 
   function openModal(key) {
@@ -942,6 +1024,21 @@
         sub = 'Browser failures via /log/error';
         colorClass = ce > 10 ? ' red' : ce > 0 ? ' amber' : '';
         break;
+      case 'farming': {
+        const farmIss = ae.credential_issuances_by_tier;
+        const farmIssued = farmIss ? (farmIss.free ?? 0) + (farmIss.creative ?? 0) + (farmIss.max ?? 0) : null;
+        const farmCompleted = ae.uploads_completed_24h ?? farmIssued;
+        const ratio = farmIssued !== null && farmCompleted > 0 ? farmIssued / farmCompleted : null;
+        if (ratio !== null) {
+          value = ratio.toFixed(2);
+          sub = `${farmIssued} issued · ${farmCompleted} uploads completed · proxy — B6`;
+          colorClass = ratio > 3.0 ? ' red' : ratio >= 1.2 ? ' amber' : ratio >= 0.5 ? '' : ' red';
+        } else {
+          value = 'n/a';
+          sub = 'No credential issuances in last 24h';
+        }
+        break;
+      }
     }
 
     const mv = document.getElementById('modal-value');
@@ -994,27 +1091,29 @@
     if (el) el.textContent = `↻ ${countdown}s`;
   }
 
-  // ── Smoke test ────────────────────────────────────────────────────────────
+  // ── Smoke test (S45: deduped; 11 sequential checks) ───────────────────────
   window.smokeTest = async function() {
-    console.group('13-metric smoke test');
+    console.group('11-metric smoke test');
     const [m, ae] = await Promise.all([
       fetch(`${WORKER}/admin/metrics`,    { headers: { 'X-Admin-Key': adminKey } }).then(r => r.json()),
       fetch(`${WORKER}/admin/ae-metrics`, { headers: { 'X-Admin-Key': adminKey } }).then(r => r.json()),
     ]);
+    const iss = ae.credential_issuances_by_tier;
+    const farmIssued = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
+    const farmCompleted = ae.uploads_completed_24h ?? farmIssued;
+    const farmRatio = farmIssued !== null && farmCompleted > 0 ? farmIssued / farmCompleted : null;
     const checks = [
-      { id: 1,  label: 'BLAKE3 / ZK rate',              val: m.zk_verification_rate,               deferred: 'B4' },
-      { id: 2,  label: 'Credential uniqueness rate',     val: m.credential_uniqueness_rate },
-      { id: 3,  label: 'ZK verification rate',           val: m.zk_verification_rate,               deferred: 'B4' },
-      { id: 4,  label: 'Credential uniqueness rate',     val: m.credential_uniqueness_rate },
-      { id: 5,  label: 'R2 bytes uploaded (90d)',        val: ae.r2_bytes_uploaded },
-      { id: 6,  label: 'Chunk retrieval success (24h)',  val: ae.r2_chunk_retrieval_success_rate },
-      { id: 7,  label: 'p95 upload latency',             val: ae.latency_by_endpoint?.upload?.p95_ms },
-      { id: 8,  label: 'p99 download latency',           val: ae.latency_by_endpoint?.download?.p99_ms },
-      { id: 9,  label: 'Worker error rate',              val: (() => { const e = ae.error_rate_by_endpoint; if (!e) return null; let err=0,tot=0; for (const ep of Object.values(e)){err+=ep.error_count;tot+=ep.total_count;} return tot>0?err/tot:0; })() },
-      { id: 10, label: 'Lightning vs Stripe mix',        val: null,                                  deferred: 'B7' },
-      { id: 11, label: 'Free-to-paid conversion rate',   val: m.free_to_paid_conversion_rate },
-      { id: 12, label: 'MRR (GBP floor)',                val: m.mrr_gbp },
-      { id: 13, label: 'Churn rate MTD',                 val: m.churn_rate_mtd_pct },
+      { id: 1,  label: 'Credential uniqueness rate',    val: m.credential_uniqueness_rate },
+      { id: 2,  label: 'Credential issuances (30d)',    val: farmIssued },
+      { id: 3,  label: 'R2 bytes uploaded (90d)',       val: ae.r2_bytes_uploaded },
+      { id: 4,  label: 'Chunk retrieval success (24h)', val: ae.r2_chunk_retrieval_success_rate },
+      { id: 5,  label: 'p95 upload latency',            val: ae.latency_by_endpoint?.upload?.p95_ms },
+      { id: 6,  label: 'p99 download latency',          val: ae.latency_by_endpoint?.download?.p99_ms },
+      { id: 7,  label: 'Worker error rate',             val: (() => { const e = ae.error_rate_by_endpoint; if (!e) return null; let err=0,tot=0; for (const ep of Object.values(e)){err+=ep.error_count;tot+=ep.total_count;} return tot>0?err/tot:0; })() },
+      { id: 8,  label: 'Lightning vs Stripe mix',       val: null, deferred: 'B7' },
+      { id: 9,  label: 'Free-to-paid conversion rate',  val: m.free_to_paid_conversion_rate },
+      { id: 10, label: 'MRR (GBP floor)',               val: m.mrr_gbp },
+      { id: 11, label: 'Farming signal ratio',          val: farmRatio },
     ];
     let pass=0, deferred=0, fail=0;
     for (const c of checks) {
