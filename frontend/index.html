@@ -952,7 +952,8 @@ async function startUpload() {
   }
 
   setStage('Chunking', 10);
-  uploadUUID = crypto.randomUUID();
+  // UUID is generated server-side at /credential/issue (S42c).
+  // Do not call crypto.randomUUID() here — uploadUUID is populated from the issue response.
   const chunks = splitChunks(selectedFile, CHUNK_SIZE);
   const totalChunks = chunks.length;
   const chunkHashes = [];
@@ -972,7 +973,10 @@ async function startUpload() {
     reportError('credential_issue', `HTTP ${issueRes.status}`, errText.slice(0, 200));
     throw new Error(`Credential issue failed: ${errText}`);
   }
-  const { signed_point, mint_pubkey } = await issueRes.json();
+  const { signed_point, mint_pubkey, uuid: issuedUuid, issued_tier: issuedTier, commitment } = await issueRes.json();
+  // Fail loudly if the Worker did not return a UUID — misconfiguration should not silently fall through.
+  if (!issuedUuid || !commitment || !issuedTier) throw new Error('Credential issue response missing uuid, commitment, or issued_tier');
+  uploadUUID = issuedUuid;
   const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
 
   setStage('Uploading', 15);
@@ -1002,12 +1006,14 @@ async function startUpload() {
       'X-Blake3-Root': rollingRoot,
     };
     if (i === 0) {
-      headers['X-Cashu-Credential']  = credential;
-      headers['X-Total-Chunks']      = String(totalChunks);
-      headers['X-Total-Bytes']       = String(selectedFile.size);
-      headers['X-Tier']              = 'free';
-      headers['X-Expiry-Timestamp']  = String(expiryTimestamp);
-      headers['X-File-Name']         = selectedFile.name;
+      headers['X-Cashu-Credential']       = credential;
+      headers['X-Total-Chunks']           = String(totalChunks);
+      headers['X-Total-Bytes']            = String(selectedFile.size);
+      headers['X-Tier']                   = 'free';
+      headers['X-Expiry-Timestamp']       = String(expiryTimestamp);
+      headers['X-File-Name']              = selectedFile.name;
+      headers['X-Credential-Commitment']  = commitment;   // S42c: UUID-bound commitment
+      headers['X-Issued-Tier']            = issuedTier;   // S42c: tier at credential issuance
       if (p2shHashHex) headers['X-P2SH-Secret-Hash'] = p2shHashHex;
     }
 
@@ -1298,6 +1304,7 @@ function reportError(context, message, detail) {
   } catch {}
 }
 
+async function waitForTurnstile(ms = 10000) {
   const start = Date.now();
   while (!turnstileToken && Date.now() - start < ms) await new Promise(r => setTimeout(r, 200));
 }

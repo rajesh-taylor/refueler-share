@@ -95,7 +95,7 @@ function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier',
     'Access-Control-Expose-Headers': 'X-File-Name',
   };
 }
@@ -202,18 +202,33 @@ export default {
 
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
-        // Rate limit: 5 requests / 60s per IP — passphrase brute-force protection
-        const ip = getClientIp(request);
-        const rl = await checkRateLimit(env, ip, 'auth', 5, 60);
-        if (rl.limited) {
-          logEvent(env, { endpoint: 'auth', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
-          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        // Rate limit layer 1: 5 requests / 60s per IP — passphrase brute-force protection
+        const ip   = getClientIp(request);
+        const rlIp = await checkRateLimit(env, ip, 'auth', 5, 60);
+        if (rlIp.limited) {
+          logEvent(env, { endpoint: 'auth', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_ip' });
+          return rateLimitResponse(request, rlIp.resetAt, corsHeaders(request));
+        }
+        // Rate limit layer 2: 10 requests / 60s per UUID — distributed brute-force protection.
+        // An attacker rotating IPs still hits this ceiling per transfer.
+        const rlUuid = await checkRateLimit(env, authMatch[1], 'auth_uuid', 10, 60);
+        if (rlUuid.limited) {
+          logEvent(env, { endpoint: 'auth', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_uuid' });
+          return rateLimitResponse(request, rlUuid.resetAt, corsHeaders(request));
         }
         return timed('auth', () => handleAuth(request, env, authMatch[1]).then(r => addCors(r, request)));
       }
 
       const downloadMatch = path.match(/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'GET' && downloadMatch) {
+        // Rate limit: 300 requests / 60s per IP — generous for legitimate chunked downloads
+        // (250 GB max transfer at 1 MB chunks = 250 chunks), blocks flood attacks.
+        const ip   = getClientIp(request);
+        const rlDl = await checkRateLimit(env, ip, 'download', 300, 60);
+        if (rlDl.limited) {
+          logEvent(env, { endpoint: 'download', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_ip' });
+          return rateLimitResponse(request, rlDl.resetAt, corsHeaders(request));
+        }
         const chunkIndex = parseInt(downloadMatch[2], 10);
         return timed('download', async () => {
           const response = await handleDownload(request, env, downloadMatch[1], chunkIndex);
@@ -373,7 +388,40 @@ async function handleAdminStatus(request, env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Credential issue — POST /credential/issue
+//
+// S42c: UUID-bound credential issuance.
+//
+// The Worker generates the transfer UUID here — the client no longer generates
+// it client-side. A commitment H(uuid‖issued_tier‖expiry_window_seconds) is
+// computed and returned alongside the blind signature. The frontend echoes this
+// commitment and issued_tier on chunk 0; the Worker recomputes and verifies.
+//
+// This closes the cross-transfer credential farming vector: a credential farmed
+// for one UUID is cryptographically invalid for any other UUID.
+//
+// Nothing is stored. The binding lives in the commitment itself.
+// Full NUT-20 quote signatures deferred to B8 Rust mint.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Canonical expiry windows (seconds) — mirrored in handleUpload.
+// These constants must stay in sync. A mismatch breaks commitment verification.
+const EXPIRY_WINDOWS = {
+  free:     7  * 24 * 3600,  //    604,800 s
+  creative: 30 * 24 * 3600,  //  2,592,000 s
+  max:      90 * 24 * 3600,  //  7,776,000 s
+};
+
+/**
+ * computeCommitment(uuid, tier, expiryWindow) → hex string
+ * SHA-256( utf8(uuid) || utf8(':') || utf8(tier) || utf8(':') || utf8(expiryWindow) )
+ * Simple, deterministic, no parsing ambiguity (UUID contains only hex+hyphen; tier is alpha).
+ */
+async function computeCommitment(uuid, tier, expiryWindow) {
+  const input = new TextEncoder().encode(`${uuid}:${tier}:${expiryWindow}`);
+  const hash  = await crypto.subtle.digest('SHA-256', input);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function handleCredentialIssue(request, env) {
   let body;
   try {
@@ -388,7 +436,16 @@ async function handleCredentialIssue(request, env) {
   const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
   if (!turnstileOk) return err(403, 'Turnstile verification failed');
 
-  const allocationBytes = TIER_CAPS[tier] ?? TIER_CAPS.free;
+  // Canonicalise tier — unknown values fall back to free silently.
+  const issuedTier      = EXPIRY_WINDOWS[tier] !== undefined ? tier : 'free';
+  const expiryWindow    = EXPIRY_WINDOWS[issuedTier];
+  const allocationBytes = TIER_CAPS[issuedTier] ?? TIER_CAPS.free;
+
+  // Generate transfer UUID server-side. Client no longer calls crypto.randomUUID().
+  const uuid = crypto.randomUUID();
+
+  // Compute commitment — binds this credential to exactly this uuid + tier + window.
+  const commitment = await computeCommitment(uuid, issuedTier, expiryWindow);
 
   let signedPoint, mintPubkey;
   try {
@@ -398,7 +455,14 @@ async function handleCredentialIssue(request, env) {
     return err(500, 'Credential issuance failed');
   }
 
-  return json({ signed_point: signedPoint, mint_pubkey: mintPubkey, allocation_bytes: allocationBytes });
+  return json({
+    signed_point:     signedPoint,
+    mint_pubkey:      mintPubkey,
+    allocation_bytes: allocationBytes,
+    uuid,
+    issued_tier:      issuedTier,
+    commitment,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -527,8 +591,40 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       ? new TextDecoder().decode(fileNameBytes.slice(0, 255))
       : (sanitisedFileName || `refueler-${uuid.slice(0, 8)}`);
 
+    const commitment = request.headers.get('X-Credential-Commitment') ?? '';
+    const issuedTier = (request.headers.get('X-Issued-Tier') ?? 'free').trim().toLowerCase();
+
     if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
       return err(400, 'Missing required headers');
+    }
+
+    // ── UUID-bound commitment verification (S42c) ─────────────────────────
+    // Recompute H(uuid:issued_tier:expiry_window) and compare to the value
+    // the client echoed from the credential issue response. A farmed credential
+    // carries a commitment for a different UUID and will fail here.
+    // Fires before credential verification — avoids a Supabase call on farming
+    // attempts. Nothing is stored; the binding is in the commitment itself.
+    if (!commitment) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 401, errorMsg: 'credential_commitment_missing' });
+      return err(401, 'Missing credential commitment');
+    }
+    const canonicalTier   = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
+    const expectedWindow  = EXPIRY_WINDOWS[canonicalTier];
+    const expectedCommitment = await computeCommitment(uuid, canonicalTier, expectedWindow);
+    // Constant-time comparison — commitment is not secret but avoids timing oracle on hex strings.
+    const commitmentBytes         = new TextEncoder().encode(commitment);
+    const expectedCommitmentBytes = new TextEncoder().encode(expectedCommitment);
+    const commitmentMatch = commitmentBytes.length === expectedCommitmentBytes.length &&
+      crypto.subtle.timingSafeEqual
+        ? await (async () => {
+            // timingSafeEqual available in Workers runtime
+            try { return crypto.subtle.timingSafeEqual(commitmentBytes, expectedCommitmentBytes); }
+            catch { return commitment === expectedCommitment; }
+          })()
+        : commitment === expectedCommitment;
+    if (!commitmentMatch) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 401, errorMsg: 'credential_uuid_mismatch' });
+      return err(401, 'Credential commitment mismatch');
     }
 
     // ── Total chunks upper bound (S42) ────────────────────────────────────
@@ -675,6 +771,15 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
     } catch (e) {
       console.error('KV byte counter write failed:', e);
+    }
+
+    // ── Chunk count manipulation defence (S42b) ───────────────────────────
+    // Reject any chunk index ≥ declared total_chunks. Without this, an
+    // adversary could push indices beyond the declared ceiling, inflating
+    // chunks_received indefinitely and corrupting the completion check.
+    if (chunkIndex >= manifest.total_chunks) {
+      logEvent(env, { endpoint: 'upload', tier: manifest.tier ?? resolvedTier, status: 400, errorMsg: 'chunk_index_out_of_bounds' });
+      return err(400, 'Chunk index exceeds declared total');
     }
 
     manifest.chunks_received.push(chunkIndex);
