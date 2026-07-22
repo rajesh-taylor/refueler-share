@@ -135,6 +135,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Full UUID in `/log/error` | First 8 chars only |
 | Trust `X-Tier` upload header | Ignored since S39 — tier resolved from Supabase via `X-Email` |
 | Apply MIME gate to chunks > 0 | Gate is chunk-0 only — ciphertext continuations carry no meaningful Content-Type |
+| URL shortener for share links | Lookup table is a privacy attack point; fragment key exposed to shortener service |
 
 ---
 
@@ -152,9 +153,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell (p95+p99+success+churn), row 3 3-cell (free users, client errors, lightning deferred B7). |
 | S38 | `20da7d4` | `client_errors_24h` AE query live. Three rogue secrets deleted. Wrangler 4.112.0. |
 | S39 | `ab4fc98` | Server-side tier enforcement: X-Email Supabase lookup, 10MB chunk cap, KV byte counter per UUID. |
-| S40 | (pending) | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
+| S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
+| S41 | `f2d775e5` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
 
-**Next: S41 — B4 continuing security hardening.**
+**Next: S42 — B4 continuing security hardening.**
 
 ---
 
@@ -236,6 +238,8 @@ Yearly = 10 months price.
 - Dashboard B5: "Investor Snapshot" → "System Summary", Satoshi font, 4 latency cards, Copy JSON → bottom-right, Source Serif 4 body
 - Brand audit: BRANDING.md against share UI, Carbon gold edging
 - Modal full build — own session allocation in B5
+- Named transfers: user-supplied label in URL fragment only, never stored server-side. Paid tier differentiator. Plan in B5 or B7.
+
 ---
 
 ## File map

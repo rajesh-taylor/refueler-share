@@ -44,6 +44,17 @@ const MIME_DENYLIST = new Set([
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UUID validation (S41)
+//
+// RFC 4122 format: 8-4-4-4-12 lowercase hex groups separated by hyphens.
+// The router regex [0-9a-f-]{36} already blocks non-hex/non-hyphen chars and
+// enforces length, but accepts structurally invalid strings (e.g. all hyphens).
+// This stricter check ensures the captured group is a valid UUID before any
+// R2, Supabase, or KV operation is attempted.
+// ─────────────────────────────────────────────────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CORS
 // ─────────────────────────────────────────────────────────────────────────────
 function corsHeaders(request) {
@@ -381,6 +392,13 @@ async function handleCredentialIssue(request, env) {
 //     'mime_missing'.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleUpload(request, env, uuid, chunkIndex) {
+  // ── UUID format validation (S41) ──────────────────────────────────────────
+  // Fires before any R2, Supabase, or KV operation.
+  if (!UUID_RE.test(uuid)) {
+    logEvent(env, { endpoint: 'upload', status: 400, errorMsg: 'invalid_uuid' });
+    return err(400, 'Invalid transfer ID');
+  }
+
   const isFirstChunk = chunkIndex === 0;
 
   // ── MIME type gate (S40) — chunk 0 only ───────────────────────────────────
@@ -627,6 +645,22 @@ async function handleAuth(request, env, uuid) {
 // Download — GET /download/:uuid/:chunk
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleDownload(request, env, uuid, chunkIndex) {
+  // ── UUID format validation (S41) ──────────────────────────────────────────
+  // Fires before any R2 or Supabase operation.
+  if (!UUID_RE.test(uuid)) {
+    logEvent(env, { endpoint: 'download', status: 400, errorMsg: 'invalid_uuid' });
+    return err(400, 'Invalid transfer ID');
+  }
+
+  // ── Chunk index bounds check (S41) ────────────────────────────────────────
+  // Router regex \d{4} structurally prevents negative values and 5+ digit
+  // numbers, but an explicit guard here makes the invariant visible and
+  // provides belt-and-braces defence against future router changes.
+  if (chunkIndex < 0 || chunkIndex > 9999) {
+    logEvent(env, { endpoint: 'download', status: 400, errorMsg: 'invalid_chunk_index' });
+    return err(400, 'Invalid chunk index');
+  }
+
   const manifest = await getManifest(env.BUCKET, uuid);
   if (!manifest) return err(404, 'Transfer not found');
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');

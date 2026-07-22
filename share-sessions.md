@@ -178,12 +178,24 @@
 - MIME type is never stored — not in R2 manifest, not in Supabase, not in AE (except errorMsg on rejection). Gate reflects declared intent only; Worker receives encrypted payload and cannot inspect content.
 - `CLAUDE.md` locked decisions updated. `README.md` updated. `Share-Master-Context.md` updated.
 
+### S41 — UUID validation + chunk bounds
+**Commit:** (pending)
+
+- `UUID_RE` constant: RFC 4122 `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i` — validated at entry to `handleUpload` and `handleDownload` before any R2/Supabase/KV touch. 400 + AE log (`invalid_uuid`) on mismatch.
+- Chunk index bounds check in `handleDownload`: explicit `chunkIndex < 0 || chunkIndex > 9999` guard. 400 + AE log (`invalid_chunk_index`). Belt-and-braces over router regex.
+- Both gates fire before any backend operation — zero R2/KV/Supabase cost on rejection.
+- Smoke tests: 400 on 36-hyphen UUID, 404 on non-matching path, 404 on all-zeros UUID (gate passed, R2 reached). ✓
+- Named transfers (client-side label in fragment, never stored) flagged as paid-tier feature for B5/B7 planning.
+
 **Do not retry:**
 - DO NOT trust `X-Tier` from client — ignored since S39, tier is always resolved from Supabase.
 - DO NOT skip `X-Email` in upload requests — without it tier always resolves to `free`.
 - DO NOT apply MIME gate to chunks > 0 — ciphertext continuations have no meaningful Content-Type.
 - DO NOT store MIME type anywhere — it is a gate signal, not a record.
 - DO NOT add `application/java-archive` to the denylist — deliberate exclusion, legitimate dev use.
+- DO NOT use a URL shortener — lookup table is a privacy attack point; fragment key would be exposed to shortener service.
+
+
 ---
 
 *"Nothing stops this train."*
