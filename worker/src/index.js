@@ -9,7 +9,38 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
-const CHUNK_SIZE_MAX = 10 * 1024 * 1024; // 10 MB hard cap per chunk
+const CHUNK_SIZE_MAX    = 10 * 1024 * 1024; // 10 MB hard cap per chunk
+const MANIFEST_SIZE_MAX = 64 * 1024;        // 64 KB manifest ceiling (S42)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manifest fetch with size cap (S42)
+//
+// getManifest() is imported from manifest.js and reads the raw R2 object.
+// An adversary-supplied or corrupted manifest larger than 64 KB would consume
+// unnecessary memory and could cause unbounded JSON.parse allocation.
+// This wrapper fetches the R2 object directly for a size check before delegating
+// to the imported helper, returning null (not found) or throwing on oversize.
+// ─────────────────────────────────────────────────────────────────────────────
+async function safeGetManifest(bucket, uuid, env) {
+  const key = `${uuid}/manifest.json`;
+  let obj;
+  try {
+    obj = await bucket.get(key);
+  } catch (e) {
+    console.error('R2 manifest get error:', e);
+    return { manifest: null, oversize: false };
+  }
+  if (!obj) return { manifest: null, oversize: false };
+
+  if ((obj.size ?? 0) > MANIFEST_SIZE_MAX) {
+    console.error(`Manifest oversize: ${obj.size} bytes for ${uuid}`);
+    return { manifest: null, oversize: true };
+  }
+
+  // Delegate to the authoritative helper for parsing and field normalisation.
+  const manifest = await getManifest(bucket, uuid);
+  return { manifest, oversize: false };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MIME type denylist (S40)
@@ -268,7 +299,7 @@ async function handleStatus(request, env) {
 async function handleLogError(request, env) {
   const ip = getClientIp(request);
   const rl = await checkRateLimit(env, ip, 'log_error', 20, 60);
-  if (rl) return new Response('Too Many Requests', { status: 429 });
+  if (rl.limited) return new Response('Too Many Requests', { status: 429 });
 
   let body;
   try { body = await request.json(); } catch { return new Response('OK', { status: 200 }); }
@@ -482,10 +513,57 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
     const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
     const rawFileName = request.headers.get('X-File-Name') ?? '';
-    const fileName    = rawFileName.replace(/[/\\]/g, '').slice(0, 255) || `refueler-${uuid.slice(0, 8)}`;
+    // Strip path separators, null bytes, C0/C1 control characters (U+0000–U+001F, U+007F),
+    // and Unicode bidirectional override characters (U+202A–U+202E, U+2066–U+2069)
+    // that can spoof filenames in terminal or file-manager display.
+    // Truncate to 255 bytes (not chars) after sanitisation to respect FS limits.
+    const sanitisedFileName = rawFileName
+      .replace(/[/\\]/g, '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/[\u202A-\u202E\u2066-\u2069]/g, '')
+      .trim();
+    const fileNameBytes = new TextEncoder().encode(sanitisedFileName);
+    const fileName = fileNameBytes.length > 255
+      ? new TextDecoder().decode(fileNameBytes.slice(0, 255))
+      : (sanitisedFileName || `refueler-${uuid.slice(0, 8)}`);
 
     if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
       return err(400, 'Missing required headers');
+    }
+
+    // ── Total chunks upper bound (S42) ────────────────────────────────────
+    // 10,000 chunks × 25 MB = 250 GB — covers Production Max with headroom.
+    // Rejects inflated values before any credential or storage operation.
+    const TOTAL_CHUNKS_MAX = 10_000;
+    if (totalChunks > TOTAL_CHUNKS_MAX) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'total_chunks_exceeded' });
+      return err(400, `X-Total-Chunks exceeds maximum of ${TOTAL_CHUNKS_MAX}`);
+    }
+
+    // ── Expiry timestamp tier validation (S42) ────────────────────────────
+    // Server validates that the client-declared expiry falls within the
+    // maximum window permitted for the resolved tier. Client cannot extend
+    // its own expiry beyond tier entitlement by supplying a distant timestamp.
+    //
+    // Windows (seconds from now):
+    //   free:     7 days  (604,800s)
+    //   creative: 30 days (2,592,000s)
+    //   max:      90 days (7,776,000s)
+    const EXPIRY_MAX_SECONDS = {
+      free:     7  * 24 * 3600,  //  7 days
+      creative: 30 * 24 * 3600,  // 30 days
+      max:      90 * 24 * 3600,  // 90 days
+    };
+    const nowSeconds  = Math.floor(Date.now() / 1000);
+    const maxWindow   = EXPIRY_MAX_SECONDS[resolvedTier] ?? EXPIRY_MAX_SECONDS.free;
+    const maxExpiryTs = nowSeconds + maxWindow;
+    if (expiryTs <= nowSeconds) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'expiry_in_past' });
+      return err(400, 'X-Expiry-Timestamp is in the past');
+    }
+    if (expiryTs > maxExpiryTs) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'expiry_exceeds_tier' });
+      return err(400, `X-Expiry-Timestamp exceeds maximum window for ${resolvedTier} tier (${maxWindow / 86400} days)`);
     }
 
     // ── Early cap check against declared total (S39) ───────────────────────
@@ -564,7 +642,11 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
   } else {
     // ── Subsequent chunks ──────────────────────────────────────────────────
-    const manifest = await getManifest(env.BUCKET, uuid);
+    const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+    if (oversize) {
+      logEvent(env, { endpoint: 'upload', status: 502, errorMsg: 'manifest_oversize' });
+      return err(502, 'Transfer manifest exceeds size limit');
+    }
     if (!manifest) return err(404, 'Transfer not found');
     if (manifest.upload_complete) return err(409, 'Upload already complete');
 
@@ -625,7 +707,11 @@ async function handleAuth(request, env, uuid) {
   const { passphrase } = body;
   if (!passphrase || typeof passphrase !== 'string') return err(400, 'Missing passphrase');
 
-  const manifest = await getManifest(env.BUCKET, uuid);
+  const { manifest, oversize: authOversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (authOversize) {
+    logEvent(env, { endpoint: 'auth', status: 502, errorMsg: 'manifest_oversize' });
+    return err(502, 'Transfer manifest exceeds size limit');
+  }
   if (!manifest) return err(404, 'Transfer not found');
   if (!requiresPassphrase(manifest)) return err(400, 'Transfer is not passphrase-protected');
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
@@ -661,7 +747,11 @@ async function handleDownload(request, env, uuid, chunkIndex) {
     return err(400, 'Invalid chunk index');
   }
 
-  const manifest = await getManifest(env.BUCKET, uuid);
+  const { manifest, oversize: dlOversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (dlOversize) {
+    logEvent(env, { endpoint: 'download', status: 502, errorMsg: 'manifest_oversize' });
+    return err(502, 'Transfer manifest exceeds size limit');
+  }
   if (!manifest) return err(404, 'Transfer not found');
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
 

@@ -136,6 +136,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Trust `X-Tier` upload header | Ignored since S39 — tier resolved from Supabase via `X-Email` |
 | Apply MIME gate to chunks > 0 | Gate is chunk-0 only — ciphertext continuations carry no meaningful Content-Type |
 | URL shortener for share links | Lookup table is a privacy attack point; fragment key exposed to shortener service |
+| `if (rl)` to check rate limit | `checkRateLimit` returns object — always truthy; use `if (rl.limited)` |
+| `getManifest()` direct from handlers | Use `safeGetManifest()` wrapper — enforces 64KB manifest ceiling |
 
 ---
 
@@ -155,9 +157,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S39 | `ab4fc98` | Server-side tier enforcement: X-Email Supabase lookup, 10MB chunk cap, KV byte counter per UUID. |
 | S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
 | S41 | `f2d775e5` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
+| S42 | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. **B4 complete.** |
 
-**Next: S42 — B4 continuing security hardening.**
-
+**Next: S43 — B5 design full pass begins.**
 ---
 
 ## Roadmap
@@ -168,8 +170,8 @@ Core S19–S100 · Buffer S101–S120.
 |-------|----------|-------|
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
-| **B4** | S34–S42 | Security hardening ← current |
-| B5 | S43–S50 | Design full pass |
+| **B4** ✓ | S34–S42 | Security hardening |
+| B5 | S43–S50 | Design full pass ← current |
 | B6 | S51–S58 | Testing infrastructure |
 | B7 | S59–S68 | Lightning/Blink + anonymous paid tier (S64, highest design risk) |
 | B8 | S69–S76 | NUT-11 Mode 2 keypair auth |

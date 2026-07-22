@@ -187,6 +187,17 @@
 - Smoke tests: 400 on 36-hyphen UUID, 404 on non-matching path, 404 on all-zeros UUID (gate passed, R2 reached). ✓
 - Named transfers (client-side label in fragment, never stored) flagged as paid-tier feature for B5/B7 planning.
 
+### S42 — Input validation hardening
+**Commit:** (pending)
+
+- `handleLogError` truthy bug fixed: `if (rl)` → `if (rl.limited)`. `checkRateLimit` returns an object (always truthy) — every client error report was silently dropped before reaching AE. Now correctly rate-limits on `.limited` property.
+- `X-File-Name` sanitisation hardened: strips path separators, null bytes, C0/C1 control characters (U+0000–U+001F, U+007F), and Unicode bidirectional override codepoints (U+202A–U+202E, U+2066–U+2069). Truncates to 255 *bytes* (not chars) after sanitisation via `TextEncoder`/`TextDecoder` round-trip.
+- `safeGetManifest()` wrapper added in `index.js`: fetches R2 object for size check (`obj.size > 64KB`) before delegating to imported `getManifest` for parsing. Returns `{ manifest, oversize }`. 502 + AE log (`manifest_oversize`) on violation. All three handler call sites updated: upload subsequent chunks, auth, download.
+- `X-Total-Chunks` upper bound on chunk 0: `> 10,000` → 400 + AE log (`total_chunks_exceeded`). Gate fires before credential verification — no Cashu token burned on junk requests.
+- `X-Expiry-Timestamp` server-side tier validation on chunk 0: validates declared expiry falls within tier-permitted window (free: 7d, creative: 30d, max: 90d). Past timestamps → 400 `expiry_in_past`. Exceeding tier window → 400 `expiry_exceeds_tier`. Gate fires after tier resolution, before credential verification.
+- Smoke tests: all five items confirmed live. Worker version `c8a57a42`.
+- **B4 complete.**
+
 **Do not retry:**
 - DO NOT trust `X-Tier` from client — ignored since S39, tier is always resolved from Supabase.
 - DO NOT skip `X-Email` in upload requests — without it tier always resolves to `free`.
@@ -194,7 +205,9 @@
 - DO NOT store MIME type anywhere — it is a gate signal, not a record.
 - DO NOT add `application/java-archive` to the denylist — deliberate exclusion, legitimate dev use.
 - DO NOT use a URL shortener — lookup table is a privacy attack point; fragment key would be exposed to shortener service.
-
+- DO NOT use `if (rl)` to check rate limit result — `checkRateLimit` always returns an object; use `if (rl.limited)`.
+- DO NOT use `10_000` numeric separators if targeting environments that predate ES2021 — confirmed fine in Workers V8.
+- DO NOT call `getManifest` directly from handlers — use `safeGetManifest` wrapper which enforces the 64KB ceiling.
 
 ---
 
