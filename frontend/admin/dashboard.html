@@ -399,6 +399,17 @@
   }
 
   /* ─── Print / PDF export ─── */
+  /*
+   * Browser header/footer (URL bottom-left, title top-left) are controlled by the
+   * browser's "Headers and footers" checkbox — not suppressible via CSS without
+   * @page { margin: 0 } which clips content. Full branded PDF template (logo,
+   * legal footer, @page control) is scoped to S49b alongside BRANDING.md.
+   * Instruct users to uncheck "Headers and footers" in the print dialog for now.
+   */
+  @page {
+    /* Generous margins keep content clear of browser-printed headers/footers */
+    margin: 1.5cm 1cm;
+  }
   @media print {
     :root, [data-theme="carbon"] {
       --bg:             #F7F4EF;
@@ -416,7 +427,7 @@
       --c-blue:         #2563A8;
     }
     #sidebar { display: none; }
-    #main { margin-left: 0; padding: 0.5cm; }
+    #main { margin-left: 0; padding: 0; }
     .content-header, #error-banner, #modal { display: none !important; }
     .editorial-note { display: none; }
     #main::before {
@@ -427,10 +438,26 @@
       color: var(--text-secondary);
       margin-bottom: 1rem;
     }
-    .card-group { border-radius: 0; border-color: #D6D1C8; }
+    /* Keep the entire card group together where possible; allow break only between rows */
+    .card-group {
+      border-radius: 0;
+      border-color: #D6D1C8;
+      break-inside: auto; /* allow inter-row breaks */
+    }
+    /* Each row stays intact — no mid-row page breaks */
+    .row-6, .row-4 {
+      break-inside: avoid;
+      page-break-inside: avoid; /* legacy compat */
+    }
     .row-6 { grid-template-columns: repeat(2, 1fr); }
     .row-4 { grid-template-columns: repeat(2, 1fr); }
-    .snap-metric { page-break-inside: avoid; border-right: 0.5px solid #D6D1C8 !important; border-bottom: 0.5px solid #D6D1C8; }
+    /* Each cell also avoids internal breaks (belt-and-braces) */
+    .snap-metric {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      border-right: 0.5px solid #D6D1C8 !important;
+      border-bottom: 0.5px solid #D6D1C8;
+    }
     .snap-metric:nth-child(2n) { border-right: none !important; }
     .group-footer { display: none; }
     body { background: #F7F4EF !important; color: #3D3A36 !important; }
