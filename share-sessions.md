@@ -222,6 +222,24 @@
 - DO NOT apply per-UUID auth rate limit instead of per-IP — both are needed. Layer them.
 - DO NOT set download rate limit below 200/60s — legitimate 250GB transfers at 1MB chunks = 250 chunks, multiple concurrent downloads possible.
 
+### S42c — UUID-bound credential issuance
+**Commit:** c053cbc
+
+- `EXPIRY_WINDOWS` constant added to `index.js` — canonical tier expiry values (free: 604800s, creative: 2592000s, max: 7776000s). Must stay in sync with `EXPIRY_MAX_SECONDS` in `handleUpload`.
+- `computeCommitment(uuid, tier, expiryWindow)` helper — `SHA256(uuid:tier:window)` as hex. Deterministic, nothing stored.
+- `handleCredentialIssue` generates UUID server-side via `crypto.randomUUID()`. Computes commitment. Returns `{ signed_point, mint_pubkey, allocation_bytes, uuid, issued_tier, commitment }`.
+- `handleUpload` chunk 0: reads `X-Credential-Commitment` + `X-Issued-Tier` headers. Recomputes expected commitment, constant-time compare. 401 + AE log (`credential_uuid_mismatch` / `credential_commitment_missing`) on failure. Fires before credential verification — no Supabase call on farming attempts.
+- CORS `Allow-Headers` updated: `X-Credential-Commitment`, `X-Issued-Tier` added.
+- Frontend (`src/index.njk`): removed `crypto.randomUUID()` call. UUID read from issue response. Hard throws if `uuid`, `commitment`, or `issued_tier` absent. Chunk 0 headers gain `X-Credential-Commitment` and `X-Issued-Tier`.
+- `waitForTurnstile` function declaration restored — had been missing since S36b, leaving orphaned top-level code that caused `SyntaxError: Unexpected token '}'` at line 1303, breaking the entire frontend script. Pre-existing bug, discovered during S42c smoke test.
+- Smoke test: upload ✓, share link ✓, download ✓. UUID in share link sourced from Worker confirmed.
+- Cross-transfer farming vector closed at Worker layer. B8 Rust mint (NUT-20) is the long-term replacement.
+
+**Do not retry:**
+- DO NOT store UUID→credential binding in KV or Supabase — binding is in the cryptographic commitment.
+- DO NOT generate UUID client-side — Worker generates it at `/credential/issue`.
+- DO NOT use `issued_tier` for cap enforcement — cap uses `resolvedTier` from Supabase. `issued_tier` is commitment-only.
+
 ---
 
 ### S42c — UUID-bound credential issuance

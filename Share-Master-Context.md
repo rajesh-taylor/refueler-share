@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.5 | **Last updated:** S42a · 22 July 2026
+> **Version:** 2.6 | **Last updated:** S42a · 22 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -156,6 +156,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | URL shortener for share links | Lookup table is a privacy attack point; fragment key exposed to shortener service |
 | `if (rl)` to check rate limit | `checkRateLimit` returns object — always truthy; use `if (rl.limited)` |
 | `getManifest()` direct from handlers | Use `safeGetManifest()` wrapper — enforces 64KB manifest ceiling |
+| Generate UUID client-side | Worker generates UUID at /credential/issue since S42c |
+| `if (rl)` to check rate limit | `checkRateLimit` returns object — always truthy; use `if (rl.limited)` |
 
 ---
 
@@ -177,11 +179,11 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S41 | `b2a4ba0` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
 | S42a | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. |
 | S42b | 18d85351 | Per-UUID auth rate limit. Download rate limiting (300/60s). Upload continuation expiry confirmed pre-existing. Chunk count manipulation defence. |
-| S42c | pending | UUID-bound credential issuance. Worker generates UUID at `/credential/issue`. Blind sig commits to H(uuid‖tier‖expiry_window). Frontend consumes UUID from response. |
+| S42c | c053cbc | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
 | S42d | pending | Free tier hardening review. Turnstile nonce binding assessment. Residual abuse exposure documented. |
 | S42e | pending | Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff. |
 
-**Next: S42b — rate limiting + upload integrity hardening.**
+**Next: S42d — Free tier hardening review.**
 ---
 
 ## Roadmap
