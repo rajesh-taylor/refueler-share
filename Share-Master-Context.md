@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 2.7 | **Last updated:** S42d · 22 July 2026
+> **Version:** 2.8 | **Last updated:** S42d close · 22 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -106,7 +106,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Turnstile: fail-closed on any error.
 - Rate limits (STATUS_KV, no new resources): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s. All 429s logged to AE.
 - `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
-- Wrangler updated to 4.112.0. ✓
+- Wrangler updated to 4.113.0. ✓
 
 **Regulatory (UK):**
 - Refueler cannot operate as an e-money issuer without FCA authorisation.
@@ -167,7 +167,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B4 Security hardening — S42a complete. S42b · S42c · S42d · S42e remaining.**
+**B4 Security hardening — S42d complete. S42e remaining (audit pass, no deploy).**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -177,15 +177,14 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S36 | `b877c76` | Rate limiting: `ratelimit.js`, 3 endpoints, KV-backed. |
 | S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
 | S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell (p95+p99+success+churn), row 3 3-cell (free users, client errors, lightning deferred B7). |
-| S38 | `20da7d4` | `client_errors_24h` AE query live. Three rogue secrets deleted. Wrangler 4.112.0. |
+| S38 | `20da7d4` | `client_errors_24h` AE query live. Three rogue secrets deleted. Wrangler 4.113.0. |
 | S39 | `ab4fc98` | Server-side tier enforcement: X-Email Supabase lookup, 10MB chunk cap, KV byte counter per UUID. |
 | S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 on missing/denied type. AE logged. |
 | S41 | `b2a4ba0` | UUID format validation (RFC 4122) in upload + download. Chunk bounds check in download. Both gates pre-backend. |
 | S42a | `c8a57a42` | `handleLogError` truthy fix. Filename bidi sanitisation. 64KB manifest cap (`safeGetManifest`). `X-Total-Chunks` ≤ 10,000. `X-Expiry-Timestamp` tier validation. |
-| S42b | 18d85351 | Per-UUID auth rate limit. Download rate limiting (300/60s). Upload continuation expiry confirmed pre-existing. Chunk count manipulation defence. |
-| S42c | c053cbc | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
-| S42d | pending | Free tier hardening review. Turnstile nonce binding implemented (`tt_nonce:` KV, 600s TTL). Safari Turnstile polling fallback. Residual abuse documented. |
-| S42e | pending | Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff. |
+| S42b | `18d85351` | Per-UUID auth rate limit. Download rate limiting (300/60s). Upload continuation expiry confirmed pre-existing. Chunk count manipulation defence. |
+| S42c | `c053cbc` | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
+| S42d | `0b32e69` | Turnstile nonce binding (`tt_nonce:` KV, 600s TTL). Safari polling fallback. Wrangler 4.113.0. Farming signal card scoped to B5. |
 
 **Next: S42e — Full B4 audit pass. Marketing claims. Critical chain S34→S42→S78 closed. B5 handoff.**
 ---
@@ -198,7 +197,7 @@ Core S19–S100 · Buffer S101–S120.
 |-------|----------|-------|
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
-| **B4** | S34–S42 | Security hardening ← current (S42b–e remaining) |
+| **B4** | S34–S42 | Security hardening ← current (S42e remaining — audit pass only, no deploy) |
 | B5 | S43–S50 | Design full pass |
 | B6 | S51–S58 | Testing infrastructure |
 | B7 | S59–S68 | Lightning/Blink + anonymous paid tier (S64, highest design risk) |
@@ -269,6 +268,7 @@ Yearly = 10 months price.
 - Brand audit: BRANDING.md against share UI, Carbon gold edging
 - Modal full build — own session allocation in B5
 - Named transfers: user-supplied label in URL fragment only, never stored server-side. Paid tier differentiator. Plan in B5 or B7.
+- Farming signal card (dashboard): `credentials_issued_24h` ÷ `uploads_completed_24h` ratio. Normal band 0.8–1.2. Alarm threshold >3.0 (highlight amber). Both numerator and denominator derivable from existing AE data — no new schema. Add alongside existing row 3 cells or as a fourth row 3 cell next to client errors.
 
 ---
 

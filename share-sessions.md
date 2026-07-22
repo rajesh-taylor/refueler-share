@@ -266,13 +266,14 @@
 ---
 
 ### S42d — Free tier hardening review
-**Commit:** pending
+**Commit:** `0b32e69` · Wrangler 4.113.0
 
 **Delivered:**
 - Full attack surface review completed (S34–S42c). See assessment table in session notes.
 - Turnstile nonce binding implemented in `handleCredentialIssue`. SHA-256 one-way hash of Turnstile token stored in KV as `tt_nonce:{hash}` with 600s TTL. 429 + AE log (`turnstile_nonce_replay`) on second use. Fails open on KV error. Closes token-replay amplifier: one Turnstile solve → at most one credential.
 - Safari / mobile Safari Turnstile fix implemented in `src/index.njk`. `renderTurnstile()` now polls for `window.turnstile` every 200ms up to 15s when called before the script is ready. `pendingTurnstileRender` flag prevents double-render if both `onTurnstileLoad` callback and poll fire. `reportError('turnstile_load', ...)` on 15s timeout for visibility. Upload button now enables correctly on all browsers.
 - Residual abuse exposure documented (see below).
+- Farming signal card scoped to B5 dashboard: `credentials_issued_24h / uploads_completed_24h` ratio, normal band 0.8–1.2, alarm >3.0. Derivable from existing AE data, no new schema required.
 **Residual abuse exposure (accepted):**
 - IP-rotation farming: attacker requests fresh credential per IP, each requiring a fresh Turnstile solve + rate limit slot. Cost per credential = one bot-challenged Turnstile interaction. Realistic throughput very low. Business risk, not security risk. Architectural fix: B8 UUID-bound Rust mint (NUT-20 quote signatures).
 - X-Email spoofing for paid tiers: attacker sends arbitrary email to claim paid tier. No live impact — paid tiers greyed out, Supabase lookup fails unless email matches active subscriber. Architectural fix: B7 signed transfer token.
