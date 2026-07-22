@@ -339,6 +339,9 @@
 3. Sidebar width 200px tight — try 240px to allow larger type without wrapping.
 4. Sidebar font sizes slightly small — uplift all sidebar type ~1-2 steps once width is resolved.
 
+**S45 snag logged (fix in S47 or S52 sweep):**
+- `formatBytes` truncation: values under 1 GB → 1dp max (`202 KB`, `1.2 GB`, `45.3 MB`). Values ≥ 1 TB → 2dp. Prevents `sm-value` overflow at 6-column width. One-line change to `formatBytes` helper in `dashboard.html`.
+
 **Do not retry:**
 - DO NOT reintroduce sticky top header — sidebar owns chrome now.
 - DO NOT bind refresh via both onclick and addEventListener.
