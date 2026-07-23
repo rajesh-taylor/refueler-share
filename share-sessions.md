@@ -476,6 +476,20 @@
 - Back-nav added to `upgrade.njk`: same `.upgrade-back-link` ghost button pattern above `.page-header`, links to `/index.html`.
 - QR library swapped: `qrcodejs` (canvas, blurs at retina) → `qr-creator` (SVG, mathematically sharp at any DPR). CDN: `cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js`. `QrCreator.render({ text, radius: 0, ecLevel: 'M', fill, background, size: 200 }, svgEl)`. CSS updated: `#qr-wrap svg { width: 200px; height: 200px; }` — no `!important` canvas override needed.
 
+### S47d — QR fix, receiver sign-off, drop zone, footer, Turnstile
+**Commits:** `242444d` → `01d31bc` → `8496539` → `1749c34` → `f1efbc8` → `3eb4ec4` · 23 July 2026
+
+- QR race fixed: `qr-creator` moved from `extraHead` to blocking `<script>` immediately before `<script type="module">`. Dynamic load guard added to `showSharePanel` — if `QrCreator` absent on `window`, injects script tag and renders on load. QR deferred indefinitely as non-priority.
+- Drop zone multi-file rejection: `drop` handler checks `files.length > 1` before `handleFileSelection`. Amber `--c-amber` message inline below drop zone. Cleared on valid single-file drop or file input change.
+- Post-download sign-off (colophon): shown after download completes. Single line — Source Serif 4 weight 400, 18px/17px mobile, `--text-secondary`, gold left border `3px solid var(--accent)`, `margin-top: 7.2rem` (4 line gaps). "Part of the Refueler ecosystem · Your data. Your rules. · refueler.io". No horizontal rule. `dl-detail` hidden at completion — sign-off is the sole completion signal.
+- Footer: `src/_includes/footer.njk` — removed App, Editorial, Privacy main-domain links. Status + Upgrade only (both subdomain). Affects index, status, upgrade pages.
+- Turnstile: explicit `theme: isDarkMode ? 'dark' : 'light'` based on `document.documentElement.dataset.theme`. `.turnstile-wrap` left-aligned (`justify-content: flex-start`).
+
+**Do not retry:**
+- DO NOT use `classList.contains('carbon-mode')` for theme detection anywhere — use `dataset.theme === 'carbon'`.
+- DO NOT add main-domain links to `footer.njk` — subdomain footer is Status + Upgrade only.
+- DO NOT auto-trigger download on share link open — receiver landing page (S47c) replaces this.
+
 **B5 resequencing (23 July 2026):**
 - Principle adopted: finish upload→share→receive loop end-to-end before further polish. Test early, don't build untested surfaces.
 - New sequence: S47c (receiver landing page) → S47d (receiver snag + single-file UX) → S48 (maintenance + theme persistence) → S49 (gold edging + brand sweep) → S52 (B5 close).

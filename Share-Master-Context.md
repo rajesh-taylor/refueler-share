@@ -264,7 +264,7 @@ Principle: finish the upload→share→receive loop end-to-end and test it befor
 | S47a ✅ | Upload/download UX I | FREE_EXPIRY, progress smooth, QR retina, upgrade nudge, status editorial. | S |
 | S47b ✅ | QR + polish | QR 200px SVG (qr-creator), 2-col button grid, serif integrity notes, ghost back links. | S |
 | S47c | Receiver landing page | Info card on link open: filename, size, expiry, passphrase indicator, Download button. Replaces auto-trigger. Pure frontend — no Worker changes. | M |
-| S47d | Receiver snag + single-file UX | Snag sweep from S47c. Drop zone explicit single-file-only rejection with clear message. | S |
+| S47d | `242444d`→`3eb4ec4` | QR guard, drop zone rejection, receiver colophon, footer subdomain-only, Turnstile explicit theme. | S |
 | S48 | Maintenance notification + theme persistence | KV-controlled modal on index.html + Paper/Carbon cookie scoped to `.refueler.io`. Privacy copy update. Two small items, one session. | S |
 | S49 | Carbon gold edging + brand sweep | `--inset-rule: #C8A96E` throughout Carbon. Card borders, rule lines, active states. Share UI vs BRANDING.md. Source Serif 4 editorial moments. | M |
 | S52 | B5 close | Snag sweep, QR logo snag note (deferred), context files, version bump to 4.0, B6 brief. | S |
@@ -276,6 +276,7 @@ Principle: finish the upload→share→receive loop end-to-end and test it befor
 - Status tile for admin dashboard: add at S52 snag sweep.
 - X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review B7.
 - Nav snag (Upgrade link breaking on `refueler.io`): deferred, review B5 index iteration.
+- Turnstile widget width: left-aligned but still fixed-width Cloudflare iframe — A/B test wider treatment in a later session.
 
 **B6 additions (folder upload):**
 - S53: Folder upload I — fflate integration, client-side zip, zip progress UI, single blob to existing upload flow.
@@ -287,7 +288,8 @@ Principle: finish the upload→share→receive loop end-to-end and test it befor
 - DO NOT omit `{% include "shared-styles.njk" %}` from any Eleventy page.
 - DO NOT use `qrcodejs` — use `qr-creator` (SVG, cdnjs).
 - Paid tier cards remain greyed out throughout B5. Re-enable only on Rajesh's explicit instruction at B7 close.
-
+- DO NOT add main-domain links to footer.njk — subdomain-only (Status + Upgrade).
+- Colophon sign-off: Source Serif 4 weight 400, 18px, gold left border, 7.2rem top margin. Single line. No horizontal rule.
 ---
 
 ## Tiers
