@@ -274,21 +274,25 @@ activePage: ""
   .upgrade-nudge-link:hover { text-decoration: underline; }
 
   /* ── Turnstile ───────────────────────────────────────────────────── */
-  .turnstile-wrap { display: flex; justify-content: center; }
+  .turnstile-wrap { display: flex; justify-content: flex-start; }
+  .turnstile-wrap > div { width: 100%; max-width: 100%; }
 
-  /* ── Post-download sign-off — editorial standfirst register ─────── */
+  /* ── Post-download sign-off — colophon register ─────────────────── */
   #dl-signoff {
-    padding: 12px 0 0;
-    border-top: 1px solid var(--border);
-    margin-top: 8px;
+    margin-top: 7.2rem;
+    border-left: 3px solid var(--accent);
+    padding: 0 0 0 1rem;
   }
   .dl-signoff-secondary {
     font-family: var(--serif);
-    font-weight: 300;
-    font-size: 0.9375rem;
-    line-height: 1.65;
+    font-weight: 400;
+    font-size: 18px;
+    line-height: 1.8;
     color: var(--text-secondary);
     margin: 0;
+  }
+  @media (max-width: 600px) {
+    .dl-signoff-secondary { font-size: 17px; }
   }
 
   /* ── Drop zone multi-file rejection ─────────────────────────────── */
@@ -623,9 +627,10 @@ function renderTurnstile() {
     turnstileWidgetId = null;
   }
   container.innerHTML = '';
+  const isDarkMode = document.documentElement.dataset.theme === 'carbon';
   turnstileWidgetId = window.turnstile.render(container, {
     sitekey: '0x4AAAAAAD0N7GlHlCRuWITr',
-    theme: 'auto',
+    theme: isDarkMode ? 'dark' : 'light',
     callback: function(token) {
       turnstileToken = token;
       updateUploadBtn();
