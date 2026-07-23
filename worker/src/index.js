@@ -877,9 +877,10 @@ async function handleMeta(request, env, uuid) {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
   }
-  return new Response(JSON.stringify({
+return new Response(JSON.stringify({
     file_name:            manifest.file_name        ?? null,
     total_bytes:          manifest.total_bytes       ?? null,
+    total_chunks:         manifest.total_chunks      ?? null,
     expiry_timestamp:     manifest.expiry_timestamp  ?? null,
     passphrase_protected: !!manifest.p2sh_secret_hash,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
