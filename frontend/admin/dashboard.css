@@ -276,7 +276,8 @@ body {
 }
 .snap-metric:last-child { border-right: none; }
 .snap-metric:hover { background: var(--surface-raised); }
-.snap-metric:focus-visible {
+.snap-metric:focus-visible,
+.snap-metric.modal-active {
   outline: 1.5px solid var(--accent);
   outline-offset: -1.5px;
   background: var(--surface-raised);
@@ -300,7 +301,7 @@ body {
 .sm-value {
   font-family: var(--heading);
   font-weight: 700;
-  font-size: 2rem;
+  font-size: 1.7rem;
   color: var(--text-primary);
   line-height: 1.05;
   margin-top: 0.6rem;
@@ -425,14 +426,6 @@ body {
   border-radius: 10px; padding: 24px 28px; margin-bottom: 32px;
   font-family: var(--sans); font-size: 0.9rem; color: var(--c-amber);
   line-height: 1.6;
-}
-
-/* ── Data source unavailable banner (partial outage — one source down) */
-.modal-datasource-warn {
-  background: var(--c-amber-bg); border: 0.5px solid var(--c-amber);
-  border-radius: 6px; padding: 10px 16px; margin: 12px 0 20px;
-  font-family: var(--sans); font-size: 0.8rem; color: var(--c-amber);
-  line-height: 1.5;
 }
 
 /* ── Sparkline stub (SVG/CSS only — never Canvas; Canvas breaks @media print) */

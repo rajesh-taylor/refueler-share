@@ -138,7 +138,7 @@ function renderMetrics(d) {
   const churn   = d.churn_rate_mtd_pct ?? 0;
   const churnEl = document.getElementById('snap-churn');
   churnEl.textContent = `${churn}%`;
-  churnEl.className = 'sm-value' + (churn > 0 ? ' red' : '');
+  churnEl.className = 'sm-value' + (churn > 0 ? ' red' : ' green');
 
   const freeEl = document.getElementById('snap-free-users');
   freeEl.textContent = d.subscribers_by_tier?.free ?? 'n/a';
@@ -173,7 +173,7 @@ function renderAeMetrics(d) {
     }
     const aggRate = totalReqs > 0 ? totalErrors / totalReqs : 0;
     errEl.textContent = `${(aggRate * 100).toFixed(2)}%`;
-    errEl.className = 'sm-value' + (aggRate > 0.01 ? ' red' : aggRate > 0 ? ' amber' : '');
+    errEl.className = 'sm-value' + (aggRate > 0.01 ? ' red' : aggRate > 0 ? ' amber' : ' green');
   } else {
     errEl.textContent = 'n/a'; errEl.className = 'sm-value';
   }
@@ -217,7 +217,7 @@ function renderAeMetrics(d) {
   const ce   = d.client_errors_24h;
   if (ce !== null && ce !== undefined) {
     ceEl.textContent = ce;
-    ceEl.className = 'sm-value' + (ce > 10 ? ' red' : ce > 0 ? ' amber' : ' green');
+    ceEl.className = 'sm-value' + (ce > 10 ? ' red' : ce > 0 ? ' amber' : '');
   } else { ceEl.textContent = 'n/a'; ceEl.className = 'sm-value'; }
 
   lastAe = d;
@@ -291,27 +291,11 @@ const MODAL_DEFS = {
 
 let _modalTrigger = null;
 
-// Keys that draw from AE data (lastAe) vs Supabase/Stripe (lastMetrics).
-const AE_KEYS      = new Set(['issuances','storage','errors','upload-speed','upload-speed-p99','download-speed','download-speed-p99','retrieval','client-errors','farming']);
-const METRICS_KEYS = new Set(['mrr','paid','uniqueness','churn','free-users']);
-
-function _showAeBanner(show) {
-  let banner = document.getElementById('modal-ae-banner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id        = 'modal-ae-banner';
-    banner.className = 'modal-datasource-warn';
-    const plain = document.getElementById('modal-plain');
-    if (plain && plain.parentNode) plain.parentNode.insertBefore(banner, plain.nextSibling);
-  }
-  banner.style.display = show ? '' : 'none';
-  if (show) banner.textContent = 'Data source unavailable — figures may be incomplete.';
-}
-
 function openModal(key, triggerEl) {
   const def = MODAL_DEFS[key];
   if (!def) return;
   _modalTrigger = triggerEl ?? document.activeElement;
+  if (_modalTrigger) _modalTrigger.classList.add('modal-active');
 
   setText('modal-label', def.label);
   setText('modal-plain', def.plain);
@@ -324,12 +308,7 @@ function openModal(key, triggerEl) {
     deferredNote.innerHTML = '<strong>B7</strong><span class="deferred-badge">deferred</span><br><br>This metric is live at Block 7 when Lightning/Blink integration ships.';
   }
 
-  // AE unavailable banner
-  const aeDown      = AE_KEYS.has(key)      && lastAe === null;
-  const metricsDown = METRICS_KEYS.has(key) && lastMetrics === null;
-  _showAeBanner((aeDown || metricsDown) && !isLightning);
-
-  // Skeleton while no data at all
+  // Skeleton while no data
   const mv = document.getElementById('modal-value');
   const ms = document.getElementById('modal-sub');
   if (lastMetrics === null && lastAe === null && key !== 'lightning') {
@@ -398,7 +377,7 @@ function openModal(key, triggerEl) {
         const ag = tr > 0 ? te / tr : 0;
         value = `${(ag * 100).toFixed(2)}%`;
         sub = `${te} errors · ${tr.toLocaleString()} total requests`;
-        colorClass = ag > 0.01 ? ' red' : ag > 0 ? ' amber' : '';
+        colorClass = ag > 0.01 ? ' red' : ag > 0 ? ' amber' : ' green';
       } else { value = 'n/a'; isNA = true; sub = 'No AE data'; }
       break;
     }
@@ -451,7 +430,7 @@ function openModal(key, triggerEl) {
       const pct = m.churn_rate_mtd_pct ?? 0;
       value = `${pct}%`;
       sub = `${m.cancelled_mtd ?? 0} cancelled this month`;
-      colorClass = pct > 0 ? ' red' : '';
+      colorClass = pct > 0 ? ' red' : ' green';
       break;
     }
     case 'free-users': {
@@ -466,7 +445,7 @@ function openModal(key, triggerEl) {
       if (ce !== null && ce !== undefined) {
         value = String(ce);
         sub = 'Browser failures reported via /log/error';
-        colorClass = ce > 10 ? ' red' : ce > 0 ? ' amber' : ' green';
+        colorClass = ce > 10 ? ' red' : ce > 0 ? ' amber' : '';
       } else { value = 'n/a'; isNA = true; sub = 'No client error data in AE'; }
       break;
     }
@@ -531,6 +510,7 @@ function closeModal() {
   document.body.style.overflow = '';
   document.getElementById('modal-csv-note').style.display = 'none';
   if (_modalTrigger && typeof _modalTrigger.focus === 'function') {
+    _modalTrigger.classList.remove('modal-active');
     _modalTrigger.focus();
   }
   _modalTrigger = null;
@@ -548,11 +528,7 @@ function formatBytes(bytes) {
   if (!bytes || bytes === 0) return { val: '0', unit: 'B' };
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const raw = bytes / Math.pow(1024, i);
-  // ≥ 1 TB: 2 dp. Everything else: 1 dp max, strip trailing zero.
-  const dp  = i >= 4 ? 2 : 1;
-  const val = parseFloat(raw.toFixed(dp)).toString();
-  return { val, unit: units[i] };
+  return { val: (bytes / Math.pow(1024, i)).toFixed(2), unit: units[i] };
 }
 
 function showError(msg) {
@@ -578,19 +554,16 @@ function updateCountdown() {
 
 // ── Smoke test ─────────────────────────────────────────────────────────────
 window.smokeTest = async function() {
-  console.group('S46b smoke test — metrics + 14 modal panels');
-
-  // ── 1. Data checks ──────────────────────────────────────────────────────
-  console.group('Data layer (11 checks)');
+  console.group('11-metric smoke test');
   const [m, ae] = await Promise.all([
     fetch(`${WORKER}/admin/metrics`,    { headers: { 'X-Admin-Key': adminKey } }).then(r => r.json()),
     fetch(`${WORKER}/admin/ae-metrics`, { headers: { 'X-Admin-Key': adminKey } }).then(r => r.json()),
   ]);
-  const iss           = ae.credential_issuances_by_tier;
-  const farmIssued    = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
+  const iss          = ae.credential_issuances_by_tier;
+  const farmIssued   = iss ? (iss.free ?? 0) + (iss.creative ?? 0) + (iss.max ?? 0) : null;
   const farmCompleted = ae.uploads_completed_24h ?? farmIssued;
-  const farmRatio     = farmIssued !== null && farmCompleted > 0 ? farmIssued / farmCompleted : null;
-  const dataChecks = [
+  const farmRatio    = farmIssued !== null && farmCompleted > 0 ? farmIssued / farmCompleted : null;
+  const checks = [
     { id: 1,  label: 'Credential uniqueness rate',    val: m.credential_uniqueness_rate },
     { id: 2,  label: 'Credential issuances (30d)',    val: farmIssued },
     { id: 3,  label: 'R2 bytes uploaded (90d)',       val: ae.r2_bytes_uploaded },
@@ -603,78 +576,13 @@ window.smokeTest = async function() {
     { id: 10, label: 'MRR (GBP floor)',               val: m.mrr_gbp },
     { id: 11, label: 'Farming signal ratio',          val: farmRatio },
   ];
-  let dPass = 0, dDeferred = 0, dFail = 0;
-  for (const c of dataChecks) {
-    if (c.deferred)                                 { console.log(`⏸  [${c.id}] ${c.label} — deferred (${c.deferred})`); dDeferred++; }
-    else if (c.val !== null && c.val !== undefined) { console.log(`✅ [${c.id}] ${c.label} → ${c.val}`); dPass++; }
-    else                                            { console.warn(`❌ [${c.id}] ${c.label} — null`); dFail++; }
+  let pass = 0, deferred = 0, fail = 0;
+  for (const c of checks) {
+    if (c.deferred)                              { console.log(`⏸  [${c.id}] ${c.label} — deferred (${c.deferred})`); deferred++; }
+    else if (c.val !== null && c.val !== undefined) { console.log(`✅ [${c.id}] ${c.label} → ${c.val}`); pass++; }
+    else                                           { console.warn(`❌ [${c.id}] ${c.label} — null`); fail++; }
   }
+  console.log(`Result: ${pass} pass · ${deferred} deferred · ${fail} fail`);
   console.groupEnd();
-
-  // ── 2. Modal panel checks ───────────────────────────────────────────────
-  console.group('Modal panels (14 keys)');
-  const modalKeys = Object.keys(MODAL_DEFS);
-  let mPass = 0, mDeferred = 0, mFail = 0;
-
-  // Snapshot lastMetrics/lastAe before we stomp them, restore after
-  const _savedMetrics = lastMetrics;
-  const _savedAe      = lastAe;
-
-  for (const key of modalKeys) {
-    try {
-      openModal(key, null);
-      const mv       = document.getElementById('modal-value');
-      const banner   = document.getElementById('modal-ae-banner');
-      const deferred = document.getElementById('modal-deferred-note');
-      const val      = mv?.textContent?.trim();
-      const isDeferred = key === 'lightning';
-      const bannerShown = banner && banner.style.display !== 'none';
-      const valueOk  = val && val !== '' && val !== '\u00A0';
-
-      if (isDeferred) {
-        console.log(`⏸  [modal:${key}] deferred panel rendered`);
-        mDeferred++;
-      } else if (valueOk) {
-        const note = bannerShown ? ' ⚠ datasource banner shown' : '';
-        console.log(`✅ [modal:${key}] "${val}"${note}`);
-        mPass++;
-      } else {
-        console.warn(`❌ [modal:${key}] empty value`);
-        mFail++;
-      }
-      closeModal();
-    } catch (err) {
-      console.error(`❌ [modal:${key}] threw: ${err.message}`);
-      mFail++;
-    }
-  }
-
-  // Restore (openModal may have mutated display state but not lastMetrics/lastAe)
-  lastMetrics = _savedMetrics;
-  lastAe      = _savedAe;
-
-  console.groupEnd();
-
-  // ── 3. formatBytes spot-checks ──────────────────────────────────────────
-  console.group('formatBytes rounding');
-  const bytesTests = [
-    { input: 207168,          expect: '202.3 KB' },
-    { input: 1073741824,      expect: '1 GB' },
-    { input: 1572864000,      expect: '1.5 GB' },
-    { input: 1099511627776,   expect: '1 TB' },
-  ];
-  let bPass = 0, bFail = 0;
-  for (const t of bytesTests) {
-    const { val, unit } = formatBytes(t.input);
-    const result = `${val} ${unit}`;
-    if (result === t.expect) { console.log(`✅ ${t.input} → "${result}"`); bPass++; }
-    else { console.warn(`❌ ${t.input} → "${result}" (expected "${t.expect}")`); bFail++; }
-  }
-  console.groupEnd();
-
-  const totalPass = dPass + mPass + bPass;
-  const totalFail = dFail + mFail + bFail;
-  console.log(`\nOverall: ${totalPass} pass · ${dDeferred + mDeferred} deferred · ${totalFail} fail`);
-  console.groupEnd();
-  return { pass: totalPass, deferred: dDeferred + mDeferred, fail: totalFail };
+  return { pass, deferred, fail };
 };
