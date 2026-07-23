@@ -649,6 +649,30 @@
     .dl-signoff-secondary { font-size: 17px; }
   }
 
+  /* ── Download compatibility warning ─────────────────────────────────── */
+  .dl-compat-warn {
+    display: none;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    margin-top: 10px;
+  }
+  .dl-compat-warn.visible { display: block; opacity: 1; }
+  .dl-compat-warn.amber {
+    background: var(--c-amber-bg);
+    border: 0.5px solid var(--c-amber);
+  }
+  .dl-compat-warn.red {
+    background: var(--c-red-bg);
+    border: 0.5px solid var(--c-red);
+  }
+  .dl-compat-warn strong { font-weight: 500; }
+
   /* ── Receiver landing card ──────────────────────────────────────── */
   #receiver-card { display: none; flex-direction: column; gap: 18px; }
   .rc-file-row {
@@ -843,6 +867,9 @@
         <span class="rc-passphrase-badge">🔐 Password protected</span>
       </div>
       <button class="btn btn-primary" id="rc-download-btn">Download</button>
+      <!-- Capability warning — shown when browser lacks FSAA and file is large.
+           Populated by JS based on 'showSaveFilePicker' in window + meta.total_bytes. -->
+      <div class="dl-compat-warn" id="dl-compat-warn" role="alert" aria-live="polite"></div>
     </div>
 
     <!-- Unlock screen (download flow — passphrase gated) -->
@@ -960,6 +987,7 @@ const dlPct            = $('dl-pct');
 const dlBar            = $('dl-bar');
 const dlSignoff        = $('dl-signoff');
 const dropMultiMsg     = $('drop-multi-msg');
+const dlCompatWarn     = $('dl-compat-warn');
 const receiverCard     = $('receiver-card');
 const rcFileName       = $('rc-file-name');
 const rcSize           = $('rc-size');
@@ -1319,12 +1347,36 @@ async function enterDownloadMode({ uuid, key, iv }) {
 
   receiverCard.style.display = 'flex';
 
+  // ── Show capability warning on receiver card if FSAA is unavailable ─────
+  // Gate: 'showSaveFilePicker' in window — no user-agent sniffing.
+  // Thresholds: ≤300 MB silent, 300 MB–1 GB amber, >1 GB red.
+  // Warning appears on the receiver card before the user clicks Download —
+  // gives them a chance to switch to Chrome rather than discovering mid-download.
+  const WARN_AMBER_BYTES = 300 * 1024 * 1024;  // 300 MB
+  const WARN_RED_BYTES   = 1024 * 1024 * 1024; // 1 GB
+  const hasFSAA = typeof showSaveFilePicker !== 'undefined';
+  const totalBytes = meta.total_bytes || 0;
+
+  if (!hasFSAA && totalBytes > WARN_AMBER_BYTES) {
+    const isRed = totalBytes > WARN_RED_BYTES;
+    dlCompatWarn.className = `dl-compat-warn ${isRed ? 'red' : 'amber'}`;
+    dlCompatWarn.innerHTML = `<strong>Streaming downloads aren't supported in this browser</strong> — this transfer may be slow or fail for large files. Chrome gives the best experience.`;
+    // Force reflow so the transition fires
+    dlCompatWarn.offsetHeight; // eslint-disable-line no-unused-expressions
+    dlCompatWarn.classList.add('visible');
+  }
+
   // ── Wire Download button ─────────────────────────────────────────────────
+  // FSAA click handler order (locked):
+  // showSaveFilePicker() MUST be the first async operation — Chrome rejects
+  // picker calls that occur after awaited work (non-gesture context).
+  // On passphrase-protected transfers: the Download button click is a fresh
+  // gesture after the unlock flow. FSAA on that click is valid.
   rcDownloadBtn.addEventListener('click', async () => {
     receiverCard.style.display = 'none';
 
     if (isPassphraseProtected) {
-      // Show passphrase unlock screen; on success, proceed to startDownload.
+      // Show passphrase unlock screen; on success, route through capability gate.
       unlockScreen.style.display = 'flex';
       unlockBtn.addEventListener('click', async () => {
         const passphrase = unlockInput.value.trim();
@@ -1346,7 +1398,8 @@ async function enterDownloadMode({ uuid, key, iv }) {
           downloadToken = token;
           unlockInput.value = '';
           unlockScreen.style.display = 'none';
-          await startDownload(uuid);
+          // Unlock button click is a fresh user gesture — FSAA is valid here.
+          await startDownloadGated(uuid, meta);
         } catch {
           unlockError.textContent = 'Network error. Try again.';
           unlockBtn.disabled = false;
@@ -1354,27 +1407,205 @@ async function enterDownloadMode({ uuid, key, iv }) {
       });
       unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
     } else {
-      await startDownload(uuid);
+      await startDownloadGated(uuid, meta);
     }
   }, { once: true });
 }
 
-async function startDownload(uuid) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Download capability gate — routes to FSAA stream or Blob fallback
+// ─────────────────────────────────────────────────────────────────────────────
+async function startDownloadGated(uuid, meta) {
+  const hasFSAA = typeof showSaveFilePicker !== 'undefined';
+
+  if (hasFSAA) {
+    // ── FSAA path ───────────────────────────────────────────────────────────
+    // showSaveFilePicker MUST be first — it must execute synchronously within
+    // the user gesture before any await. Chrome rejects it after async work.
+    const fileName = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
+    let fileHandle;
+    try {
+      fileHandle = await showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'File', accept: { 'application/octet-stream': [] } }],
+      });
+    } catch (e) {
+      // User cancelled the picker — abort silently, restore receiver card.
+      if (e.name === 'AbortError') {
+        receiverCard.style.display = 'flex';
+        return;
+      }
+      // showSaveFilePicker threw unexpectedly — fall back to Blob path.
+      reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
+      await startDownload(uuid, meta);
+      return;
+    }
+    await startDownloadStream(uuid, meta, fileHandle);
+  } else {
+    // ── Blob fallback path ──────────────────────────────────────────────────
+    await startDownload(uuid, meta);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FSAA streaming download — pipeline depth 2, per-chunk retry (3×, exp backoff)
+// Memory resident at any time: at most 2 chunks of ciphertext + 1 of plaintext.
+// ─────────────────────────────────────────────────────────────────────────────
+async function startDownloadStream(uuid, meta, fileHandle) {
+  const totalChunks = meta.total_chunks;
+  if (!totalChunks || totalChunks < 1) {
+    showDownloadError('Transfer metadata is incomplete. Please try again.');
+    return;
+  }
+
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = 'Downloading';
+  dlPct.textContent = '0%';
+  dlBar.style.width = '0%';
+
+  let writable;
+  try {
+    writable = await fileHandle.createWritable();
+  } catch (e) {
+    showDownloadError('Could not open the save location. Please try again.');
+    return;
+  }
+
+  // ── Per-chunk fetch with retry ────────────────────────────────────────────
+  // 3 attempts, exponential backoff: 1s / 2s / 4s.
+  // Abort immediately on 400 / 401 / 410 — auth/expiry failures are not transient.
+  // Retry only on network errors and HTTP 5xx.
+  async function fetchChunkWithRetry(chunkIdx) {
+    const padded = String(chunkIdx).padStart(4, '0');
+    const headers = {};
+    if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
+
+    const RETRYABLE_DELAYS = [1000, 2000, 4000];
+    let lastErr;
+
+    for (let attempt = 0; attempt <= RETRYABLE_DELAYS.length; attempt++) {
+      try {
+        const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+
+        // Hard abort on auth/expiry/client errors — no point retrying these.
+        if (res.status === 400 || res.status === 401 || res.status === 410) {
+          const err = new Error(`HTTP ${res.status}`);
+          err.fatal = true;
+          err.status = res.status;
+          throw err;
+        }
+
+        if (res.ok) return await res.arrayBuffer();
+
+        // HTTP 5xx — retryable
+        lastErr = new Error(`HTTP ${res.status}`);
+      } catch (e) {
+        if (e.fatal) throw e; // propagate hard failures immediately
+        lastErr = e;
+      }
+
+      if (attempt < RETRYABLE_DELAYS.length) {
+        await new Promise(r => setTimeout(r, RETRYABLE_DELAYS[attempt]));
+      }
+    }
+
+    // Retry exhausted
+    const err = new Error(lastErr?.message || 'Network error');
+    err.retryExhausted = true;
+    throw err;
+  }
+
+  // ── Streaming loop — pipeline depth 2 ─────────────────────────────────────
+  // Chunk N+1 is fetched concurrently while chunk N is decrypted and written.
+  // Maximum 2 ciphertext chunks in memory at any moment, regardless of file size.
+  try {
+    let nextChunkPromise = fetchChunkWithRetry(0);
+
+    for (let i = 0; i < totalChunks; i++) {
+      // Kick off the next fetch before we start the expensive decrypt of this one.
+      const ciphertextBuf = await nextChunkPromise;
+      if (i + 1 < totalChunks) {
+        nextChunkPromise = fetchChunkWithRetry(i + 1);
+      }
+
+      // AAD: 4-byte big-endian chunk index — matches encrypt path.
+      // DataView.setUint32(0, i, false) — overflow-safe for all chunk counts.
+      const aad = new Uint8Array(4);
+      new DataView(aad.buffer).setUint32(0, i, false);
+
+      let plaintext;
+      try {
+        plaintext = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: sessionIv, additionalData: aad },
+          sessionAesKey,
+          ciphertextBuf
+        );
+      } catch (e) {
+        reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`).catch(() => {});
+        // Privacy: abort() discards the incomplete FSAA temp file — no partial plaintext
+        // remains on disk after a failed transfer. Document in B9 security whitepaper.
+        await writable.abort();
+        showDownloadError('Decryption failed — wrong key or corrupted data. No partial file was saved.');
+        return;
+      }
+
+      await writable.write(new Uint8Array(plaintext));
+
+      const pct = Math.round(((i + 1) / totalChunks) * 100);
+      dlBar.style.width = pct + '%';
+      dlPct.textContent = pct + '%';
+    }
+
+    await writable.close();
+    dlStageTag.textContent = 'Complete';
+    dlBar.style.width = '100%';
+    dlPct.textContent = '100%';
+    dlSignoff.classList.remove('hidden');
+
+  } catch (e) {
+    // Report and abort — covers fetch retry exhaustion and unexpected throws.
+    reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`).catch(() => {});
+
+    try {
+      // Privacy: abort() discards the incomplete FSAA temp file — no partial plaintext
+      // remains on disk after a failed transfer. Document in B9 security whitepaper.
+      await writable.abort();
+    } catch { /* already closed or aborted */ }
+
+    if (e.status === 401) {
+      showDownloadError('Access denied. This transfer may have expired or the link is incorrect.');
+    } else if (e.status === 410) {
+      showDownloadError('This transfer has expired. The file is no longer available.');
+    } else if (e.retryExhausted) {
+      showDownloadError('Download failed after several attempts. Check your connection and try again.');
+    } else {
+      showDownloadError('Download failed. Please try again.');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Blob fallback download — retained for browsers without FSAA support.
+// Memory cost: 2× file size (ciphertext array + plaintext array) — not suitable
+// for files approaching available RAM. For large files, Chrome + FSAA is recommended.
+// Will be cleaned up in S48a-3.
+// ─────────────────────────────────────────────────────────────────────────────
+async function startDownload(uuid, meta) {
   downloadCard.classList.remove('hidden');
   dlStageTag.textContent = 'Downloading — please wait';
   dlPct.textContent = '';
   dlBar.style.width = '0%';
 
-  // ── Phase 1: fetch all chunks, updating progress bar as each arrives ──────
-  // We don't know total chunk count upfront, so we do two passes:
-  // fetch pass shows 0–50%, decrypt pass shows 50–100%.
+  const totalChunks = meta?.total_chunks;
   const chunks = [];
   let chunkIndex = 0;
-  let fileName = `refueler-${uuid.slice(0, 8)}`;
+  let fileName = meta?.file_name || `refueler-${uuid.slice(0, 8)}`;
 
-  // First, get total_chunks from manifest via a HEAD-like read of chunk 0
-  // (total_chunks not exposed directly, so we fetch greedily and track count)
-  while (true) {
+  // Fetch all chunks into memory — greedy loop, breaks on 404 if total_chunks absent,
+  // or iterates to totalChunks if available. Both paths work — manifest.total_chunks
+  // is authoritative (S48a addendum).
+  const loopBound = totalChunks || Infinity;
+  while (chunkIndex < loopBound) {
     const headers = {};
     if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
     const padded = String(chunkIndex).padStart(4, '0');
@@ -1385,28 +1616,25 @@ async function startDownload(uuid) {
       showDownloadError(`Download failed (${res.status}).`);
       return;
     }
-    if (chunkIndex === 0) {
-      const headerName = res.headers.get('X-File-Name');
-      if (headerName) fileName = headerName;
-    }
     chunks.push(await res.arrayBuffer());
-    // Pulse bar forward during download — we don't know total so animate to 45%
-    // using a decaying approach: each chunk gets half the remaining space up to 45%
-    const downloadPct = Math.min(45, Math.round(45 * (1 - Math.pow(0.7, chunkIndex + 1))));
+    const downloadPct = totalChunks
+      ? Math.round(((chunkIndex + 1) / totalChunks) * 45)
+      : Math.min(45, Math.round(45 * (1 - Math.pow(0.7, chunkIndex + 1))));
     dlBar.style.width = downloadPct + '%';
     chunkIndex++;
   }
 
   if (chunks.length === 0) { showDownloadError('No chunks received from server.'); return; }
 
-  // ── Phase 2: decrypt chunks, 50–100% ─────────────────────────────────────
   dlStageTag.textContent = 'Decrypting — almost done';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
     let plain;
     try {
+      const aad = new Uint8Array(4);
+      new DataView(aad.buffer).setUint32(0, i, false);
       plain = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: sessionIv, additionalData: (() => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, i, false); return b; })() },
+        { name: 'AES-GCM', iv: sessionIv, additionalData: aad },
         sessionAesKey, chunks[i]
       );
     } catch (e) {
