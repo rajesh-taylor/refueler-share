@@ -101,6 +101,23 @@ stripeThemeRemount: true
     margin: 0 auto;
     padding: 60px 24px 80px;
   }
+  .upgrade-back-link {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    text-decoration: none;
+    margin-bottom: 20px;
+    padding: 6px 12px;
+    border: 0.5px solid var(--border-mid);
+    border-radius: 8px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .upgrade-back-link:hover {
+    border-color: var(--accent);
+    background: var(--card-bg);
+  }
   .page-header { margin-bottom: 48px; }
   .page-header h1 {
     font-family: var(--display);
@@ -487,6 +504,8 @@ stripeThemeRemount: true
 
 <!-- ── Main page ─────────────────────────────────────────────────── -->
 <div class="page" id="mainPage">
+
+  <a href="/index.html" class="upgrade-back-link">← Back to Refueler Share</a>
 
   <div class="page-header">
     <h1>Choose your plan</h1>
