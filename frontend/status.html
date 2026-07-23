@@ -42,6 +42,328 @@
 </script>
 
 <style>
+  /* ── Brand tokens — canonical match to refueler.io ─────────────── */
+  :root {
+    --carbon:          #1A1A1A;
+    --paper:           #F5F0E8;
+    --gold:            #C8A96E;
+    --gold-dim:        #9E8050;
+
+    /* Paper mode (default) */
+    --bg:              var(--paper);
+    --fg:              var(--carbon);
+    --fg-muted:        #5A5550;
+    --fg-subtle:       #9A9590;
+    --border:          rgba(26,26,26,0.12);
+    --nav-bg:          rgba(245,240,232,0.88);
+    --card-bg:         rgba(26,26,26,0.04);
+    --card-border:     rgba(26,26,26,0.08);
+    --input-bg:        #FFFFFF;
+    --input-border:    rgba(26,26,26,0.18);
+    --drop-border:     rgba(26,26,26,0.20);
+    --drop-hover-bg:   rgba(26,26,26,0.03);
+    --tag-bg:          rgba(26,26,26,0.07);
+    --link-box-bg:     rgba(26,26,26,0.05);
+
+    --radius:          6px;
+    --mono:            'IBM Plex Mono', monospace;
+    --sans:            'DM Sans', sans-serif;
+    --display:         'Satoshi', 'DM Sans', sans-serif;
+  }
+
+  /* Carbon override — canonical match to refueler.io */
+  html.carbon-mode {
+    --bg:              var(--carbon);
+    --fg:              var(--paper);
+    --fg-muted:        #B0AAA2;
+    --fg-subtle:       #6A6560;
+    --border:          rgba(245,240,232,0.10);
+    --nav-bg:          rgba(26,26,26,0.90);
+    --card-bg:         rgba(245,240,232,0.04);
+    --card-border:     rgba(245,240,232,0.08);
+    --input-bg:        #252525;
+    --input-border:    rgba(245,240,232,0.18);
+    --drop-border:     rgba(245,240,232,0.22);
+    --drop-hover-bg:   rgba(245,240,232,0.03);
+    --tag-bg:          rgba(245,240,232,0.08);
+    --link-box-bg:     rgba(245,240,232,0.05);
+  }
+
+  /* ── Reset ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    min-height: 100%;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.35s ease, color 0.25s ease;
+  }
+
+  /* ── Site header — canonical spec from refueler.io ──────────────── */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--nav-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 clamp(1.25rem, 4vw, 3rem);
+    transition: background 0.35s ease, border-color 0.25s ease;
+  }
+  .header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: 0.06em;
+    color: var(--fg);
+    text-decoration: none;
+    white-space: nowrap;
+    text-transform: none;
+  }
+  .wordmark-divider {
+    font-weight: 300;
+    opacity: 0.3;
+    margin: 0 0.5rem;
+  }
+  .wordmark-section {
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    opacity: 0.55;
+    text-transform: none;
+  }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+  .site-nav a {
+    font-family: var(--display);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .site-nav a:hover { color: var(--fg); }
+  .site-nav a.active { color: var(--fg); }
+  /* Theme pill — border only, no fill, no gold on any state */
+  .theme-pill {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 0.35rem 0.85rem;
+    background: transparent;
+    color: var(--fg-muted);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .theme-pill:hover {
+    border-color: var(--fg-muted);
+    color: var(--fg);
+  }
+
+  /* ── Shared components ────────────────────────────────────────────── */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    padding: 10px 20px;
+    transition: opacity 0.2s, background 0.2s;
+  }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { background: var(--fg); color: var(--bg); }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--fg-muted); color: var(--fg); }
+  .btn-full { width: 100%; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--fg-subtle);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  input[type="text"],
+  input[type="password"],
+  input[type="email"] {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus,
+  input[type="password"]:focus,
+  input[type="email"]:focus { border-color: var(--fg-muted); }
+  .tag {
+    display: inline-block;
+    background: var(--tag-bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Utility ─────────────────────────────────────────────────────── */
+  .muted      { color: var(--fg-muted); }
+  .subtle     { color: var(--fg-subtle); }
+  .mono       { font-family: var(--mono); }
+  .small      { font-size: 12px; }
+  .cap-warn   { color: #D97706; font-size: 13px; line-height: 1.5; }
+  .success-txt{ color: #27AE60; }
+  .danger-txt { color: #C0392B; }
+  .hidden     { display: none !important; }
+  .flex-row   { display: flex; align-items: center; gap: 10px; }
+  .mt4        { margin-top: 4px; }
+  .mt8        { margin-top: 8px; }
+  .mt12       { margin-top: 12px; }
+  .mt16       { margin-top: 16px; }
+
+  /* ── Site footer ─────────────────────────────────────────────────── */
+  .site-footer {
+    border-top: 1px solid var(--border);
+    padding: 20px clamp(1.25rem, 4vw, 3rem);
+    margin-top: auto;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .footer-note {
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--fg-subtle);
+    font-family: var(--display);
+  }
+  .footer-links { display: flex; gap: 1.5rem; }
+  .footer-links a {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--fg); }
+
+  /* ── Responsive ──────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .shell { padding: 32px 16px 60px; }
+    .site-nav { gap: 1.25rem; }
+    .site-nav a:not(:last-of-type) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress-bar, .btn, .slider, .slider::before,
+    html, body { transition: none; }
+  }
+    /* ── Maintenance / status banner ────────────────────────────────────────── */
+  .status-banner {
+    position: sticky;
+    top: 56px;                         /* sits below the nav */
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    font-size: 13px;
+    line-height: 1.4;
+    border-bottom: 1px solid transparent;
+    animation: banner-in 0.25s ease;
+  }
+  @keyframes banner-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .status-banner[data-state="maintenance"] {
+    background: color-mix(in srgb, #C8A951 12%, var(--bg));
+    border-color: color-mix(in srgb, #C8A951 30%, transparent);
+    color: var(--fg);
+  }
+  .status-banner[data-state="degraded"] {
+    background: color-mix(in srgb, #C0392B 10%, var(--bg));
+    border-color: color-mix(in srgb, #C0392B 25%, transparent);
+    color: var(--fg);
+  }
+  .status-banner-icon { flex-shrink: 0; font-size: 15px; }
+  .status-banner-text { flex: 1; }
+  .status-banner-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+  }
+  .status-banner-link:hover { opacity: 0.75; }
+  .status-banner-dismiss {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--fg-subtle);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .status-banner-dismiss:hover { color: var(--fg); }
+  .status-banner.hidden { display: none; }
+
+</style>
+
+<style>
   /* ── Status page layout ────────────────────────────────────────────── */
   .shell {
     max-width: 720px;
@@ -321,8 +643,8 @@
   <!-- ── Hero ──────────────────────────────────────────────────────────── -->
   <div class="status-hero">
     <p class="status-hero-label">share.refueler.io</p>
-    <h1 class="status-hero-headline">Service Status</h1>
-    <p class="status-hero-updated subtle" id="hero-updated">Checking…</p>
+    <h1 class="status-hero-headline">System Status</h1>
+    <p class="status-hero-updated subtle" id="hero-updated">Loading…</p>
   </div>
 
   <!-- ── Ops layer ─────────────────────────────────────────────────────── -->
@@ -332,7 +654,7 @@
     <div class="state-card" id="state-card" data-state="operational">
       <span class="state-dot"></span>
       <div>
-        <div class="state-label" id="state-label">Checking status…</div>
+        <div class="state-label" id="state-label">Loading…</div>
         <div class="state-message" id="state-message"></div>
       </div>
     </div>
@@ -358,66 +680,73 @@
 
   </section>
 
-  <!-- ── How it works ─────────────────────────────────────────────────── -->
+  <!-- ── Cryptographic integrity layer ─────────────────────────────────── -->
   <section class="integrity-section">
 
     <div class="section-header">
-      <span class="section-title">How it works</span>
+      <span class="section-title">Cryptographic integrity layer</span>
     </div>
 
     <div class="integrity-grid">
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Technical: AES-256-GCM · RFC 3986 fragment</div>
-        <div class="integrity-card-value">✓ Encrypted in your browser</div>
+        <div class="integrity-card-label">Zero-knowledge guarantee</div>
+        <div class="integrity-card-value">✓ Architectural</div>
         <div class="integrity-card-note">
-          Your file is encrypted before it leaves your device. The key lives only in the
-          share link — we never see it, and neither does anyone who handles the transfer in transit.
+          AES-256 keys are generated browser-side and placed in the URL fragment only.
+          The fragment is never transmitted to our Worker per RFC 3986.
+          We receive and store ciphertext. Reading your files is not technically possible for us.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Technical: Cashu NUT-00 blind signatures · NUT-07 double-spend ledger</div>
-        <div class="integrity-card-value">✓ Transfers can't be linked to you</div>
+        <div class="integrity-card-label">Anonymous auth</div>
+        <div class="integrity-card-value">✓ Cashu NUT-00</div>
         <div class="integrity-card-note">
-          No account. No email. Uploads are authorised by an anonymous credential —
-          the server grants access without learning who you are.
+          Upload credentials are blind-signed. The server issues a token without
+          learning its serial number. Transfers cannot be linked to identity at the
+          ledger layer. Double-spend prevention via Supabase spent-token table (NUT-07).
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Technical: BLAKE3 WASM · server-side chunk verification</div>
-        <div class="integrity-card-value">✓ Files arrive intact</div>
+        <div class="integrity-card-label">Chunk integrity</div>
+        <div class="integrity-card-value">✓ BLAKE3 (browser)</div>
         <div class="integrity-card-note">
-          Each chunk is hashed before upload and verified by the server on receipt.
-          Any corruption or tampering in transit is caught and rejected automatically.
+          Each 50 MB chunk is BLAKE3-hashed client-side via a compiled WASM module
+          loaded from a local bundle. Hash roots enable byte-exact resume on
+          interrupted transfers without restarting from chunk 0.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Technical: SHA-256 passphrase hash · NUT-11 Mode 1</div>
-        <div class="integrity-card-value">✓ Optional passphrase lock</div>
+        <div class="integrity-card-label">Passphrase gating</div>
+        <div class="integrity-card-value">✓ NUT-11 Mode 1</div>
         <div class="integrity-card-note">
-          You can protect a share link with a passphrase. The passphrase never travels
-          the wire — only its hash is stored, and the server checks it before issuing a download token.
+          Share links can require a passphrase. The SHA-256 hash of the passphrase is
+          stored in the transfer manifest. The Worker issues a time-scoped download
+          token only on hash match. The passphrase never travels the wire in plaintext.
+        </div>
+      </div>
+
+      <div class="integrity-card gap">
+        <div class="integrity-card-label">Server-side chunk verification</div>
+        <div class="integrity-card-value">⚠ Known gap</div>
+        <div class="integrity-card-note">
+          The Worker verifies chunk receipt but does not re-verify the client-declared
+          BLAKE3 hash server-side. A compromised client could declare a hash mismatch
+          undetected. Fix: compile BLAKE3 to a static WASM binary in the Worker.
+          No integrity or audit claims are made until this is resolved.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Technical: Cloudflare R2 lifecycle rules · 92-day hard cap</div>
-        <div class="integrity-card-value">✓ Files delete themselves</div>
+        <div class="integrity-card-label">Storage ephemerality</div>
+        <div class="integrity-card-value">✓ R2 lifecycle</div>
         <div class="integrity-card-note">
-          Every transfer has an expiry. When it passes, the file is deleted automatically
-          by Cloudflare's storage layer — no manual intervention, no exceptions, no lingering copies.
-        </div>
-      </div>
-
-      <div class="integrity-card">
-        <div class="integrity-card-label">Technical: rate limiting · UUID-bound credentials · Turnstile</div>
-        <div class="integrity-card-value">✓ Abuse prevention</div>
-        <div class="integrity-card-note">
-          Each upload credential is cryptographically bound to a single transfer.
-          Rate limits and bot detection prevent the service being used as a relay for bulk abuse.
+          Hard expiry enforced by Cloudflare R2 lifecycle rules: all objects deleted
+          after 92 days maximum. Incomplete multipart uploads aborted after 1 day.
+          No manual deletion required. No exceptions.
         </div>
       </div>
 
@@ -476,9 +805,9 @@
     stateCard.dataset.state = state;
 
     const labels = {
-      operational: 'Refueler Share is running normally',
-      degraded:    'Something is wrong — we\'re looking into it',
-      maintenance: 'Maintenance in progress — back shortly',
+      operational: 'All systems operational',
+      degraded:    'Service degradation detected',
+      maintenance: 'Maintenance in progress',
     };
     stateLabel.textContent = labels[state] ?? state;
 
@@ -568,12 +897,12 @@
       const res = await fetch(`${WORKER_URL}/status`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       status = await res.json();
-    } catch {
-      stateCard.dataset.state  = 'degraded';
-      stateLabel.textContent   = 'Status check failed';
-      stateMessage.textContent = 'We couldn\'t reach the status endpoint. The service may be temporarily unavailable, or your network may be blocking the request.';
-      incidentList.innerHTML   = '<p class="fetch-error">Incident data is unavailable right now. Try refreshing in a moment.</p>';
-      heroUpdated.textContent  = '';
+    } catch (e) {
+      stateCard.dataset.state = 'degraded';
+      stateLabel.textContent  = 'Status unavailable';
+      stateMessage.textContent = 'Could not reach the Worker. The service may be down or your network is blocking the request.';
+      incidentList.innerHTML  = `<p class="fetch-error">Could not load incident data: ${escHtml(e.message)}</p>`;
+      heroUpdated.textContent = '';
       return;
     }
 
