@@ -422,19 +422,18 @@
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| S43 | Token alignment | Apply DESIGN-TOKENS.md to index.html, upgrade.html, status.html. Fix Paper/Carbon bg tokens, add --surface-raised, load IBM Plex Mono, declare --accent. | S |
-| S44 | Dashboard design pass I | Satoshi 700 figures/labels, --heading font stack, System Summary rename, Copy JSON bottom-right, 4 latency cards, 16px min sub-text. | M |
-| S45 | Dashboard design pass II | Spacing/hierarchy deep pass, Source Serif 4 editorial moments, farming signal card (AE wired). | M |
-| S46a | Modal build I | Full-viewport scaffold for all 13 metric cards, data wiring, n/a and loading states. | L |
-| S46b | Modal build II | Modal polish + snag sweep. formatBytes 1dp, zero=green (errors/churn/client-errors), AE datasource banner, × close button replacing ← Back, modal-active card ring (mouse+keyboard). smokeTest() extended: 14 modal panels + formatBytes spot-checks. 27 pass · 2 deferred · 2 fail (latency nulls, pre-existing). | M |
-| S47a | Upload/download UX I | ✅ Complete — dbcf54f · 1daeac9 · 63eb253. FREE_EXPIRY fixed (7d), progress smooth, QR retina, cap upgrade nudge, status editorial, shared-styles include fix, card text sizes, back link. | S |
-| S47b | Status page + upgrade nudge | Status.html editorial pass (plain-English copy, human-readable cards, soften errors). Upgrade nudge on cap hit + expiry gate. | S |
-| S47c | Maintenance notification | KV-controlled maintenance modal on index.html. Ghost-pattern: operator sets MAINTENANCE_NOTICE in STATUS_KV, frontend polls /status, renders dismissible modal overlay using design tokens. One Worker deploy. | M |
-| S47d | B5 close | Snag sweep, context files, version bump to 4.0, B6 planning brief. | S |
-| S48 | Theme persistence + named transfers | Cookie scoped to .refueler.io, privacy copy update, named transfers UI plan. | S |
-| S49a | Carbon gold edging | --inset-rule #C8A96E throughout Carbon. Card borders, rule lines, active states. | S |
-| S49b | Brand audit pass | Share UI vs BRANDING.md. Source Serif 4 editorial moments. Head of Design review. Paper/Carbon consistency sweep. | M |
-| S52 | B5 close (renumbered from S47d) | See S47d. | S |
+| S43 ✅ | Token alignment | DESIGN-TOKENS.md applied to index, upgrade, status. | S |
+| S44 ✅ | Dashboard design pass I | Sidebar layout, token alignment, Satoshi figures, 4 latency cards. | M |
+| S45 ✅ | Dashboard design pass II | Sidebar 240px, gold wordmark, farming card, editorial line. | M |
+| S46a ✅ | Modal build I | 14 modal keys, skeleton, n/a states, sparkline stub, focus trap. CSS+JS extracted. | L |
+| S46b ✅ | Modal build II | formatBytes, zero=green, datasource banner, × close, modal-active ring. smokeTest 27 pass. | M |
+| S47a ✅ | Upload/download UX I | FREE_EXPIRY, progress smooth, QR retina, upgrade nudge, status editorial. | S |
+| S47b ✅ | QR + polish | QR 200px SVG (qr-creator), 2-col button grid, serif integrity notes, ghost back links. | S |
+| S47c | Receiver landing page | Info card on link open: filename, size, expiry, passphrase indicator, Download button. Replaces auto-trigger. Pure frontend. | M |
+| S47d | Receiver snag + single-file UX | Snag sweep from S47c. Drop zone explicit single-file-only rejection. | S |
+| S48 | Maintenance notification + theme persistence | KV modal on index.html + Paper/Carbon cookie scoped to `.refueler.io`. Privacy copy update. | S |
+| S49 | Carbon gold edging + brand sweep | `--inset-rule: #C8A96E` throughout Carbon + Share UI vs BRANDING.md pass. | M |
+| S52 | B5 close | Snag sweep, QR logo snag note, context files, version 4.0, B6 brief. | S |
 
 ---
 
@@ -464,6 +463,34 @@
 4. `integrity-card-note` font — switch to Source Serif 4 300 weight, 14px, line-height 1.7. DM Sans reads as helper text; serif gives editorial authority appropriate to this content.
 5. Back link — restyle as ghost button: `border: 0.5px solid var(--border-mid)`, `border-radius: 8px`, `padding: 6px 12px`, full `--text-primary` colour, 12px mono. Current muted link too discreet for a user who needs a clear escape route.
 6. `upgrade.njk` — no route back to `share.refueler.io/index.html`. Same nav problem as status page. Fix in S47b.
+
+---
+
+### S47b — QR library swap + share panel polish
+**Commits:** `b98bcd8` → `d8faf0f` · 23 July 2026
+
+- QR CSS display size lifted 128px → 200px. Carbon colours corrected to `#F7F4EF` on `#111316` for maximum scanner contrast.
+- Button layout: Copy link + New upload converted from `flex-row` to `.share-btn-row` — `display: grid; grid-template-columns: 1fr 1fr; width: 100%`. Both buttons full-width, matching link box above.
+- `integrity-card-note` on `status.njk`: switched to `var(--serif)` (Source Serif 4) 14px weight-300 line-height 1.7.
+- Back link on `status.njk`: restyled from muted mono text link to ghost button (`border: 0.5px solid var(--border-mid)`, `border-radius: 8px`, `padding: 6px 12px`, `--text-primary`, hover gets `--accent` border + `--surface` background).
+- Back-nav added to `upgrade.njk`: same `.upgrade-back-link` ghost button pattern above `.page-header`, links to `/index.html`.
+- QR library swapped: `qrcodejs` (canvas, blurs at retina) → `qr-creator` (SVG, mathematically sharp at any DPR). CDN: `cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js`. `QrCreator.render({ text, radius: 0, ecLevel: 'M', fill, background, size: 200 }, svgEl)`. CSS updated: `#qr-wrap svg { width: 200px; height: 200px; }` — no `!important` canvas override needed.
+
+**B5 resequencing (23 July 2026):**
+- Principle adopted: finish upload→share→receive loop end-to-end before further polish. Test early, don't build untested surfaces.
+- New sequence: S47c (receiver landing page) → S47d (receiver snag + single-file UX) → S48 (maintenance + theme persistence) → S49 (gold edging + brand sweep) → S52 (B5 close).
+- Folder upload (fflate client-side zip) moved to B6: S53 (build I) + S54 (build II) + S55 (test + snag).
+- Session count is a guide, not a constraint. Add sessions as needed.
+
+**Open snags logged this session:**
+- QR logo centre (Refueler mark in QR quiet zone): requires canvas compositing or library support — deferred to S52 snag note.
+- Drop zone currently accepts multiple files silently — explicit rejection with message needed (S47d).
+- Auto-download on link open: receiver lands immediately in download, no consent, no file info shown. Fixed in S47c.
+
+**Do not retry:**
+- DO NOT use `qrcodejs` — canvas blur at retina is unfixable. Use `qr-creator` (SVG).
+- DO NOT use `new QRCode(el, opts)` API — use `QrCreator.render(opts, svgEl)`.
+- DO NOT implement multi-file manifest for folder upload — client-side zip via fflate is the locked approach.
 
 ---
 

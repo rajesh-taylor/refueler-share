@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 3.1 | **Last updated:** S47a close · 23 July 2026
+> **Version:** 3.2 | **Last updated:** S47b close · 23 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -97,6 +97,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Credentials in browser memory only — never localStorage, never sessionStorage.
 - `frontend/blake3/` force-committed via `git add -f`.
 - Status banner: `sessionStorage` dismiss. Status page `/status.html` — no nav entry.
+- QR library: `qr-creator` (SVG output, cdnjs). DO NOT use `qrcodejs` — canvas blur at retina.
+- Drop zone: single file only. Multiple file drag rejected with explicit message. Folder upload via client-side zip (fflate) planned for B6.
 
 **Stripe:**
 - Direct Subscription + `expand[0]=latest_invoice.payment_intent` → `pi_...` secret for `stripe.elements()`.
@@ -136,6 +138,18 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - All mints are capability/loyalty token issuers — none handle e-money.
 - UUID-bound credentials (NUT-20 pattern) are the long-term resolution to credential farming. Deferred to B8 Rust mint. S42c implements a Worker-based precursor.
 
+**Folder upload (locked direction, B6):**
+- Client-side zip via `fflate` before AES-GCM encrypt. Worker sees one blob — chunking, manifest, and Worker unchanged.
+- Browser uses `webkitdirectory` input or folder drag. Relative paths preserved in zip.
+- Two sessions (S53–S54) + one snag session (S55) allocated in B6.
+- Receiver gets a zip; no server-side extraction. Auto-unzip on receiver side is a B6 UX decision.
+- DO NOT implement multi-file manifest approach — client-side zip is the locked choice.
+
+**Receiver landing page (locked direction, S47c):**
+- Link open must NOT auto-trigger download. Receiver lands on an info card: filename, size, expiry, passphrase indicator, Download button.
+- Pure frontend change — no Worker changes required.
+- Privacy-correct: receiver sees what they're getting and consents before anything hits their disk.
+
 **Marketing claim rulings (S42e — update again after B8, B9, B10):**
 - ✅ Safe to assert: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting on all public endpoints; UUID-bound credential issuance (Worker precursor to NUT-20); Turnstile nonce binding (one solve, one credential); anonymous transfer (no account required for free tier).
 - 🔒 Blocked: full Merkle tree verification (assembled file vs BLAKE3 root); NUT-11 Mode 2 keypair auth; "audit-certified" / "security-audited"; ML-KEM key wrapping; any "end-to-end file integrity" claim without the server-side-chunks-only qualifier.
@@ -146,7 +160,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 ## Known broken / do not retry
 
 | Pattern | Correct approach |
-|---------|-----------------|
+|---------|--------------------|
 | blake3-wasm CDN (esm.sh / unpkg) | Local bundle only |
 | Invisible Turnstile | Visible managed widget only |
 | `secp.Point` | `secp.ProjectivePoint` (noble v2) |
@@ -176,6 +190,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Fail-closed on nonce KV error | Fail open — KV blip must not block legitimate uploads |
 | Await nonce KV write | Fire-and-forget only |
 | `renderTurnstile()` from `onTurnstileLoad` without flag | Use `pendingTurnstileRender` flag to prevent double-render |
+| `qrcodejs` library | Use `qr-creator` (SVG, cdnjs) — canvas output blurs at retina |
+| Multi-file manifest for folder upload | Client-side zip via fflate only — Worker architecture unchanged |
 
 ---
 
@@ -200,25 +216,27 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S42c | `c053cbc` | UUID-bound credential issuance. Worker generates UUID. Commitment H(uuid:tier:window) verified on chunk 0. waitForTurnstile fix. |
 | S42d | `0b32e69` | Turnstile nonce binding (`tt_nonce:` KV, 600s TTL). Safari polling fallback. Wrangler 4.113.0. |
 | S42e | — | Full B4 audit pass. 20 claims verified against source. Marketing claim rulings. Critical chain S34→S42→S78 closed. UK regulatory language drafted. B5 handoff complete. |
-| S43 | `5c54802` | Token alignment: Paper/Carbon --bg corrected, --surface-raised added, IBM Plex Mono loaded, --accent declared. Eleventy pages only (index, upgrade, status). Dashboard token alignment deferred to S44. |
-| S44 | `b15f407` | Dashboard design pass I: sidebar layout, DESIGN-TOKENS.md alignment (dashboard was on pre-token palette — S43 only covered Eleventy pages), Satoshi 700 figures 2rem, 4 latency cards, Copy JSON bottom-right, sidebar Paper/Carbon toggle + sign out, @media print PDF export, Refresh double-bind bug fixed. |
+| S43 | `5c54802` | Token alignment: Paper/Carbon --bg corrected, --surface-raised added, IBM Plex Mono loaded, --accent declared. Eleventy pages only. Dashboard token alignment deferred to S44. |
+| S44 | `b15f407` | Dashboard design pass I: sidebar layout, DESIGN-TOKENS.md alignment, Satoshi 700 figures 2rem, 4 latency cards, Copy JSON bottom-right, sidebar Paper/Carbon toggle + sign out, @media print PDF export, Refresh double-bind bug fixed. |
 | S45 | `7187e41` | Dashboard design pass II: sidebar 240px, gold wordmark, farming signal card (row-4), Source Serif editorial line, smoke test deduped to 11 checks. |
 | S46a | `bbf271a` | Modal build I: 14 modal keys, skeleton, n/a, deferred Lightning, sparkline stub, CSV note, focus trap. CSS+JS extracted to separate files. Green on healthy metrics. |
 | S46b | `023dfcc` | Modal polish: formatBytes 1dp, zero=green (errors/churn/client-errors), datasource banner, × close button, modal-active ring, smokeTest 27 pass. |
 | S47a | `dbcf54f` → `1daeac9` → `63eb253` | FREE_EXPIRY fixed (7d). Progress bar smooth finish. QR retina + design token colours. Cap upgrade nudge on index. status.njk: shared-styles include added, "How it works" human-readable cards, plain-English state labels, card text sizes lifted, ← Back link added. |
+| S47b | `b98bcd8` → `d8faf0f` | QR 200px + high-contrast Carbon colours (`#F7F4EF` on `#111316`). 2-col button grid (share panel). integrity-card-note → Source Serif 4 300/14px/1.7. Back links restyled as ghost buttons on status + upgrade. QR library swapped qrcodejs → qr-creator (SVG, no canvas blur). |
+
 ---
 
 ## Roadmap
 
-Core S19–S100 · Buffer S101–S120. B5 expanded to S43–S52 (10 sessions) to accommodate modal full build (2 sessions), dashboard depth (2 sessions), and brand pass (2 sessions).
+Core S19–S100 · Buffer S101–S120. B5 resequenced to complete the upload→share→receive loop before further polish. Session count is a guide not a constraint — add sessions as needed.
 
 | Block | Sessions | Scope |
 |-------|----------|-------|
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
 | B4 ✓ | S34–S42 | Security hardening |
-| B5 | S43–S52 | Design full pass ← current · S47 split into S47a/b/c/d |
-| B6 | S53–S60 | Testing infrastructure |
+| B5 | S43–S52 | Design full pass ← current |
+| B6 | S53–S60 | Testing infrastructure + folder upload |
 | B7 | S61–S70 | Lightning/Blink + anonymous paid tier (highest design risk) |
 | B8 | S71–S78 | NUT-11 Mode 2 keypair auth |
 | B9 | S79–S84 | Documentation + security whitepaper (unblocked S42) |
@@ -226,41 +244,49 @@ Core S19–S100 · Buffer S101–S120. B5 expanded to S43–S52 (10 sessions) to
 | B11 | S93–S100 | Week 0 alpha, load test, go/no-go |
 | B12 | S101–S102 | Public beta launch |
 
-Critical chains: S34→S42→S79 (integrity, renumbered) · S18→S24→S67 (dashboard) · S53→S60→S95 (CI) · S63→S65 (anon paid tier).
+Critical chains: S34→S42→S79 (integrity) · S18→S24→S67 (dashboard) · S53→S60→S95 (CI) · S63→S65 (anon paid tier).
 
 B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real live subscriber.
 
 ---
 
-## B5 session plan (S43–S52)
+## B5 session plan (S43–S52) — resequenced 23 July 2026
+
+Principle: finish the upload→share→receive loop end-to-end and test it before any further polish. Cosmetics follow stable surfaces.
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| S43 | Token alignment | Apply `DESIGN-TOKENS.md` to `index.html`, `upgrade.html`, `status.html`: fix `--bg` Paper (`#F5F0E8` → `#F7F4EF`), Carbon (`#1A1A1A` → `#1E1F22`), add `--surface-raised`, load IBM Plex Mono, declare `--accent: #C8A96E`. | S |
-| S44 | Dashboard design pass I | ✅ Complete — b15f407 | M |
-| S45 | Dashboard design pass II | ✅ Complete — 7187e41 | M |
-| S46a | Modal build I | ✅ Complete — bbf271a. 14 modal keys, skeleton, n/a, deferred Lightning, sparkline stub, CSV note, focus trap. CSS+JS extracted to separate files. | L |
-| S46b | Modal build II | ✅ Complete — 023dfcc. formatBytes, zero=green, datasource banner, × close, modal-active ring. smokeTest 27 pass. | M |
-| S47a | Upload/download UX I | ✅ Complete — dbcf54f · 1daeac9 · 63eb253. FREE_EXPIRY, progress smooth, QR retina, upgrade nudge, status editorial + shared-styles fix, card text sizes, back link. | S |
-| S47b | Status page + upgrade nudge | QR size (200px) + Carbon contrast fix. Button layout 2-col. integrity-card-note → Source Serif 4 14px 300. Back link → ghost button. upgrade.html back-nav. | S |
-| S47c | Maintenance notification | KV-controlled modal on index.html, design tokens, sessionStorage dismiss. One Worker deploy. | M |
-| S47d | B5 close | Snag sweep, context files, v4.0, B6 brief. | S |
-| S48 | Theme persistence + named transfers | Paper/Carbon cookie scoped to `.refueler.io`. Review `privacy/index.html` + `README.md` for "no cookies" language; update to "no tracking cookies". Named transfers UI plan (fragment-only label, paid tier differentiator). | S |
-| S49a | Carbon gold edging | Apply `--inset-rule: #C8A96E` throughout Carbon theme. Card borders, rule lines, active states per `DESIGN-TOKENS.md`. | S |
-| S49b | Brand audit pass | Share UI against `BRANDING.md`. Source Serif 4 body text in editorial moments. Head of Design reference review. Full Paper/Carbon consistency sweep. | M |
-| S52 | B5 close | Snag sweep. Context files. Version bump to 4.0. B6 planning brief. | S |
+| S43 ✅ | Token alignment | DESIGN-TOKENS.md applied to index, upgrade, status. | S |
+| S44 ✅ | Dashboard design pass I | Sidebar layout, token alignment, Satoshi figures, 4 latency cards. | M |
+| S45 ✅ | Dashboard design pass II | Sidebar 240px, gold wordmark, farming card, editorial line. | M |
+| S46a ✅ | Modal build I | 14 modal keys, skeleton, n/a states, sparkline stub, focus trap. | L |
+| S46b ✅ | Modal build II | formatBytes, zero=green, datasource banner, × close, modal-active ring. | M |
+| S47a ✅ | Upload/download UX I | FREE_EXPIRY, progress smooth, QR retina, upgrade nudge, status editorial. | S |
+| S47b ✅ | QR + polish | QR 200px SVG (qr-creator), 2-col button grid, serif integrity notes, ghost back links. | S |
+| S47c | Receiver landing page | Info card on link open: filename, size, expiry, passphrase indicator, Download button. Replaces auto-trigger. Pure frontend — no Worker changes. | M |
+| S47d | Receiver snag + single-file UX | Snag sweep from S47c. Drop zone explicit single-file-only rejection with clear message. | S |
+| S48 | Maintenance notification + theme persistence | KV-controlled modal on index.html + Paper/Carbon cookie scoped to `.refueler.io`. Privacy copy update. Two small items, one session. | S |
+| S49 | Carbon gold edging + brand sweep | `--inset-rule: #C8A96E` throughout Carbon. Card borders, rule lines, active states. Share UI vs BRANDING.md. Source Serif 4 editorial moments. | M |
+| S52 | B5 close | Snag sweep, QR logo snag note (deferred), context files, version bump to 4.0, B6 brief. | S |
 
-Notes:
-- S49a and S49b replace the single S49 slot, which was too compressed for both the gold edging implementation and the full brand audit.
-- S52 is the close session number after the 10-session B5 block (S43–S52). No sessions S50–S51 are skipped — the table above uses S50 and S51 for S49a and S49b respectively; renumber at session start if preferred.
-- Paid tier cards remain greyed out throughout B5. Re-enable only on Rajesh's explicit instruction at B7 close.
-- Nav snag (Upgrade link breaking on `refueler.io`) deferred — review at B5 when iterating Share index page.
-- X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review in B5 S47 or B7.
-- Upgrade nudge snag (S47): free-tier users have no visible path to upgrade.html from index.html when they hit the 4GB cap or try to select a longer expiry. Fix: contextual upgrade prompt on cap hit / expiry-tier gate, independent of nav snag.
-- Status page editorial (COMPLETE S47a): human-readable "How it works" cards live. Plain-English state labels live. Fetch error softened. Known-gap card removed. Status tile for admin dashboard still needed — add at S52 snag sweep.
+**B5 snag list (open):**
+- QR Refueler logo centre: requires canvas compositing or library support. Deferred to S52 snag note → B6 or later.
+- Drop zone multiple-file rejection: explicit message needed. In S47d.
+- WOFF2 parsing warning (Bunny/Fontshare CDN): cosmetic, carry to S52 sweep.
+- Status tile for admin dashboard: add at S52 snag sweep.
+- X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review B7.
+- Nav snag (Upgrade link breaking on `refueler.io`): deferred, review B5 index iteration.
+
+**B6 additions (folder upload):**
+- S53: Folder upload I — fflate integration, client-side zip, zip progress UI, single blob to existing upload flow.
+- S54: Folder upload II — streaming at scale, edge cases (empty folders, deep nesting, file count limits), receiver UX (deliver zip vs auto-unzip decision).
+- S55: Folder upload test + snag — photographer folder end-to-end: upload → share → receive → unzip. Work off snags.
+
+**Locked notes:**
 - DO NOT use `classList.contains('carbon-mode')` for theme detection — use `dataset.theme === 'carbon'`.
-- DO NOT omit `{% include "shared-styles.njk" %}` from any Eleventy page — without it all CSS variables, `.hidden`, and Paper/Carbon toggle JS are absent.
-- S47b carry-forward snags: (1) QR 200px display + Carbon high-contrast colours. (2) Copy link + New upload as full-width 2-col grid. (3) integrity-card-note → Source Serif 4 300/14px/1.7. (4) Back link → ghost button style. (5) upgrade.html back-nav to share index.
+- DO NOT omit `{% include "shared-styles.njk" %}` from any Eleventy page.
+- DO NOT use `qrcodejs` — use `qr-creator` (SVG, cdnjs).
+- Paid tier cards remain greyed out throughout B5. Re-enable only on Rajesh's explicit instruction at B7 close.
 
 ---
 
