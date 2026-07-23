@@ -318,6 +318,10 @@ activePage: ""
         <span class="tag" id="file-name-tag"></span>
         <span class="muted small" id="file-size-tag"></span>
       </div>
+      <!-- Turnstile — visible managed widget, shown after file selected -->
+      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
+        <div id="cf-turnstile"></div>
+      </div>
       <!-- Passphrase toggle -->
       <div class="mt16">
         <div class="toggle-row">
@@ -330,10 +334,6 @@ activePage: ""
             <span class="slider"></span>
           </label>
         </div>
-      </div>
-      <!-- Turnstile — visible managed widget, shown after file selected; sits above passphrase field -->
-      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
-        <div id="cf-turnstile"></div>
       </div>
       <div class="hidden" id="passphrase-field-wrap">
         <div class="field mt12">

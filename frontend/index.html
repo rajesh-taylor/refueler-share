@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 
 
@@ -588,7 +588,7 @@
     line-height: 1.6;
   }
   #qr-wrap { margin-top: 16px; display: flex; justify-content: center; }
-  #qr-wrap canvas, #qr-wrap img { border-radius: 4px; width: 128px !important; height: 128px !important; }
+  #qr-wrap svg { border-radius: 4px; width: 200px; height: 200px; display: block; }
 
   /* ── Passphrase unlock (download) ────────────────────────────────── */
   #unlock-screen {
@@ -610,6 +610,15 @@
   }
   .unlock-sub { font-size: 13px; color: var(--fg-muted); max-width: 320px; line-height: 1.6; }
   #unlock-error { color: #C0392B; font-size: 12px; min-height: 16px; font-family: var(--mono); }
+
+  /* ── Share panel button row ─────────────────────────────────────── */
+  .share-btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+  .share-btn-row .btn { width: 100%; justify-content: center; }
 
   /* ── Upgrade nudge links ─────────────────────────────────────────── */
   .upgrade-nudge-link {
@@ -679,6 +688,10 @@
         <span class="tag" id="file-name-tag"></span>
         <span class="muted small" id="file-size-tag"></span>
       </div>
+      <!-- Turnstile — visible managed widget, shown after file selected -->
+      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
+        <div id="cf-turnstile"></div>
+      </div>
       <!-- Passphrase toggle -->
       <div class="mt16">
         <div class="toggle-row">
@@ -691,10 +704,6 @@
             <span class="slider"></span>
           </label>
         </div>
-      </div>
-      <!-- Turnstile — visible managed widget, shown after file selected; sits above passphrase field -->
-      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
-        <div id="cf-turnstile"></div>
       </div>
       <div class="hidden" id="passphrase-field-wrap">
         <div class="field mt12">
@@ -727,7 +736,7 @@
         <span style="font-size:14px;font-weight:500">Ready to share</span>
       </div>
       <div class="link-box" id="share-link-display"></div>
-      <div class="flex-row mt12">
+      <div class="share-btn-row mt12">
         <button class="btn btn-primary" id="copy-btn"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.25"/><path d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>Copy link</button>
         <button class="btn btn-ghost" id="new-upload-btn">New upload</button>
       </div>
@@ -1093,16 +1102,17 @@ function showSharePanel(url, isProtected) {
   }
   qrWrap.innerHTML = '';
   const isDark = document.documentElement.dataset.theme === 'carbon';
-  // Render at devicePixelRatio × CSS size so the QR is crisp on retina/HiDPI.
-  // #qr-wrap CSS constrains the canvas/img to 128×128 CSS px regardless.
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  const qrSize = 128 * dpr;
-  new QRCode(qrWrap, {
-    text: url, width: qrSize, height: qrSize,
-    colorDark:  isDark ? '#E4E2DC' : '#3D3A36',
-    colorLight: isDark ? '#1E1F22' : '#F7F4EF',
-    correctLevel: QRCode.CorrectLevel.H,
-  });
+  // qr-creator renders to SVG — crisp at any DPR, no canvas blur.
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  qrWrap.appendChild(svg);
+  QrCreator.render({
+    text: url,
+    radius: 0,
+    ecLevel: 'M',
+    fill:       isDark ? '#F7F4EF' : '#3D3A36',
+    background: isDark ? '#111316' : '#F7F4EF',
+    size: 200,
+  }, svg);
 }
 
 const COPY_ICON = '<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.25"/><path d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>';
