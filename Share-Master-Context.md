@@ -204,6 +204,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S44 | `b15f407` | Dashboard design pass I: sidebar layout, DESIGN-TOKENS.md alignment (dashboard was on pre-token palette — S43 only covered Eleventy pages), Satoshi 700 figures 2rem, 4 latency cards, Copy JSON bottom-right, sidebar Paper/Carbon toggle + sign out, @media print PDF export, Refresh double-bind bug fixed. |
 | S45 | `7187e41` | Dashboard design pass II: sidebar 240px, gold wordmark, farming signal card (row-4), Source Serif editorial line, smoke test deduped to 11 checks. |
 | S46a | `bbf271a` | Modal build I: 14 modal keys, skeleton, n/a, deferred Lightning, sparkline stub, CSV note, focus trap. CSS+JS extracted to separate files. Green on healthy metrics. |
+| S46b | `023dfcc` | Modal polish: formatBytes 1dp, zero=green (errors/churn/client-errors), datasource banner, × close button, modal-active ring, smokeTest 27 pass. |
 ---
 
 ## Roadmap
@@ -215,7 +216,7 @@ Core S19–S100 · Buffer S101–S120. B5 expanded to S43–S52 (10 sessions) to
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
 | B4 ✓ | S34–S42 | Security hardening |
-| B5 | S43–S52 | Design full pass ← current |
+| B5 | S43–S52 | Design full pass ← current · S47 split into S47a/b/c/d |
 | B6 | S53–S60 | Testing infrastructure |
 | B7 | S61–S70 | Lightning/Blink + anonymous paid tier (highest design risk) |
 | B8 | S71–S78 | NUT-11 Mode 2 keypair auth |
@@ -238,8 +239,11 @@ B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real l
 | S44 | Dashboard design pass I | ✅ Complete — b15f407 | M |
 | S45 | Dashboard design pass II | ✅ Complete — 7187e41 | M |
 | S46a | Modal build I | ✅ Complete — bbf271a. 14 modal keys, skeleton, n/a, deferred Lightning, sparkline stub, CSV note, focus trap. CSS+JS extracted to separate files. | L |
-| S46b | Modal build II | Modal polish: error states (AE unavailable, zero data), smoke test all 14 panels. Trend stub and CSV note already shipped in S46a. | M |
-| S47 | Upload/download UX | Progress bar smooth animation (15%→100% jump fix). QR code resolution fix. `FREE_EXPIRY` constant mismatch fix (5 days in code → 7 days). | S |
+| S46b | Modal build II | ✅ Complete — 023dfcc. formatBytes, zero=green, datasource banner, × close, modal-active ring. smokeTest 27 pass. | M |
+| S47a | Upload/download UX I | Progress bar, QR, FREE_EXPIRY, copy audit. | S |
+| S47b | Status page + upgrade nudge | Status editorial, upgrade nudge on cap/expiry gate. | S |
+| S47c | Maintenance notification | KV-controlled modal on index.html, design tokens, sessionStorage dismiss. One Worker deploy. | M |
+| S47d | B5 close | Snag sweep, context files, v4.0, B6 brief. | S |
 | S48 | Theme persistence + named transfers | Paper/Carbon cookie scoped to `.refueler.io`. Review `privacy/index.html` + `README.md` for "no cookies" language; update to "no tracking cookies". Named transfers UI plan (fragment-only label, paid tier differentiator). | S |
 | S49a | Carbon gold edging | Apply `--inset-rule: #C8A96E` throughout Carbon theme. Card borders, rule lines, active states per `DESIGN-TOKENS.md`. | S |
 | S49b | Brand audit pass | Share UI against `BRANDING.md`. Source Serif 4 body text in editorial moments. Head of Design reference review. Full Paper/Carbon consistency sweep. | M |

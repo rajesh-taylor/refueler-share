@@ -401,6 +401,23 @@
 
 ---
 
+### S46b — Modal build II + snag sweep
+**Commits:** `0ba4549` → `368283b` → `84e3cff` → `023dfcc`
+
+- `formatBytes` fixed: `parseFloat(raw.toFixed(1)).toString()` — strips trailing zeros, 1dp for <TB, 2dp for ≥TB. `202.1 KB` not `202.09 KB`.
+- Zero = green: server errors, churn, client errors — both dashboard cards and modal switch cases.
+- `modal-datasource-warn` CSS + JS: amber banner in modal when one data source (AE or Supabase) is null while the other is populated.
+- `← Back to dashboard` button removed. Replaced with compact `×` (36×36px, transparent, gold on hover). Eliminates focus race between button click and `_modalTrigger.focus()`.
+- `.modal-active` class added to trigger card on `openModal`, removed on `closeModal` with `requestAnimationFrame` — gold ring persists on clicked card after modal closes, both mouse and keyboard.
+- `sm-value` font-size `2rem → 1.7rem` — prevents truncation at 9-char values (e.g. `202.1 KB`).
+- `smokeTest()` extended: data layer (11 checks) + modal panels (14 keys) + formatBytes rounding (4 spot-checks). Result: **27 pass · 2 deferred · 2 fail** (checks 5+6: latency nulls, pre-existing `quantilesTDigest` snag).
+- S46b formally complete. B5 current block: S47a.
+
+**Do not retry (card active ring):**
+- DO NOT attempt to fix focus ring via `requestAnimationFrame` alone while `← Back to dashboard` button exists — button click moves browser focus before handler runs, ring never persists. Solution: remove the button.
+- DO NOT use `:focus-visible` alone for mouse-click ring — Chrome does not apply `:focus-visible` on mouse interaction. Use `.modal-active` class instead.
+- DO NOT attempt `.modal-active` class via `classList.add` in `openModal` with `requestAnimationFrame` focus restore in `closeModal` — ring does not persist on mouse-click close even with rAF. Keyboard (Escape) works because focus returns to card via `t.focus()`. Mouse close does not. Root cause unresolved — deferred to S47d or later. Escape is the working close gesture; × button is cosmetic only for mouse users.
+
 ## Sessions 43–52 — B5 Design full pass
 
 | Session | Label | Scope | Size |
@@ -409,12 +426,15 @@
 | S44 | Dashboard design pass I | Satoshi 700 figures/labels, --heading font stack, System Summary rename, Copy JSON bottom-right, 4 latency cards, 16px min sub-text. | M |
 | S45 | Dashboard design pass II | Spacing/hierarchy deep pass, Source Serif 4 editorial moments, farming signal card (AE wired). | M |
 | S46a | Modal build I | Full-viewport scaffold for all 13 metric cards, data wiring, n/a and loading states. | L |
-| S46b | Modal build II | Modal polish: CSV export stub, trend stub, error states, smoke test all 13 panels. | M |
-| S47 | Upload/download UX | Progress bar animation fix, QR resolution fix, FREE_EXPIRY constant fix. | S |
+| S46b | Modal build II | Modal polish + snag sweep. formatBytes 1dp, zero=green (errors/churn/client-errors), AE datasource banner, × close button replacing ← Back, modal-active card ring (mouse+keyboard). smokeTest() extended: 14 modal panels + formatBytes spot-checks. 27 pass · 2 deferred · 2 fail (latency nulls, pre-existing). | M |
+| S47a | Upload/download UX I | Progress bar animation fix, QR resolution fix, FREE_EXPIRY constant fix, tier/expiry copy audit. | S |
+| S47b | Status page + upgrade nudge | Status.html editorial pass (plain-English copy, human-readable cards, soften errors). Upgrade nudge on cap hit + expiry gate. | S |
+| S47c | Maintenance notification | KV-controlled maintenance modal on index.html. Ghost-pattern: operator sets MAINTENANCE_NOTICE in STATUS_KV, frontend polls /status, renders dismissible modal overlay using design tokens. One Worker deploy. | M |
+| S47d | B5 close | Snag sweep, context files, version bump to 4.0, B6 planning brief. | S |
 | S48 | Theme persistence + named transfers | Cookie scoped to .refueler.io, privacy copy update, named transfers UI plan. | S |
 | S49a | Carbon gold edging | --inset-rule #C8A96E throughout Carbon. Card borders, rule lines, active states. | S |
 | S49b | Brand audit pass | Share UI vs BRANDING.md. Source Serif 4 editorial moments. Head of Design review. Paper/Carbon consistency sweep. | M |
-| S52 | B5 close | Snag sweep, context files, version bump to 4.0, B6 planning brief. | S |
+| S52 | B5 close (renumbered from S47d) | See S47d. | S |
 
 ---
 

@@ -53,7 +53,8 @@ Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported st
 
 See `share-sessions.md` for log. Full S19–S120 roadmap lives in `Share-Master-Context.md` §Roadmap.
 Core build: S19–S100. Buffer: S101–S120. Planning sessions are uncounted.
-**Current block: B5 (Design full pass) — S43–S52. S46a complete.**
+
+**Current block: B5 (Design full pass) — S43–S52. S46b complete. S47a next.**
 
 ---
 
