@@ -776,8 +776,8 @@
       <div class="mt16">
         <div class="toggle-row">
           <div>
-            <div class="toggle-label">Protect with passphrase</div>
-            <div class="toggle-desc">Recipient must enter a passphrase to download</div>
+            <div class="toggle-label">Protect with password</div>
+            <div class="toggle-desc">Recipient must enter a password to download</div>
           </div>
           <label class="switch">
             <input type="checkbox" id="passphrase-toggle" />
@@ -787,8 +787,8 @@
       </div>
       <div class="hidden" id="passphrase-field-wrap">
         <div class="field mt12">
-          <label for="passphrase-input">Passphrase</label>
-          <input type="password" id="passphrase-input" placeholder="Choose a strong passphrase" autocomplete="new-password" />
+          <label for="passphrase-input">Password</label>
+          <input type="password" id="passphrase-input" placeholder="Choose a strong password" autocomplete="new-password" />
         </div>
         <div class="muted small mt4">Share this separately. We never store it.</div>
       </div>
@@ -840,7 +840,7 @@
         </div>
       </div>
       <div id="rc-passphrase-row" class="hidden">
-        <span class="rc-passphrase-badge">🔐 Passphrase protected</span>
+        <span class="rc-passphrase-badge">🔐 Password protected</span>
       </div>
       <button class="btn btn-primary" id="rc-download-btn">Download</button>
     </div>
@@ -848,10 +848,10 @@
     <!-- Unlock screen (download flow — passphrase gated) -->
     <div id="unlock-screen">
       <div class="unlock-icon">🔐</div>
-      <div class="unlock-title">Enter passphrase</div>
-      <div class="unlock-sub">This file is protected. Enter the passphrase to download.</div>
+      <div class="unlock-title">Enter password</div>
+      <div class="unlock-sub">This file is password protected. Enter the password to download.</div>
       <div class="field" style="width:100%;max-width:320px">
-        <input type="password" id="unlock-input" placeholder="Passphrase" autocomplete="current-password" />
+        <input type="password" id="unlock-input" placeholder="Password" autocomplete="current-password" />
       </div>
       <div id="unlock-error"></div>
       <button class="btn btn-primary" id="unlock-btn" style="min-width:140px">Unlock</button>
@@ -868,10 +868,8 @@
       </div>
     </div>
 
-    <!-- Post-download sign-off — shown only after download completes, never in upload mode -->
-    <div class="hidden" id="dl-signoff">
-      <p class="dl-signoff-secondary">Your data. Your rules. · Refueler Share</p>
-    </div>
+    <!-- Post-download sign-off — deferred until colophon font is resolved (S49) -->
+    <div class="hidden" id="dl-signoff"></div>
 
     <!-- Drop zone multi-file rejection message -->
     <div class="hidden" id="drop-multi-msg" role="alert"></div>
@@ -1240,7 +1238,7 @@ function showSharePanel(url, isProtected) {
   if (isProtected) {
     const note = document.createElement('p');
     note.className = 'muted small mt8';
-    note.textContent = '🔐 Passphrase-protected — share the passphrase separately.';
+    note.textContent = '🔐 Password protected — share the password separately.';
     shareLinkDisplay.insertAdjacentElement('afterend', note);
   }
   qrWrap.innerHTML = '';
@@ -1340,7 +1338,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
             body: JSON.stringify({ passphrase }),
           });
           if (!authRes.ok) {
-            unlockError.textContent = authRes.status === 401 ? 'Incorrect passphrase.' : 'Something went wrong.';
+            unlockError.textContent = authRes.status === 401 ? 'Incorrect password.' : 'Something went wrong.';
             unlockBtn.disabled = false;
             return;
           }
@@ -1363,7 +1361,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
 
 async function startDownload(uuid) {
   downloadCard.classList.remove('hidden');
-  dlStageTag.textContent = 'Downloading';
+  dlStageTag.textContent = 'Downloading — please wait';
   dlPct.textContent = '';
   dlBar.style.width = '0%';
 
@@ -1402,7 +1400,7 @@ async function startDownload(uuid) {
   if (chunks.length === 0) { showDownloadError('No chunks received from server.'); return; }
 
   // ── Phase 2: decrypt chunks, 50–100% ─────────────────────────────────────
-  dlStageTag.textContent = 'Decrypting';
+  dlStageTag.textContent = 'Decrypting — almost done';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
     let plain;
