@@ -630,25 +630,26 @@
   /* ── Turnstile ───────────────────────────────────────────────────── */
   .turnstile-wrap { display: flex; justify-content: center; }
 
-  /* ── Post-download sign-off ─────────────────────────────────────── */
+  /* ── Post-download sign-off — editorial standfirst register ─────── */
   #dl-signoff {
-    padding: 8px 0 0 2px;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
   }
   .dl-signoff-primary {
     font-family: var(--serif);
     font-weight: 300;
-    font-size: 13px;
-    line-height: 1.85;
-    color: var(--text-tertiary);
-    margin: 0 0 22px;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    margin: 0 0 1.25rem;
   }
   .dl-signoff-secondary {
-    font-family: var(--serif);
-    font-weight: 300;
-    font-size: 12px;
-    line-height: 1.85;
+    font-family: var(--mono);
+    font-size: 0.6375rem;
+    letter-spacing: 0.06em;
+    line-height: 1.7;
     color: var(--text-tertiary);
-    opacity: 0.65;
     margin: 0;
   }
 
@@ -799,8 +800,8 @@
 
     <!-- Post-download sign-off — shown only after download completes, never in upload mode -->
     <div class="hidden" id="dl-signoff">
-      <p class="dl-signoff-primary">Your file was transferred anonymously.<br>No account. No tracking. Nothing stored about you.</p>
-      <p class="dl-signoff-secondary">Part of the Refueler ecosystem.<br>Your data. Your rules.<br>refueler.io</p>
+      <p class="dl-signoff-primary">Your file was transferred anonymously. No account. No tracking. Nothing stored about you.</p>
+      <p class="dl-signoff-secondary">Part of the Refueler ecosystem &middot; Your data. Your rules. &middot; refueler.io</p>
     </div>
 
     <!-- Drop zone multi-file rejection message -->
@@ -1311,7 +1312,7 @@ async function startDownload(uuid) {
   dlStageTag.textContent = 'Complete';
   dlPct.textContent = '100%';
   dlBar.style.width = '100%';
-  dlDetail.textContent = 'File saved.';
+  dlDetail.classList.add('hidden');  // sign-off replaces "File saved." text
   dlSignoff.classList.remove('hidden');
 }
 
