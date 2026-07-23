@@ -8,7 +8,6 @@ activePage: ""
 <html lang="en">
 <head>
 {% set extraHead %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 {% endset %}
 {% include "head.njk" %}
@@ -277,6 +276,39 @@ activePage: ""
   /* ── Turnstile ───────────────────────────────────────────────────── */
   .turnstile-wrap { display: flex; justify-content: center; }
 
+  /* ── Post-download sign-off ─────────────────────────────────────── */
+  #dl-signoff {
+    text-align: center;
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 0 8px;
+  }
+  .dl-signoff-primary {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin: 0 0 32px;
+  }
+  .dl-signoff-secondary {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-tertiary);
+    margin: 0;
+  }
+
+  /* ── Drop zone multi-file rejection ─────────────────────────────── */
+  #drop-multi-msg {
+    font-size: 13px;
+    color: var(--c-amber);
+    text-align: center;
+    padding: 8px 0 0;
+    font-family: var(--sans);
+  }
+
   @media (max-width: 600px) {
     .drop-zone { padding: 40px 16px; }
   }
@@ -397,11 +429,23 @@ activePage: ""
       <div class="progress-label mt4" id="dl-detail"></div>
     </div>
 
+    <!-- Post-download sign-off — shown only after download completes, never in upload mode -->
+    <div class="hidden" id="dl-signoff">
+      <p class="dl-signoff-primary">Your file was transferred anonymously.<br>No account. No tracking. Nothing stored about you.</p>
+      <p class="dl-signoff-secondary">Part of the Refueler ecosystem.<br>Your data. Your rules.<br>refueler.io</p>
+    </div>
+
+    <!-- Drop zone multi-file rejection message -->
+    <div class="hidden" id="drop-multi-msg" role="alert"></div>
+
   </main>
 </div>
 
 {% include "footer.njk" %}
 
+<!-- qr-creator loaded here (blocking) so QrCreator is defined before the module script runs.
+     Previously in extraHead, which races against module evaluation. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js"></script>
 <script type="module">
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -470,6 +514,8 @@ const dlStageTag       = $('dl-stage-tag');
 const dlPct            = $('dl-pct');
 const dlBar            = $('dl-bar');
 const dlDetail         = $('dl-detail');
+const dlSignoff        = $('dl-signoff');
+const dropMultiMsg     = $('drop-multi-msg');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Info card
@@ -495,10 +541,21 @@ function enterUploadMode() {
   dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 1) {
+      dropMultiMsg.textContent = 'One file at a time — drop a single file to transfer.';
+      dropMultiMsg.classList.remove('hidden');
+      return;
+    }
+    dropMultiMsg.classList.add('hidden');
+    dropMultiMsg.textContent = '';
     if (e.dataTransfer.files[0]) handleFileSelection(e.dataTransfer.files[0]);
   });
   fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) handleFileSelection(fileInput.files[0]);
+    if (fileInput.files[0]) {
+      dropMultiMsg.classList.add('hidden');
+      dropMultiMsg.textContent = '';
+      handleFileSelection(fileInput.files[0]);
+    }
   });
   passphraseToggle.addEventListener('change', () => {
     passphraseWrap.classList.toggle('hidden', !passphraseToggle.checked);
@@ -862,6 +919,7 @@ async function startDownload(uuid) {
   dlPct.textContent = '100%';
   dlBar.style.width = '100%';
   dlDetail.textContent = 'File saved.';
+  dlSignoff.classList.remove('hidden');
 }
 
 function showDownloadError(msg) {
