@@ -192,7 +192,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `renderTurnstile()` from `onTurnstileLoad` without flag | Use `pendingTurnstileRender` flag to prevent double-render |
 | `qrcodejs` library | Use `qr-creator` (SVG, cdnjs) — canvas output blurs at retina |
 | Multi-file manifest for folder upload | Client-side zip via fflate only — Worker architecture unchanged |
-
+| `types: [...]` in showSaveFilePicker | Use `types: []` — suppresses macOS extension warning |
+| Omit total_chunks from /meta/ response | Must be included — FSAA loop bound depends on it |
 ---
 
 ## Current state

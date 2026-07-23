@@ -508,4 +508,15 @@
 
 ---
 
+### S48a-1 — FSAA streaming download
+**Commits:** `f8cfac0` → `da9b9cd` → `0152aae`
+
+- `startDownloadStream()`: FSAA path, pipeline depth 2 (chunk N+1 fetched concurrently while chunk N decrypts+writes), max 2 chunks resident in memory regardless of file size.
+- `startDownloadGated()`: capability gate — `typeof showSaveFilePicker !== 'undefined'`, no UA sniffing. `showSaveFilePicker` called first within gesture before any await. AbortError restores receiver card silently. Unexpected picker error falls through to Blob.
+- Per-chunk retry: 3 attempts, 1s/2s/4s backoff. Hard abort on 400/401/410. `writable.abort()` on failure — privacy comment referencing B9 whitepaper on both call sites.
+- `startDownload()` retained as Blob fallback, updated to accept `meta` param and use `meta.total_chunks` as loop bound.
+- Capability warning (`.dl-compat-warn`): amber >300 MB, red >1 GB. Appears on receiver card before Download click. Design tokens throughout.
+- Fix: `total_chunks` added to `handleMeta` response (Worker line 882). Was missing — caused "Transfer metadata is incomplete" error on first test.
+- Fix: `types: []` in `showSaveFilePicker` call — suppresses macOS `.com` extension warning.
+
 *"Nothing stops this train."*
