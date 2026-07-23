@@ -871,7 +871,7 @@ async function handleAuth(request, env, uuid) {
 // Meta — GET /meta/:uuid
 // Public, no auth. Returns filename, size, expiry, passphrase flag from manifest.
 async function handleMeta(request, env, uuid) {
-  const { manifest } = await safeGetManifest(env, uuid);
+  const { manifest } = await safeGetManifest(env.BUCKET, uuid, env);
   if (!manifest) {
     return new Response(JSON.stringify({ error: 'not_found' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
