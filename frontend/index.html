@@ -1518,11 +1518,6 @@ async function startDownloadStream(uuid, meta, fileHandle) {
   // ── Streaming loop — pipeline depth 2 ─────────────────────────────────────
   // Chunk N+1 is fetched concurrently while chunk N is decrypted and written.
   // Maximum 2 ciphertext chunks in memory at any moment, regardless of file size.
-const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
-  let bytesWritten = 0;
-  let speedWindowStart = Date.now();
-  let speedWindowBytes = 0;
-
   try {
     let nextChunkPromise = fetchChunkWithRetry(0);
 
@@ -1556,25 +1551,9 @@ const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes
 
       await writable.write(new Uint8Array(plaintext));
 
-bytesWritten += plaintext.byteLength;
-      speedWindowBytes += plaintext.byteLength;
-
-      const now = Date.now();
-      const elapsed = (now - speedWindowStart) / 1000;
-      let speedStr = '';
-      if (elapsed >= 0.25) {
-        const bps = speedWindowBytes / elapsed;
-        speedStr = ' · ' + formatBytes(bps) + '/s';
-        speedWindowStart = now;
-        speedWindowBytes = 0;
-      }
-
-      const pct = totalBytes > 0
-        ? Math.min(Math.round((bytesWritten / totalBytes) * 100), 100)
-        : Math.round(((i + 1) / totalChunks) * 100);
+      const pct = Math.round(((i + 1) / totalChunks) * 100);
       dlBar.style.width = pct + '%';
-      dlPct.textContent = pct + '%' + speedStr;
-      dlStageTag.textContent = 'Downloading' + speedStr;
+      dlPct.textContent = pct + '%';
     }
 
     await writable.close();
@@ -1606,68 +1585,81 @@ bytesWritten += plaintext.byteLength;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Blob fallback download — retained for browsers without FSAA support.
-// Memory cost: 2× file size (ciphertext array + plaintext array) — not suitable
-// for files approaching available RAM. For large files, Chrome + FSAA is recommended.
-// Will be cleaned up in S48a-3.
+// Blob fallback download — for browsers without FSAA (showSaveFilePicker) support.
+// Memory cost: 2× file size. Not suitable for large files — capability warning
+// shown above 300 MB / 1 GB on receiver card.
 // ─────────────────────────────────────────────────────────────────────────────
 async function startDownload(uuid, meta) {
-  downloadCard.classList.remove('hidden');
-  dlStageTag.textContent = 'Downloading — please wait';
-  dlPct.textContent = '';
-  dlBar.style.width = '0%';
-
   const totalChunks = meta?.total_chunks;
-  const chunks = [];
-  let chunkIndex = 0;
-  let fileName = meta?.file_name || `refueler-${uuid.slice(0, 8)}`;
-
-  // Fetch all chunks into memory — greedy loop, breaks on 404 if total_chunks absent,
-  // or iterates to totalChunks if available. Both paths work — manifest.total_chunks
-  // is authoritative (S48a addendum).
-  const loopBound = totalChunks || Infinity;
-  while (chunkIndex < loopBound) {
-    const headers = {};
-    if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
-    const padded = String(chunkIndex).padStart(4, '0');
-    const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
-    if (res.status === 404) break;
-    if (!res.ok) {
-      reportError('download_chunk', `HTTP ${res.status} chunk ${chunkIndex}`, `uuid:${uuid.slice(0,8)} chunk:${chunkIndex}`);
-      showDownloadError(`Download failed (${res.status}).`);
-      return;
-    }
-    chunks.push(await res.arrayBuffer());
-    const downloadPct = totalChunks
-      ? Math.round(((chunkIndex + 1) / totalChunks) * 45)
-      : Math.min(45, Math.round(45 * (1 - Math.pow(0.7, chunkIndex + 1))));
-    dlBar.style.width = downloadPct + '%';
-    chunkIndex++;
+  if (!totalChunks || totalChunks < 1) {
+    showDownloadError('Transfer metadata is incomplete. Please try again.');
+    return;
   }
 
-  if (chunks.length === 0) { showDownloadError('No chunks received from server.'); return; }
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = 'Downloading';
+  dlPct.textContent = '0%';
+  dlBar.style.width = '0%';
 
-  dlStageTag.textContent = 'Decrypting — almost done';
+  const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
+  const fileName = meta?.file_name || `refueler-${uuid.slice(0, 8)}`;
+  const chunks = [];
+  let bytesReceived = 0;
+
+  // ── Fetch phase ────────────────────────────────────────────────────────────
+  for (let i = 0; i < totalChunks; i++) {
+    const headers = {};
+    if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
+    const padded = String(i).padStart(4, '0');
+    const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+
+    if (res.status === 401 || res.status === 410) {
+      showDownloadError(res.status === 401
+        ? 'Access denied. This transfer may have expired or the link is incorrect.'
+        : 'This transfer has expired. The file is no longer available.');
+      return;
+    }
+    if (!res.ok) {
+      reportError('download_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uuid.slice(0,8)}`).catch(() => {});
+      showDownloadError(`Download failed (${res.status}). Please try again.`);
+      return;
+    }
+
+    const buf = await res.arrayBuffer();
+    chunks.push(buf);
+    bytesReceived += buf.byteLength;
+
+    const pct = totalBytes > 0
+      ? Math.min(Math.round((bytesReceived / totalBytes) * 50), 50)
+      : Math.round(((i + 1) / totalChunks) * 50);
+    dlBar.style.width = pct + '%';
+    dlPct.textContent = pct + '%';
+  }
+
+  // ── Decrypt phase ──────────────────────────────────────────────────────────
+  dlStageTag.textContent = 'Decrypting';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
-    let plain;
     try {
       const aad = new Uint8Array(4);
       new DataView(aad.buffer).setUint32(0, i, false);
-      plain = await crypto.subtle.decrypt(
+      const plain = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: sessionIv, additionalData: aad },
         sessionAesKey, chunks[i]
       );
+      decrypted.push(plain);
     } catch (e) {
-      reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
-      showDownloadError(`Decrypt failed: wrong key or corrupted data.`);
+      reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`).catch(() => {});
+      showDownloadError('Decryption failed — wrong key or corrupted data.');
       return;
     }
-    decrypted.push(plain);
+
     const pct = 50 + Math.round(((i + 1) / chunks.length) * 50);
     dlBar.style.width = pct + '%';
+    dlPct.textContent = pct + '%';
   }
 
+  // ── Save ───────────────────────────────────────────────────────────────────
   const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
   const blobUrl = URL.createObjectURL(blob);
   const a       = document.createElement('a');
@@ -1680,6 +1672,7 @@ async function startDownload(uuid, meta) {
 
   dlStageTag.textContent = 'Complete';
   dlBar.style.width = '100%';
+  dlPct.textContent = '100%';
   dlSignoff.classList.remove('hidden');
 }
 
