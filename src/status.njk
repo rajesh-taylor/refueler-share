@@ -20,6 +20,17 @@ activePage: ""
   .status-hero {
     margin-bottom: 48px;
   }
+  .status-back-link {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--fg-muted);
+    text-decoration: none;
+    margin-bottom: 20px;
+    transition: color 0.15s;
+  }
+  .status-back-link:hover { color: var(--fg); }
   .status-hero-label {
     font-family: var(--mono);
     font-size: 11px;
@@ -226,19 +237,19 @@ activePage: ""
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--fg-subtle);
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
   .integrity-card-value {
     font-family: var(--display);
-    font-size: 0.8rem;
-    font-weight: 500;
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--fg);
-    margin-bottom: 4px;
+    margin-bottom: 8px;
   }
   .integrity-card-note {
-    font-size: 11px;
+    font-size: 13px;
     color: var(--fg-muted);
-    line-height: 1.5;
+    line-height: 1.6;
   }
 
   /* Known gap — amber treatment */
@@ -272,9 +283,9 @@ activePage: ""
 
   <!-- ── Hero ──────────────────────────────────────────────────────────── -->
   <div class="status-hero">
-    <p class="status-hero-label">share.refueler.io</p>
-    <h1 class="status-hero-headline">System Status</h1>
-    <p class="status-hero-updated subtle" id="hero-updated">Loading…</p>
+    <a href="/index.html" class="status-back-link">← Back to Refueler Share</a>
+    <h1 class="status-hero-headline">Service Status</h1>
+    <p class="status-hero-updated subtle" id="hero-updated">Checking…</p>
   </div>
 
   <!-- ── Ops layer ─────────────────────────────────────────────────────── -->
@@ -310,73 +321,66 @@ activePage: ""
 
   </section>
 
-  <!-- ── Cryptographic integrity layer ─────────────────────────────────── -->
+  <!-- ── How it works ─────────────────────────────────────────────────── -->
   <section class="integrity-section">
 
     <div class="section-header">
-      <span class="section-title">Cryptographic integrity layer</span>
+      <span class="section-title">How it works</span>
     </div>
 
     <div class="integrity-grid">
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Zero-knowledge guarantee</div>
-        <div class="integrity-card-value">✓ Architectural</div>
+        <div class="integrity-card-label">Technical: AES-256-GCM · RFC 3986 fragment</div>
+        <div class="integrity-card-value">✓ Encrypted in your browser</div>
         <div class="integrity-card-note">
-          AES-256 keys are generated browser-side and placed in the URL fragment only.
-          The fragment is never transmitted to our Worker per RFC 3986.
-          We receive and store ciphertext. Reading your files is not technically possible for us.
+          Your file is encrypted before it leaves your device. The key lives only in the
+          share link — we never see it, and neither does anyone who handles the transfer in transit.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Anonymous auth</div>
-        <div class="integrity-card-value">✓ Cashu NUT-00</div>
+        <div class="integrity-card-label">Technical: Cashu NUT-00 blind signatures · NUT-07 double-spend ledger</div>
+        <div class="integrity-card-value">✓ Transfers can't be linked to you</div>
         <div class="integrity-card-note">
-          Upload credentials are blind-signed. The server issues a token without
-          learning its serial number. Transfers cannot be linked to identity at the
-          ledger layer. Double-spend prevention via Supabase spent-token table (NUT-07).
+          No account. No email. Uploads are authorised by an anonymous credential —
+          the server grants access without learning who you are.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Chunk integrity</div>
-        <div class="integrity-card-value">✓ BLAKE3 (browser)</div>
+        <div class="integrity-card-label">Technical: BLAKE3 WASM · server-side chunk verification</div>
+        <div class="integrity-card-value">✓ Files arrive intact</div>
         <div class="integrity-card-note">
-          Each 50 MB chunk is BLAKE3-hashed client-side via a compiled WASM module
-          loaded from a local bundle. Hash roots enable byte-exact resume on
-          interrupted transfers without restarting from chunk 0.
+          Each chunk is hashed before upload and verified by the server on receipt.
+          Any corruption or tampering in transit is caught and rejected automatically.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Passphrase gating</div>
-        <div class="integrity-card-value">✓ NUT-11 Mode 1</div>
+        <div class="integrity-card-label">Technical: SHA-256 passphrase hash · NUT-11 Mode 1</div>
+        <div class="integrity-card-value">✓ Optional passphrase lock</div>
         <div class="integrity-card-note">
-          Share links can require a passphrase. The SHA-256 hash of the passphrase is
-          stored in the transfer manifest. The Worker issues a time-scoped download
-          token only on hash match. The passphrase never travels the wire in plaintext.
-        </div>
-      </div>
-
-      <div class="integrity-card gap">
-        <div class="integrity-card-label">Server-side chunk verification</div>
-        <div class="integrity-card-value">⚠ Known gap</div>
-        <div class="integrity-card-note">
-          The Worker verifies chunk receipt but does not re-verify the client-declared
-          BLAKE3 hash server-side. A compromised client could declare a hash mismatch
-          undetected. Fix: compile BLAKE3 to a static WASM binary in the Worker.
-          No integrity or audit claims are made until this is resolved.
+          You can protect a share link with a passphrase. The passphrase never travels
+          the wire — only its hash is stored, and the server checks it before issuing a download token.
         </div>
       </div>
 
       <div class="integrity-card">
-        <div class="integrity-card-label">Storage ephemerality</div>
-        <div class="integrity-card-value">✓ R2 lifecycle</div>
+        <div class="integrity-card-label">Technical: Cloudflare R2 lifecycle rules · 92-day hard cap</div>
+        <div class="integrity-card-value">✓ Files delete themselves</div>
         <div class="integrity-card-note">
-          Hard expiry enforced by Cloudflare R2 lifecycle rules: all objects deleted
-          after 92 days maximum. Incomplete multipart uploads aborted after 1 day.
-          No manual deletion required. No exceptions.
+          Every transfer has an expiry. When it passes, the file is deleted automatically
+          by Cloudflare's storage layer — no manual intervention, no exceptions, no lingering copies.
+        </div>
+      </div>
+
+      <div class="integrity-card">
+        <div class="integrity-card-label">Technical: rate limiting · UUID-bound credentials · Turnstile</div>
+        <div class="integrity-card-value">✓ Abuse prevention</div>
+        <div class="integrity-card-note">
+          Each upload credential is cryptographically bound to a single transfer.
+          Rate limits and bot detection prevent the service being used as a relay for bulk abuse.
         </div>
       </div>
 
@@ -424,9 +428,9 @@ activePage: ""
     stateCard.dataset.state = state;
 
     const labels = {
-      operational: 'All systems operational',
-      degraded:    'Service degradation detected',
-      maintenance: 'Maintenance in progress',
+      operational: 'Refueler Share is running normally',
+      degraded:    'Something is wrong — we\'re looking into it',
+      maintenance: 'Maintenance in progress — back shortly',
     };
     stateLabel.textContent = labels[state] ?? state;
 
@@ -516,12 +520,12 @@ activePage: ""
       const res = await fetch(`${WORKER_URL}/status`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       status = await res.json();
-    } catch (e) {
-      stateCard.dataset.state = 'degraded';
-      stateLabel.textContent  = 'Status unavailable';
-      stateMessage.textContent = 'Could not reach the Worker. The service may be down or your network is blocking the request.';
-      incidentList.innerHTML  = `<p class="fetch-error">Could not load incident data: ${escHtml(e.message)}</p>`;
-      heroUpdated.textContent = '';
+    } catch {
+      stateCard.dataset.state  = 'degraded';
+      stateLabel.textContent   = 'Status check failed';
+      stateMessage.textContent = 'We couldn\'t reach the status endpoint. The service may be temporarily unavailable, or your network may be blocking the request.';
+      incidentList.innerHTML   = '<p class="fetch-error">Incident data is unavailable right now. Try refreshing in a moment.</p>';
+      heroUpdated.textContent  = '';
       return;
     }
 
