@@ -509,9 +509,10 @@ function closeModal() {
   modal.removeEventListener('keydown', _trapFocus);
   document.body.style.overflow = '';
   document.getElementById('modal-csv-note').style.display = 'none';
-  if (_modalTrigger && typeof _modalTrigger.focus === 'function') {
+  if (_modalTrigger) {
     _modalTrigger.classList.remove('modal-active');
-    _modalTrigger.focus();
+    const t = _modalTrigger;
+    requestAnimationFrame(() => { if (typeof t.focus === 'function') t.focus(); });
   }
   _modalTrigger = null;
 }
@@ -528,7 +529,9 @@ function formatBytes(bytes) {
   if (!bytes || bytes === 0) return { val: '0', unit: 'B' };
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return { val: (bytes / Math.pow(1024, i)).toFixed(2), unit: units[i] };
+  const raw = bytes / Math.pow(1024, i);
+  const val = parseFloat(raw.toFixed(i >= 4 ? 2 : 1)).toString();
+  return { val, unit: units[i] };
 }
 
 function showError(msg) {
