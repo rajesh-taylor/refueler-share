@@ -219,6 +219,11 @@ export default {
         return timed('auth', () => handleAuth(request, env, authMatch[1]).then(r => addCors(r, request)));
       }
 
+      const metaMatch = path.match(/^\/meta\/([0-9a-f-]{36})$/i);
+      if (request.method === 'GET' && metaMatch) {
+        return timed('meta', () => handleMeta(request, env, metaMatch[1]).then(r => addCors(r, request)));
+      }
+
       const downloadMatch = path.match(/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i);
       if (request.method === 'GET' && downloadMatch) {
         // Rate limit: 300 requests / 60s per IP — generous for legitimate chunked downloads
@@ -863,6 +868,23 @@ async function handleAuth(request, env, uuid) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Meta — GET /meta/:uuid
+// Public, no auth. Returns filename, size, expiry, passphrase flag from manifest.
+async function handleMeta(request, env, uuid) {
+  const { manifest } = await safeGetManifest(env, uuid);
+  if (!manifest) {
+    return new Response(JSON.stringify({ error: 'not_found' }), {
+      status: 404, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return new Response(JSON.stringify({
+    file_name:            manifest.file_name        ?? null,
+    total_bytes:          manifest.total_bytes       ?? null,
+    expiry_timestamp:     manifest.expiry_timestamp  ?? null,
+    passphrase_protected: !!manifest.p2sh_secret_hash,
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
 // Download — GET /download/:uuid/:chunk
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleDownload(request, env, uuid, chunkIndex) {

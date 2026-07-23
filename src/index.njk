@@ -491,12 +491,11 @@ activePage: ""
     <div class="card hidden" id="download-card">
       <div class="flex-row">
         <span class="tag" id="dl-stage-tag">Downloading</span>
-        <span class="muted small" id="dl-pct">0%</span>
+        <span class="muted small" id="dl-pct"></span>
       </div>
       <div class="progress-bar-wrap">
         <div class="progress-bar" id="dl-bar"></div>
       </div>
-      <div class="progress-label mt4" id="dl-detail"></div>
     </div>
 
     <!-- Post-download sign-off — shown only after download completes, never in upload mode -->
@@ -582,7 +581,6 @@ const downloadCard     = $('download-card');
 const dlStageTag       = $('dl-stage-tag');
 const dlPct            = $('dl-pct');
 const dlBar            = $('dl-bar');
-const dlDetail         = $('dl-detail');
 const dlSignoff        = $('dl-signoff');
 const dropMultiMsg     = $('drop-multi-msg');
 const receiverCard     = $('receiver-card');
@@ -905,40 +903,26 @@ async function enterDownloadMode({ uuid, key, iv }) {
   sessionIv      = new Uint8Array(ivBytes);
   history.replaceState(null, '', location.pathname);
 
-  // ── Probe chunk 0 to get metadata and check auth requirement ─────────────
-  // We do NOT auto-download. Show the receiver card first, let the user click.
-  let probe;
+  // ── Fetch metadata from /meta/{uuid} ────────────────────────────────────
+  // Public endpoint — no auth, returns filename/size/expiry/passphrase flag.
+  // Works for both protected and unprotected transfers.
+  let meta = {};
   try {
-    probe = await fetch(`${WORKER_URL}/download/${uuid}/0000`);
+    const metaRes = await fetch(`${WORKER_URL}/meta/${uuid}`);
+    if (metaRes.ok) meta = await metaRes.json();
+    else if (metaRes.status === 404) { showDownloadError('Transfer not found or already expired.'); return; }
   } catch {
     showDownloadError('Network error — could not reach server.');
     return;
   }
 
-  const isPassphraseProtected = probe.status === 401;
-  const transferOk = isPassphraseProtected || probe.ok || probe.status === 206;
+  // ── Populate receiver card ────────────────────────────────────────────────
+  rcFileName.textContent = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
 
-  if (!transferOk) {
-    reportError('manifest_fetch', `HTTP ${probe.status}`, `uuid:${uuid.slice(0,8)}`);
-    showDownloadError(`Transfer unavailable (${probe.status}).`);
-    return;
-  }
+  rcSize.textContent = meta.total_bytes ? formatBytes(meta.total_bytes) : '—';
 
-  // ── Populate receiver card ───────────────────────────────────────────────
-  // Filename: from X-File-Name header on the probe response (chunk 0).
-  // Only present on non-401 probes — for passphrase-protected transfers it won't
-  // be sent before auth, so fall back gracefully.
-  const rawName = probe.headers.get('X-File-Name');
-  rcFileName.textContent = rawName || `refueler-${uuid.slice(0, 8)}`;
-
-  // Size: from X-Total-Bytes header on the probe response.
-  const totalBytes = probe.headers.get('X-Total-Bytes');
-  rcSize.textContent = totalBytes ? formatBytes(parseInt(totalBytes, 10)) : '—';
-
-  // Expiry: from X-Expiry-Timestamp header — seconds since epoch.
-  const expiryTs = probe.headers.get('X-Expiry-Timestamp');
-  if (expiryTs) {
-    const secsRemaining = Math.floor(parseInt(expiryTs, 10) - Date.now() / 1000);
+  if (meta.expiry_timestamp) {
+    const secsRemaining = Math.floor(meta.expiry_timestamp - Date.now() / 1000);
     if (secsRemaining <= 0) {
       rcExpiry.textContent = 'Expired';
       rcExpiry.style.color = 'var(--c-red)';
@@ -953,9 +937,8 @@ async function enterDownloadMode({ uuid, key, iv }) {
     rcExpiry.textContent = '—';
   }
 
-  if (isPassphraseProtected) {
-    rcPassphraseRow.classList.remove('hidden');
-  }
+  const isPassphraseProtected = !!meta.passphrase_protected;
+  if (isPassphraseProtected) rcPassphraseRow.classList.remove('hidden');
 
   receiverCard.style.display = 'flex';
 
@@ -1002,12 +985,18 @@ async function enterDownloadMode({ uuid, key, iv }) {
 async function startDownload(uuid) {
   downloadCard.classList.remove('hidden');
   dlStageTag.textContent = 'Downloading';
-  dlPct.textContent = '—';
+  dlPct.textContent = '';
+  dlBar.style.width = '0%';
 
+  // ── Phase 1: fetch all chunks, updating progress bar as each arrives ──────
+  // We don't know total chunk count upfront, so we do two passes:
+  // fetch pass shows 0–50%, decrypt pass shows 50–100%.
   const chunks = [];
   let chunkIndex = 0;
   let fileName = `refueler-${uuid.slice(0, 8)}`;
 
+  // First, get total_chunks from manifest via a HEAD-like read of chunk 0
+  // (total_chunks not exposed directly, so we fetch greedily and track count)
   while (true) {
     const headers = {};
     if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
@@ -1016,7 +1005,7 @@ async function startDownload(uuid) {
     if (res.status === 404) break;
     if (!res.ok) {
       reportError('download_chunk', `HTTP ${res.status} chunk ${chunkIndex}`, `uuid:${uuid.slice(0,8)} chunk:${chunkIndex}`);
-      showDownloadError(`Download failed at chunk ${chunkIndex} (${res.status}).`);
+      showDownloadError(`Download failed (${res.status}).`);
       return;
     }
     if (chunkIndex === 0) {
@@ -1024,12 +1013,16 @@ async function startDownload(uuid) {
       if (headerName) fileName = headerName;
     }
     chunks.push(await res.arrayBuffer());
-    dlDetail.textContent = `Chunk ${chunkIndex + 1}`;
+    // Pulse bar forward during download — we don't know total so animate to 45%
+    // using a decaying approach: each chunk gets half the remaining space up to 45%
+    const downloadPct = Math.min(45, Math.round(45 * (1 - Math.pow(0.7, chunkIndex + 1))));
+    dlBar.style.width = downloadPct + '%';
     chunkIndex++;
   }
 
   if (chunks.length === 0) { showDownloadError('No chunks received from server.'); return; }
 
+  // ── Phase 2: decrypt chunks, 50–100% ─────────────────────────────────────
   dlStageTag.textContent = 'Decrypting';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
@@ -1041,13 +1034,12 @@ async function startDownload(uuid) {
       );
     } catch (e) {
       reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
-      showDownloadError(`Decrypt failed on chunk ${i}: wrong key or corrupted data.`);
+      showDownloadError(`Decrypt failed: wrong key or corrupted data.`);
       return;
     }
     decrypted.push(plain);
-    dlPct.textContent = Math.round(((i + 1) / chunks.length) * 100) + '%';
-    dlBar.style.width = dlPct.textContent;
-    dlDetail.textContent = `Decrypting ${i + 1} / ${chunks.length}`;
+    const pct = 50 + Math.round(((i + 1) / chunks.length) * 50);
+    dlBar.style.width = pct + '%';
   }
 
   const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
@@ -1061,17 +1053,13 @@ async function startDownload(uuid) {
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
   dlStageTag.textContent = 'Complete';
-  dlPct.textContent = '100%';
   dlBar.style.width = '100%';
-  dlDetail.classList.add('hidden');  // sign-off replaces "File saved." text
   dlSignoff.classList.remove('hidden');
 }
 
 function showDownloadError(msg) {
   downloadCard.classList.remove('hidden');
-  dlStageTag.textContent = 'Error';
-  dlDetail.textContent = msg;
-  dlDetail.classList.add('danger-txt');
+  dlStageTag.textContent = `Error — ${msg}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
