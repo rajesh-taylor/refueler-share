@@ -16,6 +16,6 @@
     "blake3-wasm": "2.1.5"
   },
   "devDependencies": {
-    "wrangler": "^4.112.0"
+    "wrangler": "^4.113.0"
   }
 }

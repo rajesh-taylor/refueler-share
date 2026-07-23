@@ -2,8 +2,8 @@
 // Wraps the wasm-pack bundler output without requiring a bundler.
 // Import the .wasm binary directly; Wrangler static-import bundles it.
 
-import wasmBinary from './blake3-wasm/blake3_wasm_bg.wasm';
-import { __wbg_set_wasm, hash as _hash, __wbindgen_init_externref_table } from './blake3-wasm/blake3_wasm_bg.js';
+import wasmBinary from '../blake3-wasm/blake3_wasm_bg.wasm';
+import { __wbg_set_wasm, hash as _hash, __wbindgen_init_externref_table } from '../blake3-wasm/blake3_wasm_bg.js';
 
 let initialised = false;
 
