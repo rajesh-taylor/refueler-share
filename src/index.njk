@@ -1048,7 +1048,7 @@ async function startDownloadGated(uuid, meta) {
     try {
       fileHandle = await showSaveFilePicker({
         suggestedName: fileName,
-        types: [{ description: 'File', accept: { 'application/octet-stream': [] } }],
+        types: [],
       });
     } catch (e) {
       // User cancelled the picker — abort silently, restore receiver card.
