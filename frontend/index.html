@@ -649,6 +649,59 @@
     .dl-signoff-secondary { font-size: 17px; }
   }
 
+  /* ── Receiver landing card ──────────────────────────────────────── */
+  #receiver-card { display: none; flex-direction: column; gap: 18px; }
+  .rc-file-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .rc-file-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    opacity: 0.55;
+    line-height: 1;
+  }
+  .rc-file-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--fg);
+    word-break: break-all;
+    line-height: 1.5;
+  }
+  .rc-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 24px;
+  }
+  .rc-meta-item {}
+  .rc-meta-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-secondary);
+    margin-bottom: 3px;
+  }
+  .rc-meta-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .rc-passphrase-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--c-amber);
+    background: var(--c-amber-bg);
+    border: 0.5px solid var(--c-amber);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: var(--mono);
+  }
+  #rc-download-btn { width: 100%; justify-content: center; }
+
   /* ── Drop zone multi-file rejection ─────────────────────────────── */
   #drop-multi-msg {
     font-size: 13px;
@@ -770,6 +823,28 @@
       <div id="qr-wrap"></div>
     </div>
 
+    <!-- Receiver landing card (S47c) — shown before any download starts -->
+    <div class="card" id="receiver-card" style="display:none">
+      <div class="rc-file-row">
+        <span class="rc-file-icon">📄</span>
+        <span class="rc-file-name" id="rc-file-name">Loading…</span>
+      </div>
+      <div class="rc-meta-grid">
+        <div class="rc-meta-item">
+          <div class="rc-meta-label">Size</div>
+          <div class="rc-meta-value" id="rc-size">—</div>
+        </div>
+        <div class="rc-meta-item">
+          <div class="rc-meta-label">Expires</div>
+          <div class="rc-meta-value" id="rc-expiry">—</div>
+        </div>
+      </div>
+      <div id="rc-passphrase-row" class="hidden">
+        <span class="rc-passphrase-badge">🔐 Passphrase protected</span>
+      </div>
+      <button class="btn btn-primary" id="rc-download-btn">Download</button>
+    </div>
+
     <!-- Unlock screen (download flow — passphrase gated) -->
     <div id="unlock-screen">
       <div class="unlock-icon">🔐</div>
@@ -889,6 +964,12 @@ const dlBar            = $('dl-bar');
 const dlDetail         = $('dl-detail');
 const dlSignoff        = $('dl-signoff');
 const dropMultiMsg     = $('drop-multi-msg');
+const receiverCard     = $('receiver-card');
+const rcFileName       = $('rc-file-name');
+const rcSize           = $('rc-size');
+const rcExpiry         = $('rc-expiry');
+const rcPassphraseRow  = $('rc-passphrase-row');
+const rcDownloadBtn    = $('rc-download-btn');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Info card
@@ -1203,43 +1284,98 @@ async function enterDownloadMode({ uuid, key, iv }) {
   sessionIv      = new Uint8Array(ivBytes);
   history.replaceState(null, '', location.pathname);
 
-  const probe = await fetch(`${WORKER_URL}/download/${uuid}/0000`);
+  // ── Probe chunk 0 to get metadata and check auth requirement ─────────────
+  // We do NOT auto-download. Show the receiver card first, let the user click.
+  let probe;
+  try {
+    probe = await fetch(`${WORKER_URL}/download/${uuid}/0000`);
+  } catch {
+    showDownloadError('Network error — could not reach server.');
+    return;
+  }
 
-  if (probe.status === 401) {
-    unlockScreen.style.display = 'flex';
-    unlockBtn.addEventListener('click', async () => {
-      const passphrase = unlockInput.value.trim();
-      if (!passphrase) return;
-      unlockBtn.disabled = true;
-      unlockError.textContent = '';
-      try {
-        const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ passphrase }),
-        });
-        if (!authRes.ok) {
-          unlockError.textContent = authRes.status === 401 ? 'Incorrect passphrase.' : 'Something went wrong.';
-          unlockBtn.disabled = false;
-          return;
-        }
-        const { token } = await authRes.json();
-        downloadToken = token;
-        unlockInput.value = '';
-        unlockScreen.style.display = 'none';
-        await startDownload(uuid);
-      } catch {
-        unlockError.textContent = 'Network error. Try again.';
-        unlockBtn.disabled = false;
-      }
-    });
-    unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
-  } else if (probe.ok || probe.status === 206) {
-    await startDownload(uuid);
-  } else {
+  const isPassphraseProtected = probe.status === 401;
+  const transferOk = isPassphraseProtected || probe.ok || probe.status === 206;
+
+  if (!transferOk) {
     reportError('manifest_fetch', `HTTP ${probe.status}`, `uuid:${uuid.slice(0,8)}`);
     showDownloadError(`Transfer unavailable (${probe.status}).`);
+    return;
   }
+
+  // ── Populate receiver card ───────────────────────────────────────────────
+  // Filename: from X-File-Name header on the probe response (chunk 0).
+  // Only present on non-401 probes — for passphrase-protected transfers it won't
+  // be sent before auth, so fall back gracefully.
+  const rawName = probe.headers.get('X-File-Name');
+  rcFileName.textContent = rawName || `refueler-${uuid.slice(0, 8)}`;
+
+  // Size: from X-Total-Bytes header on the probe response.
+  const totalBytes = probe.headers.get('X-Total-Bytes');
+  rcSize.textContent = totalBytes ? formatBytes(parseInt(totalBytes, 10)) : '—';
+
+  // Expiry: from X-Expiry-Timestamp header — seconds since epoch.
+  const expiryTs = probe.headers.get('X-Expiry-Timestamp');
+  if (expiryTs) {
+    const secsRemaining = Math.floor(parseInt(expiryTs, 10) - Date.now() / 1000);
+    if (secsRemaining <= 0) {
+      rcExpiry.textContent = 'Expired';
+      rcExpiry.style.color = 'var(--c-red)';
+    } else {
+      const days  = Math.floor(secsRemaining / 86400);
+      const hours = Math.floor((secsRemaining % 86400) / 3600);
+      if (days >= 1)       rcExpiry.textContent = `${days} day${days !== 1 ? 's' : ''} remaining`;
+      else if (hours >= 1) rcExpiry.textContent = `${hours} hour${hours !== 1 ? 's' : ''} remaining`;
+      else                 rcExpiry.textContent = 'Less than 1 hour';
+    }
+  } else {
+    rcExpiry.textContent = '—';
+  }
+
+  if (isPassphraseProtected) {
+    rcPassphraseRow.classList.remove('hidden');
+  }
+
+  receiverCard.style.display = 'flex';
+
+  // ── Wire Download button ─────────────────────────────────────────────────
+  rcDownloadBtn.addEventListener('click', async () => {
+    receiverCard.style.display = 'none';
+
+    if (isPassphraseProtected) {
+      // Show passphrase unlock screen; on success, proceed to startDownload.
+      unlockScreen.style.display = 'flex';
+      unlockBtn.addEventListener('click', async () => {
+        const passphrase = unlockInput.value.trim();
+        if (!passphrase) return;
+        unlockBtn.disabled = true;
+        unlockError.textContent = '';
+        try {
+          const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ passphrase }),
+          });
+          if (!authRes.ok) {
+            unlockError.textContent = authRes.status === 401 ? 'Incorrect passphrase.' : 'Something went wrong.';
+            unlockBtn.disabled = false;
+            return;
+          }
+          const { token } = await authRes.json();
+          downloadToken = token;
+          unlockInput.value = '';
+          unlockScreen.style.display = 'none';
+          await startDownload(uuid);
+        } catch {
+          unlockError.textContent = 'Network error. Try again.';
+          unlockBtn.disabled = false;
+        }
+      });
+      unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
+    } else {
+      await startDownload(uuid);
+    }
+  }, { once: true });
 }
 
 async function startDownload(uuid) {
