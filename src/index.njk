@@ -1139,6 +1139,11 @@ async function startDownloadStream(uuid, meta, fileHandle) {
   // ── Streaming loop — pipeline depth 2 ─────────────────────────────────────
   // Chunk N+1 is fetched concurrently while chunk N is decrypted and written.
   // Maximum 2 ciphertext chunks in memory at any moment, regardless of file size.
+const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
+  let bytesWritten = 0;
+  let speedWindowStart = Date.now();
+  let speedWindowBytes = 0;
+
   try {
     let nextChunkPromise = fetchChunkWithRetry(0);
 
@@ -1172,9 +1177,25 @@ async function startDownloadStream(uuid, meta, fileHandle) {
 
       await writable.write(new Uint8Array(plaintext));
 
-      const pct = Math.round(((i + 1) / totalChunks) * 100);
+bytesWritten += plaintext.byteLength;
+      speedWindowBytes += plaintext.byteLength;
+
+      const now = Date.now();
+      const elapsed = (now - speedWindowStart) / 1000;
+      let speedStr = '';
+      if (elapsed >= 0.25) {
+        const bps = speedWindowBytes / elapsed;
+        speedStr = ' · ' + formatBytes(bps) + '/s';
+        speedWindowStart = now;
+        speedWindowBytes = 0;
+      }
+
+      const pct = totalBytes > 0
+        ? Math.min(Math.round((bytesWritten / totalBytes) * 100), 100)
+        : Math.round(((i + 1) / totalChunks) * 100);
       dlBar.style.width = pct + '%';
-      dlPct.textContent = pct + '%';
+      dlPct.textContent = pct + '%' + speedStr;
+      dlStageTag.textContent = 'Downloading' + speedStr;
     }
 
     await writable.close();
