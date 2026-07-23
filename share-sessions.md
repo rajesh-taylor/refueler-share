@@ -427,7 +427,7 @@
 | S45 | Dashboard design pass II | Spacing/hierarchy deep pass, Source Serif 4 editorial moments, farming signal card (AE wired). | M |
 | S46a | Modal build I | Full-viewport scaffold for all 13 metric cards, data wiring, n/a and loading states. | L |
 | S46b | Modal build II | Modal polish + snag sweep. formatBytes 1dp, zero=green (errors/churn/client-errors), AE datasource banner, × close button replacing ← Back, modal-active card ring (mouse+keyboard). smokeTest() extended: 14 modal panels + formatBytes spot-checks. 27 pass · 2 deferred · 2 fail (latency nulls, pre-existing). | M |
-| S47a | Upload/download UX I | Progress bar animation fix, QR resolution fix, FREE_EXPIRY constant fix, tier/expiry copy audit. | S |
+| S47a | Upload/download UX I | ✅ Complete — dbcf54f · 1daeac9 · 63eb253. FREE_EXPIRY fixed (7d), progress smooth, QR retina, cap upgrade nudge, status editorial, shared-styles include fix, card text sizes, back link. | S |
 | S47b | Status page + upgrade nudge | Status.html editorial pass (plain-English copy, human-readable cards, soften errors). Upgrade nudge on cap hit + expiry gate. | S |
 | S47c | Maintenance notification | KV-controlled maintenance modal on index.html. Ghost-pattern: operator sets MAINTENANCE_NOTICE in STATUS_KV, frontend polls /status, renders dismissible modal overlay using design tokens. One Worker deploy. | M |
 | S47d | B5 close | Snag sweep, context files, version bump to 4.0, B6 planning brief. | S |
@@ -435,6 +435,35 @@
 | S49a | Carbon gold edging | --inset-rule #C8A96E throughout Carbon. Card borders, rule lines, active states. | S |
 | S49b | Brand audit pass | Share UI vs BRANDING.md. Source Serif 4 editorial moments. Head of Design review. Paper/Carbon consistency sweep. | M |
 | S52 | B5 close (renumbered from S47d) | See S47d. | S |
+
+---
+
+### S47a — Upload/download UX + copy audit
+**Commits:** `dbcf54f` → `1daeac9` → `63eb253` · 23 July 2026
+
+- `FREE_EXPIRY` constant fixed: `5 * 24 * 60 * 60` → `7 * 24 * 60 * 60`. Now matches UI "1 / 7 day expiry" and Worker `EXPIRY_WINDOWS.free`.
+- Progress bar smooth finish: chunks complete at 95%, `setStage('Finalising', 98)` → 80ms → `setStage('Done', 100)` + "Transfer complete" label → 700ms hold → `progressCard` hidden → share panel appears. Eliminates 15%→100% jump.
+- QR retina fix: renders at `128 × devicePixelRatio` (capped 3×) physical pixels; CSS display stays 128px. `isDark` detection switched from `classList.contains('carbon-mode')` to `dataset.theme === 'carbon'`. QR colours updated to design tokens (`#E4E2DC`/`#3D3A36`).
+- `showSharePanel`: `progressCard.classList.add('hidden')` moved into upload flow above the call — avoids double-hide.
+- Cap warning + upgrade nudge: "This file is over the 4 GB free limit." + "Creative Premium supports transfers up to 100 GB — see plans →" linking to `/upgrade.html`. Orange `--accent-action` link. `.upgrade-nudge-link` CSS added.
+- Tier/expiry copy audit: `upgrade.njk` was already correct. No drift elsewhere.
+- `status.njk` fix: `{% include "shared-styles.njk" %}` was missing — caused unstyled cards, dead Paper/Carbon toggle, phantom "Scheduled Maintenance" heading. One line added.
+- `status.njk` editorial pass: section renamed "How it works". Six cards rewritten with human-first values (✓ Encrypted in your browser, ✓ Transfers can't be linked to you, ✓ Files arrive intact, ✓ Optional passphrase lock, ✓ Files delete themselves, ✓ Abuse prevention). Technical labels demoted to secondary `integrity-card-label` text. Known-gap card removed (closed S34). State labels plain English ("Refueler Share is running normally" / "Something is wrong — we're looking into it"). Fetch error softened — no raw JS error string shown to user.
+- `integrity-card-value` lifted to `1rem` / `font-weight: 600`. `integrity-card-note` lifted to `13px` / `line-height: 1.6`. Cards now readable.
+- `← Back to Refueler Share` link added above hero headline. IBM Plex Mono 11px, muted, links to `/index.html`.
+- WOFF2 parsing warning noted (Bunny/Fontshare font CDN) — cosmetic, flag for B5 close sweep.
+
+**Do not retry:**
+- DO NOT use `classList.contains('carbon-mode')` for theme detection in status or any page — use `dataset.theme === 'carbon'`.
+- DO NOT omit `{% include "shared-styles.njk" %}` from any Eleventy page — without it all CSS variables, `.hidden`, and Paper/Carbon toggle JS are absent.
+
+**S47a snag list (carry into S47b):**
+1. QR display size too small — not scannable at arm's length. Lift CSS display size to ~200px.
+2. QR Carbon contrast poor — use near-white on near-black (`#F7F4EF` on `#111316`).
+3. Button layout — Copy link + New upload should be full-width 2-column grid matching link box width, not loose left-aligned row.
+4. `integrity-card-note` font — switch to Source Serif 4 300 weight, 14px, line-height 1.7. DM Sans reads as helper text; serif gives editorial authority appropriate to this content.
+5. Back link — restyle as ghost button: `border: 0.5px solid var(--border-mid)`, `border-radius: 8px`, `padding: 6px 12px`, full `--text-primary` colour, 12px mono. Current muted link too discreet for a user who needs a clear escape route.
+6. `upgrade.njk` — no route back to `share.refueler.io/index.html`. Same nav problem as status page. Fix in S47b.
 
 ---
 

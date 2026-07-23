@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 3.0 | **Last updated:** S42e close · 22 July 2026
+> **Version:** 3.1 | **Last updated:** S47a close · 23 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -205,6 +205,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S45 | `7187e41` | Dashboard design pass II: sidebar 240px, gold wordmark, farming signal card (row-4), Source Serif editorial line, smoke test deduped to 11 checks. |
 | S46a | `bbf271a` | Modal build I: 14 modal keys, skeleton, n/a, deferred Lightning, sparkline stub, CSV note, focus trap. CSS+JS extracted to separate files. Green on healthy metrics. |
 | S46b | `023dfcc` | Modal polish: formatBytes 1dp, zero=green (errors/churn/client-errors), datasource banner, × close button, modal-active ring, smokeTest 27 pass. |
+| S47a | `dbcf54f` → `1daeac9` → `63eb253` | FREE_EXPIRY fixed (7d). Progress bar smooth finish. QR retina + design token colours. Cap upgrade nudge on index. status.njk: shared-styles include added, "How it works" human-readable cards, plain-English state labels, card text sizes lifted, ← Back link added. |
 ---
 
 ## Roadmap
@@ -240,8 +241,8 @@ B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real l
 | S45 | Dashboard design pass II | ✅ Complete — 7187e41 | M |
 | S46a | Modal build I | ✅ Complete — bbf271a. 14 modal keys, skeleton, n/a, deferred Lightning, sparkline stub, CSV note, focus trap. CSS+JS extracted to separate files. | L |
 | S46b | Modal build II | ✅ Complete — 023dfcc. formatBytes, zero=green, datasource banner, × close, modal-active ring. smokeTest 27 pass. | M |
-| S47a | Upload/download UX I | Progress bar, QR, FREE_EXPIRY, copy audit. | S |
-| S47b | Status page + upgrade nudge | Status editorial, upgrade nudge on cap/expiry gate. | S |
+| S47a | Upload/download UX I | ✅ Complete — dbcf54f · 1daeac9 · 63eb253. FREE_EXPIRY, progress smooth, QR retina, upgrade nudge, status editorial + shared-styles fix, card text sizes, back link. | S |
+| S47b | Status page + upgrade nudge | QR size (200px) + Carbon contrast fix. Button layout 2-col. integrity-card-note → Source Serif 4 14px 300. Back link → ghost button. upgrade.html back-nav. | S |
 | S47c | Maintenance notification | KV-controlled modal on index.html, design tokens, sessionStorage dismiss. One Worker deploy. | M |
 | S47d | B5 close | Snag sweep, context files, v4.0, B6 brief. | S |
 | S48 | Theme persistence + named transfers | Paper/Carbon cookie scoped to `.refueler.io`. Review `privacy/index.html` + `README.md` for "no cookies" language; update to "no tracking cookies". Named transfers UI plan (fragment-only label, paid tier differentiator). | S |
@@ -256,8 +257,10 @@ Notes:
 - Nav snag (Upgrade link breaking on `refueler.io`) deferred — review at B5 when iterating Share index page.
 - X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review in B5 S47 or B7.
 - Upgrade nudge snag (S47): free-tier users have no visible path to upgrade.html from index.html when they hit the 4GB cap or try to select a longer expiry. Fix: contextual upgrade prompt on cap hit / expiry-tier gate, independent of nav snag.
-- Status page editorial snag (S49b): status.html is written for developers, not users. Cryptographic integrity section uses NUT-00, NUT-11, BLAKE3 terminology — opaque to a normal user. Fix in S49b editorial pass: lead with plain-English service health ("Refueler Share is running normally" + pulsing green dot), rename integrity cards to human language ("Files encrypted in your browser", "Transfers can't be linked to you", "Files delete themselves automatically"), keep technical labels as secondary text only for the curious. Status tile (compact operational indicator) also needed in admin dashboard — add as S45 addition or S52 snag sweep item.
-- "Could not load incident data: Load failed" on status.html is a local file:// preview artefact — Worker fetch fails on file protocol. Displays correctly at share.refueler.io. Soften error copy in S49b regardless: never show raw fetch error to a user visiting the live page.
+- Status page editorial (COMPLETE S47a): human-readable "How it works" cards live. Plain-English state labels live. Fetch error softened. Known-gap card removed. Status tile for admin dashboard still needed — add at S52 snag sweep.
+- DO NOT use `classList.contains('carbon-mode')` for theme detection — use `dataset.theme === 'carbon'`.
+- DO NOT omit `{% include "shared-styles.njk" %}` from any Eleventy page — without it all CSS variables, `.hidden`, and Paper/Carbon toggle JS are absent.
+- S47b carry-forward snags: (1) QR 200px display + Carbon high-contrast colours. (2) Copy link + New upload as full-width 2-col grid. (3) integrity-card-note → Source Serif 4 300/14px/1.7. (4) Back link → ghost button style. (5) upgrade.html back-nav to share index.
 
 ---
 
