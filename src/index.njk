@@ -319,6 +319,22 @@ activePage: ""
   }
   .dl-compat-warn strong { font-weight: 500; }
 
+  /* ── USP copy block — A/B variant, serif editorial register ─────── */
+  #usp-block {
+    border-left: 3px solid var(--accent);
+    padding: 0.25rem 0 0.25rem 1rem;
+    margin-top: 4px;
+  }
+  .usp-text {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 300;
+    line-height: 1.75;
+    color: var(--text-secondary);
+    margin: 0;
+    white-space: pre-line;
+  }
+
   /* ── Receiver landing card ──────────────────────────────────────── */
   #receiver-card { display: none; flex-direction: column; gap: 18px; }
   .rc-file-row {
@@ -500,6 +516,8 @@ activePage: ""
       <!-- Capability warning — shown when browser lacks FSAA and file is large.
            Populated by JS based on 'showSaveFilePicker' in window + meta.total_bytes. -->
       <div class="dl-compat-warn" id="dl-compat-warn" role="alert" aria-live="polite"></div>
+      <!-- USP copy block — A/B variant, selected and populated by JS in enterDownloadMode -->
+      <div id="usp-block" class="hidden"><p class="usp-text" id="usp-text"></p></div>
     </div>
 
     <!-- Unlock screen (download flow — passphrase gated) -->
@@ -615,6 +633,8 @@ const rcSize           = $('rc-size');
 const rcExpiry         = $('rc-expiry');
 const rcPassphraseRow  = $('rc-passphrase-row');
 const rcDownloadBtn    = $('rc-download-btn');
+const uspBlock         = $('usp-block');
+const uspText          = $('usp-text');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Info card
@@ -968,6 +988,30 @@ async function enterDownloadMode({ uuid, key, iv }) {
 
   receiverCard.style.display = 'flex';
 
+  // ── A/B USP variant (S47c) ───────────────────────────────────────────────
+  // 50/50 split per session. Variant stored in sessionStorage — never a cookie,
+  // never sent to any server as identity. Only the variant label is logged to AE.
+  const USP_VARIANTS = {
+    A: `Reading your files is not technically possible for us.\nThe key never leaves your browser. The server stores encrypted noise.\nFiles delete themselves. No account. No trace. No data to sell.`,
+    B: `Your files were encrypted before they left the sender's device.\nWe never held the key. We cannot read what we stored.\nThis link expires and deletes itself — no trace remains.\nNo account. No email. No history.\nYour data. Not ours.`,
+  };
+  let uspVariant;
+  try {
+    uspVariant = sessionStorage.getItem('rs-usp-variant');
+    if (!uspVariant) {
+      uspVariant = Math.random() > 0.5 ? 'B' : 'A';
+      sessionStorage.setItem('rs-usp-variant', uspVariant);
+    }
+  } catch {
+    // sessionStorage blocked (private mode edge case) — assign without storing.
+    uspVariant = Math.random() > 0.5 ? 'B' : 'A';
+  }
+  uspText.textContent = USP_VARIANTS[uspVariant];
+  uspBlock.classList.remove('hidden');
+  // Log variant exposure to AE via /log/error (context: receiver_ab) — fire-and-forget.
+  // blob1='client_error', blob2='receiver_ab', blob3=variant — parseable in AE SQL.
+  logReceiverEvent('receiver_ab_shown', uspVariant);
+
   // ── Show capability warning on receiver card if FSAA is unavailable ─────
   // Gate: 'showSaveFilePicker' in window — no user-agent sniffing.
   // Thresholds: ≤300 MB silent, 300 MB–1 GB amber, >1 GB red.
@@ -1181,7 +1225,10 @@ async function startDownloadStream(uuid, meta, fileHandle) {
     dlStageTag.textContent = 'Complete';
     dlBar.style.width = '100%';
     dlPct.textContent = '100%';
+    uspBlock.classList.add('hidden');
     dlSignoff.classList.remove('hidden');
+    // Log download completion with variant so we can compute per-variant conversion rate.
+    try { logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
 
   } catch (e) {
     // Report and abort — covers fetch retry exhaustion and unexpected throws.
@@ -1294,7 +1341,10 @@ async function startDownload(uuid, meta) {
   dlStageTag.textContent = 'Complete';
   dlBar.style.width = '100%';
   dlPct.textContent = '100%';
+  uspBlock.classList.add('hidden');
   dlSignoff.classList.remove('hidden');
+  // Log download completion with variant.
+  try { logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
 }
 
 function showDownloadError(msg) {
@@ -1406,6 +1456,26 @@ function reportError(context, message, detail) {
         context: String(context).slice(0, 64),
         message: String(message || '').slice(0, 200),
         detail:  String(detail  || '').slice(0, 200),
+        ts:      Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Receiver A/B event logging (S47c) — fire-and-forget, no identity, no cookies
+// Sends to /log/error as context='receiver_ab' so it lands in AE.
+// message = event label, detail = variant. Parseable in AE SQL later.
+// ─────────────────────────────────────────────────────────────────────────────
+function logReceiverEvent(event, variant) {
+  try {
+    fetch(`${WORKER_URL}/log/error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'receiver_ab',
+        message: String(event).slice(0, 64),
+        detail:  `variant:${variant}`,
         ts:      Date.now(),
       }),
     }).catch(() => {});
