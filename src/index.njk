@@ -993,7 +993,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
   // never sent to any server as identity. Only the variant label is logged to AE.
   const USP_VARIANTS = {
     A: `Reading your files is not technically possible for us.\nThe key never leaves your browser. The server stores encrypted noise.\nFiles delete themselves. No account. No trace. No data to sell.`,
-    B: `Your files were encrypted before they left the sender's device.\nWe never held the key. We cannot read what we stored.\nThis link expires and deletes itself — no trace remains.\nNo account. No email. No history.\nYour data. Not ours.`,
+    B: `This link expires and deletes itself — no trace remains.\nNo account. No email. No history.\nYour data. Not ours.`,
   };
   let uspVariant;
   try {
