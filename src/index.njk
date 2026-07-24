@@ -20,23 +20,78 @@ activePage: ""
 </div>
 
 <script>
+// ── Shared maintenance text formatter (used by banner + modal) ────────────────
+function formatMaintenanceText(status) {
+  const mw = status.maintenance;
+  if (mw && mw.scheduled_at) {
+    const dt = new Date(mw.scheduled_at * 1000);
+    const formatted = dt.toLocaleString('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+    });
+    const dur = mw.duration_minutes ? ` (${mw.duration_minutes} min)` : '';
+    const desc = mw.description ? ` — ${mw.description}` : '';
+    return `Scheduled maintenance: ${formatted}${dur}${desc}`;
+  }
+  return status.message ?? 'Maintenance in progress.';
+}
+
+// ── Maintenance modal (index.html only, maintenance state only) ───────────────
+const MODAL_DISMISS_KEY = 'rs-maint-modal-dismissed';
+
+function showMaintenanceModal(status) {
+  // Skip if dismissed this session
+  try { if (sessionStorage.getItem(MODAL_DISMISS_KEY)) return; } catch {}
+  // Skip entirely in download mode — receiver must never be blocked by a modal
+  const hash = window.location.hash.slice(1);
+  if (hash.includes('uuid=') && hash.includes('key=')) return;
+  // Idempotent
+  if (document.getElementById('maint-modal')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'maint-modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'maint-modal-heading');
+  overlay.innerHTML = `
+    <div class="maint-modal-card">
+      <div class="maint-modal-icon">🔧</div>
+      <h2 class="maint-modal-heading" id="maint-modal-heading">Scheduled maintenance</h2>
+      <p class="maint-modal-body"></p>
+      <button class="btn btn-primary btn-full maint-modal-dismiss" id="maint-modal-dismiss">Got it</button>
+    </div>`;
+  overlay.querySelector('.maint-modal-body').textContent = formatMaintenanceText(status);
+  document.body.appendChild(overlay);
+
+  const dismissBtn = document.getElementById('maint-modal-dismiss');
+  dismissBtn.focus();
+
+  function closeModal() {
+    try { sessionStorage.setItem(MODAL_DISMISS_KEY, '1'); } catch {}
+    overlay.remove();
+  }
+
+  dismissBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  overlay.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+}
+
+// ── Status banner IIFE ────────────────────────────────────────────────────────
 (function () {
-  const WORKER_URL   = 'https://refueler-share.rt-fc4.workers.dev';
-  const DISMISS_KEY  = 'rs-banner-dismissed';
-  const banner       = document.getElementById('status-banner');
-  const bannerIcon   = document.getElementById('status-banner-icon');
-  const bannerText   = document.getElementById('status-banner-text');
+  const WORKER_URL    = 'https://refueler-share.rt-fc4.workers.dev';
+  const DISMISS_KEY   = 'rs-banner-dismissed';
+  const banner        = document.getElementById('status-banner');
+  const bannerIcon    = document.getElementById('status-banner-icon');
+  const bannerText    = document.getElementById('status-banner-text');
   const bannerDismiss = document.getElementById('status-banner-dismiss');
 
   bannerDismiss.addEventListener('click', () => {
     banner.classList.add('hidden');
-    // Store dismissal for this session only (sessionStorage, not localStorage —
-    // we want the banner to reappear on next visit in case situation has changed)
+    // Session-only dismissal — banner reappears on next visit
     try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch {}
   });
 
   async function loadStatus() {
-    // Don't show if dismissed this session
     try { if (sessionStorage.getItem(DISMISS_KEY)) return; } catch {}
 
     let status;
@@ -49,25 +104,14 @@ activePage: ""
     }
 
     const state = status.state ?? 'operational';
-    if (state === 'operational') return; // nothing to show
+    if (state === 'operational') return;
 
     banner.dataset.state = state;
 
     if (state === 'maintenance') {
       bannerIcon.textContent = '🔧';
-      const mw = status.maintenance;
-      if (mw && mw.scheduled_at) {
-        const dt = new Date(mw.scheduled_at * 1000);
-        const formatted = dt.toLocaleString('en-GB', {
-          weekday: 'short', day: 'numeric', month: 'short',
-          hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-        });
-        const dur = mw.duration_minutes ? ` (${mw.duration_minutes} min)` : '';
-        const desc = mw.description ? ` — ${mw.description}` : '';
-        bannerText.textContent = `Scheduled maintenance: ${formatted}${dur}${desc}`;
-      } else {
-        bannerText.textContent = status.message ?? 'Maintenance in progress.';
-      }
+      bannerText.textContent = formatMaintenanceText(status);
+      showMaintenanceModal(status);
     } else if (state === 'degraded') {
       bannerIcon.textContent = '⚠️';
       bannerText.textContent = status.message ?? 'Some services are degraded — we are investigating.';
@@ -399,6 +443,46 @@ activePage: ""
 
   @media (max-width: 600px) {
     .drop-zone { padding: 40px 16px; }
+  }
+
+  /* ── Maintenance modal ───────────────────────────────────────────── */
+  #maint-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .maint-modal-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    border-top: 3px solid var(--gold);
+    max-width: 480px;
+    width: 100%;
+    padding: 32px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+  }
+  .maint-modal-icon { font-size: 32px; line-height: 1; }
+  .maint-modal-heading {
+    font-family: var(--display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--fg);
+    margin: 0;
+  }
+  .maint-modal-body {
+    font-family: var(--sans);
+    font-size: 15px;
+    color: var(--fg-muted);
+    line-height: 1.6;
+    margin: 0 0 8px;
   }
 </style>
 </head>

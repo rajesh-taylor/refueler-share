@@ -476,6 +476,19 @@
 - Back-nav added to `upgrade.njk`: same `.upgrade-back-link` ghost button pattern above `.page-header`, links to `/index.html`.
 - QR library swapped: `qrcodejs` (canvas, blurs at retina) → `qr-creator` (SVG, mathematically sharp at any DPR). CDN: `cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js`. `QrCreator.render({ text, radius: 0, ecLevel: 'M', fill, background, size: 200 }, svgEl)`. CSS updated: `#qr-wrap svg { width: 200px; height: 200px; }` — no `!important` canvas override needed.
 
+### S47c — Receiver landing page + A/B USP test
+**Commits:** `cb7a925` → trim commit · 24 July 2026
+
+- Receiver card confirmed: filename, size, expiry, passphrase badge. No auto-download.
+- USP copy block below Download button: Source Serif 4 weight 300, 16px/1.75, gold left border `3px solid var(--accent)`, `--text-secondary`.
+- Variant A (architectural, 3 lines): "Reading your files is not technically possible for us…"
+- Variant B (human, 3 lines — trimmed after review): "This link expires and deletes itself…"
+- 50/50 split via `Math.random()`, stored `rs-usp-variant` in `sessionStorage`. Private-mode fallback: assign without storing.
+- `logReceiverEvent()` helper — fires to `/log/error` (context `receiver_ab`), two events: `receiver_ab_shown` + `receiver_ab_downloaded` with variant label.
+- USP block hidden on download completion (both FSAA and Blob paths). Colophon takes over.
+- Pages deploy failed first attempt (Cloudflare API rate limit code 971, transient). Retry succeeded.
+- Full flow smoke-tested: upload → share → receiver card → passphrase → FSAA picker → complete → colophon. ✓
+
 ### S47d — QR fix, receiver sign-off, drop zone, footer, Turnstile
 **Commits:** `242444d` → `01d31bc` → `8496539` → `1749c34` → `f1efbc8` → `3eb4ec4` · 23 July 2026
 
