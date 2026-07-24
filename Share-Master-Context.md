@@ -224,6 +224,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S46b | `023dfcc` | Modal polish: formatBytes 1dp, zero=green (errors/churn/client-errors), datasource banner, × close button, modal-active ring, smokeTest 27 pass. |
 | S47a | `dbcf54f` → `1daeac9` → `63eb253` | FREE_EXPIRY fixed (7d). Progress bar smooth finish. QR retina + design token colours. Cap upgrade nudge on index. status.njk: shared-styles include added, "How it works" human-readable cards, plain-English state labels, card text sizes lifted, ← Back link added. |
 | S47b | `b98bcd8` → `d8faf0f` | QR 200px + high-contrast Carbon colours (`#F7F4EF` on `#111316`). 2-col button grid (share panel). integrity-card-note → Source Serif 4 300/14px/1.7. Back links restyled as ghost buttons on status + upgrade. QR library swapped qrcodejs → qr-creator (SVG, no canvas blur). |
+| S48 | `0761f4c` | Maintenance modal on index.html. Theme cookie `rs-theme` scoped to `.refueler.io`. FOUC eliminated. |
 
 ---
 

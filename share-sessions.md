@@ -521,7 +521,22 @@
 
 ---
 
-### S48a-1 — FSAA streaming download
+### S48 — Maintenance modal + theme cookie persistence
+**Commit:** `0761f4c`
+
+- `formatMaintenanceText(status)` extracted as shared function from banner IIFE — reused by both banner and modal, no duplication.
+- `showMaintenanceModal(status)` added to `src/index.njk`: full-viewport overlay (z-index 200, rgba 0.72 backdrop), 480px card, `border-top: 3px solid var(--gold)`, `border-radius: 12px`, design tokens. "Got it" dismiss button (`.btn.btn-primary.btn-full`). `sessionStorage` key `rs-maint-modal-dismissed` — independent of banner's `rs-banner-dismissed`. Idempotent.
+- Modal skips in download mode (fragment contains `uuid=` + `key=`). Modal fires on `state === 'maintenance'` only — degraded stays banner-only.
+- `src/_includes/shared-styles.njk`: two `<script>` blocks added before `<style>`. (1) Synchronous cookie-read: reads `rs-theme` cookie → localStorage `theme` → system `prefers-color-scheme`. Applies `html.carbon-mode` + `data-theme` before paint — no FOUC. (2) Delegated click listener on `document`: fires on `.theme-pill` click, writes `rs-theme` cookie (`domain=.refueler.io; path=/; max-age=31536000; SameSite=Lax`) + localStorage. Keeps `data-theme` in sync.
+- `footer.njk` — no change (no "no cookies" language present).
+
+**Do not retry:**
+- DO NOT add `Secure` flag to `rs-theme` cookie explicitly — Cloudflare enforces HTTPS.
+- DO NOT fail-closed on cookie read error — `getCookie` returns null, falls back to localStorage then system pref.
+- DO NOT show maintenance modal in download mode — receiver fragment must never be blocked.
+
+---
+### S48a — FSAA streaming download
 **Commits:** `f8cfac0` → `da9b9cd` → `0152aae`
 
 - `startDownloadStream()`: FSAA path, pipeline depth 2 (chunk N+1 fetched concurrently while chunk N decrypts+writes), max 2 chunks resident in memory regardless of file size.
