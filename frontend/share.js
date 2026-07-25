@@ -297,9 +297,11 @@ async function zipAndSelect(entries, folderName) {
   for (let i = 0; i < entries.length; i++) {
     const { relativePath, file } = entries[i];
     const buf = await file.arrayBuffer();
-    fileMap[relativePath] = [new Uint8Array(buf), { level: 0 }];
-    // level:0 = store only (no compression) — AES-GCM ciphertext is already incompressible.
-    // Compression would waste CPU and expand size. Store = fast zip creation.
+    fileMap[relativePath] = new Uint8Array(buf);
+    // Bare Uint8Array → fflate default (level 6 DEFLATE) — produces unambiguous DEFLATE entries.
+    // level:0 is a fflate footgun: writes DEFLATED method with zero compression, which macOS
+    // Archive Utility rejects as "unsupported format". Compression ratio is irrelevant here
+    // since the zip is AES-GCM encrypted immediately after. Compatibility wins over CPU saving.
 
     const pct = Math.round(((i + 1) / totalFiles) * 85); // read phase = 0–85%
     showZipStage('Compressing', pct, `${i + 1} / ${totalFiles} files`);
