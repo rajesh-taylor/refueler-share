@@ -1,0 +1,367 @@
+/* ── share.css — extracted from src/index.njk at S51 ─────────────────────── */
+/* DO NOT edit inline CSS in index.njk — edit this file only.                 */
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+.shell {
+  min-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 20px 80px;
+}
+main {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Info card ───────────────────────────────────────────────────── */
+.info-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.info-card .info-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.info-card-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-subtle);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 0 0 8px;
+  flex-shrink: 0;
+}
+.info-card-dismiss:hover { color: var(--fg); }
+.info-card > span:not(.info-icon):not(.info-card-dismiss) {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ── Drop zone ───────────────────────────────────────────────────── */
+.drop-zone {
+  background: var(--card-bg);
+  border: 1.5px dashed var(--drop-border);
+  border-radius: var(--radius);
+  padding: 56px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: var(--fg-muted);
+  background: var(--drop-hover-bg);
+}
+.drop-zone input[type="file"] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer;
+  width: 100%; height: 100%;
+}
+.drop-icon {
+  font-size: 28px;
+  margin-bottom: 14px;
+  opacity: 0.35;
+  line-height: 1;
+  color: var(--fg);
+}
+.drop-label {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--fg);
+  margin-bottom: 6px;
+}
+.drop-sub { font-size: 13px; color: var(--fg-muted); }
+
+/* ── Toggle switch ───────────────────────────────────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.toggle-label { font-size: 13px; color: var(--fg); }
+.toggle-desc { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px; height: 21px;
+  flex-shrink: 0;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0;
+  background: var(--tag-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 21px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.slider::before {
+  content: '';
+  position: absolute;
+  width: 15px; height: 15px;
+  left: 2px; top: 2px;
+  background: var(--fg-subtle);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+.switch input:checked + .slider { background: var(--fg); border-color: var(--fg); }
+.switch input:checked + .slider::before { transform: translateX(17px); background: var(--bg); }
+
+/* ── Progress ────────────────────────────────────────────────────── */
+.progress-bar-wrap {
+  background: var(--card-border);
+  border-radius: 2px;
+  height: 2px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--fg);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s linear;
+}
+.progress-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-top: 6px;
+}
+
+/* ── Share link panel ────────────────────────────────────────────── */
+.link-box {
+  background: var(--link-box-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 12px 14px;
+  word-break: break-all;
+  color: var(--fg-muted);
+  margin-top: 10px;
+  line-height: 1.6;
+}
+#qr-wrap { margin-top: 16px; display: flex; justify-content: center; }
+#qr-wrap svg { border-radius: 4px; width: 200px; height: 200px; display: block; }
+
+/* ── Passphrase unlock (download) ────────────────────────────────── */
+#unlock-screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  gap: 20px;
+  text-align: center;
+}
+.unlock-icon { font-size: 40px; opacity: 0.4; }
+.unlock-title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.unlock-sub { font-size: 13px; color: var(--fg-muted); max-width: 320px; line-height: 1.6; }
+#unlock-error { color: #C0392B; font-size: 12px; min-height: 16px; font-family: var(--mono); }
+
+/* ── Share panel button row ─────────────────────────────────────── */
+.share-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+.share-btn-row .btn { width: 100%; justify-content: center; }
+
+/* ── Upgrade nudge links ─────────────────────────────────────────── */
+.upgrade-nudge-link {
+  color: var(--accent-action);
+  text-decoration: none;
+  font-weight: 500;
+}
+.upgrade-nudge-link:hover { text-decoration: underline; }
+
+/* ── Turnstile ───────────────────────────────────────────────────── */
+.turnstile-wrap { display: flex; justify-content: flex-start; }
+.turnstile-wrap > div { width: 100%; max-width: 100%; }
+
+/* ── Post-download sign-off — colophon register ─────────────────── */
+#dl-signoff {
+  margin-top: 7.2rem;
+  border-left: 3px solid var(--accent);
+  padding: 0 0 0 1rem;
+}
+.dl-signoff-secondary {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .dl-signoff-secondary { font-size: 17px; }
+}
+
+/* ── Download compatibility warning ─────────────────────────────────── */
+.dl-compat-warn {
+  display: none;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  margin-top: 10px;
+}
+.dl-compat-warn.visible { display: block; opacity: 1; }
+.dl-compat-warn.amber {
+  background: var(--c-amber-bg);
+  border: 0.5px solid var(--c-amber);
+}
+.dl-compat-warn.red {
+  background: var(--c-red-bg);
+  border: 0.5px solid var(--c-red);
+}
+.dl-compat-warn strong { font-weight: 500; }
+
+/* ── USP copy block — A/B variant, serif editorial register ─────── */
+#usp-block {
+  border-left: 3px solid var(--accent);
+  padding: 0.25rem 0 0.25rem 1rem;
+  margin-top: 4px;
+}
+.usp-text {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* ── Receiver landing card ──────────────────────────────────────── */
+#receiver-card { display: none; flex-direction: column; gap: 18px; }
+.rc-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rc-file-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  line-height: 1;
+}
+.rc-file-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg);
+  word-break: break-all;
+  line-height: 1.5;
+}
+.rc-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+}
+.rc-meta-item {}
+.rc-meta-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+}
+.rc-meta-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.rc-passphrase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--c-amber);
+  background: var(--c-amber-bg);
+  border: 0.5px solid var(--c-amber);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+}
+#rc-download-btn { width: 100%; justify-content: center; }
+
+/* ── Drop zone multi-file rejection ─────────────────────────────── */
+#drop-multi-msg {
+  font-size: 13px;
+  color: var(--c-amber);
+  text-align: center;
+  padding: 8px 0 0;
+  font-family: var(--sans);
+}
+
+@media (max-width: 600px) {
+  .drop-zone { padding: 40px 16px; }
+}
+
+/* ── Maintenance modal ───────────────────────────────────────────── */
+#maint-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.maint-modal-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border-top: 3px solid var(--accent);
+  max-width: 480px;
+  width: 100%;
+  padding: 32px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.maint-modal-icon { font-size: 32px; line-height: 1; }
+.maint-modal-heading {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+.maint-modal-body {
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+  margin: 0 0 8px;
+}

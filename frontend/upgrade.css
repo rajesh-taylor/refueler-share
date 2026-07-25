@@ -1,0 +1,419 @@
+/* ── upgrade.css — extracted from src/upgrade.njk at S51 ────────────────────── */
+/* DO NOT edit inline CSS in upgrade.njk — edit this file only.                  */
+
+/* ── Upgrade-specific tokens ─────────────────────────────────── */
+:root {
+  --card-bg-raised:  rgba(26,26,26,0.06);
+  --stripe-bg:       #FFFFFF;
+  --success:         #1E8A4A;
+  --danger:          #C0392B;
+}
+html.carbon-mode {
+  --card-bg-raised:  rgba(245,240,232,0.06);
+  --stripe-bg:       #2E2E2E;
+  --success:         #4CAF82;
+  --danger:          #E05555;
+}
+
+/* ── Page layout ─────────────────────────────────────────────── */
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 60px 24px 80px;
+}
+.upgrade-back-link {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+  margin-bottom: 20px;
+  padding: 6px 12px;
+  border: 0.5px solid var(--border-mid);
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.upgrade-back-link:hover {
+  border-color: var(--accent);
+  background: var(--card-bg);
+}
+.page-header { margin-bottom: 48px; }
+.page-header h1 {
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+.page-header p {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: 14px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+/* ── Billing toggle ──────────────────────────────────────────── */
+.billing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.toggle-label {
+  font-size: 13px;
+  color: var(--fg-muted);
+  transition: color 0.2s;
+}
+.toggle-label.active { color: var(--fg); font-weight: 500; }
+.toggle-switch {
+  width: 38px;
+  height: 21px;
+  background: var(--card-border);
+  border-radius: 99px;
+  position: relative;
+  cursor: pointer;
+  border: 1px solid var(--input-border);
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+.toggle-switch.on { background: var(--gold); border-color: var(--gold); }
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  background: var(--fg-subtle);
+  border-radius: 50%;
+  transition: left 0.15s, background 0.15s;
+}
+.toggle-switch.on .toggle-knob { left: 19px; background: var(--carbon); }
+.saving-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--success);
+  border: 1px solid currentColor;
+  padding: 2px 8px;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
+/* ── Tier cards ──────────────────────────────────────────────── */
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 40px;
+}
+.tier-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 24px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.tier-card:hover:not(.free-card) { border-color: var(--fg-muted); }
+.tier-card.selected { border-color: var(--gold); background: var(--card-bg-raised); }
+.tier-card.free-card { cursor: default; }
+.tier-label {
+  font-family: var(--display);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: 14px;
+}
+.tier-label.gold { color: var(--gold); }
+.tier-name {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 12px;
+}
+.tier-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.tier-price-main {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.02em;
+}
+.tier-price-period { font-size: 13px; color: var(--fg-muted); font-weight: 400; }
+.tier-yearly {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-subtle);
+  margin-bottom: 20px;
+}
+.tier-yearly strong { color: var(--gold-dim); font-weight: 500; }
+.tier-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tier-features li {
+  font-size: 13px;
+  color: var(--fg-muted);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+}
+.tier-features li::before {
+  content: '✓';
+  color: var(--gold);
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 12px;
+  margin-top: 1px;
+}
+.tier-features li.dim::before { color: var(--fg-subtle); }
+.tier-features li.dim { color: var(--fg-subtle); }
+.current-plan-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--fg-subtle);
+  border: 1px solid var(--card-border);
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+/* ── Manage section ──────────────────────────────────────────── */
+.manage-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 24px 28px;
+  margin-bottom: 32px;
+  display: none;
+}
+.manage-section.visible { display: block; }
+.manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.manage-meta-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: 4px;
+}
+.manage-meta-value { font-size: 15px; font-weight: 500; color: var(--fg); }
+.manage-divider { border: none; border-top: 1px solid var(--inset-rule); margin: 18px 0; }
+.manage-note { font-size: 12px; color: var(--fg-subtle); }
+
+/* ── Lookup section ──────────────────────────────────────────── */
+.lookup-section { margin-bottom: 32px; }
+.lookup-label { font-size: 13px; color: var(--fg-muted); margin-bottom: 10px; }
+.lookup-row { display: flex; gap: 8px; align-items: stretch; }
+.lookup-row input { flex: 1; }
+
+/* ── Payment section ─────────────────────────────────────────── */
+.payment-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 28px 32px;
+  display: none;
+}
+.payment-section.visible { display: block; }
+.payment-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.payment-title { font-family: var(--display); font-size: 16px; font-weight: 600; color: var(--fg); }
+.payment-summary { font-family: var(--mono); font-size: 12px; color: var(--fg-muted); }
+
+/* Payment tabs */
+.payment-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--inset-rule);
+}
+.pay-tab {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  cursor: pointer;
+  border-bottom: 1.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+  font-family: var(--sans);
+}
+.pay-tab.active { color: var(--fg); border-bottom-color: var(--fg); }
+.pay-tab:hover:not(.active) { color: var(--fg); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.lightning-placeholder { text-align: center; padding: 40px 20px; color: var(--fg-subtle); }
+.lightning-placeholder .lp-icon { font-size: 28px; margin-bottom: 12px; opacity: 0.5; }
+.lightning-placeholder p { font-size: 13px; line-height: 1.6; }
+
+/* ── Fields ──────────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.field label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-subtle);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.field input { font-family: var(--sans); font-size: 14px; }
+input::placeholder { color: var(--fg-subtle); }
+
+#stripe-element-container {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 16px;
+  min-height: 60px;
+  transition: background 0.35s ease;
+}
+
+/* ── Buttons (upgrade page overrides — gold primary) ─────────── */
+.btn-primary {
+  background: var(--gold);
+  color: var(--carbon);
+  font-weight: 600;
+  border: none;
+}
+.btn-subscribe {
+  width: 100%;
+  background: var(--gold);
+  color: var(--carbon);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  letter-spacing: 0.02em;
+}
+.btn-subscribe:hover:not(:disabled) { opacity: 0.88; }
+.btn-subscribe:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Status messages ─────────────────────────────────────────── */
+.status-msg {
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  display: none;
+  font-family: var(--mono);
+}
+.status-msg.error {
+  background: rgba(192,57,43,0.08);
+  color: var(--danger);
+  border: 1px solid rgba(192,57,43,0.2);
+  display: block;
+}
+.status-msg.success {
+  background: rgba(30,138,74,0.08);
+  color: var(--success);
+  border: 1px solid rgba(30,138,74,0.2);
+  display: block;
+}
+.payment-note { font-family: var(--serif); font-weight: 300; text-align: center; font-size: 12px; color: var(--fg-subtle); margin-top: 14px; line-height: 1.6; }
+.payment-note a { color: var(--gold-dim); text-decoration: none; }
+.payment-note a:hover { color: var(--gold); }
+
+/* ── Success panel ───────────────────────────────────────────── */
+.success-panel { text-align: center; padding: 80px 24px; display: none; }
+.success-panel.visible { display: block; }
+.success-icon { font-size: 36px; margin-bottom: 20px; opacity: 0.7; }
+.success-panel h2 {
+  font-family: var(--display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+.success-panel p { font-size: 14px; color: var(--fg-muted); margin-bottom: 28px; }
+
+/* ── Coming soon tier cards ──────────────────────────────────── */
+.tier-card.coming-soon {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
+  user-select: none;
+}
+.coming-soon-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: var(--card-bg);
+  border: 1px solid var(--fg-muted);
+  padding: 2px 8px;
+  border-radius: 3px;
+  opacity: calc(1 / 0.35);
+}
+
+/* ── Soft-launch notice ──────────────────────────────────────── */
+.soft-launch-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-subtle);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  margin-top: 14px;
+}
+.soft-launch-notice::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+.hidden { display: none !important; }
+
+@media (max-width: 680px) {
+  .page { padding: 40px 16px 60px; }
+  .tiers { grid-template-columns: 1fr; }
+  .payment-section { padding: 20px 16px; }
+  .manage-section { padding: 18px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, html, body { transition: none !important; }
+}
