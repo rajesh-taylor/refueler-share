@@ -293,9 +293,8 @@ function showMaintenanceModal(status) {
 
 {% include "footer.njk" %}
 
-<!-- fflate + qr-creator loaded here (blocking) so globals are defined before the module script runs. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js"></script>
-<script type="module" src="/share.js"></script>
+<!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked) so globals are defined before the module script runs. -->
+<script src="/fflate.min.js"></script>
+<script src="/qr-creator.min.js"></script>
 </body>
 </html>
