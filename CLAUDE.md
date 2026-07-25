@@ -71,6 +71,26 @@ sessions) + 2–3 buffer for download bearer token TTL investigation. See Share-
 
 ---
 
+## Context file hygiene — mandatory at every B-close session
+
+Every block-close session (S72, S83, S91, S96, S104, S112, S113, S114) must include a trim pass
+on both context files before the git commit. This is not optional.
+
+**`share-sessions.md`:**
+- Sessions more than two blocks old: convert full narrative entries to compact one-row table format
+  (session number · commit · one-line summary). Do-not-retry blocks are permanent — never trim.
+- Target: under 500 lines at all times.
+
+**`Share-Master-Context.md`:**
+- §Current state table: drop rows older than two blocks. Block summaries in §Roadmap carry the history.
+- §Known broken / do not retry: remove entries that duplicate `CLAUDE.md` locked decisions.
+- §B-n snag list: remove fully resolved items. Carried items only.
+- Target: under 350 lines at all times.
+
+**Applies to:** S72 (B6) · S83 (B7 — renumber if sessions shift) · S91 (B8) · S96 (B9) ·
+S104 (B10) · S112 (B11) · S113–S114 (B12).
+Also apply at any session where either file exceeds its target line count mid-block.
+
 ## Deferred experiments
 
 - **refueler-ecash-lab** — separate repo for NUT-11 Mode 2 and ML-KEM key wrapping
