@@ -583,4 +583,92 @@
 - "Already a subscriber?" lookup label confirmed correct in sans — instructional UI, not editorial.
 - No Worker changes. No wrangler deploy.
 
+### S51 — File extraction
+**Commit:** `c182036`
+
+- `frontend/share.css` (367 lines) — all inline CSS extracted from `src/index.njk`.
+- `frontend/share.js` (899 lines) — all `<script type="module">` content extracted from `src/index.njk`. Loaded as `<script type="module" src="/share.js"></script>`.
+- `frontend/upgrade.css` (419 lines) — all inline CSS extracted from `src/upgrade.njk`.
+- `src/index.njk` reduced from 1,582 → 280 lines. `<link rel="stylesheet" href="/share.css">` added to `extraHead`. Banner/modal inline scripts and HTML structure unchanged.
+- `src/upgrade.njk` reduced from 944 → 525 lines. `<link rel="stylesheet" href="/upgrade.css">` added to `extraHead` alongside Stripe script. Upgrade JS stays inline (332 lines — manageable, no extraction needed).
+- Static assets served directly from `frontend/` (Eleventy output dir) — no `.eleventy.js` changes needed. Matches `admin/dashboard.css + dashboard.js` pattern.
+- Eleventy build clean: 3 files, 0.06s. Pages deploy via git push.
+- Smoke test: upload (passphrase enabled) → receiver card → password unlock → download. All correct. USP variant A rendered, gold left rule, 6 days remaining. ✓
+- `window.onTurnstileLoad` potential module-scope issue noted and confirmed non-issue in practice — callback assigned to `window` explicitly.
+
+**Do not retry:**
+- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/share.js`, `frontend/upgrade.css` only.
+- DO NOT put `share.js` as a regular script — must remain `type="module"` (scoped deps, top-level await support).
+
+
+### S52 — B5 close sweep
+**Commit:** TBD
+
+- `worker/src/manifest.js` `TIER_EXPIRY_SECONDS.free` corrected: `5 * 24 * 60 * 60` → `7 * 24 * 60 * 60`.
+  Now matches `EXPIRY_WINDOWS.free` in `index.js` and UI "1 / 7 day expiry". Snag logged S47a, resolved here.
+- `src/_includes/shared-styles.njk`: `--heading` token alias added alongside `--display` (both point to
+  Satoshi stack). Resolves cosmetic divergence between shared-styles (`--display`) and DESIGN-TOKENS.md
+  (`--heading`) flagged S49a.
+- WOFF2 parsing warning (Bunny/Fontshare CDN): confirmed cosmetic browser console noise. No action needed.
+- QR logo centre (Refueler mark in QR quiet zone): deferred. Requires canvas compositing or `qr-creator`
+  fork. Revisit B11 prep if time allows.
+- Lightning ops plan documented (see Share-Master-Context.md §Lightning infrastructure). Blink primary →
+  LNbits Tier 2 on 2-of-3 trigger. Two fallbacks with time targets. Written for investor/legal review.
+  Full text to land in B9 whitepaper §Operations.
+- Admin dashboard Lightning toggle scoped to B6: KV flag `lightning_available`, dashboard toggle card,
+  graceful degradation on upgrade page. Enables Fallback 1 + 2 without a code deploy.
+- B6 scope locked: 20 core sessions + 10 buffer (testing infra, reviewed every 4 sessions) +
+  2–3 bearer token TTL buffer. See B6 session plan below.
+- Context files bumped: `Share-Master-Context.md` → v4.0, `CLAUDE.md` → v1.3.
+- **B5 formally complete.**
+
+**Do not retry:**
+- DO NOT set `TIER_EXPIRY_SECONDS.free` to 5 days — canonical value is 7 days everywhere.
+- DO NOT use `--display` as the sole heading token — `--heading` is the DESIGN-TOKENS.md name;
+  both must be declared in shared-styles.njk.
+
+---
+
+## Sessions 53–72+ — B6 Testing infrastructure + folder upload
+
+**Block principle:** No session holds more than one architecturally complex piece of work.
+Split early rather than overstuff. Testing infra reviewed every 4 sessions (S63, S67) — buffer
+consumed only if genuinely needed, not by default.
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| S53 | Folder upload I | fflate integration, client-side zip, zip progress UI, single blob → existing upload flow | M |
+| S54 | Folder upload II | Streaming large folders, edge cases (empty dirs, deep nesting, 1000+ files, special chars) | M |
+| S55 | Folder upload III | Receiver UX decision (deliver zip vs auto-unzip), zip preview card, error states | M |
+| S56 | Folder upload test | Photographer folder end-to-end: upload → share → receive → unzip. Off snags. | S |
+| S57 | Bearer TTL — investigation | Measure token lifetime vs large-transfer duration. Document the gap. | S |
+| S58 | Bearer TTL — fix | Extend TTL or mid-stream 401 re-auth prompt. Decision at S57. | M |
+| S59 | Bearer TTL — buffer | Consumed only if S58 has outstanding issues. | S |
+| S60 | Worker unit tests I | Miniflare/Workers test runtime setup. `ratelimit.js` + `manifest.js` coverage. | M |
+| S61 | Worker unit tests II | `nut00.js` blind sig tests. `blake3.js` hash verification. | M |
+| S62 | Worker unit tests III | `turnstile.js`, `stripe.js` handler stubs. Edge case coverage. | M |
+| S63 | Testing infra review I | 4-session checkpoint: assess buffer need. Integration test harness design. | S |
+| S64 | Integration tests I | Full upload→download round-trip in test harness against dev Worker. | L |
+| S65 | Integration tests II | Passphrase gate, rate limit enforcement, credential farming defence. | M |
+| S66 | Integration tests III | MIME denylist, UUID validation, chunk bounds, tier cap enforcement. | M |
+| S67 | Testing infra review II | 4-session checkpoint. Load test design. | S |
+| S68 | Load test I | k6 setup, credential issue + upload synthetic load. KV rate limit validation. | M |
+| S69 | Load test II | Download load, concurrent transfers, KV timing edge cases. | M |
+| S70 | CI pipeline I | GitHub Actions: Eleventy build check, wrangler dry-run deploy, lint. | S |
+| S71 | CI pipeline II | Test runner in CI. Fail-fast on Worker unit test regression. Lightning toggle card. | S |
+| S72 | B6 close | Snag sweep, context files v5.0, B7 brief. Lightning backend confirmed. | S |
+
+**Buffer pool:**
+- S60b, S61b, S62b, S64b — testing infra (10 sessions total, reviewed S63 + S67)
+- S57b, S58b — bearer token TTL (2–3 sessions)
+
+**Background work for Rajesh during B6:**
+1. Competitor analysis — WeTransfer, SwissTransfer, Smash, Wormhole, OnionShare.
+   For each: max file size · expiry · encryption model · pricing · anonymous use · Lightning/Bitcoin.
+   Feeds B13 and btc++ Berlin pitch.
+2. 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
+   Used S57–S58 for bearer TTL investigation and large-transfer smoke tests.
+3. Blink API key: create account + generate key if not already done. Needed at B7 start.
+4. btc++ Berlin abstract: draft one paragraph if considering presenting. Claude can help.
+
 *"Nothing stops this train."*

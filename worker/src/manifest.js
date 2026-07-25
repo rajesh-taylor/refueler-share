@@ -25,7 +25,7 @@ export const TIER_CAPS = {
 };
 
 export const TIER_EXPIRY_SECONDS = {
-  free:       5  * 24 * 60 * 60,   // 5 days, fixed
+  free: 7 * 24 * 60 * 60,           // 7 days, fixed
   creative:   null,                 // user-set: 1 / 7 / 30 days
   production: null,                 // user-set: 1 / 7 / 30 / 90 days
   enterprise: null,                 // custom
