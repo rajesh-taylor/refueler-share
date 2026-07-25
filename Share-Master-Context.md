@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.0 | **Last updated:** S52 · 25 July 2026
+> **Version:** 4.1 | **Last updated:** S54 · 25 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -160,23 +160,7 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 - Cashu in Share = anonymous authentication mechanism, not payment instrument.
 - Exact whitepaper language drafted S42e. Legal counsel review before any public claims.
 
-**Whitepaper language (B9 §Regulatory — drafted S42e):**
-> The Refueler Share mint issues upload credentials — opaque capability tokens that grant the right
-> to perform a single anonymous file transfer of a defined size and expiry. These tokens carry no
-> monetary value, are not redeemable for currency or goods, and are not transferable between users.
-> They function solely as anonymous authentication artefacts within the Refueler Share system.
->
-> Under the UK Electronic Money Regulations 2011 (SI 2011/99) and the Payment Services Regulations
-> 2017, e-money is defined as electronically stored monetary value issued on receipt of funds, used
-> to make payment transactions, and accepted by persons other than the issuer. Refueler Share
-> credentials satisfy none of these criteria: they represent system access, not stored monetary value,
-> and are accepted only by Refueler Share infrastructure, not by third parties.
->
-> Refueler Share does not require FCA authorisation as an e-money institution. Lightning payments are
-> processed via Blink, a licensed custodial wallet provider that carries its own regulatory cover.
-> Refueler holds no custodial funds.
->
-> This analysis should be reviewed by qualified legal counsel before any public claims are made.
+**Whitepaper language (B9 §Regulatory):** Drafted S42e — exact text in userMemories. Share mint = capability token issuer under UK EMR 2011 + PSR 2017. FCA authorisation not required. Blink carries Lightning regulatory cover. Legal review required before any public claims.
 
 **Payment flow (locked):**
 - Lightning → Blink API (primary) → LNbits (Tier 2 on trigger)
@@ -207,13 +191,6 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 
 | Pattern | Correct approach |
 |---------|--------------------|
-| blake3-wasm CDN (esm.sh / unpkg) | Local bundle only |
-| Invisible Turnstile | Visible managed widget only |
-| `secp.Point` | `secp.ProjectivePoint` (noble v2) |
-| `binding = "R2"` in wrangler.toml | Must be `BUCKET` |
-| BLAKE3 for passphrase hash | SHA-256 only |
-| `wrangler r2 bucket lifecycle set --rule` inline JSON | Use `add` subcommand |
-| `wrangler r2 bucket lifecycle get` | Command is `list` |
 | `checkout/sessions ui_mode:embedded` | Direct Subscription + PaymentIntent expansion |
 | `decodeURIComponent` on Stripe `client_secret` | Already decoded |
 | `new Uint8Array([i])` for AES-GCM AAD | `DataView.setUint32(0, i, false)` into 4-byte buffer |
@@ -240,7 +217,6 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | Multi-file manifest for folder upload | Client-side zip via fflate only |
 | `types: [...]` in showSaveFilePicker | Use `types: []` |
 | Omit `total_chunks` from `/meta/` response | Must be included — FSAA loop bound |
-| Edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` | Edit `frontend/share.css`, `frontend/share.js`, `frontend/upgrade.css` |
 | `TIER_EXPIRY_SECONDS.free` = 5 days | Canonical value is 7 days everywhere |
 | `--display` as sole heading token | Declare both `--display` and `--heading` in shared-styles.njk |
 | `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
@@ -251,25 +227,10 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S54 next.**
+**B6 Testing infrastructure + folder upload — current. S55 next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
-| S34 | `7738450f` | BLAKE3 WASM in Worker. Server-side chunk verification. Integrity gap closed. |
-| S35-emergency | `95a12b4` | Paid tiers greyed out, soft-launch notice. Uncounted. |
-| S35 | `ab01388` | AAD overflow fix (4-byte uint32, encrypt + decrypt). |
-| S36 | `b877c76` | Rate limiting: `ratelimit.js`, 3 endpoints, KV-backed. |
-| S36b | `0cc4de9` | `/log/error` + `reportError()` helper. 6 capture points in frontend. |
-| S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell, row 3 3-cell. |
-| S38 | `20da7d4` | `client_errors_24h` AE query. Secret hygiene. Wrangler 4.113.0. |
-| S39 | `ab4fc98` | Server-side tier enforcement. 10MB chunk cap. KV byte counter. |
-| S40 | `c6f1a7a` | MIME denylist gate on chunk 0. |
-| S41 | `b2a4ba0` | UUID validation (RFC 4122). Chunk bounds check. |
-| S42a | `c8a57a42` | handleLogError fix. Filename sanitisation. 64KB manifest cap. Chunk + expiry guards. |
-| S42b | `18d85351` | Per-UUID auth rate limit. Download rate limiting. Chunk count defence. |
-| S42c | `c053cbc` | UUID-bound credential issuance. Worker generates UUID. waitForTurnstile fix. |
-| S42d | `0b32e69` | Turnstile nonce binding. Safari polling fallback. |
-| S42e | — | Full B4 audit pass. Marketing claim rulings. UK regulatory language. B5 handoff. |
 | S43 | `5c54802` | Token alignment: Eleventy pages onto DESIGN-TOKENS.md v1.0. |
 | S44 | `b15f407` | Dashboard design pass I: sidebar, tokens, Satoshi figures, 4 latency cards. |
 | S45 | `7187e41` | Dashboard design pass II: 240px sidebar, gold wordmark, farming card. |
@@ -283,9 +244,10 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | S48a | `0152aae` | FSAA streaming download. Pipeline depth 2. Per-chunk retry. Blob fallback. |
 | S49a | `3598a65` | Carbon gold edging. `--inset-rule` throughout. Brand token aliases in shared-styles. |
 | S50 | `e3a4407` | Serif audit. 3 correct usages confirmed. 3 CSS-only additions. |
-| S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). index.njk 1582→280L. upgrade.njk 944→525L. |
-| S52 | TBD | manifest.js TIER_EXPIRY_SECONDS.free 5d→7d. shared-styles.njk --heading alias. B5 closed. B6 scoped. Lightning ops plan documented. Context v4.0. |
-| S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop (FileSystem API) + webkitdirectory picker. Relative paths preserved. Zip progress card (gold bar). Bare Uint8Array fix for macOS zip compat. Zero Worker changes. ✓ |
+| S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). |
+| S52 | — | manifest.js TIER_EXPIRY_SECONDS.free 5d→7d. `--heading` alias. Lightning ops plan. Context v4.0. B5 closed. |
+| S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop + picker. Zip progress card. Bare Uint8Array fix. ✓ |
+| S54 | TBD | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
 ---
 
 ## Roadmap
@@ -311,60 +273,26 @@ B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real l
 
 ---
 
-## B6 session plan (S53–S72+)
-
-**Principle:** No session holds more than one architecturally complex piece of work.
-Testing infra reviewed every 4 sessions (S63, S67, S71). Buffer consumed only if genuinely needed.
-
-| Session | Label | Scope | Size |
-|---------|-------|-------|------|
-| S53 | Folder upload I | fflate, client-side zip, zip progress UI, blob → upload flow | M |
-| S54 | Folder upload II | Streaming large folders, edge cases, special chars, 1000+ files | M |
-| S55 | Folder upload III | Receiver UX, zip preview card, error states | M |
-| S56 | Folder upload test | Photographer folder end-to-end. Off snags. | S |
-| S57 | Bearer TTL — investigation | Measure token lifetime vs large-transfer duration. Document gap. | S |
-| S58 | Bearer TTL — fix | Extend TTL or mid-stream 401 re-auth. Decision at S57. | M |
-| S59 | Bearer TTL — buffer | Consumed only if S58 has outstanding issues. | S |
-| S60 | Worker unit tests I | Miniflare setup. `ratelimit.js` + `manifest.js` coverage. | M |
-| S61 | Worker unit tests II | `nut00.js` blind sig. `blake3.js` hash verification. | M |
-| S62 | Worker unit tests III | `turnstile.js`, `stripe.js` handler stubs. Edge cases. | M |
-| S63 | Testing infra review | 4-session checkpoint. Integration test harness design. | S |
-| S64 | Integration tests I | Full upload→download round-trip in test harness. | L |
-| S65 | Integration tests II | Passphrase gate, rate limit, farming defence. | M |
-| S66 | Integration tests III | MIME denylist, UUID validation, chunk bounds, tier caps. | M |
-| S67 | Testing infra review II | 4-session checkpoint. Load test design. | S |
-| S68 | Load test I | k6 setup, credential issue + upload load. KV rate limit validation. | M |
-| S69 | Load test II | Download load, concurrent transfers, KV timing. | M |
-| S70 | CI pipeline I | GitHub Actions: build check, wrangler dry-run, lint. | S |
-| S71 | CI pipeline II | Test runner in CI. Fail-fast on Worker unit test regression. | S |
-| S72 | B6 close | Snag sweep, context files v5.0, B7 brief. Lightning backend confirmed. | S |
-
-**Buffer pool:** 10 sessions for testing infra (reviewed S63+S67) + 2–3 for bearer TTL.
+## B6 notes
 
 **Admin dashboard Lightning toggle (B6 scope):**
 KV flag `lightning_available: true/false/blink`. Dashboard toggle card. Upgrade page reads flag.
 Enables Fallback 1 + Fallback 2 without a code deploy, within target time windows.
 
 **Background work for Rajesh during B6:**
-1. Competitor analysis: WeTransfer, SwissTransfer, Smash, Wormhole, OnionShare.
-   Max file size · expiry · encryption model · pricing · anonymous use · Lightning/Bitcoin support.
+1. Competitor analysis: WeTransfer, SwissTransfer, Smash, Wormhole, OnionShare. Max file size · expiry · encryption model · pricing · anonymous use · Lightning/Bitcoin.
 2. 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-3. Blink API key: create account + generate API key if not already done.
+3. Blink API key: create account + generate key if not already done.
 4. btc++ Berlin abstract: draft one paragraph if considering presenting.
 
 ---
 
-## B5 snag list — resolved + carried
+## B6 open snags (resolve at S72)
 
-| Item | Status |
-|------|--------|
-| FREE_EXPIRY 5d→7d in manifest.js | ✅ S52 |
-| `--heading` alias in shared-styles.njk | ✅ S52 |
-| WOFF2 parsing warning (Bunny/Fontshare) | ✅ Confirmed cosmetic. No action. |
-| QR logo centre (Refueler mark in quiet zone) | Deferred → B11 prep if time allows |
-| X-Email header wiring for paid tier enforcement | Deferred → B7 (paid tiers not yet live) |
-| Nav snag (Upgrade link on refueler.io) | Deferred → B5 index iteration / B13 |
-| Status tile for admin dashboard | Carry to B6 snag sweep at S72 |
+- QR logo centre (Refueler mark in quiet zone) → B11 prep
+- X-Email header wiring for paid tier enforcement → B7
+- Nav snag (Upgrade link on refueler.io) → B13
+- Status tile for admin dashboard → S72 sweep
 
 ---
 

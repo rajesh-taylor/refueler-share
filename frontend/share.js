@@ -197,6 +197,12 @@ function handleFileSelection(file) {
 // Folder handling — drag drop entry point
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleFolderDrop(directoryEntry) {
+  // Guard: fflate must be loaded as a blocking CDN script before this module.
+  if (typeof fflate === 'undefined') {
+    setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
+    return;
+  }
+
   // Gather all files from the FileSystem API entry tree.
   // Shows "Gathering…" stage while reading the directory recursively.
   showZipStage('Gathering', 0, 'Reading folder…');
@@ -206,15 +212,30 @@ async function handleFolderDrop(directoryEntry) {
     files = await readDirectoryEntry(directoryEntry);
   } catch (e) {
     reportError('folder_read', e.message, 'drag_entry');
-    setDropMsg('Could not read the dropped folder. Try the "Upload folder" button instead.');
+    // e.message may be a depth-limit error — surface it directly.
+    setDropMsg(e.message.includes('nested more than')
+      ? e.message
+      : 'Could not read the dropped folder. Try the "Upload folder" button instead.');
     hideZipCard();
     return;
   }
 
+  // Empty folder — explicit message, not a silent skip.
   if (files.length === 0) {
     setDropMsg('That folder appears to be empty.');
     hideZipCard();
     return;
+  }
+
+  // File count checks.
+  if (files.length > FOLDER_MAX_FILES) {
+    setDropMsg(`This folder contains ${files.length.toLocaleString()} files — the maximum is ${FOLDER_MAX_FILES.toLocaleString()}. Please zip it manually and upload the .zip file.`);
+    hideZipCard();
+    return;
+  }
+  if (files.length > FOLDER_WARN_FILES) {
+    setDropMsg(`Large folder (${files.length.toLocaleString()} files) — this may take a moment.`);
+    // Non-blocking: proceed after showing the message.
   }
 
   // Top-level folder name from entry.name
@@ -228,6 +249,21 @@ async function handleFolderDrop(directoryEntry) {
 async function handleFolderFiles(fileList) {
   if (fileList.length === 0) return;
 
+  // Guard: fflate must be loaded as a blocking CDN script before this module.
+  if (typeof fflate === 'undefined') {
+    setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
+    return;
+  }
+
+  // File count checks (same thresholds as drag-drop path).
+  if (fileList.length > FOLDER_MAX_FILES) {
+    setDropMsg(`This folder contains ${fileList.length.toLocaleString()} files — the maximum is ${FOLDER_MAX_FILES.toLocaleString()}. Please zip it manually and upload the .zip file.`);
+    return;
+  }
+  if (fileList.length > FOLDER_WARN_FILES) {
+    setDropMsg(`Large folder (${fileList.length.toLocaleString()} files) — this may take a moment.`);
+  }
+
   showZipStage('Gathering', 0, `${fileList.length} file${fileList.length !== 1 ? 's' : ''} found`);
 
   // Derive top-level folder name from webkitRelativePath of the first file.
@@ -236,43 +272,86 @@ async function handleFolderFiles(fileList) {
   const folderName = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
 
   // Convert File objects to { relativePath, file } pairs, stripping top-level dir name.
-  // "ProjectFiles/assets/hero.jpg" → "assets/hero.jpg"
+  // "ProjectFiles/assets/hero.jpg" → "assets/hero.jpg", then sanitise each segment.
   const entries = fileList.map(f => {
-    const rel = f.webkitRelativePath || f.name;
-    // Strip the first path segment (the folder name itself)
+    const rel     = f.webkitRelativePath || f.name;
     const stripped = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
-    return { relativePath: stripped, file: f };
-  }).filter(e => e.relativePath.length > 0); // guard against edge case of bare folder name
+    const safe    = sanitisePath(stripped);
+    return { relativePath: safe, file: f };
+  }).filter(e => e.relativePath.length > 0);
 
   await zipAndSelect(entries, folderName);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Read a FileSystem API DirectoryEntry recursively → [{relativePath, file}]
+// Sanitise a single path segment — strip control chars, null bytes, bidi overrides.
+// Truncates to 200 bytes (UTF-8). Matches Worker S42a filename sanitisation logic.
 // ─────────────────────────────────────────────────────────────────────────────
-async function readDirectoryEntry(dirEntry, pathPrefix) {
-  const prefix = pathPrefix || '';
-  const results = [];
+function sanitiseSegment(seg) {
+  // Strip null bytes, C0/C1 control chars (U+0000–U+001F, U+007F),
+  // and Unicode bidi override codepoints (U+202A–U+202E, U+2066–U+2069).
+  // eslint-disable-next-line no-control-regex
+  let s = seg.replace(/[\x00-\x1F\x7F\u202A-\u202E\u2066-\u2069]/g, '');
+  // Truncate to 200 bytes via round-trip through TextEncoder/TextDecoder.
+  const enc = new TextEncoder();
+  let bytes = enc.encode(s);
+  if (bytes.length > 200) {
+    bytes = bytes.slice(0, 200);
+    s = new TextDecoder('utf-8', { fatal: false }).decode(bytes).replace(/\uFFFD$/, '');
+  }
+  return s;
+}
+
+// Sanitise a full relative path — apply sanitiseSegment to each segment,
+// drop empty segments and path traversal attempts ('..', '.').
+function sanitisePath(rel) {
+  return rel.split('/')
+    .map(sanitiseSegment)
+    .filter(s => s.length > 0 && s !== '..' && s !== '.')
+    .join('/');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read a FileSystem API DirectoryEntry recursively → [{relativePath, file}]
+// Max depth: 20 levels. Hard stops with a thrown Error on breach.
+// createReader.readEntries() returns ≤100 entries per call — loop until empty.
+// ─────────────────────────────────────────────────────────────────────────────
+const FOLDER_MAX_DEPTH  = 20;
+const FOLDER_WARN_FILES = 500;
+const FOLDER_MAX_FILES  = 2000;
+
+async function readDirectoryEntry(dirEntry, pathPrefix, depth) {
+  const prefix    = pathPrefix || '';
+  const currDepth = depth      || 0;
+  const results   = [];
+
+  if (currDepth > FOLDER_MAX_DEPTH) {
+    throw new Error(`Folder is nested more than ${FOLDER_MAX_DEPTH} levels deep. Please zip it manually first.`);
+  }
 
   await new Promise((resolve, reject) => {
     const reader = dirEntry.createReader();
 
-    // createReader.readEntries() returns ≤100 entries per call — must call repeatedly.
     function readBatch() {
       reader.readEntries(async entries => {
         if (entries.length === 0) { resolve(); return; }
         for (const entry of entries) {
           if (entry.isFile) {
             const file = await new Promise((res, rej) => entry.file(res, rej));
-            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-            results.push({ relativePath: rel, file });
+            const rel  = prefix ? `${prefix}/${entry.name}` : entry.name;
+            const safe = sanitisePath(rel);
+            if (safe) results.push({ relativePath: safe, file });
           } else if (entry.isDirectory) {
             const subPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
-            const subResults = await readDirectoryEntry(entry, subPrefix);
-            results.push(...subResults);
+            try {
+              const subResults = await readDirectoryEntry(entry, subPrefix, currDepth + 1);
+              results.push(...subResults);
+            } catch (e) {
+              reject(e); return;
+            }
           }
         }
-        readBatch(); // keep reading until empty batch
+        readBatch();
       }, reject);
     }
     readBatch();
@@ -284,9 +363,18 @@ async function readDirectoryEntry(dirEntry, pathPrefix) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Zip [{relativePath, file}] using fflate, then hand blob to handleFileSelection
 // ─────────────────────────────────────────────────────────────────────────────
+const FOLDER_MEM_WARN_BYTES = 500 * 1024 * 1024; // 500 MB
+
 async function zipAndSelect(entries, folderName) {
-  const zipName = `${folderName}.zip`;
+  const zipName    = `${folderName}.zip`;
   const totalFiles = entries.length;
+
+  // Memory pressure warning — computed before reading anything into RAM.
+  // Non-blocking: the user is already committed to this folder at this point.
+  const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
+  if (totalBytes > FOLDER_MEM_WARN_BYTES) {
+    setDropMsg(`Large folder (${formatBytes(totalBytes)}) — compression may use significant memory and take a while.`);
+  }
 
   showZipStage('Compressing', 0, `0 / ${totalFiles} files`);
 
