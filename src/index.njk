@@ -167,6 +167,12 @@ function showMaintenanceModal(status) {
     flex-shrink: 0;
   }
   .info-card-dismiss:hover { color: var(--fg); }
+  .info-card > span:not(.info-icon):not(.info-card-dismiss) {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 14px;
+    line-height: 1.7;
+  }
 
   /* ── Drop zone ───────────────────────────────────────────────────── */
   .drop-zone {
