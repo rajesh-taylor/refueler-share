@@ -245,12 +245,13 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | `--display` as sole heading token | Declare both `--display` and `--heading` in shared-styles.njk |
 | `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
 | Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
+| `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x | Bare `new Uint8Array(buf)` — default level-6 DEFLATE, macOS-compatible |
 
 ---
 
 ## Current state
 
-**B5 Design full pass — COMPLETE. B6 Testing infrastructure + folder upload — current.**
+**B6 Testing infrastructure + folder upload — current. S54 next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -284,7 +285,7 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | S50 | `e3a4407` | Serif audit. 3 correct usages confirmed. 3 CSS-only additions. |
 | S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). index.njk 1582→280L. upgrade.njk 944→525L. |
 | S52 | TBD | manifest.js TIER_EXPIRY_SECONDS.free 5d→7d. shared-styles.njk --heading alias. B5 closed. B6 scoped. Lightning ops plan documented. Context v4.0. |
-
+| S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop (FileSystem API) + webkitdirectory picker. Relative paths preserved. Zip progress card (gold bar). Bare Uint8Array fix for macOS zip compat. Zero Worker changes. ✓ |
 ---
 
 ## Roadmap

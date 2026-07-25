@@ -627,6 +627,23 @@
 - DO NOT use `--display` as the sole heading token — `--heading` is the DESIGN-TOKENS.md name;
   both must be declared in shared-styles.njk.
 
+### S53 — Folder upload I
+**Commits:** `b1d9855` (folder upload) · `ca1260c` (fflate fix)
+
+- fflate 0.8.2 loaded as blocking CDN script (`cdnjs.cloudflare.com`) before `share.js` module.
+- Hidden `<input webkitdirectory multiple>` added to drop zone. "📁 Upload folder" ghost button triggers it.
+- Folder drag-drop: `webkitGetAsEntry().isDirectory` detection routes to `handleFolderDrop()` via FileSystem API.
+- `readDirectoryEntry()`: batched `createReader.readEntries()` loop — handles >100 entries per dir correctly.
+- `handleFolderFiles()`: strips top-level folder name from `webkitRelativePath` — `ProjectFiles/assets/hero.jpg` → `assets/hero.jpg` inside zip. Zip named `ProjectFiles.zip`.
+- `zipAndSelect()`: reads files into memory, builds fflate `fileMap`, calls `fflate.zip()` async callback, synthesises `File` object, hands to `handleFileSelection()` unchanged.
+- Zip progress card (`#zip-progress-card`): gold bar, file count detail, hides when zip complete, existing upload progress card takes over.
+- Zero Worker changes. `application/zip` passes MIME denylist gate.
+- **Fix `ca1260c`:** `[new Uint8Array(buf), { level: 0 }]` → bare `new Uint8Array(buf)`. fflate `level:0` writes DEFLATED-with-zero-compression entries; macOS Archive Utility rejects as "unsupported format". Bare Uint8Array = default level-6 DEFLATE, universally compatible. End-to-end smoke test passed: folder → zip → encrypt → upload → download → decrypt → macOS extracts cleanly. ✓
+
+**Do not retry:**
+- DO NOT use `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x — macOS Archive Utility rejects. Bare `Uint8Array` only.
+- DO NOT use `webkitGetAsEntry` result without `.isDirectory` check — files and dirs both return entries.
+
 ---
 
 ## Sessions 53–72+ — B6 Testing infrastructure + folder upload
