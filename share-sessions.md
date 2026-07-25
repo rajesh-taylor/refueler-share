@@ -366,11 +366,42 @@ consumed only if genuinely needed, not by default.
 
 ---
 
+### S55 — Folder upload receiver UX
+**Commit:** TBD · `frontend/share.js`, `frontend/share.css`, `src/index.njk` · no Worker changes
+
+**Decisions locked this session:**
+- **Delivery: zip as-is.** Receiver downloads the zip and unzips themselves.
+  Auto-unzip on receiver side not implemented: requires fflate on the receiver page,
+  full decrypted zip in browser memory before entry extraction, and directory tree
+  reconstruction from the zip central directory. Same memory footprint concern as
+  client-side zip with no benefit over native OS unzip. Decision permanent unless
+  explicitly revisited in B7+.
+- **Error states:** Generic `showDownloadError` messages (decryption failure, HTTP error)
+  are correct for folder transfers. A corrupted zip is indistinguishable from a
+  corrupted file at the AES-GCM decrypt layer — the decryption error is the right
+  signal. No folder-specific error message needed.
+
+**Delivered:**
+- `id="rc-file-icon"` added to icon span in receiver card HTML (`index.njk`).
+- Filename wrapped in `<div>` alongside new `<div class="rc-folder-note hidden" id="rc-folder-note">`.
+- `rcFileIcon` + `rcFolderNote` DOM refs added to `share.js`.
+- In `enterDownloadMode`, after setting `rcFileName.textContent`: detect `.zip` extension
+  via `fileName.toLowerCase().endsWith('.zip')`. If true: set icon to 📁, remove `hidden`
+  from `rc-folder-note`.
+- `.rc-folder-note` CSS: IBM Plex Mono 11px, `--text-secondary`, `margin-top: 4px`.
+- Upload path unchanged — no awareness of "this is a folder zip" needed there.
+
+**Do not retry:**
+- DO NOT auto-unzip on receiver side — see delivery decision above.
+- DO NOT add a folder-specific decrypt error message — AES-GCM error is the correct signal.
+
+---
+
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
 | S53 | Folder upload I | fflate integration, client-side zip, zip progress UI, single blob → existing upload flow | M |
 | S54 | Folder upload II | Streaming large folders, edge cases (empty dirs, deep nesting, 1000+ files, special chars) | M |
-| S55 | Folder upload III | Receiver UX decision (deliver zip vs auto-unzip), zip preview card, error states | M |
+| S55 | TBD | Folder upload III: receiver UX — folder icon (📁), zip-as-is delivery decision, "Compressed folder" note, error states confirmed. |
 | S56 | Folder upload test | Photographer folder end-to-end: upload → share → receive → unzip. Off snags. | S |
 | S57 | Bearer TTL — investigation | Measure token lifetime vs large-transfer duration. Document the gap. | S |
 | S58 | Bearer TTL — fix | Extend TTL or mid-stream 401 re-auth prompt. Decision at S57. | M |

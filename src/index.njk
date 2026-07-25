@@ -235,8 +235,11 @@ function showMaintenanceModal(status) {
     <!-- Receiver landing card (S47c) — shown before any download starts -->
     <div class="card" id="receiver-card" style="display:none">
       <div class="rc-file-row">
-        <span class="rc-file-icon">📄</span>
-        <span class="rc-file-name" id="rc-file-name">Loading…</span>
+        <span class="rc-file-icon" id="rc-file-icon">📄</span>
+        <div>
+          <span class="rc-file-name" id="rc-file-name">Loading…</span>
+          <div class="rc-folder-note hidden" id="rc-folder-note">Compressed folder — unzip after download</div>
+        </div>
       </div>
       <div class="rc-meta-grid">
         <div class="rc-meta-item">

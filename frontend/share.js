@@ -79,7 +79,9 @@ const zipBar           = $('zip-bar');
 const zipDetail        = $('zip-detail');
 const dlCompatWarn     = $('dl-compat-warn');
 const receiverCard     = $('receiver-card');
+const rcFileIcon       = $('rc-file-icon');
 const rcFileName       = $('rc-file-name');
+const rcFolderNote     = $('rc-folder-note');
 const rcSize           = $('rc-size');
 const rcExpiry         = $('rc-expiry');
 const rcPassphraseRow  = $('rc-passphrase-row');
@@ -697,7 +699,18 @@ async function enterDownloadMode({ uuid, key, iv }) {
   }
 
   // ── Populate receiver card ────────────────────────────────────────────────
-  rcFileName.textContent = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
+  const fileName = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
+  rcFileName.textContent = fileName;
+
+  // Folder transfer detection — zip filename signals a client-side zipped folder.
+  // Show folder icon and "unzip after download" note. Zip is delivered as-is;
+  // auto-unzip on receiver side is not implemented (same memory concerns as
+  // client-side zip, plus directory reconstruction complexity). Decision: S55.
+  const isZip = fileName.toLowerCase().endsWith('.zip');
+  if (isZip) {
+    rcFileIcon.textContent = '📁';
+    rcFolderNote.classList.remove('hidden');
+  }
 
   rcSize.textContent = meta.total_bytes ? formatBytes(meta.total_bytes) : '—';
 

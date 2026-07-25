@@ -300,6 +300,15 @@ main {
   font-weight: 500;
   color: var(--text-primary);
 }
+/* ── Receiver folder note — shown below filename for .zip transfers ──────── */
+.rc-folder-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .rc-passphrase-badge {
   display: inline-flex;
   align-items: center;

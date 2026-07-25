@@ -247,7 +247,8 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). |
 | S52 | — | manifest.js TIER_EXPIRY_SECONDS.free 5d→7d. `--heading` alias. Lightning ops plan. Context v4.0. B5 closed. |
 | S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop + picker. Zip progress card. Bare Uint8Array fix. ✓ |
-| S54 | TBD | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
+| S54 | `c732abf` | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
+| S55 | TBD | Folder upload III. Receiver UX: folder icon, zip-as-is decision, folder note, error states confirmed. |
 ---
 
 ## Roadmap
