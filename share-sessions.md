@@ -433,6 +433,8 @@
 | S47d | Receiver snag + single-file UX | Snag sweep from S47c. Drop zone explicit single-file-only rejection. | S |
 | S48 | Maintenance notification + theme persistence | KV modal on index.html + Paper/Carbon cookie scoped to `.refueler.io`. Privacy copy update. | S |
 | S49a ✅ | Carbon gold edging + brand sweep | `--inset-rule` throughout Carbon. Token aliases fixed in shared-styles.njk. | S |
+| S50 ✅ | Serif audit | --serif audit across all 3 pages. 3 correct usages confirmed. 3 additions: info card copy, upgrade subline, payment note. CSS-only. | S |
+| S51 | File extraction | Extract index.njk CSS→frontend/share.css, JS→frontend/share.js. Extract upgrade.njk CSS→frontend/upgrade.css. Matches admin/dashboard pattern. | M |
 | S52 | B5 close | Snag sweep, QR logo snag note, context files, version 4.0, B6 brief. | S |
 
 ---
@@ -567,5 +569,18 @@
 
 **Do not retry:**
 - DO NOT use `border-left: 2px` on integrity cards — visual review confirmed 0.5px is correct weight.
+
+### S50 — Source Serif 4 editorial moments audit
+**Commit:** `e3a4407`
+
+- Full --serif audit across index.njk, status.njk, upgrade.njk.
+- Confirmed correct existing usage: `.dl-signoff-secondary` (colophon), `.usp-text` (receiver A/B block), `.integrity-card-note` (status How it works).
+- No wrong-register serif usage found anywhere.
+- Three CSS-only additions:
+  - `index.njk`: `.info-card > span` body copy → `var(--serif)` 300 14px/1.7
+  - `upgrade.njk`: `.page-header p` subline → `var(--serif)` 300
+  - `upgrade.njk`: `.payment-note` reassurance copy → `var(--serif)` 300
+- "Already a subscriber?" lookup label confirmed correct in sans — instructional UI, not editorial.
+- No Worker changes. No wrangler deploy.
 
 *"Nothing stops this train."*

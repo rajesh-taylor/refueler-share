@@ -226,6 +226,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S47b | `b98bcd8` → `d8faf0f` | QR 200px + high-contrast Carbon colours (`#F7F4EF` on `#111316`). 2-col button grid (share panel). integrity-card-note → Source Serif 4 300/14px/1.7. Back links restyled as ghost buttons on status + upgrade. QR library swapped qrcodejs → qr-creator (SVG, no canvas blur). |
 | S48 | `0761f4c` | Maintenance modal on index.html. Theme cookie `rs-theme` scoped to `.refueler.io`. FOUC eliminated. |
 | S49a | `12fa05f` → `3598a65` | Carbon gold edging: `--inset-rule` token added to shared-styles.njk (Paper: `var(--border)`, Carbon: `var(--gold)`). Nav border-bottom + footer border-top → `var(--inset-rule)`. Status page section dividers + integrity card left rail → `var(--inset-rule)`. Upgrade page tabs divider + manage-divider → `var(--inset-rule)`. Brand sweep: `--serif`, `--accent`, `--text-primary`, `--text-secondary`, `--border-mid`, `--surface` token aliases added to shared-styles.njk (were consumed by pages but undeclared). Maintenance modal border-top: `var(--gold)` → `var(--accent)`. Card left rail tuned 2px → 0.5px hairline on visual review. |
+| S50 | `e3a4407` | Serif audit: 3 correct usages confirmed, 3 additions (info card copy, upgrade subline, payment note). CSS-only. |
 ---
 
 ## Roadmap
@@ -279,6 +280,7 @@ Principle: finish the upload→share→receive loop end-to-end and test it befor
 - X-Email header wiring for paid tier enforcement: must be fixed before paid tiers go live. Review B7.
 - Nav snag (Upgrade link breaking on `refueler.io`): deferred, review B5 index iteration.
 - Turnstile widget width: left-aligned but still fixed-width Cloudflare iframe — A/B test wider treatment in a later session.
+- File extraction (S51): index.njk (1,575 lines — ~360 CSS, ~1,046 JS) and upgrade.njk (941 lines — ~416 CSS) to be split into static assets matching admin/dashboard pattern. status.njk (555 lines) is fine as-is.
 
 **B6 additions (folder upload):**
 - S53: Folder upload I — fflate integration, client-side zip, zip progress UI, single blob to existing upload flow.
