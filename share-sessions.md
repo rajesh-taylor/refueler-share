@@ -432,7 +432,7 @@
 | S47c | Receiver landing page | Info card on link open: filename, size, expiry, passphrase indicator, Download button. Replaces auto-trigger. Pure frontend. | M |
 | S47d | Receiver snag + single-file UX | Snag sweep from S47c. Drop zone explicit single-file-only rejection. | S |
 | S48 | Maintenance notification + theme persistence | KV modal on index.html + Paper/Carbon cookie scoped to `.refueler.io`. Privacy copy update. | S |
-| S49 | Carbon gold edging + brand sweep | `--inset-rule: #C8A96E` throughout Carbon + Share UI vs BRANDING.md pass. | M |
+| S49a ✅ | Carbon gold edging + brand sweep | `--inset-rule` throughout Carbon. Token aliases fixed in shared-styles.njk. | S |
 | S52 | B5 close | Snag sweep, QR logo snag note, context files, version 4.0, B6 brief. | S |
 
 ---
@@ -546,5 +546,26 @@
 - Capability warning (`.dl-compat-warn`): amber >300 MB, red >1 GB. Appears on receiver card before Download click. Design tokens throughout.
 - Fix: `total_chunks` added to `handleMeta` response (Worker line 882). Was missing — caused "Transfer metadata is incomplete" error on first test.
 - Fix: `types: []` in `showSaveFilePicker` call — suppresses macOS `.com` extension warning.
+
+### S49a — Carbon gold edging + brand sweep
+**Commits:** `12fa05f` → `3598a65` · 25 July 2026
+
+- `--inset-rule` token added to `shared-styles.njk`: Paper resolves to `var(--border)` (rgba near-invisible), Carbon resolves to `var(--gold)` (#C8A96E). No-op in Paper — all visual changes are Carbon-only.
+- Nav `border-bottom` + footer `border-top` → `var(--inset-rule)`. Consistent hairline weight across all chrome.
+- Status page `.section-header border-bottom` → `var(--inset-rule)`. Gold section dividers in Carbon.
+- Integrity cards: `border-left: 0.5px solid var(--inset-rule)`. 2px tuned to 0.5px hairline on visual review — matches nav/footer weight, content leads not chrome.
+- Upgrade page: payment tabs container `border-bottom` + `.manage-divider border-top` → `var(--inset-rule)`.
+- Brand sweep — token aliases added to `shared-styles.njk` (were consumed by pages but never declared, silently failing or falling back):
+  - `--serif: 'Source Serif 4', Georgia, serif`
+  - `--accent: var(--gold)` (with Carbon override unchanged — same value)
+  - `--text-primary: var(--fg)`, `--text-secondary: var(--fg-muted)` (DESIGN-TOKENS.md naming used by status + upgrade back-links)
+  - `--border-mid: rgba(26,26,26,0.22)` / Carbon: `rgba(245,240,232,0.22)`
+  - `--surface: rgba(26,26,26,0.04)` / Carbon: `rgba(245,240,232,0.04)`
+- Maintenance modal `border-top: var(--gold)` → `var(--accent)` (tokenised, same value).
+- Brand sweep finding: `--display` (shared-styles) vs `--heading` (DESIGN-TOKENS.md) — both point to Satoshi stack. Cosmetic divergence. Log for S52 sweep.
+- Brand sweep finding: orange `--accent-action` exists in Share DESIGN-TOKENS.md but is abolished in BRANDING.md. Intentional divergence — DESIGN-TOKENS.md governs Share; orange is permitted on consumer CTA surfaces only. No action.
+
+**Do not retry:**
+- DO NOT use `border-left: 2px` on integrity cards — visual review confirmed 0.5px is correct weight.
 
 *"Nothing stops this train."*

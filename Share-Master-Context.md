@@ -225,7 +225,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S47a | `dbcf54f` → `1daeac9` → `63eb253` | FREE_EXPIRY fixed (7d). Progress bar smooth finish. QR retina + design token colours. Cap upgrade nudge on index. status.njk: shared-styles include added, "How it works" human-readable cards, plain-English state labels, card text sizes lifted, ← Back link added. |
 | S47b | `b98bcd8` → `d8faf0f` | QR 200px + high-contrast Carbon colours (`#F7F4EF` on `#111316`). 2-col button grid (share panel). integrity-card-note → Source Serif 4 300/14px/1.7. Back links restyled as ghost buttons on status + upgrade. QR library swapped qrcodejs → qr-creator (SVG, no canvas blur). |
 | S48 | `0761f4c` | Maintenance modal on index.html. Theme cookie `rs-theme` scoped to `.refueler.io`. FOUC eliminated. |
-
+| S49a | `12fa05f` → `3598a65` | Carbon gold edging: `--inset-rule` token added to shared-styles.njk (Paper: `var(--border)`, Carbon: `var(--gold)`). Nav border-bottom + footer border-top → `var(--inset-rule)`. Status page section dividers + integrity card left rail → `var(--inset-rule)`. Upgrade page tabs divider + manage-divider → `var(--inset-rule)`. Brand sweep: `--serif`, `--accent`, `--text-primary`, `--text-secondary`, `--border-mid`, `--surface` token aliases added to shared-styles.njk (were consumed by pages but undeclared). Maintenance modal border-top: `var(--gold)` → `var(--accent)`. Card left rail tuned 2px → 0.5px hairline on visual review. |
 ---
 
 ## Roadmap
@@ -236,7 +236,7 @@ Core S19–S100 · Buffer S101–S120. B5 resequenced to complete the upload→s
 |-------|----------|-------|
 | B2 ✓ | S19–S26 | Instrumentation, metrics, dashboard |
 | B3 ✓ | S27–S33 | Stripe test coverage |
-| B4 ✓ | S34–S42 | Security hardening |
+**B4 Security hardening — COMPLETE. B5 Design full pass — current. S49a complete.**
 | B5 | S43–S52 | Design full pass ← current |
 | B6 | S53–S60 | Testing infrastructure + folder upload |
 | B7 | S61–S70 | Lightning/Blink + anonymous paid tier (highest design risk) |
@@ -268,7 +268,7 @@ Principle: finish the upload→share→receive loop end-to-end and test it befor
 | S47c | Receiver landing page | Info card on link open: filename, size, expiry, passphrase indicator, Download button. Replaces auto-trigger. Pure frontend — no Worker changes. | M |
 | S47d | `242444d`→`3eb4ec4` | QR guard, drop zone rejection, receiver colophon, footer subdomain-only, Turnstile explicit theme. | S |
 | S48 | Maintenance notification + theme persistence | KV-controlled modal on index.html + Paper/Carbon cookie scoped to `.refueler.io`. Privacy copy update. Two small items, one session. | S |
-| S49 | Carbon gold edging + brand sweep | `--inset-rule: #C8A96E` throughout Carbon. Card borders, rule lines, active states. Share UI vs BRANDING.md. Source Serif 4 editorial moments. | M |
+| S49a ✅ | Carbon gold edging + brand sweep | `--inset-rule` throughout Carbon. Token aliases fixed in shared-styles.njk. | S |
 | S52 | B5 close | Snag sweep, QR logo snag note (deferred), context files, version bump to 4.0, B6 brief. | S |
 
 **B5 snag list (open):**
