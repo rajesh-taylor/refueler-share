@@ -562,16 +562,19 @@ document.addEventListener('click', function (e) {
       <button class="info-card-dismiss" id="dismiss-info" aria-label="Dismiss">✕</button>
     </div>
 
+    <!-- File inputs — outside the drop zone so they never intercept drag events   -->
+    <!-- or block button clicks. Triggered programmatically by JS click handlers.  -->
+    <!-- S56: moved from inside drop-zone where position:absolute caused conflicts. -->
+    <input type="file" id="file-input" aria-label="Select file" style="display:none" />
+    <input type="file" id="folder-input" webkitdirectory multiple aria-label="Select folder" style="display:none" />
+
     <!-- Drop zone -->
     <div class="drop-zone" id="drop-zone">
-      <!-- Single-file input — occupies full drop zone hit area -->
-      <input type="file" id="file-input" aria-label="Select file" />
-      <!-- Folder input — hidden, triggered by "Upload folder" button only -->
-      <input type="file" id="folder-input" webkitdirectory multiple aria-label="Select folder" style="display:none" />
       <div class="drop-icon">↑</div>
-      <div class="drop-label">Drop a file or folder, or click to browse</div>
+      <div class="drop-label">Drop a file or folder here</div>
       <div class="drop-sub mt4">End-to-end encrypted · Free up to 4 GB</div>
       <div class="drop-folder-row mt12">
+        <button class="btn btn-ghost btn-sm" id="file-btn" type="button">📄 Browse file</button>
         <button class="btn btn-ghost btn-sm" id="folder-btn" type="button">📁 Upload folder</button>
       </div>
     </div>
@@ -725,8 +728,10 @@ document.addEventListener('click', function (e) {
 </footer>
 
 
-<!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked) so globals are defined before the module script runs. -->
+<!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked). Blocking scripts so  -->
+<!-- globals are defined before the module script executes.                        -->
 <script src="/fflate.min.js"></script>
 <script src="/qr-creator.min.js"></script>
+<script type="module" src="/share.js"></script>
 </body>
 </html>

@@ -136,7 +136,15 @@ function enterUploadMode() {
     if (e.dataTransfer.files[0]) handleFileSelection(e.dataTransfer.files[0]);
   });
 
-  // Single-file input
+  // Drop zone click — opens the single-file picker.
+  // S56: file input is now outside the drop zone hit area so this explicit
+  // click handler is required. No delay from full-area invisible input.
+  dropZone.addEventListener('click', () => {
+    fileInput.value = '';
+    fileInput.click();
+  });
+
+  // Single-file input change
   fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) {
       clearDropMsg();
@@ -144,15 +152,28 @@ function enterUploadMode() {
     }
   });
 
+  // Browse file button — explicit file picker trigger (redundant with drop zone
+  // click but provided as a clear affordance alongside the folder button).
+  const fileBtn = $('file-btn');
+  if (fileBtn) {
+    fileBtn.addEventListener('click', e => {
+      e.stopPropagation(); // prevent bubbling to drop zone click handler
+      fileInput.value = '';
+      fileInput.click();
+    });
+  }
+
   // Folder button triggers the hidden webkitdirectory input.
-  // Stop propagation so the click doesn't bubble to the drop zone's file input.
   folderBtn.addEventListener('click', e => {
-    e.stopPropagation();
+    e.stopPropagation(); // prevent bubbling to drop zone click handler
     folderInput.value = '';
     folderInput.click();
   });
 
-  // webkitdirectory input — user selected a folder via the picker
+  // webkitdirectory input — user selected a folder via the picker.
+  // On macOS Chrome, webkitdirectory navigates into the folder — user clicks
+  // Open from inside the folder, which submits all files within it.
+  // Subfolders are traversed by the browser and included in files[].
   folderInput.addEventListener('change', () => {
     if (folderInput.files.length === 0) return;
     clearDropMsg();
@@ -199,7 +220,7 @@ function handleFileSelection(file) {
 // Folder handling — drag drop entry point
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleFolderDrop(directoryEntry) {
-  // Guard: fflate must be loaded as a blocking CDN script before this module.
+  // Guard: fflate must be loaded as a blocking script before this module.
   if (typeof fflate === 'undefined') {
     setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
     return;
@@ -251,7 +272,7 @@ async function handleFolderDrop(directoryEntry) {
 async function handleFolderFiles(fileList) {
   if (fileList.length === 0) return;
 
-  // Guard: fflate must be loaded as a blocking CDN script before this module.
+  // Guard: fflate must be loaded as a blocking script before this module.
   if (typeof fflate === 'undefined') {
     setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
     return;
@@ -372,7 +393,6 @@ async function zipAndSelect(entries, folderName) {
   const totalFiles = entries.length;
 
   // Memory pressure warning — computed before reading anything into RAM.
-  // Non-blocking: the user is already committed to this folder at this point.
   const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
   if (totalBytes > FOLDER_MEM_WARN_BYTES) {
     setDropMsg(`Large folder (${formatBytes(totalBytes)}) — compression may use significant memory and take a while.`);
@@ -382,7 +402,6 @@ async function zipAndSelect(entries, folderName) {
 
   // Read all files into memory as Uint8Arrays.
   // fflate.zip() accepts { "path": Uint8Array } — no streaming API for full zip.
-  // For S54 we can revisit async streaming for very large folders.
   const fileMap = {};
   for (let i = 0; i < entries.length; i++) {
     const { relativePath, file } = entries[i];
@@ -390,8 +409,7 @@ async function zipAndSelect(entries, folderName) {
     fileMap[relativePath] = new Uint8Array(buf);
     // Bare Uint8Array → fflate default (level 6 DEFLATE) — produces unambiguous DEFLATE entries.
     // level:0 is a fflate footgun: writes DEFLATED method with zero compression, which macOS
-    // Archive Utility rejects as "unsupported format". Compression ratio is irrelevant here
-    // since the zip is AES-GCM encrypted immediately after. Compatibility wins over CPU saving.
+    // Archive Utility rejects as "unsupported format". Compatibility wins over CPU saving.
 
     const pct = Math.round(((i + 1) / totalFiles) * 85); // read phase = 0–85%
     showZipStage('Compressing', pct, `${i + 1} / ${totalFiles} files`);
@@ -464,9 +482,6 @@ function renderTurnstile() {
   if (!container) return;
   if (!window.turnstile) {
     // Script not ready yet — set flag and start polling (Safari ITP fallback).
-    // Polls every 200ms up to 15s. Once the script loads, renderTurnstile is
-    // called again by the poll. The onTurnstileLoad callback above also fires
-    // on non-Safari browsers, whichever arrives first wins.
     if (!pendingTurnstileRender) {
       pendingTurnstileRender = true;
       const deadline = Date.now() + 15000;
@@ -648,16 +663,9 @@ function showSharePanel(url, isProtected) {
   }
   qrWrap.innerHTML = '';
   // qr-creator renders to SVG — crisp at any DPR, no canvas blur.
-  // Guard: if the blocking script above the module tag didn't expose QrCreator
-  // (e.g. CDN blocked, cached old build), load it dynamically before rendering.
+  // Guard: if self-hosted script didn't load, skip QR silently — link is still copyable.
   if (typeof QrCreator !== 'undefined') {
     renderQr(url);
-  } else {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js';
-    s.onload = () => renderQr(url);
-    s.onerror = () => { /* QR unavailable — silently skip, link is still copyable */ };
-    document.head.appendChild(s);
   }
 }
 
@@ -686,8 +694,6 @@ async function enterDownloadMode({ uuid, key, iv }) {
   history.replaceState(null, '', location.pathname);
 
   // ── Fetch metadata from /meta/{uuid} ────────────────────────────────────
-  // Public endpoint — no auth, returns filename/size/expiry/passphrase flag.
-  // Works for both protected and unprotected transfers.
   let meta = {};
   try {
     const metaRes = await fetch(`${WORKER_URL}/meta/${uuid}`);
@@ -703,9 +709,6 @@ async function enterDownloadMode({ uuid, key, iv }) {
   rcFileName.textContent = fileName;
 
   // Folder transfer detection — zip filename signals a client-side zipped folder.
-  // Show folder icon and "unzip after download" note. Zip is delivered as-is;
-  // auto-unzip on receiver side is not implemented (same memory concerns as
-  // client-side zip, plus directory reconstruction complexity). Decision: S55.
   const isZip = fileName.toLowerCase().endsWith('.zip');
   if (isZip) {
     rcFileIcon.textContent = '📁';
@@ -736,8 +739,6 @@ async function enterDownloadMode({ uuid, key, iv }) {
   receiverCard.style.display = 'flex';
 
   // ── A/B USP variant (S47c) ───────────────────────────────────────────────
-  // 50/50 split per session. Variant stored in sessionStorage — never a cookie,
-  // never sent to any server as identity. Only the variant label is logged to AE.
   const USP_VARIANTS = {
     A: `Reading your files is not technically possible for us.\nThe key never leaves your browser. The server stores encrypted noise.\nFiles delete themselves. No account. No trace. No data to sell.`,
     B: `This link expires and deletes itself — no trace remains.\nNo account. No email. No history.\nYour data. Not ours.`,
@@ -750,17 +751,15 @@ async function enterDownloadMode({ uuid, key, iv }) {
       sessionStorage.setItem('rs-usp-variant', uspVariant);
     }
   } catch {
-    // sessionStorage blocked (private mode edge case) — assign without storing.
     uspVariant = Math.random() > 0.5 ? 'B' : 'A';
   }
   uspText.textContent = USP_VARIANTS[uspVariant];
   uspBlock.classList.remove('hidden');
-  // Log variant exposure to AE via /log/error (context: receiver_ab) — fire-and-forget.
   logReceiverEvent('receiver_ab_shown', uspVariant);
 
-  // ── Show capability warning on receiver card if FSAA is unavailable ─────
-  const WARN_AMBER_BYTES = 300 * 1024 * 1024;  // 300 MB
-  const WARN_RED_BYTES   = 1024 * 1024 * 1024; // 1 GB
+  // ── Capability warning on receiver card if FSAA unavailable ─────────────
+  const WARN_AMBER_BYTES = 300 * 1024 * 1024;
+  const WARN_RED_BYTES   = 1024 * 1024 * 1024;
   const hasFSAA = typeof showSaveFilePicker !== 'undefined';
   const totalBytes = meta.total_bytes || 0;
 
@@ -773,9 +772,6 @@ async function enterDownloadMode({ uuid, key, iv }) {
   }
 
   // ── Wire Download button ─────────────────────────────────────────────────
-  // FSAA click handler order (locked):
-  // showSaveFilePicker() MUST be the first async operation — Chrome rejects
-  // picker calls that occur after awaited work (non-gesture context).
   rcDownloadBtn.addEventListener('click', async () => {
     receiverCard.style.display = 'none';
 
@@ -845,7 +841,6 @@ async function startDownloadGated(uuid, meta) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FSAA streaming download — pipeline depth 2, per-chunk retry (3×, exp backoff)
-// Memory resident at any time: at most 2 chunks of ciphertext + 1 of plaintext.
 // ─────────────────────────────────────────────────────────────────────────────
 async function startDownloadStream(uuid, meta, fileHandle) {
   const totalChunks = meta.total_chunks;
@@ -867,7 +862,6 @@ async function startDownloadStream(uuid, meta, fileHandle) {
     return;
   }
 
-  // ── Per-chunk fetch with retry ────────────────────────────────────────────
   async function fetchChunkWithRetry(chunkIdx) {
     const padded = String(chunkIdx).padStart(4, '0');
     const headers = {};
@@ -905,7 +899,6 @@ async function startDownloadStream(uuid, meta, fileHandle) {
     throw err;
   }
 
-  // ── Streaming loop — pipeline depth 2 ─────────────────────────────────────
   try {
     let nextChunkPromise = fetchChunkWithRetry(0);
 
@@ -927,8 +920,6 @@ async function startDownloadStream(uuid, meta, fileHandle) {
         );
       } catch (e) {
         reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`).catch(() => {});
-        // Privacy: abort() discards the incomplete FSAA temp file — no partial plaintext
-        // remains on disk after a failed transfer. Document in B9 security whitepaper.
         await writable.abort();
         showDownloadError('Decryption failed — wrong key or corrupted data. No partial file was saved.');
         return;
@@ -952,10 +943,7 @@ async function startDownloadStream(uuid, meta, fileHandle) {
   } catch (e) {
     reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`).catch(() => {});
 
-    try {
-      // Privacy: abort() discards the incomplete FSAA temp file.
-      await writable.abort();
-    } catch { /* already closed or aborted */ }
+    try { await writable.abort(); } catch { /* already closed or aborted */ }
 
     if (e.status === 401) {
       showDownloadError('Access denied. This transfer may have expired or the link is incorrect.');
@@ -970,9 +958,7 @@ async function startDownloadStream(uuid, meta, fileHandle) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Blob fallback download — for browsers without FSAA (showSaveFilePicker) support.
-// Memory cost: 2× file size. Not suitable for large files — capability warning
-// shown above 300 MB / 1 GB on receiver card.
+// Blob fallback download — browsers without FSAA support
 // ─────────────────────────────────────────────────────────────────────────────
 async function startDownload(uuid, meta) {
   const totalChunks = meta?.total_chunks;
@@ -991,7 +977,6 @@ async function startDownload(uuid, meta) {
   const chunks = [];
   let bytesReceived = 0;
 
-  // ── Fetch phase ────────────────────────────────────────────────────────────
   for (let i = 0; i < totalChunks; i++) {
     const headers = {};
     if (downloadToken) headers['Authorization'] = `Bearer ${downloadToken}`;
@@ -1021,7 +1006,6 @@ async function startDownload(uuid, meta) {
     dlPct.textContent = pct + '%';
   }
 
-  // ── Decrypt phase ──────────────────────────────────────────────────────────
   dlStageTag.textContent = 'Decrypting';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
@@ -1044,7 +1028,6 @@ async function startDownload(uuid, meta) {
     dlPct.textContent = pct + '%';
   }
 
-  // ── Save ───────────────────────────────────────────────────────────────────
   const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
   const blobUrl = URL.createObjectURL(blob);
   const a       = document.createElement('a');
