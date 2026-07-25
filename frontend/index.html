@@ -220,6 +220,16 @@ document.addEventListener('click', function (e) {
     --mono:            'IBM Plex Mono', monospace;
     --sans:            'DM Sans', sans-serif;
     --display:         'Satoshi', 'DM Sans', sans-serif;
+    --serif:           'Source Serif 4', Georgia, serif;
+
+    /* ── Token aliases — DESIGN-TOKENS.md canonical names ─────── */
+    /* Allows page CSS to use --accent, --text-primary etc.        */
+    --accent:          var(--gold);
+    --inset-rule:      var(--border);   /* Paper: transparent-ish rule; Carbon: gold */
+    --text-primary:    var(--fg);
+    --text-secondary:  var(--fg-muted);
+    --border-mid:      rgba(26,26,26,0.22);
+    --surface:         rgba(26,26,26,0.04);
   }
 
   /* Carbon override — canonical match to refueler.io */
@@ -238,6 +248,13 @@ document.addEventListener('click', function (e) {
     --drop-hover-bg:   rgba(245,240,232,0.03);
     --tag-bg:          rgba(245,240,232,0.08);
     --link-box-bg:     rgba(245,240,232,0.05);
+
+    /* ── Carbon token aliases ─────────────────────────────────── */
+    --inset-rule:      var(--gold);     /* Gold rule lines in Carbon */
+    --text-primary:    var(--fg);
+    --text-secondary:  var(--fg-muted);
+    --border-mid:      rgba(245,240,232,0.22);
+    --surface:         rgba(245,240,232,0.04);
   }
 
   /* ── Reset ─────────────────────────────────────────────────────── */
@@ -263,7 +280,7 @@ document.addEventListener('click', function (e) {
     background: var(--nav-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--inset-rule);
     padding: 0 clamp(1.25rem, 4vw, 3rem);
     transition: background 0.35s ease, border-color 0.25s ease;
   }
@@ -420,7 +437,7 @@ document.addEventListener('click', function (e) {
 
   /* ── Site footer ─────────────────────────────────────────────────── */
   .site-footer {
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--inset-rule);
     padding: 20px clamp(1.25rem, 4vw, 3rem);
     margin-top: auto;
   }
@@ -848,7 +865,7 @@ document.addEventListener('click', function (e) {
   .maint-modal-card {
     background: var(--card-bg);
     border-radius: 12px;
-    border-top: 3px solid var(--gold);
+    border-top: 3px solid var(--accent);
     max-width: 480px;
     width: 100%;
     padding: 32px 28px 28px;
