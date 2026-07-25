@@ -141,10 +141,28 @@ function showMaintenanceModal(status) {
 
     <!-- Drop zone -->
     <div class="drop-zone" id="drop-zone">
+      <!-- Single-file input — occupies full drop zone hit area -->
       <input type="file" id="file-input" aria-label="Select file" />
+      <!-- Folder input — hidden, triggered by "Upload folder" button only -->
+      <input type="file" id="folder-input" webkitdirectory multiple aria-label="Select folder" style="display:none" />
       <div class="drop-icon">↑</div>
-      <div class="drop-label">Drop a file or click to browse</div>
+      <div class="drop-label">Drop a file or folder, or click to browse</div>
       <div class="drop-sub mt4">End-to-end encrypted · Free up to 4 GB</div>
+      <div class="drop-folder-row mt12">
+        <button class="btn btn-ghost btn-sm" id="folder-btn" type="button">📁 Upload folder</button>
+      </div>
+    </div>
+
+    <!-- Zip progress card (shown while compressing a folder, before upload progress) -->
+    <div class="card hidden" id="zip-progress-card">
+      <div class="flex-row">
+        <span class="tag" id="zip-stage-tag">Compressing</span>
+        <span class="muted small" id="zip-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="zip-bar"></div>
+      </div>
+      <div class="progress-label mt4" id="zip-detail"></div>
     </div>
 
     <!-- Cap warning + upgrade nudge -->
@@ -272,8 +290,8 @@ function showMaintenanceModal(status) {
 
 {% include "footer.njk" %}
 
-<!-- qr-creator loaded here (blocking) so QrCreator is defined before the module script runs.
-     Previously in extraHead, which races against module evaluation. -->
+<!-- fflate + qr-creator loaded here (blocking) so globals are defined before the module script runs. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-creator/1.0.0/qr-creator.min.js"></script>
 <script type="module" src="/share.js"></script>
 </body>

@@ -174,16 +174,18 @@ Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ## Status
 
-🟢 **Session 46a complete — Block 5 design full pass in progress.**
+🟢 **Session 53 complete — Block 6 testing infrastructure + folder upload in progress.**
 
-Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io).
+Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io). Folder upload (client-side zip via fflate) is now supported.
 
 **Completed blocks:**
 - **B1 — SSG Migration:** Eleventy 3.x scaffold, `src/` → `frontend/`, Cloudflare Pages auto-deploy live.
 - **B2 — Instrumentation:** Analytics Engine (`share_events`), Supabase aggregation, admin dashboard (`/admin/dashboard.html`), 13-metric smoke test, `/admin/snapshot` endpoint.
 - **B3 — Stripe test coverage:** Checkout flow verified (direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
 - **B4 — Security hardening ✓:** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5). Server-side chunk hash verification on every upload. AES-GCM AAD overflow fixed (chunk index ≥256). KV-backed rate limiting on all public endpoints. Frontend error reporting via `/log/error`. MIME type denylist gate on chunk 0. UUID format validation and chunk bounds checks. Filename sanitisation (path separators, null bytes, bidi overrides). 64KB manifest cap. Server-side tier enforcement via `X-Email` → Supabase lookup, 10MB chunk hard cap, KV cumulative byte counter per UUID. UUID-bound credential issuance — `H(uuid:tier:window)` commitment verified on upload. Turnstile nonce binding (one solve → one credential). Full audit pass — 20 security claims verified against deployed source.
-- **B5 — Design full pass (in progress):** DESIGN-TOKENS.md v1.0 applied across all frontend surfaces. Admin dashboard rebuilt: 240px sidebar, Satoshi 700 figures, 4 latency cards, farming signal card, Source Serif 4 editorial line, Paper/Carbon toggle cookie scoped to `.refueler.io`, `@media print` PDF export. Dashboard extracted to three files (`dashboard.html` / `dashboard.css` / `dashboard.js`). Full-viewport metric modals for all 14 keys: loading skeleton, n/a state, deferred Lightning panel, SVG/CSS sparkline stub, CSV export note, keyboard focus trap.
+- **B5 — Design full pass ✓:** DESIGN-TOKENS.md v1.0 applied across all frontend surfaces. Admin dashboard rebuilt: 240px sidebar, Satoshi 700 figures, 4 latency cards, farming signal card, Source Serif 4 editorial line, Paper/Carbon toggle cookie scoped to `.refueler.io`, `@media print` PDF export. Dashboard extracted to three files (`dashboard.html` / `dashboard.css` / `dashboard.js`). Full-viewport metric modals for all 14 keys: loading skeleton, n/a state, deferred Lightning panel, SVG/CSS sparkline stub, CSV export note, keyboard focus trap. File extraction: `share.css`, `share.js`, `upgrade.css`. FSAA streaming download with pipeline depth 2 and per-chunk retry. Receiver landing page with USP A/B test. Carbon gold edging throughout.
+- **B6 — Testing infrastructure + folder upload (in progress):**
+  - **S53:** Client-side folder-to-zip via fflate 0.8.2. Folder drag-and-drop (FileSystem API) and `webkitdirectory` input both supported. Relative paths preserved in zip; top-level folder name stripped from paths inside the archive. Zip progress card (gold bar, file count) precedes existing upload progress card. Resulting zip blob handed unchanged to the existing upload flow — zero Worker changes. `application/zip` passes the MIME denylist gate.
 
 ---
 

@@ -70,6 +70,13 @@ const dlPct            = $('dl-pct');
 const dlBar            = $('dl-bar');
 const dlSignoff        = $('dl-signoff');
 const dropMultiMsg     = $('drop-multi-msg');
+const folderInput      = $('folder-input');
+const folderBtn        = $('folder-btn');
+const zipProgressCard  = $('zip-progress-card');
+const zipStageTag      = $('zip-stage-tag');
+const zipPct           = $('zip-pct');
+const zipBar           = $('zip-bar');
+const zipDetail        = $('zip-detail');
 const dlCompatWarn     = $('dl-compat-warn');
 const receiverCard     = $('receiver-card');
 const rcFileName       = $('rc-file-name');
@@ -104,22 +111,52 @@ function enterUploadMode() {
   dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
+    clearDropMsg();
+
+    // ── Folder drag detection ──────────────────────────────────────────────
+    // Check if the first item is a directory via the FileSystem API.
+    // Falls back gracefully if webkitGetAsEntry is unavailable.
+    const items = e.dataTransfer.items;
+    if (items && items.length === 1 && items[0].webkitGetAsEntry) {
+      const entry = items[0].webkitGetAsEntry();
+      if (entry && entry.isDirectory) {
+        handleFolderDrop(entry);
+        return;
+      }
+    }
+
+    // Multiple items (files or a mix) — reject with message
     if (e.dataTransfer.files.length > 1) {
-      dropMultiMsg.textContent = 'One file at a time — drop a single file to transfer.';
-      dropMultiMsg.classList.remove('hidden');
+      setDropMsg('One file or one folder at a time please.');
       return;
     }
-    dropMultiMsg.classList.add('hidden');
-    dropMultiMsg.textContent = '';
+
     if (e.dataTransfer.files[0]) handleFileSelection(e.dataTransfer.files[0]);
   });
+
+  // Single-file input
   fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) {
-      dropMultiMsg.classList.add('hidden');
-      dropMultiMsg.textContent = '';
+      clearDropMsg();
       handleFileSelection(fileInput.files[0]);
     }
   });
+
+  // Folder button triggers the hidden webkitdirectory input.
+  // Stop propagation so the click doesn't bubble to the drop zone's file input.
+  folderBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    folderInput.value = '';
+    folderInput.click();
+  });
+
+  // webkitdirectory input — user selected a folder via the picker
+  folderInput.addEventListener('change', () => {
+    if (folderInput.files.length === 0) return;
+    clearDropMsg();
+    handleFolderFiles(Array.from(folderInput.files));
+  });
+
   passphraseToggle.addEventListener('change', () => {
     passphraseWrap.classList.toggle('hidden', !passphraseToggle.checked);
     if (!passphraseToggle.checked) passphraseInput.value = '';
@@ -129,6 +166,16 @@ function enterUploadMode() {
   uploadBtn.addEventListener('click', startUpload);
   copyBtn.addEventListener('click', copyShareLink);
   newUploadBtn.addEventListener('click', () => location.reload());
+}
+
+function setDropMsg(msg) {
+  dropMultiMsg.textContent = msg;
+  dropMultiMsg.classList.remove('hidden');
+}
+
+function clearDropMsg() {
+  dropMultiMsg.classList.add('hidden');
+  dropMultiMsg.textContent = '';
 }
 
 function handleFileSelection(file) {
@@ -144,6 +191,160 @@ function handleFileSelection(file) {
   if (tsWrap) tsWrap.classList.remove('hidden');
   renderTurnstile();
   updateUploadBtn();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Folder handling — drag drop entry point
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleFolderDrop(directoryEntry) {
+  // Gather all files from the FileSystem API entry tree.
+  // Shows "Gathering…" stage while reading the directory recursively.
+  showZipStage('Gathering', 0, 'Reading folder…');
+
+  let files;
+  try {
+    files = await readDirectoryEntry(directoryEntry);
+  } catch (e) {
+    reportError('folder_read', e.message, 'drag_entry');
+    setDropMsg('Could not read the dropped folder. Try the "Upload folder" button instead.');
+    hideZipCard();
+    return;
+  }
+
+  if (files.length === 0) {
+    setDropMsg('That folder appears to be empty.');
+    hideZipCard();
+    return;
+  }
+
+  // Top-level folder name from entry.name
+  const folderName = directoryEntry.name || 'folder';
+  await zipAndSelect(files, folderName);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Folder handling — webkitdirectory input entry point
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleFolderFiles(fileList) {
+  if (fileList.length === 0) return;
+
+  showZipStage('Gathering', 0, `${fileList.length} file${fileList.length !== 1 ? 's' : ''} found`);
+
+  // Derive top-level folder name from webkitRelativePath of the first file.
+  // e.g. "ProjectFiles/assets/hero.jpg" → top-level = "ProjectFiles"
+  const firstPath = fileList[0].webkitRelativePath || fileList[0].name;
+  const folderName = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
+
+  // Convert File objects to { relativePath, file } pairs, stripping top-level dir name.
+  // "ProjectFiles/assets/hero.jpg" → "assets/hero.jpg"
+  const entries = fileList.map(f => {
+    const rel = f.webkitRelativePath || f.name;
+    // Strip the first path segment (the folder name itself)
+    const stripped = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
+    return { relativePath: stripped, file: f };
+  }).filter(e => e.relativePath.length > 0); // guard against edge case of bare folder name
+
+  await zipAndSelect(entries, folderName);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read a FileSystem API DirectoryEntry recursively → [{relativePath, file}]
+// ─────────────────────────────────────────────────────────────────────────────
+async function readDirectoryEntry(dirEntry, pathPrefix) {
+  const prefix = pathPrefix || '';
+  const results = [];
+
+  await new Promise((resolve, reject) => {
+    const reader = dirEntry.createReader();
+
+    // createReader.readEntries() returns ≤100 entries per call — must call repeatedly.
+    function readBatch() {
+      reader.readEntries(async entries => {
+        if (entries.length === 0) { resolve(); return; }
+        for (const entry of entries) {
+          if (entry.isFile) {
+            const file = await new Promise((res, rej) => entry.file(res, rej));
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            results.push({ relativePath: rel, file });
+          } else if (entry.isDirectory) {
+            const subPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+            const subResults = await readDirectoryEntry(entry, subPrefix);
+            results.push(...subResults);
+          }
+        }
+        readBatch(); // keep reading until empty batch
+      }, reject);
+    }
+    readBatch();
+  });
+
+  return results;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zip [{relativePath, file}] using fflate, then hand blob to handleFileSelection
+// ─────────────────────────────────────────────────────────────────────────────
+async function zipAndSelect(entries, folderName) {
+  const zipName = `${folderName}.zip`;
+  const totalFiles = entries.length;
+
+  showZipStage('Compressing', 0, `0 / ${totalFiles} files`);
+
+  // Read all files into memory as Uint8Arrays.
+  // fflate.zip() accepts { "path": Uint8Array } — no streaming API for full zip.
+  // For S54 we can revisit async streaming for very large folders.
+  const fileMap = {};
+  for (let i = 0; i < entries.length; i++) {
+    const { relativePath, file } = entries[i];
+    const buf = await file.arrayBuffer();
+    fileMap[relativePath] = [new Uint8Array(buf), { level: 0 }];
+    // level:0 = store only (no compression) — AES-GCM ciphertext is already incompressible.
+    // Compression would waste CPU and expand size. Store = fast zip creation.
+
+    const pct = Math.round(((i + 1) / totalFiles) * 85); // read phase = 0–85%
+    showZipStage('Compressing', pct, `${i + 1} / ${totalFiles} files`);
+  }
+
+  // fflate.zip() — async, callback-based
+  const zipBlob = await new Promise((resolve, reject) => {
+    fflate.zip(fileMap, (err, data) => {
+      if (err) { reject(err); return; }
+      resolve(new Blob([data], { type: 'application/zip' }));
+    });
+  }).catch(err => {
+    reportError('folder_zip', err.message || 'fflate error', folderName.slice(0, 100));
+    setDropMsg('Compression failed. Try again or zip the folder manually first.');
+    hideZipCard();
+    return null;
+  });
+
+  if (!zipBlob) return;
+
+  showZipStage('Compressing', 100, `Ready — ${formatBytes(zipBlob.size)}`);
+  await new Promise(r => setTimeout(r, 300)); // brief hold so user sees 100%
+  hideZipCard();
+
+  // Synthesise a File object — handleFileSelection expects .name, .size, .slice()
+  const zipFile = new File([zipBlob], zipName, { type: 'application/zip' });
+  handleFileSelection(zipFile);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zip progress UI helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function showZipStage(label, pct, detail) {
+  zipProgressCard.classList.remove('hidden');
+  zipStageTag.textContent   = label;
+  zipPct.textContent        = pct + '%';
+  zipBar.style.width        = pct + '%';
+  zipDetail.textContent     = detail || '';
+}
+
+function hideZipCard() {
+  zipProgressCard.classList.add('hidden');
+  zipBar.style.width = '0%';
+  zipPct.textContent = '0%';
+  zipDetail.textContent = '';
 }
 
 function updateUploadBtn() {

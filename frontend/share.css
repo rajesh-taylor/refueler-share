@@ -65,10 +65,11 @@ main {
   border-color: var(--fg-muted);
   background: var(--drop-hover-bg);
 }
-.drop-zone input[type="file"] {
+.drop-zone input[type="file"]:not(#folder-input) {
   position: absolute; inset: 0;
   opacity: 0; cursor: pointer;
   width: 100%; height: 100%;
+  z-index: 0;
 }
 .drop-icon {
   font-size: 28px;
@@ -312,6 +313,28 @@ main {
   font-family: var(--mono);
 }
 #rc-download-btn { width: 100%; justify-content: center; }
+
+/* ── Drop zone folder button row ─────────────────────────────────── */
+.drop-folder-row {
+  position: relative;
+  z-index: 2;           /* above the full-area file input (z-index: 0) */
+}
+.drop-folder-row .btn-sm {
+  font-size: 12px;
+  padding: 5px 12px;
+  pointer-events: auto;
+}
+
+/* ── Zip progress card ───────────────────────────────────────────── */
+/* Sits between the drop zone and the upload options card.
+   Same visual language as #progress-card — tag + bar + detail. */
+#zip-progress-card {
+  /* inherits .card styles from shared-styles */
+}
+#zip-progress-card .progress-bar {
+  background: var(--accent);  /* gold — distinct from the upload bar (--fg) */
+  transition: width 0.2s linear;
+}
 
 /* ── Drop zone multi-file rejection ─────────────────────────────── */
 #drop-multi-msg {
