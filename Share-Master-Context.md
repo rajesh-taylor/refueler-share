@@ -289,7 +289,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S57 | — | Bearer TTL investigation. 15-min exp fatal for large transfers. |
 | S58 | `f94a158` | Bearer token TTL fix. Token lifetime = transfer expiry. |
 | S60 | `e59305c` | Vitest 2 harness. ratelimit + manifest tests. 43 passing. |
-| S61 | TBD | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
+| S61 | `5f425ca` | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
 ---
 
 ## Roadmap
