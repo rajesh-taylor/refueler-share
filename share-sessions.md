@@ -129,6 +129,12 @@ consumed only if genuinely needed, not by default.
 | S50 ✅ | Serif audit | --serif audit across all 3 pages. 3 correct usages confirmed. 3 additions: info card copy, upgrade subline, payment note. CSS-only. | S |
 | S51 | File extraction | Extract index.njk CSS→frontend/share.css, JS→frontend/share.js. Extract upgrade.njk CSS→frontend/upgrade.css. Matches admin/dashboard pattern. | M |
 | S52 | B5 close | Snag sweep, QR logo snag note, context files, version 4.0, B6 brief. | S |
+| S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop + picker. Zip progress card. Bare Uint8Array fix. ✓ |
+| S54 | `c732abf` | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
+| S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is decision, folder note, error states confirmed. |
+| S56 | `6cf711d`·`7735787` | fflate+qr self-hosted. Drop zone inputs outside hit area. Browse file + Upload folder buttons. Full folder round-trip ✓ |
+| S57 | — | Bearer TTL investigation. 15-min hardcoded exp fatal for large transfers. Fix scoped S58. |
+| S58 | 'f94a158'| Bearer TTL fix. `issueDownloadToken` accepts `expiresAt`. Token exp = manifest.expiry_timestamp. Smoke test ✓ (PhotoSession folder, passphrase, FSAA). |
 
 ---
 
@@ -397,15 +403,79 @@ consumed only if genuinely needed, not by default.
 
 ---
 
+### S56 — Folder upload smoke test + drop zone fix
+**Commits:** `6cf711d` · `7735787` · 25 July 2026
+
+- fflate 0.8.2 + qr-creator 1.0.0 self-hosted at `frontend/fflate.min.js` +
+  `frontend/qr-creator.min.js` (cdnjs blocked from share.refueler.io — 146-byte
+  error HTML returned). Both now 200 from Pages.
+- Drop zone inputs moved outside hit area (S56). Full-area invisible file input
+  was intercepting drag events and blocking folder button clicks. Both inputs now
+  `display:none` above the drop zone in `index.njk`, triggered by explicit JS
+  click handlers.
+- Two buttons in drop zone: 📄 Browse file (single file) + 📁 Upload folder.
+  `stopPropagation` on both prevents bubbling to drop zone click handler.
+- Drop zone click handler explicitly calls `fileInput.click()` — no delay.
+- QR fallback CDN reference removed from `showSharePanel` — self-hosted only.
+- `webkitdirectory` picker on macOS Chrome: navigates into folder, user clicks
+  Open from inside — subfolders included in `files[]`. Picker path works for
+  PhotoSession (nested subdirs). "Browse file" correctly single-file only.
+- **Full end-to-end pass:** PhotoSession folder (README + Selects + Rejects +
+  Client Edits/Finals/hero_v2_FINAL.tif, 2.3 MB) → zip → encrypt → upload →
+  passphrase protect → receiver card (📁, size, expiry, password badge) →
+  password unlock → FSAA save picker → PhotoSession.zip → macOS unzip →
+  folder structure intact. ✓
+
+**S56 snags:**
+- Receiver page nav shows APP, EDITORIAL, PRIVACY, UPGRADE (main domain links).
+  Should be share-subdomain nav only. Fix in nav consolidation session (B13 scope
+  or dedicated snag session).
+- Drag-drop of folder from Finder works via FileSystem API. Folder picker
+  (`webkitdirectory`) works on macOS Chrome. No further action needed.
+
+**Do not retry:**
+- DO NOT load fflate or qr-creator from cdnjs — self-hosted only (`frontend/`).
+- DO NOT put file inputs inside the drop zone hit area — inputs outside, JS-triggered only.
+
+---
+
+### S57 — Bearer token TTL investigation
+No commit · 26 July 2026
+
+- `nut11.js` confirmed: stateless HMAC-SHA256 token, format `base64url({uuid,exp}).base64url(hmac)`.
+  No KV storage. `verifyDownloadToken` re-derives HMAC per request — correct architecture.
+- TTL hardcoded: `exp = now + 900` (15 minutes). Fatal for any transfer >~1 GB on realistic connections.
+- Fix is one line + one parameter: `issueDownloadToken(uuid, key, expiresAt)` → `exp = expiresAt`.
+  Caller passes `manifest.expiry_timestamp`. Token lifetime matches file lifetime exactly.
+- Options B and C from S57 planning are the same fix — mechanism is already stateless. No architecture change.
+- Option C (stateless HMAC) is NOT B8 work — B8 is NUT-11 Mode 2 keypair challenge-response, unrelated.
+
+**Do not retry:** 15-minute fixed TTL for download tokens on any tier.
+
+### S58 — Bearer token TTL fix
+**Commit:** `f94a158` · 26 July 2026
+
+- `issueDownloadToken` signature updated: `(uuid, mintPrivkeyHex, expiresAt)`.
+- `const exp = expiresAt` replaces `Math.floor(Date.now() / 1000) + 900`.
+- JSDoc updated: "token lifetime matches transfer expiry — not a fixed window."
+- `handleAuth` in `index.js` line 866: passes `manifest.expiry_timestamp` as third argument.
+- `verifyDownloadToken` untouched — already checks `payload.exp > now` correctly.
+- Smoke test ✓: PhotoSession folder → passphrase protect → receiver card ("6 days remaining") → unlock → FSAA download → 100% complete → colophon.
+
+**Do not retry:**
+- DO NOT hardcode 900s (15 min) TTL for download tokens — pass `manifest.expiry_timestamp` as `expiresAt`.
+
+---
+
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
 | S53 | Folder upload I | fflate integration, client-side zip, zip progress UI, single blob → existing upload flow | M |
 | S54 | Folder upload II | Streaming large folders, edge cases (empty dirs, deep nesting, 1000+ files, special chars) | M |
 | S55 | TBD | Folder upload III: receiver UX — folder icon (📁), zip-as-is delivery decision, "Compressed folder" note, error states confirmed. |
 | S56 | Folder upload test | Photographer folder end-to-end: upload → share → receive → unzip. Off snags. | S |
-| S57 | Bearer TTL — investigation | Measure token lifetime vs large-transfer duration. Document the gap. | S |
-| S58 | Bearer TTL — fix | Extend TTL or mid-stream 401 re-auth prompt. Decision at S57. | M |
-| S59 | Bearer TTL — buffer | Consumed only if S58 has outstanding issues. | S |
+| S57 | — | Bearer TTL investigation. 15-min hardcoded exp fatal for large transfers. Fix scoped S58. |
+| S58 | `f94a158` | Bearer TTL fix. Token exp = manifest.expiry_timestamp. Smoke test ✓. |
+| S59 | — | Bearer TTL buffer. Skipped — S58 clean first attempt. |
 | S60 | Worker unit tests I | Miniflare/Workers test runtime setup. `ratelimit.js` + `manifest.js` coverage. | M |
 | S61 | Worker unit tests II | `nut00.js` blind sig tests. `blake3.js` hash verification. | M |
 | S62 | Worker unit tests III | `turnstile.js`, `stripe.js` handler stubs. Edge case coverage. | M |

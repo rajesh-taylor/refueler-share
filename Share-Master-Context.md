@@ -222,6 +222,8 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
 | Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
 | `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x | Bare `new Uint8Array(buf)` — default level-6 DEFLATE, macOS-compatible |
+| Load fflate or qr-creator from cdnjs | Self-hosted only — `frontend/fflate.min.js` + `frontend/qr-creator.min.js` |
+| File inputs inside drop zone hit area | Inputs outside drop zone, JS-triggered only (`display:none`, explicit `.click()`) |
 
 ---
 
@@ -248,7 +250,10 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | S52 | — | manifest.js TIER_EXPIRY_SECONDS.free 5d→7d. `--heading` alias. Lightning ops plan. Context v4.0. B5 closed. |
 | S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop + picker. Zip progress card. Bare Uint8Array fix. ✓ |
 | S54 | `c732abf` | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
-| S55 | TBD | Folder upload III. Receiver UX: folder icon, zip-as-is decision, folder note, error states confirmed. |
+| S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is, folder note. |
+| S56 | `6cf711d`·`7735787` | fflate+qr self-hosted. Drop zone fix. Full folder round-trip ✓ |
+| S57 | — | Bearer TTL investigation. 15-min exp fatal for large transfers. |
+| S58 | `f94a158` | Bearer token TTL fix. Token lifetime = transfer expiry. |
 ---
 
 ## Roadmap
