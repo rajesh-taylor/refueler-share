@@ -30,7 +30,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const WEBHOOK_SECRET = 'whsec_testTESTtestTESTtestTESTtest12';
+const WEBHOOK_SECRET = 'WEBHOOK_SECRET_PLACEHOLDER_for_tests';
 const STRIPE_KEY = 'sk_test_PLACEHOLDER_not_a_real_key';
 
 /**

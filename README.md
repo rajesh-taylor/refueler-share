@@ -1,6 +1,6 @@
 # refueler-share
 
-> Zero-knowledge, end-to-end encrypted file transfer — built for creative professionals who value speed, privacy, and financial sovereignty.
+> Zero-knowledge, end-to-end encrypted file transfer. No account. No tracking. No key on our side.
 
 **Live at:** [share.refueler.io](https://share.refueler.io)  
 **Part of the [Refueler](https://refueler.io) ecosystem**
@@ -9,13 +9,11 @@
 
 ## What This Is
 
-`refueler-share` is a high-speed, anonymous file sharing utility targeting video editors, photographers, and media professionals who are leaving Adobe and corporate cloud platforms over privacy failures and unfair pricing.
-
-It is **not** a standard file host. It is a cryptographic pipeline:
+`refueler-share` is an anonymous, encrypted file transfer system. It is not a standard file host. It is a cryptographic pipeline:
 
 - Files are encrypted **in the browser** before a single byte leaves your machine
 - The server is **architected to be blind** — reading your files is not technically possible for us, regardless of policy, jurisdiction, or legal compulsion
-- Storage is **ephemeral** — hard deletion via Cloudflare R2 lifecycle rules, no exceptions
+- Storage is **ephemeral** — hard deletion via R2 lifecycle rules, no exceptions
 - Transfers run at **full line speed** — no artificial throttling, even on the free tier
 
 ---
@@ -24,33 +22,27 @@ It is **not** a standard file host. It is a cryptographic pipeline:
 
 ### Two-Layer Cryptographic Stack
 
-**BLAKE3 — Chunk Integrity, Client and Server**  
-Every file is split into 50MB blocks. Each block is fingerprinted using BLAKE3, computed client-side via a compiled WebAssembly module. The Cloudflare Worker independently recomputes the BLAKE3 hash of every received chunk and verifies it against the client-declared value before writing to R2. A compromised or corrupted chunk is rejected at the Worker boundary — the server cannot be made to store data that doesn't match the declared hash.
+**BLAKE3 — Chunk Integrity**  
+Every file is split into chunks. Each chunk is fingerprinted with BLAKE3, computed client-side via a compiled WebAssembly module. The Cloudflare Worker independently recomputes the hash of every received chunk and verifies it against the client-declared value before writing to R2. A corrupted or tampered chunk is rejected at the Worker boundary.
 
-Upload requests are validated against a denylist of execution-capable file types (Windows executables, ELF binaries, shell scripts, PHP). The service does not store or record file types — the check reflects the sender's declared Content-Type only.
+The Worker-side BLAKE3 implementation is compiled from the official Rust `blake3` crate (v1.8.5) via `wasm-pack`, checked into `worker/blake3-wasm/`, and imported statically. No CDN dependency.
 
-The Worker-side BLAKE3 implementation is compiled from the official Rust `blake3` crate (v1.8.5) to WebAssembly via `wasm-pack`, checked into `worker/blake3-wasm/`, and imported statically. No CDN dependency. No trust assumption on the client declaration.
-
-BLAKE3 is used exclusively for **chunk integrity verification**. It does not replace the Cashu blind signature scheme.
+BLAKE3 is used exclusively for chunk integrity verification. It is not the authentication layer.
 
 **Cashu Blind Signatures — Anonymous Upload Authentication**  
-Access tokens are issued using the cryptographic primitive underlying the Cashu protocol — specifically the blind signature scheme (NUT-00). The server signs a blinded upload credential without ever learning the token's serial number. The client presents the unblinded proof to the Cloudflare Worker to authorise a transfer.
+Access tokens are issued using the blind signature scheme from the Cashu protocol (NUT-00). The server signs a blinded upload credential without learning the token's serial number. The client presents the unblinded proof to authorise a transfer.
 
-This is not a monetary use of Cashu. There is no external mint. The blind signature primitive is repurposed as a **zero-knowledge anonymous credential system** for upload access — keeping the server's ledger structurally unable to link a user identity to a specific file transfer.
+This is not a monetary use of Cashu. There is no external mint. The blind signature primitive is repurposed as a zero-knowledge anonymous credential system — structurally preventing the server from linking any user identity to a specific transfer.
 
-> **This combination — BLAKE3 chunk integrity + Cashu blind sigs as anonymous auth — has not been publicly implemented before.**
+> **This combination — BLAKE3 chunk integrity + Cashu blind signatures as anonymous auth — has not been publicly implemented before.**
 
-### Protocol Extensions Supported
+### Why "we can't read your files" is an architectural claim, not a policy promise
 
-| NUT | Purpose |
-|-----|---------|
-| NUT-00 | Blind proof issuance & double-spend prevention |
-| NUT-04 | Automated token minting on Lightning / Stripe webhook settlement |
-| NUT-07 | Token melt on transfer completion — instant spent-token recording |
-| NUT-11 | Programmable spending conditions: time-locks, capacity ceilings, P2SH identity locks |
+The AES-256 session key is generated inside your browser using the Web Crypto API and placed in the URL fragment — the `#` portion. Browsers, per RFC 3986, never transmit the fragment to a server. It does not appear in HTTP requests, Worker logs, or anywhere in our infrastructure.
 
-### Post-Quantum Security (Production Max tier)
-AES-GCM session keys are wrapped inside an **ML-KEM (Kyber)** post-quantum envelope for download link generation. Protects against Harvest Now, Decrypt Later attacks on high-value media assets.
+Our Worker receives encrypted bytes and stores them in R2. It has no key. A court order compelling us to hand over file contents would be complied with immediately — and yield nothing readable. A breach of our R2 bucket exposes only ciphertext.
+
+This is not a policy choice. It is the consequence of how the code is written.
 
 ---
 
@@ -58,89 +50,16 @@ AES-GCM session keys are wrapped inside an **ML-KEM (Kyber)** post-quantum envel
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | HTML5 / JavaScript Streams API / BLAKE3 WASM |
+| Frontend | HTML5 / Web Streams API / BLAKE3 WASM |
 | Backend | Cloudflare Workers (serverless, blind relay) |
-| Storage | Cloudflare R2 (zero egress fees) |
+| Storage | Cloudflare R2 (zero egress fees, lifecycle-enforced deletion) |
 | Ledger | Supabase PostgreSQL (spent-token tracking only) |
-| Payments | Stripe (card / Apple Pay) · Lightning BOLT11 |
-| Encryption | AES-GCM 256-bit (client-side) · ML-KEM (PQC, Max tier) |
-
----
-
-## Speed Benchmarks
-
-*Pending A/B test results from `refueler-share-dev` bucket — to be published pre-Production Max launch.*  
-*Test protocol: 1GB / 10GB / 50GB / 100GB files across 500 Mbps fibre, 100 Mbps broadband, 30 Mbps 4G.*  
-*Metric: CIT — Cryptographic Integrity Throughput (verified GB/s, BLAKE3-confirmed end-to-end).*
-
-Directional benchmarks (500 Mbps UK studio fibre):
-
-| Platform | Real-World Speed | Notes |
-|----------|-----------------|-------|
-| Smash (Free) | ~25 Mbps | Throttled above 2 GB on free tier |
-| WeTransfer (Paid) | ~85–160 Mbps | Server-side rate limits |
-| SwissTransfer | ~200–350 Mbps | Server-side AES — Infomaniak holds your key |
-| PrivCloud | ~180–280 Mbps | Client-side AES-256, 2 GB free cap |
-| **share.refueler.io** | **~480+ Mbps** | Full line saturation, client-side encryption |
-
----
-
-## How We Compare
-
-### The honest competitive picture
-
-| Service | Free Cap | Retention | Zero-Knowledge | Download Limit | Business Model |
-|---------|----------|-----------|----------------|----------------|----------------|
-| WeTransfer | 2 GB | 7 days | ✗ — server reads files | None stated | Ads + data |
-| Smash | Unlimited\* | 7 days | ✗ | None stated | Paid speed tiers |
-| TransferNow | 5 GB | 7 days | ✗ | None stated | Paid tiers |
-| **SwissTransfer** | **50 GB** | **30 days** | **✗ — Infomaniak holds the key** | **250 downloads** | **Loss leader for hosting upsell** |
-| PrivCloud | 2 GB | — | ✓ (client-side AES) | None stated | Freemium |
-| **share.refueler.io** | **4 GB** | **1 / 7 days** | **✓ — reading your files is not technically possible for us** | **None** | **Lightning + Stripe** |
-
-\*Smash throttles transfers above 2 GB on the free tier to approximately 25 Mbps.
-
-### Why "we can't read your files" means something different here
-
-Most privacy services make a policy promise: *we choose not to read your files*. Policy promises can be changed, compelled by courts, or quietly abandoned after an acquisition.
-
-We make an architectural statement: **reading your files is not technically possible for us.**
-
-Here is why that claim holds:
-
-The AES-256 key is generated inside your browser using the Web Crypto API. It is placed in the URL fragment — the part after the `#` symbol. Browsers are specified by RFC 3986 never to transmit the fragment to a server. It does not appear in HTTP requests. It does not appear in our Worker logs. It does not exist anywhere in our infrastructure.
-
-Our Cloudflare Worker receives encrypted bytes and stores them in R2. It has no key. It cannot decrypt what it stores. A court order compelling us to hand over file contents would be complied with immediately — and yield nothing readable. A data breach of our R2 bucket exposes only ciphertext.
-
-This is not a policy choice we made. It is the consequence of how the code is written.
-
-### We also cannot "double-dip"
-
-Most free file transfer services are not file transfer businesses. They are data businesses that use file transfer as an acquisition channel. Your upload behaviour, your recipient's download behaviour, your file metadata, your IP, your device fingerprint — all of it is extractable and sellable to advertisers and data brokers.
-
-We cannot do this. Not because we have chosen not to — because we have no data to extract. We do not know who you are. We do not know what you transferred. We do not know who received it. The anonymous credential system is designed specifically so that this information does not exist on our side in any recoverable form.
-
-One revenue stream. Upload capacity, paid directly via Lightning or card. No behavioural inventory to monetise.
-
-### On SwissTransfer's 50 GB free tier
-
-SwissTransfer is operated by Infomaniak, a Swiss cloud hosting company. They handle 8.28 million transfers per month — roughly 3 every second — and offer 50 GB free deliberately. It is their marketing budget, not a file transfer business. The model: generate brand exposure through massive transfer volume and convert a fraction of users into paid Infomaniak hosting customers.
-
-The structural problem: SwissTransfer encrypts files on Infomaniak's servers. The encryption key is generated server-side and held by Infomaniak. This means Infomaniak can read every file you send, and their privacy guarantee is a legal one (Swiss data protection law) rather than a cryptographic one. SwissTransfer also caps downloads at 250 per link.
-
-We are not competing with their 50 GB figure. That number is subsidised by an unrelated hosting business and built on a privacy model that doesn't survive a serious threat. Our 4 GB free tier is architecturally zero-knowledge. No subsidy required.
-
-### On PrivCloud
-
-PrivCloud are technically correct — client-side AES-256, open source, no account required for small transfers. The closest ideological overlap.
-
-Their constraints: 2 GB free cap (ours is 4 GB), French legal jurisdiction as the primary privacy guarantee rather than cryptographic architecture, no Lightning payment option, no BLAKE3 chunk integrity verification, no anonymous credential system (an account or session exists that can be correlated with a transfer).
+| Payments | Stripe · Lightning BOLT11 |
+| Encryption | AES-GCM 256-bit (client-side only) |
 
 ---
 
 ## Tiers
-
-Four tiers: **Skint Tog** (free), **Creative Premium**, **Production Max**, and **Enterprise**.
 
 | Tier | Cap | Expiry options | Price |
 |------|-----|----------------|-------|
@@ -153,43 +72,23 @@ Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ---
 
-## Ecosystem Position
-
-`refueler-share` is one of three infrastructure pillars in the Refueler ecosystem:
-
-```
-              [ refueler.io ] (Commerce Platform)
-             /       |        \
-            /        |         \
-[multi-core]         |      [share.refueler.io]
-(Bitcoin Indexer     |      (This repo — encrypted
-& Stream Engine)     |       P2P file transfer)
-                     |
-              [mint.refueler.io]
-              (Closed-loop digital
-               loyalty stamp mint)
-```
-
----
-
 ## Status
 
-🟢 **Session 53 complete — Block 6 testing infrastructure + folder upload in progress.**
+🟢 **Block 6 in progress — testing infrastructure and folder upload.**
 
-Full upload → share link → passphrase gate → download flow is end-to-end functional and live at [share.refueler.io](https://share.refueler.io). Folder upload (client-side zip via fflate) is now supported.
+Full upload → share link → passphrase gate → download flow is live at [share.refueler.io](https://share.refueler.io). Folder upload (client-side zip, directory structure preserved) is supported.
 
 **Completed blocks:**
-- **B1 — SSG Migration:** Eleventy 3.x scaffold, `src/` → `frontend/`, Cloudflare Pages auto-deploy live.
-- **B2 — Instrumentation:** Analytics Engine (`share_events`), Supabase aggregation, admin dashboard (`/admin/dashboard.html`), 13-metric smoke test, `/admin/snapshot` endpoint.
-- **B3 — Stripe test coverage:** Checkout flow verified (direct Subscription + PaymentIntent), webhook upsert confirmed, Customer Portal live, cancellation logic code-complete.
-- **B4 — Security hardening ✓:** BLAKE3 Worker WASM compiled from Rust (`blake3` crate v1.8.5). Server-side chunk hash verification on every upload. AES-GCM AAD overflow fixed (chunk index ≥256). KV-backed rate limiting on all public endpoints. Frontend error reporting via `/log/error`. MIME type denylist gate on chunk 0. UUID format validation and chunk bounds checks. Filename sanitisation (path separators, null bytes, bidi overrides). 64KB manifest cap. Server-side tier enforcement via `X-Email` → Supabase lookup, 10MB chunk hard cap, KV cumulative byte counter per UUID. UUID-bound credential issuance — `H(uuid:tier:window)` commitment verified on upload. Turnstile nonce binding (one solve → one credential). Full audit pass — 20 security claims verified against deployed source.
-- **B5 — Design full pass ✓:** DESIGN-TOKENS.md v1.0 applied across all frontend surfaces. Admin dashboard rebuilt: 240px sidebar, Satoshi 700 figures, 4 latency cards, farming signal card, Source Serif 4 editorial line, Paper/Carbon toggle cookie scoped to `.refueler.io`, `@media print` PDF export. Dashboard extracted to three files (`dashboard.html` / `dashboard.css` / `dashboard.js`). Full-viewport metric modals for all 14 keys: loading skeleton, n/a state, deferred Lightning panel, SVG/CSS sparkline stub, CSV export note, keyboard focus trap. File extraction: `share.css`, `share.js`, `upgrade.css`. FSAA streaming download with pipeline depth 2 and per-chunk retry. Receiver landing page with USP A/B test. Carbon gold edging throughout.
-- **B6 — Testing infrastructure + folder upload (in progress):**
-  - **S53:** Client-side folder-to-zip via fflate 0.8.2. Folder drag-and-drop (FileSystem API) and `webkitdirectory` input both supported. Relative paths preserved in zip; top-level folder name stripped from paths inside the archive. Zip progress card (gold bar, file count) precedes existing upload progress card. Resulting zip blob handed unchanged to the existing upload flow — zero Worker changes. `application/zip` passes the MIME denylist gate.
+- **B1** — Eleventy SSG scaffold, Cloudflare Pages deploy
+- **B2** — Analytics Engine instrumentation, Supabase aggregation, admin dashboard
+- **B3** — Stripe checkout, webhook handler, Customer Portal
+- **B4** — Security hardening: BLAKE3 Worker WASM, server-side chunk verification, AES-GCM AAD fix, KV rate limiting, MIME denylist, UUID validation, filename sanitisation, UUID-bound credential issuance, Turnstile nonce binding
+- **B5** — Design system full pass: DESIGN-TOKENS.md, Paper/Carbon toggle, FSAA streaming download, receiver landing page
+- **B6** — Folder upload (fflate), bearer token TTL fix, Worker unit test suite (178 tests, 6 suites)
 
 ---
 
 ## Licence
 
-Apache 2.0 — open infrastructure, open source. The patent grant clause protects the novel BLAKE3 + Cashu blind signature combination.  
-The Cashu blind signature implementation within this repo is a closed-loop, non-monetary application. No external Cashu mint is used or connected.
+Apache 2.0. The patent grant clause protects the novel BLAKE3 + Cashu blind signature combination.  
+The Cashu blind signature implementation is a closed-loop, non-monetary application. No external Cashu mint is used or connected.
