@@ -201,6 +201,7 @@ No commit · 26 July 2026
 - DO NOT hardcode 900s (15 min) TTL for download tokens — pass `manifest.expiry_timestamp` as `expiresAt`.
 
 ---
+| S60 | `e59305c` | Vitest 2 harness. `test/helpers/kv-mock.js`. 43 tests: ratelimit (18) + manifest (25). All green 309ms. |
 
 ## B6 session plan
 
@@ -213,7 +214,7 @@ No commit · 26 July 2026
 | S57 ✅ | Bearer TTL investigation | 15-min hardcoded exp fatal for large transfers | S |
 | S58 ✅ | Bearer TTL fix | Token exp = manifest.expiry_timestamp. Smoke test ✓ | S |
 | S59 | — | Bearer TTL buffer. Skipped — S58 clean first attempt. |
-| S60 | Worker unit tests I | Miniflare/Workers test runtime setup. `ratelimit.js` + `manifest.js` coverage. | M |
+| S60 ✅ | Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. | M |
 | S61 | Worker unit tests II | `nut00.js` blind sig tests. `blake3.js` hash verification. | M |
 | S62 | Worker unit tests III | `turnstile.js`, `stripe.js` handler stubs. Edge case coverage. | M |
 | S63 | Testing infra review I | 4-session checkpoint: assess buffer need. Integration test harness design. | S |
