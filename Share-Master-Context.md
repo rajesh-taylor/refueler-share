@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.3 | **Last updated:** B7 Lightning planning · 26 July 2026
+> **Version:** 4.4 | **Last updated:** S61 · 26 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -278,7 +278,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S60 (Worker unit tests I) next.**
+**B6 Testing infrastructure + folder upload — current. S62 (Worker unit tests III) next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -288,7 +288,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S56 | `6cf711d`·`7735787` | fflate+qr self-hosted. Drop zone fix. Full folder round-trip ✓ |
 | S57 | — | Bearer TTL investigation. 15-min exp fatal for large transfers. |
 | S58 | `f94a158` | Bearer token TTL fix. Token lifetime = transfer expiry. |
-
+| S60 | `e59305c` | Vitest 2 harness. ratelimit + manifest tests. 43 passing. |
+| S61 | TBD | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
 ---
 
 ## Roadmap

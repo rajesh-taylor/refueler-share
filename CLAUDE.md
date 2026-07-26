@@ -64,7 +64,7 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**B5 COMPLETE. B6 (Testing infrastructure + folder upload) in progress — S60 next.**
+**B5 COMPLETE. B6 (Testing infrastructure + folder upload) in progress — S62 next.**
 **B7 plan locked (Lightning planning session, 26 Jul 2026) — S73–S87, 25 core + 5 buffer.**
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).

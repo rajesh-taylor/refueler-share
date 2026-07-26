@@ -201,7 +201,25 @@ No commit · 26 July 2026
 - DO NOT hardcode 900s (15 min) TTL for download tokens — pass `manifest.expiry_timestamp` as `expiresAt`.
 
 ---
-| S60 | `e59305c` | Vitest 2 harness. `test/helpers/kv-mock.js`. 43 tests: ratelimit (18) + manifest (25). All green 309ms. |
+### S60 — Worker unit tests I
+**Commit:** `e59305c` · 26 July 2026
+
+- Vitest 2 harness established in `worker/`. `vitest.config.js`, `kv-mock.js` helper.
+- `ratelimit.test.js`: 18 tests. `manifest.test.js`: 25 tests. 43 total passing.
+
+### S61 — Worker unit tests II
+**Commit:** TBD · 26 July 2026
+
+- `nut00.test.js`: 30 tests. Full BDHKE round-trip including privacy guarantee (same secret + different r → same C). verifyCredential, tokenSerial, error paths.
+- `blake3.test.js`: 27 tests. Mock strategy: vi.mock blake3_worker.js, substitute @noble/hashes/blake3. Core correctness, input validation, constant-time comparison, error handling.
+- Production bug caught: `blake3.js` crashed on undefined return from blake3Hash. Null guard added.
+- Noble v2 API fix: `.subtract()` does not exist — use `.add(rK.negate())` for point subtraction.
+- 100 tests passing across 4 suites.
+
+**Do not retry:**
+- DO NOT use `ProjectivePoint.subtract()` — noble v2 removed it. Use `.add(point.negate())`.
+
+---
 
 ## B6 session plan
 
@@ -214,8 +232,8 @@ No commit · 26 July 2026
 | S57 ✅ | Bearer TTL investigation | 15-min hardcoded exp fatal for large transfers | S |
 | S58 ✅ | Bearer TTL fix | Token exp = manifest.expiry_timestamp. Smoke test ✓ | S |
 | S59 | — | Bearer TTL buffer. Skipped — S58 clean first attempt. |
-| S60 ✅ | Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. | M |
-| S61 | Worker unit tests II | `nut00.js` blind sig tests. `blake3.js` hash verification. | M |
+| S60 ✅ | 'e59305c'| Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. 43 tests passing. | M |
+| S61 ✅ | Worker unit tests II | `nut00.js` BDHKE round-trip + `blake3.js` verification. 100 tests passing. `blake3.js` null-guard fix (production bug caught by test). noble v2 `.subtract()` → `.add(rK.negate())`. | M |
 | S62 | Worker unit tests III | `turnstile.js`, `stripe.js` handler stubs. Edge case coverage. | M |
 | S63 | Testing infra review I | 4-session checkpoint: assess buffer need. Integration test harness design. | S |
 | S64 | Integration tests I | Full upload→download round-trip in test harness against dev Worker. | L |

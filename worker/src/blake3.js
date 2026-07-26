@@ -40,5 +40,8 @@ export async function verifyChunkHash(chunkBytes, declaredHashHex) {
     return false;
   }
 
+  // Guard: blake3Hash returned null/undefined (e.g. WASM not yet initialised)
+  if (!computed) return false;
+
   return bytesEqual(computed, declared);
 }
