@@ -35,13 +35,14 @@ export function timingSafeEqual(a, b) {
 }
 
 /**
- * issueDownloadToken(uuid, mintPrivkeyHex) → token string
- *
- * Issues a 15-minute HMAC-SHA256 download token bound to the transfer UUID.
- * Format: base64url(json({ uuid, exp })) + '.' + base64url(hmac)
- */
-export async function issueDownloadToken(uuid, mintPrivkeyHex) {
-  const exp = Math.floor(Date.now() / 1000) + 900; // 15 minutes
+   * issueDownloadToken(uuid, mintPrivkeyHex, expiresAt) → token string
+   *
+   * Issues an HMAC-SHA256 download token bound to the transfer UUID.
+   * Token lifetime matches the transfer expiry — not a fixed window.
+   * Format: base64url(json({ uuid, exp })) + '.' + base64url(hmac)
+   */
+  export async function issueDownloadToken(uuid, mintPrivkeyHex, expiresAt) {
+    const exp = expiresAt;
   const payload = JSON.stringify({ uuid, exp });
   const payloadB64 = btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 

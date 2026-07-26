@@ -863,7 +863,7 @@ async function handleAuth(request, env, uuid) {
     return err(401, 'Incorrect passphrase');
   }
 
-  const token = await issueDownloadToken(uuid, env.MINT_PRIVATE_KEY);
+const token = await issueDownloadToken(uuid, env.MINT_PRIVATE_KEY, manifest.expiry_timestamp);
   return json({ token });
 }
 
