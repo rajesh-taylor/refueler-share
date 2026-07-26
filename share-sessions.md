@@ -220,6 +220,21 @@ No commit · 26 July 2026
 - DO NOT use `ProjectivePoint.subtract()` — noble v2 removed it. Use `.add(point.negate())`.
 
 ---
+### S62 — Worker unit tests III
+**Commit:** TBD · 26 July 2026
+
+- `turnstile.test.js`: 34 tests. Input guards (null/undefined/empty/wrong-type), success verification,
+  CF success:false paths (expired, already-used, truthy non-boolean), HTTP errors, malformed JSON,
+  edge cases (long token, whitespace, concurrent calls), alias export confirmed.
+- `stripe.test.js`: 44 tests. HMAC-SHA256 webhook verification, replay protection (±300s window),
+  malformed/missing headers, body tampering detection, createCheckoutSession find-or-create customer
+  path + subscription expansion, error paths (search/create/sub failures, missing client_secret),
+  getSubscriptionTier routing (all 4 live lookup keys), edge cases (null/missing lookup_key, empty
+  items, network error propagation, status=active filter confirmed).
+- 178 tests passing across 6 suites.
+- stderr: expected WASM instantiation noise from blake3 error-path test — cosmetic only, test passes.
+
+---
 
 ## B6 session plan
 
@@ -234,7 +249,7 @@ No commit · 26 July 2026
 | S59 | — | Bearer TTL buffer. Skipped — S58 clean first attempt. |
 | S60 ✅ | 'e59305c'| Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. 43 tests passing. | M |
 | S61 ✅ | Worker unit tests II | `nut00.js` BDHKE round-trip + `blake3.js` verification. 100 tests passing. `blake3.js` null-guard fix (production bug caught by test). noble v2 `.subtract()` → `.add(rK.negate())`. | M |
-| S62 | Worker unit tests III | `turnstile.js`, `stripe.js` handler stubs. Edge case coverage. | M |
+| S62 ✅ | Worker unit tests III | `turnstile.js` + `stripe.js`. 78 new tests. 178 total passing. | M |
 | S63 | Testing infra review I | 4-session checkpoint: assess buffer need. Integration test harness design. | S |
 | S64 | Integration tests I | Full upload→download round-trip in test harness against dev Worker. | L |
 | S65 | Integration tests II | Passphrase gate, rate limit enforcement, credential farming defence. | M |
