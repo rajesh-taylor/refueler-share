@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.1 | **Last updated:** S54 · 25 July 2026
+> **Version:** 4.2 | **Last updated:** context hygiene · 26 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -91,21 +91,16 @@ All Lightning payments at launch route through Blink API. Refueler holds no cust
 - Blink API reliability falls below 99.5% measured over a 30-day window
 
 **Tier 2: Self-hosted LNbits** — target 4–6 weeks after trigger, 3–4 engineer-days.
-LNbits on dedicated VPS (~£4/mo). Migration = Worker env var swap
-(`LIGHTNING_BACKEND=lnbits`), no frontend changes. Blink account remains live and funded
-throughout Tier 2 operation.
+LNbits on dedicated VPS (~£4/mo). Migration = Worker env var swap (`LIGHTNING_BACKEND=lnbits`), no frontend changes.
 
 **Fallback 1 — LNbits instability:** Revert to Blink within 4 hours.
-Procedure: set KV flag `lightning_available: blink` → redeploy. Single env var gates routing.
-Admin dashboard toggle executes this without a code deploy (scoped B6).
+Set KV flag `lightning_available: blink` → redeploy. Admin dashboard toggle executes without a code deploy (B6).
 
-**Fallback 2 — both Blink and LNbits unavailable:** Activate graceful degradation within 30 minutes.
-Set KV flag `lightning_available: false`. Lightning option hidden on upgrade page, amber notice shown,
-Stripe fiat path remains fully operational. Lightning resumes when primary or fallback is confirmed stable.
-Dashboard toggle card executes this without a code deploy (scoped B6).
+**Fallback 2 — both unavailable:** Activate graceful degradation within 30 minutes.
+Set KV flag `lightning_available: false`. Lightning option hidden on upgrade page, Stripe fiat path fully operational.
+Dashboard toggle card executes without a code deploy (B6).
 
-**Not pursued pre-scale:** Self-hosted lnd/phoenixd. Operational overhead not justified until
-sustained Lightning demand is demonstrated. Phoenix is noted as excellent — revisit post-B12.
+**Not pursued pre-scale:** Self-hosted lnd/phoenixd. Revisit post-B12.
 
 Full text for B9 whitepaper §Operations. Legal review before any public claims.
 
@@ -114,32 +109,26 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 ## Locked architecture decisions
 
 **Crypto layers (never conflate):**
-- BLAKE3 = chunk integrity. Browser: local WASM at `frontend/blake3/`. Worker: `worker/blake3-wasm/`
-  via `blake3_worker.js`. Server verifies every chunk — 400 on mismatch.
+- BLAKE3 = chunk integrity. Browser: local WASM at `frontend/blake3/`. Worker: `worker/blake3-wasm/` via `blake3_worker.js`. Server verifies every chunk — 400 on mismatch.
 - Cashu = anonymous auth (NUT-00/07/11). No monetary usage. No external mint.
 - Passphrase hash = SHA-256 only (`crypto.subtle.digest`). Stored in manifest as `p2sh_secret_hash`.
 - AES-GCM session key lives in URL fragment only — never in requests, never in logs.
-- Upload boundary: `Content-Type` header validated on chunk 0 against denylist of execution-capable
-  MIME types. 415 on missing or denylisted type, logged to AE. Gate reflects declared intent only.
-  MIME type is never stored.
-- AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`.
-  Never `new Uint8Array([i])`.
+- Upload boundary: `Content-Type` header validated on chunk 0 against denylist of execution-capable MIME types. 415 on missing or denylisted type, logged to AE. MIME type is never stored.
+- AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`. Never `new Uint8Array([i])`.
 
 **Storage:**
-- R2 binding: `BUCKET`. KV binding: `STATUS_KV`. Chunk key: `{uuid}/{0000}`.
-  Manifest key: `{uuid}/manifest.json`.
+- R2 binding: `BUCKET`. KV binding: `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`.
 - R2 manifest is authoritative. Supabase is ledger only. No direct R2 URL exposure.
 - `safeGetManifest()` double-read: minor R2 inefficiency, not a security gap.
 
 **Frontend:**
 - Credentials in browser memory only — never localStorage, never sessionStorage.
-- `frontend/blake3/` force-committed via `git add -f`.
+- `frontend/blake3/`, `frontend/fflate.min.js`, `frontend/qr-creator.min.js` — all self-hosted, force-committed via `git add -f`. DO NOT load from cdnjs.
 - Status banner: `sessionStorage` dismiss. Status page `/status.html` — no nav entry.
-- QR library: `qr-creator` (SVG output, cdnjs). DO NOT use `qrcodejs`.
-- Drop zone: single file only. Multiple file drag rejected with explicit message.
-- Folder upload via client-side zip (fflate) — B6. DO NOT implement multi-file manifest.
-- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit
-  `frontend/share.css`, `frontend/share.js`, `frontend/upgrade.css` only (extracted S51).
+- QR library: `qr-creator` (SVG output, self-hosted). DO NOT use `qrcodejs`.
+- Drop zone: single file only. Multiple file drag rejected with explicit message. File inputs outside drop zone hit area, JS-triggered only.
+- Folder upload via client-side zip (fflate, S53–S56). DO NOT implement multi-file manifest.
+- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/share.js`, `frontend/upgrade.css` only (extracted S51).
 - `share.js` must remain `type="module"` — scoped deps, top-level await support.
 
 **Stripe:**
@@ -149,18 +138,16 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 **Ops:**
 - NUT-07 melt after first chunk write. Supabase failure: log and continue.
 - Turnstile: fail-closed on any error.
-- Rate limits (STATUS_KV): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s ·
-  `log_error` 20/60s · `download` 300/60s. All 429s logged to AE.
+- Rate limits (STATUS_KV): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s · `download` 300/60s. All 429s logged to AE.
 - `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
 - Wrangler 4.113.0. ✓
+- Download bearer token TTL = `manifest.expiry_timestamp`. DO NOT hardcode 900s. (Fixed S58.)
 
 **Regulatory (UK):**
 - Refueler cannot operate as an e-money issuer without FCA authorisation.
 - Share mint issues access credentials only — capability tokens, not monetary instruments.
 - Cashu in Share = anonymous authentication mechanism, not payment instrument.
-- Exact whitepaper language drafted S42e. Legal counsel review before any public claims.
-
-**Whitepaper language (B9 §Regulatory):** Drafted S42e — exact text in userMemories. Share mint = capability token issuer under UK EMR 2011 + PSR 2017. FCA authorisation not required. Blink carries Lightning regulatory cover. Legal review required before any public claims.
+- Whitepaper language drafted S42e (exact text in userMemories). Legal review required before any public claims.
 
 **Payment flow (locked):**
 - Lightning → Blink API (primary) → LNbits (Tier 2 on trigger)
@@ -168,21 +155,16 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 - Share mint → upload credentials only, zero monetary value, no e-money
 
 **Mint architecture (locked):**
-- Share mint in `refueler-share`. Loyalty mint in `refueler-mint`. Ticketing mint in future
-  `refueler-tickets`. Test lab in `refueler-ecash-lab` — B8 planning task.
-- Resilience: one mint down must not affect other products.
-- All mints are capability/loyalty token issuers — none handle e-money.
+- Share mint in `refueler-share`. Loyalty mint in `refueler-mint`. Ticketing mint in future `refueler-tickets`. Test lab in `refueler-ecash-lab` — B8 planning task.
+- Resilience: one mint down must not affect other products. All mints are capability/loyalty token issuers — none handle e-money.
 
-**Folder upload (locked direction, B6):**
+**Folder upload (locked, complete S56):**
 - Client-side zip via `fflate` before AES-GCM encrypt. Worker sees one blob — unchanged.
-- `webkitdirectory` input or folder drag. Relative paths preserved in zip.
-- DO NOT implement multi-file manifest approach.
+- `webkitdirectory` input or folder drag. Relative paths preserved in zip. Zip as-is delivery — receiver unzips natively.
 
 **Marketing claim rulings (S42e — update again after B8, B9, B10):**
-- ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound
-  credential issuance; Turnstile nonce binding; anonymous transfer (no account, free tier).
-- 🔒 Blocked: full Merkle tree verification; NUT-11 Mode 2; "audit-certified"; ML-KEM;
-  any "end-to-end file integrity" without the server-side-chunks-only qualifier.
+- ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; Turnstile nonce binding; anonymous transfer (no account, free tier).
+- 🔒 Blocked: full Merkle tree verification; NUT-11 Mode 2; "audit-certified"; ML-KEM; any "end-to-end file integrity" without the server-side-chunks-only qualifier.
 - 📅 Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle · B10 → ML-KEM.
 
 ---
@@ -213,8 +195,6 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | Fail-closed on nonce KV error | Fail open — KV blip must not block legitimate uploads |
 | Await nonce KV write | Fire-and-forget only |
 | `renderTurnstile()` without `pendingTurnstileRender` flag | Causes double-render |
-| `qrcodejs` library | Use `qr-creator` (SVG, cdnjs) |
-| Multi-file manifest for folder upload | Client-side zip via fflate only |
 | `types: [...]` in showSaveFilePicker | Use `types: []` |
 | Omit `total_chunks` from `/meta/` response | Must be included — FSAA loop bound |
 | `TIER_EXPIRY_SECONDS.free` = 5 days | Canonical value is 7 days everywhere |
@@ -222,38 +202,23 @@ Full text for B9 whitepaper §Operations. Legal review before any public claims.
 | `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
 | Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
 | `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x | Bare `new Uint8Array(buf)` — default level-6 DEFLATE, macOS-compatible |
-| Load fflate or qr-creator from cdnjs | Self-hosted only — `frontend/fflate.min.js` + `frontend/qr-creator.min.js` |
-| File inputs inside drop zone hit area | Inputs outside drop zone, JS-triggered only (`display:none`, explicit `.click()`) |
+| Hardcode 900s TTL for download tokens | Pass `manifest.expiry_timestamp` as `expiresAt` |
 
 ---
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S55 next.**
+**B6 Testing infrastructure + folder upload — current. S60 (Worker unit tests I) next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
-| S43 | `5c54802` | Token alignment: Eleventy pages onto DESIGN-TOKENS.md v1.0. |
-| S44 | `b15f407` | Dashboard design pass I: sidebar, tokens, Satoshi figures, 4 latency cards. |
-| S45 | `7187e41` | Dashboard design pass II: 240px sidebar, gold wordmark, farming card. |
-| S46a | `bbf271a` | Modal build I: 14 modal keys, skeleton, focus trap. CSS+JS extracted. |
-| S46b | `023dfcc` | Modal polish: formatBytes, zero=green, datasource banner, × close. smokeTest 27 pass. |
-| S47a | `63eb253` | FREE_EXPIRY fixed. Progress smooth. QR retina. Cap nudge. status.njk editorial. |
-| S47b | `d8faf0f` | QR 200px SVG (qr-creator). 2-col button grid. Serif integrity notes. Ghost back links. |
-| S47c | `cb7a925` | Receiver landing page. Info card. USP A/B test. No auto-download. |
-| S47d | `3eb4ec4` | QR guard. Drop zone rejection. Colophon. Footer subdomain-only. Turnstile theme. |
-| S48 | `0761f4c` | Maintenance modal. Theme cookie `rs-theme` scoped to `.refueler.io`. No FOUC. |
-| S48a | `0152aae` | FSAA streaming download. Pipeline depth 2. Per-chunk retry. Blob fallback. |
-| S49a | `3598a65` | Carbon gold edging. `--inset-rule` throughout. Brand token aliases in shared-styles. |
-| S50 | `e3a4407` | Serif audit. 3 correct usages confirmed. 3 CSS-only additions. |
-| S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). |
-| S52 | — | manifest.js TIER_EXPIRY_SECONDS.free 5d→7d. `--heading` alias. Lightning ops plan. Context v4.0. B5 closed. |
 | S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop + picker. Zip progress card. Bare Uint8Array fix. ✓ |
 | S54 | `c732abf` | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
 | S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is, folder note. |
 | S56 | `6cf711d`·`7735787` | fflate+qr self-hosted. Drop zone fix. Full folder round-trip ✓ |
 | S57 | — | Bearer TTL investigation. 15-min exp fatal for large transfers. |
 | S58 | `f94a158` | Bearer token TTL fix. Token lifetime = transfer expiry. |
+
 ---
 
 ## Roadmap
@@ -285,18 +250,13 @@ B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real l
 KV flag `lightning_available: true/false/blink`. Dashboard toggle card. Upgrade page reads flag.
 Enables Fallback 1 + Fallback 2 without a code deploy, within target time windows.
 
-**Background work for Rajesh during B6:**
-1. Competitor analysis: WeTransfer, SwissTransfer, Smash, Wormhole, OnionShare. Max file size · expiry · encryption model · pricing · anonymous use · Lightning/Bitcoin.
-2. 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-3. Blink API key: create account + generate key if not already done.
-4. btc++ Berlin abstract: draft one paragraph if considering presenting.
-
 ---
 
 ## B6 open snags (resolve at S72)
 
 - QR logo centre (Refueler mark in quiet zone) → B11 prep
 - X-Email header wiring for paid tier enforcement → B7
+- Receiver page nav: shows main domain links, should be share-subdomain only → B13
 - Nav snag (Upgrade link on refueler.io) → B13
 - Status tile for admin dashboard → S72 sweep
 
@@ -360,6 +320,8 @@ refueler-share/
     share.css                    ← extracted from src/index.njk (S51)
     share.js                     ← extracted from src/index.njk (S51), type="module"
     upgrade.css                  ← extracted from src/upgrade.njk (S51)
+    fflate.min.js                ← self-hosted (S56)
+    qr-creator.min.js            ← self-hosted (S56)
     blake3/                      ← WASM bundle (force-committed, git add -f)
     admin/
       dashboard.html             ← self-contained, no build step
