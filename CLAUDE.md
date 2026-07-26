@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.3 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** S52 · 25 July 2026
+> **Version:** 1.4 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B7 Lightning planning · 26 July 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Blink, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -25,7 +25,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 | Chunk indexing & verification | BLAKE3 | Internal only — content addressing, integrity checks |
 | Anonymous authentication | Cashu blind signatures | Access tokens, payment gate |
 | Storage | Cloudflare R2 | Egress-free object store |
-| Payment | Blink BOLT11 (primary) → LNbits (Tier 2) | Upload capacity settled via Lightning |
+| Payment | Blink BOLT11 — Share-specific account (B7) → LNbits Tier 2 (B9) | Upload capacity settled via Lightning |
 
 **These two layers must never be conflated.** BLAKE3 is not the auth layer. Cashu is not the hashing layer.
 
@@ -61,20 +61,23 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 
 ## Session queue
 
-See `share-sessions.md` for log. Full S19–S120 roadmap lives in `Share-Master-Context.md` §Roadmap.
-Core build: S19–S100. Buffer: S101–S120. Planning sessions are uncounted.
+See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
+Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**B5 COMPLETE. Current block: B6 (Testing infrastructure + folder upload) — S53 onwards.**
+**B5 COMPLETE. B6 (Testing infrastructure + folder upload) in progress — S60 next.**
+**B7 plan locked (Lightning planning session, 26 Jul 2026) — S73–S87, 25 core + 5 buffer.**
 
-B6 session allocation: 20 core sessions + up to 10 buffer (testing infra only, reviewed every 4
-sessions) + 2–3 buffer for download bearer token TTL investigation. See Share-Master-Context.md §B6.
+Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
+Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
+the first session of a group — never skipped. See Share-Master-Context.md §B7 notes.
 
 ---
 
 ## Context file hygiene — mandatory at every B-close session
 
-Every block-close session (S72, S83, S91, S96, S104, S112, S113, S114) must include a trim pass
+Every block-close session (S72, S87, S96+, S110+, S118+, S126+, S127–S128) must include a trim pass
 on both context files before the git commit. This is not optional.
+(B8+ session numbers renumber at B7 close — check Share-Master-Context.md §Roadmap for current numbers.)
 
 **`share-sessions.md`:**
 - Sessions more than two blocks old: convert full narrative entries to compact one-row table format
@@ -87,15 +90,15 @@ on both context files before the git commit. This is not optional.
 - §B-n snag list: remove fully resolved items. Carried items only.
 - Target: under 350 lines at all times.
 
-**Applies to:** S72 (B6) · S83 (B7 — renumber if sessions shift) · S91 (B8) · S96 (B9) ·
-S104 (B10) · S112 (B11) · S113–S114 (B12).
+**Applies to:** S72 (B6) · S87 (B7) · S96 (B8 — renumber at B7 close) · S110 (B9) ·
+S118 (B10) · S126 (B11) · S127–S128 (B12).
 Also apply at any session where either file exceeds its target line count mid-block.
 
 ## Deferred experiments
 
 - **refueler-ecash-lab** — separate repo for NUT-11 Mode 2 and ML-KEM key wrapping
-  experimentation before wiring into production. Flagged S20. Scope decision at B8 (S69)
-  and B10 (S83). Do not start until NUT-11 Mode 2 design is locked.
+  experimentation before wiring into production. Flagged S20. Scope decision at B8 (S88+)
+  and B10 (S111+). Do not start until NUT-11 Mode 2 design is locked.
 
 ---
 

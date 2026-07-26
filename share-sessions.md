@@ -237,4 +237,54 @@ No commit · 26 July 2026
 3. Blink API key: create account + generate key if not already done. Needed at B7 start.
 4. btc++ Berlin abstract: draft one paragraph if considering presenting. Claude can help.
 
+---
+
+## B7 session plan — Lightning/Blink + anonymous paid tier
+
+**Block principle:** No session holds more than one architecturally complex piece of work.
+M difficulty = 2 sessions (a/b). L difficulty = 3 sessions (a/b/c). S = 1 session.
+Buffer consumed only if genuinely needed — reviewed at S83a.
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| S73 | Lightning infra I-a | Worker secrets set (`BLINK_API_KEY`, `BLINK_WALLET_ID`). `worker/src/lightning.js` scaffold. `createInvoice()` stub. `LIGHTNING_BACKEND` env var abstraction. | M |
+| S73a | Lightning infra I-b | `createBlinkInvoice()` implementation. `lnInvoiceCreate` GraphQL call. Response parsing. Unit smoke test: curl → invoice returned. | M |
+| S74 | Lightning infra II-a | `POST /webhook/lightning` endpoint. KV payment tracking schema: `{ paymentHash, tier, period, created_at, expires_at, settled: false }` — 25h TTL. | M |
+| S74a | Lightning infra II-b | Dedup logic: second webhook call finds `settled: true`, returns 200 silently. `getBlinkInvoiceStatus()` polling fallback. Smoke test: curl invoice → fake webhook → KV settled flag confirmed. | M |
+| S75 | Credential issuance I-a | On settled webhook: resolve `{ tier, period }` from KV. Issue Cashu credential via NUT-00 path with tier-appropriate capacity. | L |
+| S75a | Credential issuance I-b | Write credential to short-lived KV slot keyed by `paymentHash` (10 min TTL). `GET /subscription/lightning/credential?hash=` poll endpoint. | L |
+| S75b | Credential issuance I-c | Tier cap wiring for Lightning credentials (no X-Email — credential-based enforcement design). Error states: expired invoice, already-redeemed hash. Smoke test full chain. | L |
+| S76 | Frontend Lightning flow I-a | `src/upgrade.njk`: Lightning tier cards enabled. `POST /subscription/lightning` wired. Paper/Carbon tokens throughout. | M |
+| S76a | Frontend Lightning flow I-b | QR display (qr-creator, same pattern as share flow). BOLT11 copy button. Rate display (GBP + sats equivalent, "rate locked 24h" copy). Polling for credential on payment hash. | M |
+| S77 | Frontend Lightning flow II-a | Credential receipt → browser memory. Upload flow unlocks paid tier cap on credential receipt. | M |
+| S77a | Frontend Lightning flow II-b | Error states: expired invoice UI, already-redeemed UI, payment timeout (24h). Full frontend smoke test both Paper and Carbon. | M |
+| S78 | GBP/sats pricing display | Blink `btcPrice` query wired in Worker at invoice creation. Rate stored in KV entry alongside hash. Displayed on frontend: "£12 = ~82,400 sats (rate at time of invoice)." | S |
+| S79 | Payment privacy table I | `src/_data/payment_privacy.json` created. Schema: array of rows, each with `label`, `stripe`, `lightning`, `paynym` fields. Stripe and Lightning columns populated. PayNym column: "Coming soon" placeholder throughout. | S |
+| S79a | Payment privacy table II | Eleventy partial `src/_includes/payment-privacy-table.njk` renders JSON. Collapsible section added to `src/upgrade.njk`. Paper/Carbon tokens. Blink correlation row explicit. Full build + visual check. | S |
+| S80 | Dashboard Lightning cards I-a | `frontend/admin/dashboard.html`: new Lightning section. Lightning confirmation latency card (p95, live — KV `invoice_created_at` vs `webhook_received_at`). AE logging for latency datapoint added to `/webhook/lightning` handler. | M |
+| S80a | Dashboard Lightning cards I-b | Four stub cards (greyed, labelled): webhook delivery rate (needs LNbits), webhook signature failures (needs LNbits), routing fee income MTD (needs own node), channel liquidity health (needs own node). CSS: greyed state, "available at B9" tooltip. | M |
+| S81 | KV Lightning admin toggle | Dashboard toggle card: `lightning_available: true/false/blink`. `POST /admin/status` extended. Upgrade page reads flag — Lightning option hidden when `false`. Graceful degradation copy. Smoke test both states. | S |
+| S82 | Paid tier activation I-a | Re-enable Creative Premium + Production Max cards (greyed since S35-e). Stripe path smoke test: checkout → webhook → Supabase row → tier enforced. | M |
+| S82a | Paid tier activation I-b | Lightning path smoke test: invoice → pay (test wallet) → credential issued → tier enforced → upload cap active. Both payment paths confirmed live. | M |
+| S83 | B7 security audit I-a | Full security review Lightning flow: invoice expiry handling, KV race conditions, credential farming via Lightning path, double-issuance attack vectors. | M |
+| S83a | B7 security audit I-b | Webhook replay attack surface. Any findings from S83 fixed and retested. Marketing claim rulings updated — Lightning pseudonymity claims audited. | M |
+| S84 | LNbits planning I | Read `lnbits/lnbits` repo. Map keep/strip/brand decisions. Extension shortlist: LNURLp, LNURLw, Boltcard. Webhook signing spec. Dashboard metrics enabled by signing logged. No code this session. | S |
+| S85 | LNbits planning II | Skinning scope: which templates, which tokens, effort estimate. LNURL-withdraw gift architecture design. NUT-20 binding spec. Session output: locked decisions list for B9. No code this session. | S |
+| S86 | LNURL-withdraw gift architecture | Design document: Cashu credential as LNURL-withdraw payload. Wallet compatibility matrix (Zeus, Phoenix, Blink, Breez). Gift flow UX spec. B9 session scope locked. | S |
+| S87 | B7 close | Snag sweep. Context files updated. §Lightning infrastructure finalised. B8 brief. Rajesh B9 background tasks listed. Buffer review. | S |
+
+**Buffer pool (5 sessions):**
+- S75c — credential issuance complexity overrun
+- S76b — frontend Lightning flow overrun
+- S83b — security audit findings requiring additional fixes
+- S84a — LNbits planning scope larger than expected
+- S87a — B7 close sweep overrun
+
+**Background work for Rajesh during B7:**
+1. Complete pre-B7 checklist (see Share-Master-Context.md §B7 notes) before S73 starts.
+2. Read LNbits repo before S84: `https://github.com/lnbits/lnbits`
+3. Hetzner account setup (no VPS yet — just have login ready for B9): `https://hetzner.com`
+4. Test Lightning wallet for payment testing: Blink app on a second device, or Phoenix wallet.
+5. 2 GB test file if not already done: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
+
 *"Nothing stops this train."*
