@@ -367,6 +367,10 @@ Very L = 4 sessions. Split early rather than overrun.
 - Own node stub cards (routing fee income, channel liquidity) — greyed until B9
 - LNbits webhook signing cards (delivery rate, signature failures) — greyed until B9
 
+## B11 notes
+
+- Add `POST /admin/test-results` to Worker endpoints table in this file and to `index.js` when dashboard test card is built (S119+). Payload: JSON reporter output from CI. KV key: `test_results_latest`.
+
 ---
 
 ## Tiers
