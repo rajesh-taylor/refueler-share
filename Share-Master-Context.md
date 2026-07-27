@@ -273,12 +273,16 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
 | `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x | Bare `new Uint8Array(buf)` — default level-6 DEFLATE, macOS-compatible |
 | Hardcode 900s TTL for download tokens | Pass `manifest.expiry_timestamp` as `expiresAt` |
+| `client.putManifest()` in integration tests | No Worker route exists — manifest written automatically after final chunk |
+| `X-P2SH-Secret-Hash` in separate manifest PUT | Must be sent as chunk 0 upload header |
+| Dummy blinded message in `issueCredential` test helper | Must do real BDHKE unblinding (`C_ - r*K`) or `verifyCredential` returns 401 |
+| Supabase mock started in test file | Lifecycle owns it — must start before wrangler so URL lands in `.dev.vars` |
 
 ---
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S62 (Worker unit tests III) next.**
+**B6 Testing infrastructure + folder upload — current. S65 (Integration tests II) next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -290,7 +294,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S58 | `f94a158` | Bearer token TTL fix. Token lifetime = transfer expiry. |
 | S60 | `e59305c` | Vitest 2 harness. ratelimit + manifest tests. 43 passing. |
 | S61 | `5f425ca` | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
-| S62 | TBD | turnstile + stripe unit tests. 178 passing across 6 suites. |
+| S62 | `5f425ca` | turnstile + stripe unit tests. 178 passing across 6 suites. |
+| S64 | `def77b5` | Integration harness. wrangler dev --local + Supabase mock. Full BDHKE in client.js. 181 passing across 7 suites. |
 ---
 
 ## Roadmap
