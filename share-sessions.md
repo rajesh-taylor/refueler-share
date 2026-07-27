@@ -234,6 +234,21 @@ No commit · 26 July 2026
 - 178 tests passing across 6 suites.
 - stderr: expected WASM instantiation noise from blake3 error-path test — cosmetic only, test passes.
 
+### S64 — Integration tests I
+**Commit:** `def77b5` · 27 July 2026
+
+Full integration harness built against `wrangler dev --local`. Three tests all passing.
+
+Harness: `wrangler-lifecycle.js` globalSetup starts Supabase mock first, writes its URL to `.dev.vars`, then spawns wrangler. `client.js` does full BDHKE in `issueCredential()` — generates secret + blinding factor, POSTs blinded point, unblinds `C_ - r*K` → sends `{ C, mint_pubkey }` in `X-Cashu-Credential`. Added `GET /rest/v1/spent_tokens` handler to `supabase-mock.js` (was missing; caused 502 on every upload).
+
+Three tests passing: full upload→download round-trip (3 chunks, wrong-hash 400 regression); passphrase-protected transfer; double-spend rejection. **181 tests passing across 7 suites.**
+
+**Do not retry:**
+- DO NOT call `client.putManifest()` in integration tests — no Worker route exists; manifest written automatically after final chunk.
+- DO NOT send `X-P2SH-Secret-Hash` in a separate manifest PUT — must be on chunk 0 upload header.
+- DO NOT run integration tests from repo root — `cd worker && npm run test:integration` only.
+- DO NOT start Supabase mock in the test file — lifecycle owns it; test imports `mockHandle` for `reset()`.
+- DO NOT use a dummy blinded message for `issueCredential` — must do real BDHKE unblinding or `verifyCredential` returns 401.
 ---
 
 ## B6 session plan
@@ -251,8 +266,8 @@ No commit · 26 July 2026
 | S61 ✅ | Worker unit tests II | `nut00.js` BDHKE round-trip + `blake3.js` verification. 100 tests passing. `blake3.js` null-guard fix (production bug caught by test). noble v2 `.subtract()` → `.add(rK.negate())`. | M |
 | S62 ✅ | Worker unit tests III | `turnstile.js` + `stripe.js`. 78 new tests. 178 total passing. | M |
 | S63 ✅ | Testing infra review I | Harness assessment. Integration test architecture designed. TESTING.md created. Buffer sessions S64b + S66b added. | S |
-| S64 | Integration tests I | wrangler dev --local harness. vitest.config.integration.js. HTTP client helper. Fixture factories in worker/tests/integration/fixtures/. Full upload→download round-trip + passphrase variant + double-spend rejection. | L |
-| S65 | Integration tests II | Passphrase gate, rate limit enforcement, credential farming defence. | M |
+| S64 ✅ | `def77b5` | Integration tests I | wrangler dev --local harness. Full BDHKE in client.js. 181 tests passing. | L |
+| S65 ✅ | Security regression suite I | Rate limit enforcement + credential farming defence + nonce binding. `security.test.js` foundation. 188 passing. | M |
 | S66 | Integration tests III | MIME denylist, UUID validation, chunk bounds, tier cap enforcement. | M |
 | S67 | Testing infra review II | 4-session checkpoint. Load test design. | S |
 | S68 | Load test I | k6 setup, credential issue + upload synthetic load. KV rate limit validation. | M |

@@ -282,7 +282,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S65 (Integration tests II) next.**
+**B6 Testing infrastructure + folder upload — current. S66 (Integration tests III) next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
@@ -296,6 +296,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S61 | `5f425ca` | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
 | S62 | `5f425ca` | turnstile + stripe unit tests. 178 passing across 6 suites. |
 | S64 | `def77b5` | Integration harness. wrangler dev --local + Supabase mock. Full BDHKE in client.js. 181 passing across 7 suites. |
+| S65 | `8dc8dce` | Security regression suite foundation. `security.test.js` built. Rate limit enforcement (cred 10/60s, upload 120/60s), foreign UUID rejection, nonce binding (token-keyed, not IP-keyed). `uniqueIp()` + `freshToken()` helpers prevent cross-test KV bleed. 188 tests passing across 8 suites. |
 ---
 
 ## Roadmap
