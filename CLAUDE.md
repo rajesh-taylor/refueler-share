@@ -101,5 +101,13 @@ Also apply at any session where either file exceeds its target line count mid-bl
   and B10 (S111+). Do not start until NUT-11 Mode 2 design is locked.
 
 ---
+## Test environment
+
+`TESTING.md` in repo root is the canonical testing architecture document.
+Load it at the start of any session touching tests, CI, load testing, 
+staging environment, or the B9 security whitepaper.
+Do not load it by default — it is reference material, not working memory.
+
+---
 
 *"Nothing stops this train."*

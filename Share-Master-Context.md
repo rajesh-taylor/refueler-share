@@ -304,9 +304,9 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B6 | S53–S72+ | Testing infrastructure + folder upload ← current |
 | B7 | S73–S87+ | Lightning/Blink + anonymous paid tier — 25 core + 5 buffer |
 | B8 | S88–S96 | NUT-11 Mode 2 keypair auth (renumbered post-B7) |
-| B9 | S97–S110 | LNbits fork + skin + node + LNURL-withdraw + whitepaper — 8 Lightning sessions + docs |
-| B10 | S111–S118 | Enterprise + ML-KEM spike |
-| B11 | S119–S126 | Week 0 alpha, load test, go/no-go |
+| B9 | S97–S110 | LNbits fork + node + LNURL-withdraw + whitepaper + staging environment |
+| B10 | S111–S118 | Enterprise + ML-KEM + chaos tests + contract tests |
+| B11 | S119–S126 | Alpha + load test + CI Level 3 + dashboard test card |
 | B12 | S127–S128 | Public beta launch |
 | B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) |
 
@@ -415,6 +415,22 @@ Yearly = 10 months price.
 | POST | `/log/error` | — | Client error → AE (20/60s rate limited) |
 
 ---
+## Testing infrastructure
+
+Canonical reference: `TESTING.md` (repo root). Load for any testing session.
+
+| Layer | Tool | Status |
+|-------|------|--------|
+| Unit tests | Vitest 2 | 178 passing — 6 suites (ratelimit, manifest, nut00, blake3, turnstile, stripe) |
+| Integration tests | Vitest + wrangler dev --local | S64 — not yet built |
+| Security regression suite | Vitest integration | S66b — not yet built |
+| Load tests | k6 | S68–S69 — not yet built |
+| CI pipeline | GitHub Actions | S70–S71 — not yet built |
+| Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
+| Staging environment | refueler-share-staging Worker | B9 scope |
+
+Fixture factories: `worker/tests/integration/fixtures/` — importable by 
+both Vitest and k6. Do not put fixture logic inside Vitest-specific files.
 
 ## File map
 

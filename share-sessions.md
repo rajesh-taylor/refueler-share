@@ -250,8 +250,8 @@ No commit · 26 July 2026
 | S60 ✅ | 'e59305c'| Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. 43 tests passing. | M |
 | S61 ✅ | Worker unit tests II | `nut00.js` BDHKE round-trip + `blake3.js` verification. 100 tests passing. `blake3.js` null-guard fix (production bug caught by test). noble v2 `.subtract()` → `.add(rK.negate())`. | M |
 | S62 ✅ | Worker unit tests III | `turnstile.js` + `stripe.js`. 78 new tests. 178 total passing. | M |
-| S63 | Testing infra review I | 4-session checkpoint: assess buffer need. Integration test harness design. | S |
-| S64 | Integration tests I | Full upload→download round-trip in test harness against dev Worker. | L |
+| S63 ✅ | Testing infra review I | Harness assessment. Integration test architecture designed. TESTING.md created. Buffer sessions S64b + S66b added. | S |
+| S64 | Integration tests I | wrangler dev --local harness. vitest.config.integration.js. HTTP client helper. Fixture factories in worker/tests/integration/fixtures/. Full upload→download round-trip + passphrase variant + double-spend rejection. | L |
 | S65 | Integration tests II | Passphrase gate, rate limit enforcement, credential farming defence. | M |
 | S66 | Integration tests III | MIME denylist, UUID validation, chunk bounds, tier cap enforcement. | M |
 | S67 | Testing infra review II | 4-session checkpoint. Load test design. | S |
@@ -262,7 +262,9 @@ No commit · 26 July 2026
 | S72 | B6 close | Snag sweep, context files v5.0, B7 brief. Lightning backend confirmed. | S |
 
 **Buffer pool:**
-- S60b, S61b, S62b, S64b — testing infra (10 sessions total, reviewed S63 + S67)
+- S60b, S61b, S62b — testing infra overrun
+- S64b — harness rebuild if S64 finds a Worker bug requiring a fix
+- S66b — security regression suite foundation (whitepaper evidence trail)
 - S57b, S58b — bearer token TTL (consumed: S58 was clean)
 
 **Background work for Rajesh during B6:**
