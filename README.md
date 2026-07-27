@@ -74,17 +74,25 @@ Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
 
 ## Status
 
-🟢 **Block 6 in progress — testing infrastructure and folder upload.**
+🟢 **Block 6 in progress — testing infrastructure.**
 
-Full upload → share link → passphrase gate → download flow is live at [share.refueler.io](https://share.refueler.io). Folder upload (client-side zip, directory structure preserved) is supported.
+Full upload → share link → passphrase gate → download flow is live at 
+[share.refueler.io](https://share.refueler.io). Folder upload 
+(client-side zip, directory structure preserved) is supported.
 
 **Completed blocks:**
 - **B1** — Eleventy SSG scaffold, Cloudflare Pages deploy
-- **B2** — Analytics Engine instrumentation, Supabase aggregation, admin dashboard
+- **B2** — Analytics Engine instrumentation, Supabase aggregation, 
+  admin dashboard
 - **B3** — Stripe checkout, webhook handler, Customer Portal
-- **B4** — Security hardening: BLAKE3 Worker WASM, server-side chunk verification, AES-GCM AAD fix, KV rate limiting, MIME denylist, UUID validation, filename sanitisation, UUID-bound credential issuance, Turnstile nonce binding
-- **B5** — Design system full pass: DESIGN-TOKENS.md, Paper/Carbon toggle, FSAA streaming download, receiver landing page
-- **B6** — Folder upload (fflate), bearer token TTL fix, Worker unit test suite (178 tests, 6 suites)
+- **B4** — Security hardening: BLAKE3 Worker WASM, server-side chunk 
+  verification, AES-GCM AAD fix, KV rate limiting, MIME denylist, 
+  UUID validation, filename sanitisation, UUID-bound credential 
+  issuance, Turnstile nonce binding
+- **B5** — Design system full pass: DESIGN-TOKENS.md, Paper/Carbon 
+  toggle, FSAA streaming download, receiver landing page
+- **B6** — Folder upload (fflate), bearer token TTL fix, Worker unit 
+  test suite (178 tests, 6 suites), integration test harness designed
 
 ---
 
