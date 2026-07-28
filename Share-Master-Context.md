@@ -432,8 +432,8 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session.
 | Layer | Tool | Status |
 |-------|------|--------|
 | Unit tests | Vitest 2 | 178 passing — 6 suites (ratelimit, manifest, nut00, blake3, turnstile, stripe) |
-| Integration tests | Vitest + wrangler dev --local | S64 — not yet built |
-| Security regression suite | Vitest integration | S66b — not yet built |
+| Integration tests | Vitest + wrangler dev --local | S64–S66 complete. 207 passing across 8 suites. |
+| Security regression suite | Vitest integration | S65–S66 complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
 | Load tests | k6 | S68–S69 — not yet built |
 | CI pipeline | GitHub Actions | S70–S71 — not yet built |
 | Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |

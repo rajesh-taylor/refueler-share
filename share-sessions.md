@@ -268,7 +268,7 @@ Three tests passing: full upload→download round-trip (3 chunks, wrong-hash 400
 | S63 ✅ | Testing infra review I | Harness assessment. Integration test architecture designed. TESTING.md created. Buffer sessions S64b + S66b added. | S |
 | S64 ✅ | `def77b5` | Integration tests I | wrangler dev --local harness. Full BDHKE in client.js. 181 tests passing. | L |
 | S65 ✅ | Security regression suite I | Rate limit enforcement + credential farming defence + nonce binding. `security.test.js` foundation. 188 passing. | M |
-| S66 | Integration tests III | MIME denylist, UUID validation, chunk bounds, tier cap enforcement. | M |
+| S66 | [commit] | MIME denylist (8 tests), UUID validation (6), chunk bounds (3), tier cap (2). 207 passing across 8 suites. |
 | S67 | Testing infra review II | 4-session checkpoint. Load test design. | S |
 | S68 | Load test I | k6 setup, credential issue + upload synthetic load. KV rate limit validation. | M |
 | S69 | Load test II | Download load, concurrent transfers, KV timing edge cases. | M |
