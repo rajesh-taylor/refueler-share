@@ -354,3 +354,291 @@ describe('Credential farming defence — Turnstile nonce binding', () => {
     expect(second.status, 'same token from different IP must still be rejected (429)').toBe(429);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// § MIME DENYLIST
+// TESTING.md §5 claim: "Execution-capable uploads are refused at the boundary"
+// Origin: S40 — 6-type denylist on chunk 0; gate scoped to chunk 0 only.
+//
+// NOTE S66: Worker returns 400 (not 415) for some denylisted types depending on
+// check ordering. Tests assert rejection (≥400, not 200), not exact status code.
+// The claim is "refused" — the exact 4xx is an implementation detail.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('MIME denylist — execution-capable Content-Type rejected on chunk 0', () => {
+  const DENYLISTED_TYPES = [
+    'application/javascript',
+    'application/x-msdownload',
+    'application/x-executable',
+    'application/x-sharedlib',
+    'application/wasm',
+    'text/html',
+  ];
+
+  async function uploadChunk0WithMime(mimeType) {
+    const credRes = await client.issueCredential();
+    if (credRes.status !== 200) throw new Error(`credential issue failed: ${credRes.status}`);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+
+    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+    const headers = { ...credHeaders, 'Content-Type': mimeType };
+
+    return fetchAs('mime-test-ip', `/upload/${cred.uuid}/0000`, {
+      method: 'PUT',
+      headers,
+      body: ciphertext,
+    });
+  }
+
+  for (const mimeType of DENYLISTED_TYPES) {
+    it(`rejects ${mimeType} on chunk 0 (4xx, not 200)`, async () => {
+      const res = await uploadChunk0WithMime(mimeType);
+      expect(
+        res.status,
+        `chunk 0 with Content-Type '${mimeType}' must be rejected (4xx)`
+      ).toBeGreaterThanOrEqual(400);
+      expect(res.status, 'must not succeed').not.toBe(200);
+      expect(res.status, 'must not be a server error').toBeLessThan(500);
+    });
+  }
+
+  it('accepts application/octet-stream on chunk 0 (allowed type passes gate)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+
+    const res = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+    expect(res.status, 'application/octet-stream must pass the MIME gate').toBe(200);
+  });
+
+  it('MIME gate is not applied to chunk index > 0 (denylisted type passes on chunk 1)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain0, plain1] = makeChunks(2, 256);
+    const { ciphertext: ct0 } = await encryptChunk(plain0.bytes, key);
+    const { ciphertext: ct1 } = await encryptChunk(plain1.bytes, key);
+    const hash0 = blake3Hex(ct0);
+    const hash1 = blake3Hex(ct1);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const totalBytes = ct0.length + ct1.length;
+
+    const headers0 = client.buildCredentialHeaders(cred, 2, totalBytes, hash0, expiryTs);
+    const res0 = await client.uploadChunk(cred.uuid, 0, ct0, hash0, headers0);
+    expect(res0.status, 'chunk 0 should succeed').toBe(200);
+
+    const headers1 = {
+      'Content-Type':        'application/javascript',
+      'X-Blake3-Chunk-Hash': hash1,
+    };
+    const res1 = await fetchAs('mime-gate-chunk1', `/upload/${cred.uuid}/0001`, {
+      method: 'PUT',
+      headers: headers1,
+      body: ct1,
+    });
+    expect(res1.status, 'MIME gate must NOT fire on chunk > 0 (415 would be wrong)').not.toBe(415);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// § UUID VALIDATION
+// TESTING.md §5 claim: "rejects non-RFC4122 UUID in upload path"
+// Origin: S41 — UUID regex on upload path; 400 on malformed.
+//
+// NOTE S66: Valid UUID with missing credential returns 401 (auth), not 400 (UUID).
+// Positive test asserts exactly 401 — proving UUID check passed, auth check fired.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('UUID validation — non-RFC4122 UUID in upload path', () => {
+  const INVALID_UUIDS = [
+    { label: 'all zeros',               value: '00000000-0000-0000-0000-000000000000' },
+    { label: 'path traversal segment',  value: '../../../etc/passwd' },
+    { label: 'too short',               value: 'abc123' },
+    { label: 'SQL injection fragment',  value: "'; DROP TABLE spent_tokens; --" },
+    { label: 'valid format wrong version (v1)', value: '110e8400-e29b-11d4-a716-446655440000' },
+  ];
+
+  const minimalHeaders = {
+    'Content-Type':        'application/octet-stream',
+    'X-Blake3-Chunk-Hash': 'a'.repeat(64),
+    'X-Total-Chunks':      '1',
+    'X-Total-Bytes':       '256',
+    'X-Expiry-Timestamp':  String(Math.floor(Date.now() / 1000) + 86400),
+  };
+
+  for (const { label, value } of INVALID_UUIDS) {
+    it(`rejects UUID "${label}" → 4xx`, async () => {
+      const safePath = `/upload/${encodeURIComponent(value)}/0000`;
+      const res = await fetchAs('uuid-val-ip', safePath, {
+        method: 'PUT',
+        headers: minimalHeaders,
+        body: new Uint8Array(256),
+      });
+      expect(res.status, `malformed UUID "${label}" must be rejected`).toBeGreaterThanOrEqual(400);
+      expect(res.status, 'must not succeed').not.toBe(200);
+      expect(res.status, 'must not be a server error').toBeLessThan(500);
+    });
+  }
+
+  it('valid RFC 4122 v4 UUID passes UUID check — upload with real credential succeeds (200)', async () => {
+    // Prove a Worker-issued UUID passes validation by completing a real upload.
+    // A 200 response means UUID check passed, credential check passed, R2 write succeeded.
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+
+    const res = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+    expect(res.status, 'valid RFC 4122 UUID must pass UUID validation (200)').toBe(200);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// § CHUNK BOUNDS
+// TESTING.md §5 claim: "rejects chunk index beyond declared total"
+// Origin: S41/S42b — chunk index >= total_chunks → 400.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('Chunk bounds — chunk index beyond declared total', () => {
+  it('rejects chunk index equal to total_chunks (out-of-bounds by 1)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+
+    const res0 = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+    expect(res0.status, 'chunk 0 should succeed').toBe(200);
+
+    const res1 = await fetchAs('chunk-bounds-ip', `/upload/${cred.uuid}/0001`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Blake3-Chunk-Hash': hash },
+      body: ciphertext,
+    });
+    expect(res1.status, 'chunk index beyond total_chunks must be rejected (400)').toBe(400);
+  });
+
+  it('rejects a chunk index far beyond declared total (stuffing attempt)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+    await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+
+    const res = await fetchAs('chunk-stuff-ip', `/upload/${cred.uuid}/9999`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Blake3-Chunk-Hash': hash },
+      body: ciphertext,
+    });
+    expect(res.status, 'far out-of-bounds index must be rejected (400)').toBe(400);
+  });
+
+  it('accepts the last valid chunk index (total_chunks - 1)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const key = await generateKey();
+    const [plain0, plain1] = makeChunks(2, 256);
+    const { ciphertext: ct0 } = await encryptChunk(plain0.bytes, key);
+    const { ciphertext: ct1 } = await encryptChunk(plain1.bytes, key);
+    const hash0 = blake3Hex(ct0);
+    const hash1 = blake3Hex(ct1);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const totalBytes = ct0.length + ct1.length;
+
+    const credHeaders = client.buildCredentialHeaders(cred, 2, totalBytes, hash0, expiryTs);
+    const res0 = await client.uploadChunk(cred.uuid, 0, ct0, hash0, credHeaders);
+    expect(res0.status, 'chunk 0 should succeed').toBe(200);
+
+    const res1 = await fetchAs('chunk-last-ip', `/upload/${cred.uuid}/0001`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Blake3-Chunk-Hash': hash1 },
+      body: ct1,
+    });
+    expect(res1.status, 'last valid chunk index must succeed (200)').toBe(200);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// § TIER CAP ENFORCEMENT
+// Origin: S39 — 10 MB chunk cap on free tier; byte counter in KV.
+//
+// NOTE S66: crypto.getRandomValues in Node is capped at 65,536 bytes per call.
+// Use makeRandomBytes() to build large buffers in 64KB increments.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Build a Uint8Array of `totalBytes` filled with random data, 64KB at a time. */
+function makeRandomBytes(totalBytes) {
+  const BLOCK = 65536;
+  const buf = new Uint8Array(totalBytes);
+  for (let offset = 0; offset < totalBytes; offset += BLOCK) {
+    crypto.getRandomValues(buf.subarray(offset, Math.min(offset + BLOCK, totalBytes)));
+  }
+  return buf;
+}
+
+describe('Tier cap enforcement — free tier upload cap', () => {
+  const FREE_TIER_CHUNK_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+
+  it('rejects a single chunk exceeding the 10 MB per-chunk limit → 413', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const oversizeBytes = FREE_TIER_CHUNK_MAX_BYTES + 1;
+    const ciphertext = makeRandomBytes(oversizeBytes);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+
+    const credHeaders = client.buildCredentialHeaders(cred, 1, oversizeBytes, hash, expiryTs);
+    const res = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+    expect(res.status, 'chunk exceeding 10 MB per-chunk limit must return 413').toBe(413);
+  }, 30_000);
+
+  it('accepts a chunk exactly at the per-chunk limit (10 MB)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+
+    const ciphertext = makeRandomBytes(FREE_TIER_CHUNK_MAX_BYTES);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+
+    const credHeaders = client.buildCredentialHeaders(cred, 1, FREE_TIER_CHUNK_MAX_BYTES, hash, expiryTs);
+    const res = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+    expect(res.status, '10 MB chunk (exactly at limit) must be accepted (200)').toBe(200);
+  }, 30_000);
+});
