@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.4 | **Last updated:** S61 · 26 July 2026
+> **Version:** 4.5 | **Last updated:** S67 · 28 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -214,23 +214,13 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Download bearer token TTL = `manifest.expiry_timestamp`. DO NOT hardcode 900s. (Fixed S58.)
 
 **Regulatory (UK):**
-- Refueler cannot operate as an e-money issuer without FCA authorisation.
-- Share mint issues access credentials only — capability tokens, not monetary instruments.
+- Share mint issues access credentials only — capability tokens, not monetary instruments. FCA authorisation not required.
 - Cashu in Share = anonymous authentication mechanism, not payment instrument.
-- Whitepaper language drafted S42e (exact text in userMemories). Legal review required before any public claims.
 
 **Payment flow (locked):**
 - Lightning → Blink API (primary) → LNbits (Tier 2 on trigger)
 - PayNym → Sparrow cold storage wallet, manual/semi-manual settlement
 - Share mint → upload credentials only, zero monetary value, no e-money
-
-**Mint architecture (locked):**
-- Share mint in `refueler-share`. Loyalty mint in `refueler-mint`. Ticketing mint in future `refueler-tickets`. Test lab in `refueler-ecash-lab` — B8 planning task.
-- Resilience: one mint down must not affect other products. All mints are capability/loyalty token issuers — none handle e-money.
-
-**Folder upload (locked, complete S56):**
-- Client-side zip via `fflate` before AES-GCM encrypt. Worker sees one blob — unchanged.
-- `webkitdirectory` input or folder drag. Relative paths preserved in zip. Zip as-is delivery — receiver unzips natively.
 
 **Marketing claim rulings (S42e — update again after B8, B9, B10):**
 - ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; Turnstile nonce binding; anonymous transfer (no account, free tier).
@@ -244,31 +234,17 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Pattern | Correct approach |
 |---------|--------------------|
 | `checkout/sessions ui_mode:embedded` | Direct Subscription + PaymentIntent expansion |
-| `decodeURIComponent` on Stripe `client_secret` | Already decoded |
 | `new Uint8Array([i])` for AES-GCM AAD | `DataView.setUint32(0, i, false)` into 4-byte buffer |
 | AE SQL `doubles[N]` / `blob[N]` syntax | Named columns: `double1`, `blob1` etc. |
 | AE SQL from Worker binding | External REST only, proxy via `/admin/ae-metrics` |
 | KV counter for double-spend | Supabase table only (race condition) |
 | `await env.AE.writeDataPoint()` | Synchronous, fire-and-forget |
-| Sub-100ms loop to test KV rate limiter | Use `sleep 0.5` — KV eventual consistency |
 | Customer Portal without active subscription | Stripe returns `resource_missing` |
-| 4242 card in live mode | Test mode only |
 | `await reportError(...)` | `.catch(() => {})` fire-and-forget |
-| Full UUID in `/log/error` | First 8 chars only |
-| Trust `X-Tier` upload header | Ignored — tier resolved from Supabase via `X-Email` |
-| Apply MIME gate to chunks > 0 | Gate is chunk-0 only |
-| URL shortener for share links | Privacy attack point; fragment key exposed to shortener |
 | `if (rl)` to check rate limit | Use `if (rl.limited)` — `checkRateLimit` returns object |
 | `getManifest()` direct from handlers | Use `safeGetManifest()` — enforces 64KB ceiling |
 | Generate UUID client-side | Worker generates UUID at `/credential/issue` since S42c |
 | Turnstile nonce TTL = 7 days | Cloudflare expires tokens ~300s; use 600s KV TTL |
-| Fail-closed on nonce KV error | Fail open — KV blip must not block legitimate uploads |
-| Await nonce KV write | Fire-and-forget only |
-| `renderTurnstile()` without `pendingTurnstileRender` flag | Causes double-render |
-| `types: [...]` in showSaveFilePicker | Use `types: []` |
-| Omit `total_chunks` from `/meta/` response | Must be included — FSAA loop bound |
-| `TIER_EXPIRY_SECONDS.free` = 5 days | Canonical value is 7 days everywhere |
-| `--display` as sole heading token | Declare both `--display` and `--heading` in shared-styles.njk |
 | `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
 | Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
 | `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x | Bare `new Uint8Array(buf)` — default level-6 DEFLATE, macOS-compatible |
@@ -277,26 +253,26 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `X-P2SH-Secret-Hash` in separate manifest PUT | Must be sent as chunk 0 upload header |
 | Dummy blinded message in `issueCredential` test helper | Must do real BDHKE unblinding (`C_ - r*K`) or `verifyCredential` returns 401 |
 | Supabase mock started in test file | Lifecycle owns it — must start before wrangler so URL lands in `.dev.vars` |
+| `ProjectivePoint.subtract()` in noble v2 | Use `.add(point.negate())` |
 
 ---
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S66 (Integration tests III) next.**
+**B6 Testing infrastructure + folder upload — current. S68 (Load tests I) next.**
 
 | Session | Commit | Shipped |
 |---------|--------|---------|
-| S53 | `ca1260c` | Folder upload I. fflate 0.8.2. Drag+drop + picker. Zip progress card. Bare Uint8Array fix. ✓ |
-| S54 | `c732abf` | Folder upload II. Depth limit (20). File count cap (2000). sanitisePath. Memory warning. fflate guard. |
-| S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is, folder note. |
-| S56 | `6cf711d`·`7735787` | fflate+qr self-hosted. Drop zone fix. Full folder round-trip ✓ |
-| S57 | — | Bearer TTL investigation. 15-min exp fatal for large transfers. |
-| S58 | `f94a158` | Bearer token TTL fix. Token lifetime = transfer expiry. |
 | S60 | `e59305c` | Vitest 2 harness. ratelimit + manifest tests. 43 passing. |
 | S61 | `5f425ca` | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
 | S62 | `5f425ca` | turnstile + stripe unit tests. 178 passing across 6 suites. |
-| S64 | `def77b5` | Integration harness. wrangler dev --local + Supabase mock. Full BDHKE in client.js. 181 passing across 7 suites. |
-| S65 | `8dc8dce` | Security regression suite foundation. `security.test.js` built. Rate limit enforcement (cred 10/60s, upload 120/60s), foreign UUID rejection, nonce binding (token-keyed, not IP-keyed). `uniqueIp()` + `freshToken()` helpers prevent cross-test KV bleed. 188 tests passing across 8 suites. |
+| S64 | `def77b5` | Integration harness. wrangler dev --local + Supabase mock. Full BDHKE in client.js. 181 passing. |
+| S65 | `8dc8dce` | Security regression suite I. Rate limits, UUID binding, nonce binding. 188 passing. |
+| S66 | `344e32d` | Security regression suite II. MIME, UUID validation, chunk bounds, tier cap. 207 passing across 8 suites. |
+| S67 | — | Testing infra review II. k6 architecture locked. TESTING.md discrepancies flagged for S72 fix. |
+
+**Test count: 207 passing across 8 suites (6 unit + 2 integration).**
+
 ---
 
 ## Roadmap
@@ -318,18 +294,26 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 
 Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain).
 
-B3 gap deferred to B11: full cancel → webhook → Supabase loop needs a real live subscriber.
-
-B7 Lightning sessions planned: S73→S87 (25 core + 5 buffer). B8 session numbers shift accordingly — renumber at B7 close.
-B9 includes 8 dedicated Lightning sessions: LNbits fork/skin, webhook signing, own node setup, LNURL-withdraw credential delivery, privacy table update, whitepaper §Lightning.
-
 ---
 
 ## B6 notes
 
 **Admin dashboard Lightning toggle (B6 scope):**
 KV flag `lightning_available: true/false/blink`. Dashboard toggle card. Upgrade page reads flag.
-Enables Fallback 1 + Fallback 2 without a code deploy, within target time windows.
+Enables Fallback 1 + Fallback 2 without a code deploy.
+
+**k6 load test architecture (locked S67):**
+- Target: `wrangler dev --local` for S68–S69. Staging deferred to B9.
+- Four scripts: `credential-burst.js`, `concurrent-transfers.js`, `download-saturation.js`, `mixed-realistic.js`.
+- S68 first task: verify `chunks.js` has no `crypto.subtle` dependency — k6 cannot use Web Crypto API.
+- 429 tagging: use k6 `check()` for expected 429s; exclude from `http_req_failed` threshold.
+- Draft thresholds: p95 < 200ms; `http_req_failed` < 1% (excl. tagged 429s); `checks` > 99%; KV byte-counter accuracy ±1 byte.
+
+**TESTING.md fixes pending at S72:**
+- §2 rewrite: update "178 tests / 6 suites" → "207 tests / 8 suites" with revised seams assessment (all five seams closed).
+- §5 row 3: double-spend test attribution corrected from `security.test.js` → `round-trip.test.js`.
+
+**`stripe-events.js` fixture:** Not confirmed built. Check before S70 — fold creation into S70 scope if absent.
 
 ---
 
@@ -340,6 +324,7 @@ Enables Fallback 1 + Fallback 2 without a code deploy, within target time window
 - Receiver page nav: shows main domain links, should be share-subdomain only → B13
 - Nav snag (Upgrade link on refueler.io) → B13
 - Status tile for admin dashboard → S72 sweep
+- TESTING.md §2 + §5 fixes → S72 sweep
 
 ---
 
@@ -347,13 +332,9 @@ Enables Fallback 1 + Fallback 2 without a code deploy, within target time window
 
 **Session numbering convention (B7 onwards):**
 Single-scope sessions use plain numbers (e.g. S78). Sessions that split due to complexity use
-lettered suffixes starting from `a` (e.g. S73, S73a). Buffer sessions follow the same pattern
-(e.g. S75c if S75b is consumed). Plain number is never skipped — S73 is always the first session
-of that group, S73a is the second.
+lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skipped.
 
-**Difficulty scaling rule (B7 onwards):**
-S = 1 session. M = 2 sessions (e.g. S73, S73a). L = 3 sessions (e.g. S75, S75a, S75b).
-Very L = 4 sessions. Split early rather than overrun.
+**Difficulty scaling rule:** S = 1 session. M = 2. L = 3. Split early rather than overrun.
 
 **Rajesh pre-B7 checklist:**
 1. Create Share Blink account (non-UK connection — Mullvad or VPN). Email `rt+share@rajeshtaylor.com`.
@@ -373,9 +354,28 @@ Very L = 4 sessions. Split early rather than overrun.
 - Own node stub cards (routing fee income, channel liquidity) — greyed until B9
 - LNbits webhook signing cards (delivery rate, signature failures) — greyed until B9
 
+---
+
 ## B11 notes
 
-- Add `POST /admin/test-results` to Worker endpoints table in this file and to `index.js` when dashboard test card is built (S119+). Payload: JSON reporter output from CI. KV key: `test_results_latest`.
+- Add `POST /admin/test-results` to Worker endpoints table and to `index.js` when dashboard test card is built (S119+). Payload: JSON reporter output from CI. KV key: `test_results_latest`.
+
+---
+
+## Competitive intelligence — M-series (outside repo, not version-controlled)
+
+**Context:** Market intelligence sessions labelled M-01, M-02, M-03. Tracked outside the GitHub repo to avoid stale content in version control. Findings feed B13 (go-to-market), btc++ Berlin pitch, and B9 whitepaper §Privacy comparison. Three-session scope using pre-planned prompts in Opus.
+
+**M-01 — Privacy-native peers (Proton Drive, Tresorit, Internxt):**
+Encryption architecture (at-rest vs in-transit vs zero-knowledge). Key custody model and legal compulsion surface. Metadata collection (filenames, access times, IPs). Security audit posture — published reports, firms, recency.
+
+**M-02 — File transfer peers (WeTransfer, Smash, Wormhole, OnionShare):**
+What happens to a file post-upload (storage duration, deletion guarantees). Client-side encryption and key model. Payment anonymity — any Lightning/crypto options, any anonymous access paths. GDPR/compliance language vs actual architecture. OnionShare Tor model vs Cloudflare Workers model — honest comparison.
+
+**M-03 — Architectural inspiration (Bitmail EHL, Nostr NIP-96, Blossom BUD-01/03):**
+Bitmail's Encrypted Hashlink: content hash as delivery receipt on a blockchain ledger — threat model difference vs Refueler KV manifest approach. Nostr relay-based storage and anonymity model. Blossom content-addressed blob storage — overlap with BLAKE3 content addressing in Refueler. Decentralisation vs Cloudflare edge — honest trade-off analysis.
+
+**Session format:** Plan prompt in a standalone mini-session → run in Opus → distil findings. Not committed to repo. Summarised into this section or a separate `COMPETITIVE-INTEL.md` (gitignored) at Rajesh's discretion.
 
 ---
 
@@ -425,6 +425,7 @@ Yearly = 10 months price.
 | POST | `/log/error` | — | Client error → AE (20/60s rate limited) |
 
 ---
+
 ## Testing infrastructure
 
 Canonical reference: `TESTING.md` (repo root). Load for any testing session.
@@ -432,47 +433,46 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session.
 | Layer | Tool | Status |
 |-------|------|--------|
 | Unit tests | Vitest 2 | 178 passing — 6 suites (ratelimit, manifest, nut00, blake3, turnstile, stripe) |
-| Integration tests | Vitest + wrangler dev --local | S64–S66 complete. 207 passing across 8 suites. |
-| Security regression suite | Vitest integration | S65–S66 complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
-| Load tests | k6 | S68–S69 — not yet built |
+| Integration tests | Vitest + wrangler dev --local | 207 passing across 8 suites. All 5 seams closed. |
+| Security regression suite | Vitest integration | Complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
+| Load tests | k6 | S68–S69. Architecture locked S67. |
 | CI pipeline | GitHub Actions | S70–S71 — not yet built |
 | Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
 | Staging environment | refueler-share-staging Worker | B9 scope |
 
-Fixture factories: `worker/tests/integration/fixtures/` — importable by 
-both Vitest and k6. Do not put fixture logic inside Vitest-specific files.
+Fixture factories: `worker/tests/integration/fixtures/` — importable by both Vitest and k6. Pure ESM, no vitest/node imports.
 
 ## File map
 
 ```
 refueler-share/
-  CLAUDE.md  share-sessions.md  Share-Master-Context.md  LICENSE  README.md
+  CLAUDE.md  share-sessions.md  Share-Master-Context.md  TESTING.md  LICENSE  README.md
   .eleventy.js   package.json   package-lock.json
   src/
     index.njk  upgrade.njk  status.njk
     _includes/  head.njk  nav.njk  footer.njk  shared-styles.njk
-  frontend/                      ← Eleventy output (committed, Pages serves)
+    _data/  payment_privacy.json  ← B7
+  frontend/
     index.html  upgrade.html  status.html
-    share.css                    ← extracted from src/index.njk (S51)
-    share.js                     ← extracted from src/index.njk (S51), type="module"
-    upgrade.css                  ← extracted from src/upgrade.njk (S51)
-    fflate.min.js                ← self-hosted (S56)
-    qr-creator.min.js            ← self-hosted (S56)
-    blake3/                      ← WASM bundle (force-committed, git add -f)
-    admin/
-      dashboard.html             ← self-contained, no build step
-      dashboard.css              ← extracted S46a
-      dashboard.js               ← extracted S46a
+    share.css  share.js  upgrade.css
+    fflate.min.js  qr-creator.min.js
+    blake3/
+    admin/  dashboard.html  dashboard.css  dashboard.js
   worker/
-    wrangler.toml                ← BUCKET + STATUS_KV + AE bindings
-    package.json                 ← @noble/hashes@1.7.2, @noble/secp256k1@2.1.0
-    blake3-wasm/                 ← compiled WASM + glue (force-committed)
+    wrangler.toml
+    package.json
+    blake3-wasm/
     src/
       index.js  nut00.js  nut11.js  blake3.js  blake3_worker.js
       manifest.js  turnstile.js  stripe.js  ratelimit.js
-      lightning.js                 ← Lightning backend abstraction (B7)
-    src/_data/
-      payment_privacy.json         ← Payment privacy table data (B7)
+      lightning.js  ← B7
+    tests/
+      unit/  ratelimit  manifest  nut00  blake3  turnstile  stripe  kv-mock.js
+      integration/  client.js  round-trip.test.js  security.test.js
+        fixtures/  credential  chunks  manifest  turnstile-mock  supabase-mock  stripe-events
+        helpers/  wrangler-lifecycle.js
+      load/  credential-burst  concurrent-transfers  download-saturation  mixed-realistic  ← S68–S69
+  .github/workflows/  ci.yml  integration.yml  staging-deploy.yml  ← S70–S71, B9
   docs/r2-lifecycle.md
 ```
 

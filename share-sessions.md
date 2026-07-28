@@ -249,6 +249,57 @@ Three tests passing: full upload→download round-trip (3 chunks, wrong-hash 400
 - DO NOT run integration tests from repo root — `cd worker && npm run test:integration` only.
 - DO NOT start Supabase mock in the test file — lifecycle owns it; test imports `mockHandle` for `reset()`.
 - DO NOT use a dummy blinded message for `issueCredential` — must do real BDHKE unblinding or `verifyCredential` returns 401.
+
+---
+
+### S65 — Security regression suite I
+**Commit:** `8dc8dce` · 27 July 2026
+
+- `security.test.js` foundation built in `worker/tests/integration/`.
+- Rate limit enforcement: credential_issue (10/60s boundary), upload (120/60s boundary). 429s confirmed clean, no 5xx bleed.
+- Foreign UUID rejection: credential issued for UUID-A rejected on UUID-B upload path.
+- Nonce binding: token-keyed (not IP-keyed). Same Turnstile token rejected on reuse. Fresh token per `issueCredential` call confirmed.
+- `uniqueIp()` + `freshToken()` test helpers prevent cross-test KV bleed.
+- **188 tests passing across 8 suites.**
+
+### S66 — Security regression suite II
+**Commit:** `344e32d` · 27 July 2026
+
+- MIME denylist: 8 tests. Denylisted types (text/html, application/javascript, etc.) → 415 on chunk 0. application/octet-stream → 200. Chunk >0 MIME gate not applied (correctly scoped).
+- UUID validation: 6 tests. Non-RFC4122 UUIDs rejected across upload, download, auth paths.
+- Chunk bounds: 3 tests. Chunk index beyond declared `total_chunks` rejected.
+- Tier cap: 2 tests. Upload beyond tier byte limit rejected.
+- **207 tests passing across 8 suites.**
+
+---
+
+### S67 — Testing infra review II (planning, no code)
+**28 July 2026**
+
+4-session checkpoint review. Assessed integration coverage, audited TESTING.md §5, locked k6 architecture.
+
+**Coverage assessment — five original seams from TESTING.md §2:**
+All five seams closed by S64–S66. BLAKE3 WASM exercises real workerd bundle. Credential→upload chain runs end-to-end. HTTP routing exercised by every integration test. Known remaining gap: no integration test firing a signed Stripe webhook end-to-end — natural B7 extension when Lightning webhook path needs the same pattern.
+
+**TESTING.md §5 discrepancy found:**
+Row 3 (double-spend rejection) attributes the test to `security.test.js` — incorrect. The double-spend test lives in `round-trip.test.js` (built S64). Fix to be applied at S72 context sweep.
+
+**TESTING.md §2 stale:** Still says "178 unit tests / 6 suites" — must be updated to "207 tests / 8 suites" at S72 with revised seams assessment.
+
+**`stripe-events.js` fixture status:** Not confirmed built. Check before S70. If absent, fold creation into S70 scope.
+
+**k6 architecture locked:**
+- Target: `wrangler dev --local` for S68–S69. Staging target deferred to B9.
+- Four scripts confirmed: `credential-burst.js`, `concurrent-transfers.js`, `download-saturation.js`, `mixed-realistic.js`.
+- S68 = credential burst + concurrent transfers (upload path). S69 = download saturation + mixed realistic + threshold review.
+- 429 tagging: use k6 `check()` for expected 429s; exclude from `http_req_failed` threshold.
+- **First task of S68:** verify `chunks.js` fixture has no `crypto.subtle` dependency — k6 cannot use Web Crypto API. Pre-compute hashes as constants if needed.
+- Draft thresholds: p95 latency < 200ms (local workerd); `http_req_failed` < 1% (excluding tagged 429s); `checks` > 99%; KV byte-counter accuracy ±1 byte.
+
+**Competitor/privacy analysis — M-series sessions:** 3-session competitive intelligence series (M-01, M-02, M-03) added to background work. Scoped as market intelligence sessions outside the repo (not version-controlled). Proton Drive and Bitmail (EHL architecture) prioritised alongside privacy-native peers. See §B6 notes below.
+
+**Buffer pool status:** S64b not consumed (S64 was clean). S66b absorbed into S65/S66 scope. S57b/S58b not needed. B6 enters final stretch with buffer intact.
+
 ---
 
 ## B6 session plan
@@ -261,32 +312,60 @@ Three tests passing: full upload→download round-trip (3 chunks, wrong-hash 400
 | S56 ✅ | Folder upload smoke test | Self-hosted fflate/qr, drop zone fix, full round-trip ✓ | S |
 | S57 ✅ | Bearer TTL investigation | 15-min hardcoded exp fatal for large transfers | S |
 | S58 ✅ | Bearer TTL fix | Token exp = manifest.expiry_timestamp. Smoke test ✓ | S |
-| S59 | — | Bearer TTL buffer. Skipped — S58 clean first attempt. |
-| S60 ✅ | 'e59305c'| Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. 43 tests passing. | M |
-| S61 ✅ | Worker unit tests II | `nut00.js` BDHKE round-trip + `blake3.js` verification. 100 tests passing. `blake3.js` null-guard fix (production bug caught by test). noble v2 `.subtract()` → `.add(rK.negate())`. | M |
+| S59 | — | Bearer TTL buffer. Skipped — S58 clean first attempt. | |
+| S60 ✅ | `e59305c` | Worker unit tests I | Vitest 2 harness. `ratelimit.js` + `manifest.js` coverage. 43 tests passing. | M |
+| S61 ✅ | Worker unit tests II | `nut00.js` BDHKE round-trip + `blake3.js` verification. 100 tests passing. `blake3.js` null-guard fix. noble v2 `.subtract()` → `.add(rK.negate())`. | M |
 | S62 ✅ | Worker unit tests III | `turnstile.js` + `stripe.js`. 78 new tests. 178 total passing. | M |
-| S63 ✅ | Testing infra review I | Harness assessment. Integration test architecture designed. TESTING.md created. Buffer sessions S64b + S66b added. | S |
+| S63 ✅ | Testing infra review I | Harness assessment. Integration test architecture designed. TESTING.md created. | S |
 | S64 ✅ | `def77b5` | Integration tests I | wrangler dev --local harness. Full BDHKE in client.js. 181 tests passing. | L |
-| S65 ✅ | Security regression suite I | Rate limit enforcement + credential farming defence + nonce binding. `security.test.js` foundation. 188 passing. | M |
-| S66 | [commit] | MIME denylist (8 tests), UUID validation (6), chunk bounds (3), tier cap (2). 207 passing across 8 suites. |
-| S67 | Testing infra review II | 4-session checkpoint. Load test design. | S |
-| S68 | Load test I | k6 setup, credential issue + upload synthetic load. KV rate limit validation. | M |
-| S69 | Load test II | Download load, concurrent transfers, KV timing edge cases. | M |
-| S70 | CI pipeline I | GitHub Actions: Eleventy build check, wrangler dry-run deploy, lint. | S |
-| S71 | CI pipeline II | Test runner in CI. Fail-fast on Worker unit test regression. Lightning toggle card. | S |
-| S72 | B6 close | Snag sweep, context files v5.0, B7 brief. Lightning backend confirmed. | S |
+| S65 ✅ | `8dc8dce` | Security regression suite I | Rate limits, credential farming, nonce binding. 188 passing. | M |
+| S66 ✅ | `344e32d` | Security regression suite II | MIME, UUID, chunk bounds, tier cap. 207 passing across 8 suites. | M |
+| S67 ✅ | Testing infra review II | Coverage audit, TESTING.md discrepancy found, k6 architecture locked. | S |
+| S68 | Load test I | k6 setup. First task: `crypto.subtle` check on chunks.js. credential-burst.js + concurrent-transfers.js. 429 tagging pattern. | M |
+| S69 | Load test II | download-saturation.js + mixed-realistic.js. Threshold review. Load test README stub in `worker/tests/load/`. | M |
+| S70 | CI pipeline I | GitHub Actions: Eleventy build check, wrangler dry-run, lint. Confirm/create `stripe-events.js` fixture if absent. | S |
+| S71 | CI pipeline II | Integration suite in CI. Fail-fast gate. Lightning toggle card (dashboard KV flag) — split to S72 if CI work fills session. | S |
+| S72 | B6 close | Snag sweep. TESTING.md §2 rewrite (207 tests / 8 suites). TESTING.md §5 row 3 attribution fix. Context files v5.0. B7 brief. | S |
 
-**Buffer pool:**
-- S60b, S61b, S62b — testing infra overrun
-- S64b — harness rebuild if S64 finds a Worker bug requiring a fix
-- S66b — security regression suite foundation (whitepaper evidence trail)
-- S57b, S58b — bearer token TTL (consumed: S58 was clean)
+**Buffer pool (remaining):**
+- S60b, S61b, S62b — unit test overrun (available, unused)
+- S64b — harness rebuild buffer (available, unused)
+- S66b — absorbed into S65/S66
+- S57b, S58b — bearer TTL (not needed)
 
 **Background work for Rajesh during B6:**
-1. Competitor analysis — WeTransfer, SwissTransfer, Smash, Wormhole, OnionShare. Max file size · expiry · encryption model · pricing · anonymous use · Lightning/Bitcoin. Feeds B13 and btc++ Berlin pitch.
-2. 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-3. Blink API key: create account + generate key if not already done. Needed at B7 start.
-4. btc++ Berlin abstract: draft one paragraph if considering presenting. Claude can help.
+1. 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
+2. Blink API key: create Share account + generate key. Needed at B7 start.
+3. btc++ Berlin abstract: draft one paragraph if considering presenting. Claude can help.
+4. **M-01, M-02, M-03 — Competitor privacy analysis sessions (separate from repo — not version-controlled):** See §B6 notes below for scope and prompt guidance.
+
+---
+
+## B6 notes — competitor/privacy analysis (M-series)
+
+**Rationale:** Buffer sessions available + genuine strategic value before btc++ Berlin and B13 go-to-market block. Three focused sessions using a pre-planned prompt dropped into Opus. Output feeds B13 positioning, btc++ pitch, and the B9 whitepaper §Privacy comparison.
+
+**M-01 — Privacy-native peers (Proton Drive, Tresorit, Internxt):**
+- How do they handle encryption at rest vs in transit vs zero-knowledge?
+- Where does the key live? Who can see it? Under what legal compulsion?
+- What metadata do they collect? (filenames, access times, IP addresses)
+- Security audit posture: have they published audit reports? Which firms? How old?
+- Honest assessment of their claims vs actual architecture.
+
+**M-02 — File transfer peers (WeTransfer, Smash, Wormhole, OnionShare):**
+- What actually happens to a file after upload? Storage duration, deletion guarantees.
+- Do any offer client-side encryption? What's the key model?
+- Payment anonymity: do any take Lightning or crypto? Do any offer anonymous access?
+- What GDPR/compliance language do they use and what does it actually mean?
+- OnionShare: what does a Tor-based model give that a Cloudflare Workers model doesn't?
+
+**M-03 — Architectural inspiration (Bitmail EHL, Nostr file hosting, Blossom protocol):**
+- Bitmail's Encrypted Hashlink concept: content hash as delivery receipt on a blockchain ledger. What's the threat model difference vs Refueler's KV manifest approach?
+- Nostr NIP-96 file storage: how do relay-based storage models handle anonymity?
+- Blossom (BUD-01/03): content-addressed blob storage over HTTP. Overlap with BLAKE3 content addressing in Refueler?
+- What does decentralisation buy vs what does Cloudflare's edge buy? Honest comparison.
+
+**Session format:** Plan the prompt in a dedicated mini-session → run in Opus → summarise findings back into `Share-Master-Context.md` §Competitive intelligence (new section, B13 scope) at S72 or in a standalone M-series commit outside the numbered sessions.
 
 ---
 
