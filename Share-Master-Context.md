@@ -327,6 +327,7 @@ Enables Fallback 1 + Fallback 2 without a code deploy.
 - TESTING.md §2 + §5 fixes → S72 sweep
 - **Manifest-field minimalism audit** (added M-02): audit manifest fields against Blossom "blob and nothing else" benchmark — does the Worker need every field it stores? Surviving list feeds whitepaper honest-metadata table. → S72 sweep
 - **UUID/fragment token entropy pre-audit** (added M-01, Proton INFO-004 precedent): before B9 makes any link-security claims, pre-audit our UUID + fragment entropy against birthday-paradox analysis. → S72 sweep
+- **REFUELER-BRIDGE.md:** Created 28 Jul 2026. Lives in both `refueler-share/` and `refueler-io/` repos. Commit to `refueler-io` when `/notes/` session opens that repo. Update at every block close alongside other context files.
 
 ---
 
