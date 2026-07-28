@@ -369,6 +369,23 @@ Row 3 (double-spend rejection) attributes the test to `security.test.js` — inc
 
 ---
 
+## M-series — Competitive & architectural intelligence (outside repo, not version-controlled)
+
+Labelled M-01/M-02 (merged from planned M-01/M-02/M-03 — M-01/M-02 merged per S67 decision).
+Output files live at `/Users/rajeshtaylor/Documents/`. Not committed to any repo.
+Feeds: B9 whitepaper §Competitive context + §Design rationale + §Alternatives considered + §Threat model. B13 go-to-market. btc++ Berlin pitch.
+
+| # | Date | File | Summary |
+|---|------|------|---------|
+| M-01 | 28 Jul | `COMPETITIVE-INTEL.md` | Privacy & security analysis: Proton Drive, Tresorit, Wormhole, OnionShare, WeTransfer, Smash, SwissTransfer. 7-dimension comparison across all products. Grounded in Securitum Proton Drive audit (Oct 2021, Michał Bentkowski). Key findings: Proton accepts on-chain BTC — do not claim "no competitor offers anonymous payment". Anonymity spectrum: WeTransfer/Smash/SwissTransfer → Tresorit/Proton → Wormhole → **Refueler Share** → OnionShare. Positioning: "professional-grade anonymity where only one side needs to be sophisticated." B13 wedges: vs WeTransfer (ML-terms/content access), vs SwissTransfer ("jurisdiction is not architecture"), vs Proton ("no account to correlate; payment is blinded"), vs OnionShare ("close your laptop; transfer survives"). Two `/notes/` article titles confirmed: "What a subpoena gets from seven file transfer services" · "Why our till is blind." |
+| M-02 | 28 Jul | `ARCHITECTURAL-INSPIRATION.md` | Decentralised protocol analysis: Bitmail EHL, Nostr NIP-96 (effectively deprecated → Blossom), Blossom BUD-01/BUD-04. Key findings: (1) Bitmail EHL solves non-repudiation — our anti-product. Decline chain-anchoring. (2) NIP-96 deprecated; say "Blossom" at Berlin. (3) BUD mirroring is BUD-04 not BUD-03 (BUD-03 = user server list). (4) "Pseudonymous is not unlinkable" — the Berlin line. (5) Cashu whitepaper paragraph drafted verbatim. (6) btc++ "why not Blossom?" answer ready to rehearse. (7) Blossom metadata-minimalism benchmark → manifest-field audit added to S72 snag sweep. Decline table: chain anchoring, blockchain ledger, Nostr relay manifest, content-addressed read interface, BUD-04 mirroring (defer B10), NIP-98 keypair auth. |
+
+**Do-not-say (from M-01):** "No competitor offers anonymous payment" — false. Proton accepts on-chain Bitcoin and cash by post.
+**Do-not-use framing (from M-01):** "Swiss-grade privacy", "zero-knowledge" as headline, "military-grade encryption", "anonymous payments."
+**Whitepaper framing that is genuinely ours (M-01):** "The server is blind and so is the till." Blind-signature credentials as the third leg — nobody detaches payment from usage. Open-source verifiability of a hosted service. Honest-metadata table (sizes/timing visible, published voluntarily). Executable evidence trail.
+
+---
+
 ## B7 session plan — Lightning/Blink + anonymous paid tier
 
 **Block principle:** No session holds more than one architecturally complex piece of work.

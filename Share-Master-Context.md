@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.5 | **Last updated:** S67 · 28 July 2026
+> **Version:** 4.6 | **Last updated:** M-series + /notes/ plan · 28 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -325,6 +325,8 @@ Enables Fallback 1 + Fallback 2 without a code deploy.
 - Nav snag (Upgrade link on refueler.io) → B13
 - Status tile for admin dashboard → S72 sweep
 - TESTING.md §2 + §5 fixes → S72 sweep
+- **Manifest-field minimalism audit** (added M-02): audit manifest fields against Blossom "blob and nothing else" benchmark — does the Worker need every field it stores? Surviving list feeds whitepaper honest-metadata table. → S72 sweep
+- **UUID/fragment token entropy pre-audit** (added M-01, Proton INFO-004 precedent): before B9 makes any link-security claims, pre-audit our UUID + fragment entropy against birthday-paradox analysis. → S72 sweep
 
 ---
 
@@ -364,22 +366,71 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 
 ## Competitive intelligence — M-series (outside repo, not version-controlled)
 
-**Context:** Market intelligence sessions labelled M-01, M-02, M-03. Tracked outside the GitHub repo to avoid stale content in version control. Findings feed B13 (go-to-market), btc++ Berlin pitch, and B9 whitepaper §Privacy comparison. Three-session scope using pre-planned prompts in Opus.
+**Status: M-01 + M-02 complete (28 Jul 2026).** Files: `COMPETITIVE-INTEL.md` + `ARCHITECTURAL-INSPIRATION.md` — both at `/Users/rajeshtaylor/Documents/`. Not committed to any repo.
+Feeds: B9 whitepaper §Competitive context, §Design rationale, §Alternatives considered, §Threat model. B13 go-to-market. btc++ Berlin pitch.
 
-**M-01 — Privacy-native peers (Proton Drive, Tresorit, Internxt):**
-Encryption architecture (at-rest vs in-transit vs zero-knowledge). Key custody model and legal compulsion surface. Metadata collection (filenames, access times, IPs). Security audit posture — published reports, firms, recency.
+**Key locked findings — do not contradict these in any copy:**
 
-**M-02 — File transfer peers (WeTransfer, Smash, Wormhole, OnionShare):**
-What happens to a file post-upload (storage duration, deletion guarantees). Client-side encryption and key model. Payment anonymity — any Lightning/crypto options, any anonymous access paths. GDPR/compliance language vs actual architecture. OnionShare Tor model vs Cloudflare Workers model — honest comparison.
+- Anonymity spectrum (weakest→strongest): WeTransfer/Smash/SwissTransfer → Tresorit/Proton → Wormhole → **Refueler Share** → OnionShare. One step below OnionShare (no operator), one step above everything hosted.
+- DO NOT claim "no competitor offers anonymous payment" — Proton accepts on-chain Bitcoin and cash by post.
+- Positioning statement: "professional-grade anonymity where only one side needs to be sophisticated."
+- Core framing (ours, not used by competitors): "the server is blind and so is the till."
+- "Pseudonymous is not unlinkable" — the Berlin line. Keypair auth (Nostr/Blossom) is pseudonymous; Cashu blind signatures are unlinkable. This is the structural differentiator.
+- Decline permanently: chain-anchoring manifests, blockchain delivery ledger, Nostr relay manifest publication, content-addressed read interface, NIP-98 keypair auth as credential layer.
+- Whitepaper §Alternatives considered seeds from the M-02 decline table.
+- Cashu differentiator paragraph: drafted verbatim in ARCHITECTURAL-INSPIRATION.md §Cross-cutting synthesis — copy directly into B9 whitepaper.
+- btc++ "why not Blossom?" answer: drafted verbatim in ARCHITECTURAL-INSPIRATION.md — rehearse before October.
 
-**M-03 — Architectural inspiration (Bitmail EHL, Nostr NIP-96, Blossom BUD-01/03):**
-Bitmail's Encrypted Hashlink: content hash as delivery receipt on a blockchain ledger — threat model difference vs Refueler KV manifest approach. Nostr relay-based storage and anonymity model. Blossom content-addressed blob storage — overlap with BLAKE3 content addressing in Refueler. Decentralisation vs Cloudflare edge — honest trade-off analysis.
+**B9 whitepaper sections now substantially drafted (from M-series):**
+§Competitive context (M-01 summary table), §Design rationale (M-02 kinship sentences), §Alternatives considered (M-02 decline table), §Threat model (M-01 subpoena table), §Privacy model (M-01 honest-metadata table + qualifiers).
 
-**Session format:** Plan prompt in a standalone mini-session → run in Opus → distil findings. Not committed to repo. Summarised into this section or a separate `COMPETITIVE-INTEL.md` (gitignored) at Rajesh's discretion.
+**B13 wedges (from M-01):**
+- vs WeTransfer: "a server that can read your files is a server whose terms about your files matter; ours stores noise" (ML-terms 2025 episode)
+- vs SwissTransfer: "jurisdiction is not architecture"
+- vs Proton: "no account to correlate; the payment itself is blinded"
+- vs OnionShare: "close your laptop; the transfer survives"
+
+**`/notes/` articles confirmed (refueler.io — not share subdomain):**
+1. "What a subpoena gets from seven file transfer services" — M-01 subpoena table + legal compulsion analysis. Audience: lawyers, journalists, accountants.
+2. "Why our till is blind" — Cashu blind signatures explained accessibly. Audience: Bitcoin-adjacent professionals, btc++ follow-up readers.
+Content plan session: 28 Jul 2026. Articles live on `refueler.io/notes/` (new section, separate from `/editorial/`). Nav integration requires main repo (`refueler-io`). See §/notes/ content plan below.
 
 ---
 
-## Tiers
+## /notes/ content plan — refueler.io (planned 28 Jul 2026)
+
+**What `/notes/` is:** A new section on `refueler.io` (main domain, not `share.refueler.io`). Separate from `/editorial/` (investor-facing long-form). `/notes/` is SEO-targeted technical content for professional buyers — lawyers, journalists, accountants, Bitcoin-adjacent professionals. Register: authoritative but readable, not academic. No fluff.
+
+**Why separate from `/editorial/`:** `/editorial/` is curated investor/partner long-form (ref: `refueler.io/editorial/looks-done-isnt-done`). `/notes/` is higher-cadence, search-optimised, shareable standalone pieces. Different audience intent.
+
+**Nav integration:** Requires a session touching the main `refueler-io` repo (separate from `refueler-share`). Top nav shared across the domain — the nav snag (Upgrade link) and `/notes/` entry resolve together. Scope this at the content build session.
+
+**"What is Share?" question (resolved 28 Jul):** No dedicated "what is Share" page needed before the first `/notes/` article. The index page (`share.refueler.io`) is self-evident for the product. The `/notes/` articles *are* the introduction for the professional buyer arriving via search — they land on the article, understand the product, click through to Share. This is the better funnel than a static about page.
+
+**Article 1 — "What a subpoena gets from seven file transfer services"**
+- Audience: lawyers, journalists, accountants, compliance professionals
+- Core content: M-01 subpoena table + legal compulsion analysis per product. Honest, precise, not alarmist. Positions Refueler Share at the end of the table as the correct answer without saying so directly.
+- SEO target: "file transfer privacy", "secure file transfer lawyers", "file transfer subpoena"
+- CTA: link to `share.refueler.io` — "see how we designed around this"
+- Length: ~1,200 words. Table-anchored. No marketing copy.
+- Status: M-01 provides all source material. Ready to draft.
+
+**Article 2 — "Why our till is blind"**
+- Audience: Bitcoin-adjacent professionals, btc++ Berlin follow-up readers, privacy-curious technical buyers
+- Core content: Cashu blind signatures explained accessibly. The "server blind, till blind" framing. Why "pseudonymous is not unlinkable." What this means practically for a sender.
+- SEO target: "Cashu blind signatures", "anonymous file transfer", "privacy file transfer Bitcoin"
+- CTA: link to `share.refueler.io` upgrade page (Lightning tier)
+- Length: ~1,000 words. Minimal jargon — explain Cashu as you go. No maths.
+- Status: M-01 + M-02 Cashu differentiator paragraph provides source material. Ready to draft after Article 1.
+- Note: publish *after* B7 Lightning is live — the article references Lightning payment as the mechanism.
+
+**Publication order:** Article 1 first (no product dependency — subpoena analysis stands alone). Article 2 after B7 (Lightning must be live to make the "till is blind" claim honest).
+
+**Build session scope (separate from `refueler-share` sessions):**
+1. Create `refueler.io/notes/` route in main repo
+2. Add nav entry
+3. Build Article 1 — draft, review, publish
+4. Article 2 — draft after B7, publish before btc++ Berlin (target: mid-September)
 
 | Tier | Cap | Expiry |
 |------|-----|--------|
