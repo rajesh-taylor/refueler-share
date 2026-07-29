@@ -14,7 +14,14 @@
 **Typography:** Source Serif 4 body. IBM Plex Mono for data, tables, and inline technical strings. Paper/Carbon tokens throughout — same design system as Share.
 **Table styling:** All table columns carry the same font weight and colour. No lighter secondary-text treatment on any column. If it's in the table, it has the same authority as the rest of the table.
 **CTAs:** Each article earns its own ending. No standard template. No hard sell.
-**honest_metadata.json:** Lives in `src/_data/` in the refueler-io repo. Referenced by published URL from the B9 whitepaper (not as a file import). Single source of truth for what Refueler stores and doesn't.
+**Eleventy structure:** One `src/notes/[slug]/index.njk` per article.
+New card added by hand to `src/notes/index.njk`. No collection, no config
+changes. Frontmatter fields (`audience`, `dependency`) are documentation only.
+**honest_metadata.json:** Lives in `src/_data/honest_metadata.json` in
+refueler-io repo. Requires `eleventyConfig.addPassthroughCopy
+("src/_data/honest_metadata.json")` in `eleventy.config.js` to publish at
+a public URL for the B9 whitepaper reference. Template usage:
+`{{ honest_metadata.field }}`. Public URL: `refueler.io/_data/honest_metadata.json`.
 
 ---
 
