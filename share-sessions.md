@@ -437,7 +437,6 @@ Buffer consumed only if genuinely needed — reviewed at S83a.
 | AP-0 | 29 Jul | — | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. 
 Mullvad payment decoupling. Client dashboard scoped (firm-scoped, privacy-intact). IT handover 
 doc confirmed. API pricing model direction set. Susie/BHODL contacts logged. |
-| AP-1 | TBD | — | Ad-hoc: /notes/ article pipeline session. Titles, sequencing, target audience, 
-product dependency flags, draft structure for articles 2-5. Context files updated at close. |
+| AP-1 | 29 Jul | — | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. REFUELER-BRIDGE.md prompt drafted for refueler-io project chat. |
 
 *"Nothing stops this train."*

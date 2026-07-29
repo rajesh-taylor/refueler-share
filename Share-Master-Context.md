@@ -533,28 +533,31 @@ refueler-share/
 ## /notes/ article pipeline — refueler.io
 
 All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IBM Plex Mono for data/tables.
+**Full editorial detail:** see `notes-articles-list.md` in repo root.
 
-| # | Title | Audience | Product dependency | Status |
-|---|-------|----------|--------------------|--------|
-| 1 | What a subpoena gets from seven file transfer services | Lawyers, journalists, accountants | None | Live — needs iteration |
-| 2 | Why your client's files don't belong in your inbox | Legal, professional services | None | Planned |
-| 3 | The metadata your file transfer service keeps (and what it's worth to someone else) | General professional | None | Planned |
-| 4 | The difference between a secure server and a blind one | Technical-adjacent professionals | None | Planned |
-| 5 | Jurisdiction is not architecture: what Swiss privacy laws actually protect | Legal, compliance | None | Planned |
-| 6 | Why we built an anonymous payment option for a file transfer tool | Bitcoin-adjacent, privacy-curious | B7 Lightning live | Planned |
-| 7 | What journalists need from a file transfer tool that most of them don't have | Journalists, press freedom orgs | None | Planned — Susie/BHODL contact |
-| 8 | The file transfer risk your professional indemnity insurer hasn't thought about yet | Solicitors, accountants | API planning complete | Planned — highest B2B value |
-| 9 | What happens to your files after the link expires | General, SEO | None | Planned |
-| 10 | A freelance video editor's month with an anonymous file transfer tool | Creative industry | Real user acquired | Case study — publish last |
-| 11 | TBD — API / white-label for professional services | IT decision-makers, practice managers | API built | Planned |
-| 12 | TBD — API technical integration guide (notes register, not docs) | Developers at law firms / agencies | API built | Planned |
+| # | Title (short) | Publish order | Dependency | Status |
+|---|--------------|---------------|------------|--------|
+| 1 | Subpoena table | 1st | None | Live — iteration hold until 5 Aug |
+| 2 | Client files / inbox | 2nd | None | Planned — structure locked AP-1 |
+| 3 | Metadata value | 3rd | None | Planned — structure locked AP-1 |
+| 4 | Blind vs secure server | 4th | None | Planned — structure locked AP-1 |
+| 5 | Jurisdiction vs architecture | 5th | None | Planned — structure locked AP-1 |
+| 6 | Anonymous payment option | After B7 live | B7 Lightning | Planned |
+| 7 | Journalists and file transfer | Flexible | Susie intro first | Planned |
+| 8 | PI insurer risk | After AP-2/AP-3 | API planning | Planned — highest B2B value |
+| 9 | After the link expires | Anytime | None | Planned |
+| 10 | Case study (video editor) | Last | Real user + history | Planned |
+| 11 | API / white-label notes | After API built | AP-2/AP-3 + build | Planned |
+| 12 | API technical integration | After API built | AP-2/AP-3 + build | Planned |
 
-**Sequencing logic:** Articles 2–5 build professional credibility before paid product exists. Article 6 unlocks after B7. Articles 8, 11, 12 unlock after API planning sessions. Article 10 (case study) publishes last — requires real user with sufficient usage history.
+**Sequencing logic:** Articles 2–5 build professional credibility before paid product exists. Article 6 unlocks after B7. Articles 8, 11, 12 unlock after API planning sessions. Article 10 publishes last.
+**Article 1 iteration:** structural changes locked in `notes-articles-list.md`. One-week hold — do not touch before 5 Aug.
+**Byline:** Rajesh Taylor. Notes = personal register within brand voice. Editorial = pure brand voice.
+**honest_metadata.json:** lives in `src/_data/` in refueler-io repo. Referenced by URL from B9 whitepaper — single source of truth.
 
 **Key contacts:**
 - Susie, Bitcoin Policy UK — article 7 / journalist angle. Met at London + Essex meetups.
-- BHODL co-founder (lawyer + Bitcoiner) — legal angle, potential case study subject.
-
+- BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback reader, potential case study subject.
 ---
 
 ## API / white-label — planning item
