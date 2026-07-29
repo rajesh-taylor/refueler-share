@@ -530,4 +530,65 @@ refueler-share/
 
 ---
 
+## /notes/ article pipeline — refueler.io
+
+All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IBM Plex Mono for data/tables.
+
+| # | Title | Audience | Product dependency | Status |
+|---|-------|----------|--------------------|--------|
+| 1 | What a subpoena gets from seven file transfer services | Lawyers, journalists, accountants | None | Live — needs iteration |
+| 2 | Why your client's files don't belong in your inbox | Legal, professional services | None | Planned |
+| 3 | The metadata your file transfer service keeps (and what it's worth to someone else) | General professional | None | Planned |
+| 4 | The difference between a secure server and a blind one | Technical-adjacent professionals | None | Planned |
+| 5 | Jurisdiction is not architecture: what Swiss privacy laws actually protect | Legal, compliance | None | Planned |
+| 6 | Why we built an anonymous payment option for a file transfer tool | Bitcoin-adjacent, privacy-curious | B7 Lightning live | Planned |
+| 7 | What journalists need from a file transfer tool that most of them don't have | Journalists, press freedom orgs | None | Planned — Susie/BHODL contact |
+| 8 | The file transfer risk your professional indemnity insurer hasn't thought about yet | Solicitors, accountants | API planning complete | Planned — highest B2B value |
+| 9 | What happens to your files after the link expires | General, SEO | None | Planned |
+| 10 | A freelance video editor's month with an anonymous file transfer tool | Creative industry | Real user acquired | Case study — publish last |
+| 11 | TBD — API / white-label for professional services | IT decision-makers, practice managers | API built | Planned |
+| 12 | TBD — API technical integration guide (notes register, not docs) | Developers at law firms / agencies | API built | Planned |
+
+**Sequencing logic:** Articles 2–5 build professional credibility before paid product exists. Article 6 unlocks after B7. Articles 8, 11, 12 unlock after API planning sessions. Article 10 (case study) publishes last — requires real user with sufficient usage history.
+
+**Key contacts:**
+- Susie, Bitcoin Policy UK — article 7 / journalist angle. Met at London + Essex meetups.
+- BHODL co-founder (lawyer + Bitcoiner) — legal angle, potential case study subject.
+
+---
+
+## API / white-label — planning item
+
+**Status:** Formal planning item. Sessions AP-1, AP-2, AP-3 scheduled as ad-hoc sessions before btc++ Berlin (October 2026). Build slots into B8 or post-B7 depending on B7 landing cleanly.
+
+**Two tiers:**
+- White-label: custom subdomain (e.g. `secure.smithjones-solicitors.co.uk`), no Refueler branding. Target: high-end legal, financial, enterprise.
+- Refueler-badged: "Powered by Refueler Share" badge. Target: SME professional services, creative agencies, dental/medical practices.
+
+**Setup model (white-label):** Client adds CNAME to their subdomain pointing to Cloudflare edge. We issue API key. Custom hostname SSL handled by Cloudflare automatically. One DNS change + one config value. No certificate management by client.
+
+**Why no email required:** Credential model replaces email as identity join key. API call from client's backend issues a transfer credential on behalf of their end user. We never see end user identity. Client's internal system holds the matter/case reference.
+
+**Mullvad-style payment decoupling:**
+- Lightning path: already anonymous by design (B7). Credential issued to payment hash, no email in chain.
+- Stripe path: email required by Stripe's data model but need not be stored against usage. Tier enforcement moves to Cashu credential not email lookup. `subscribers` table becomes billing artefact only, not identity record. Honest claim: "we don't join your identity to your transfers, even on the fiat path."
+- API customers: their clients are never identified to Refueler regardless of payment method.
+
+**Client dashboard (firm-scoped):**
+Law firm sees: transfer reference ID (their internal matter reference), file size, creation time, expiry time, downloaded/active/expired status. Never sees: file content, end-user IP, any identity data. Honest-metadata table applies — we show exactly what we log operationally, nothing more. Retention mechanic: firm logs in regularly, Refueler stays front of mind.
+
+**IT handover documentation:**
+Two-page plain-English setup guide for IT departments / managed IT providers. Covers: DNS CNAME change, API key configuration, testing the embed, what to do if something breaks. Tone: professional, non-condescending, assumes competence but not specialist knowledge. Every client touchpoint reflects professionalism — this doc is part of that. Format: PDF, Refueler branded. Produced before first API client onboards.
+
+**API pricing model (to lock at AP-1):**
+- Refueler-badged embed: add-on to Production Max. Self-serve, dashboard included, API key issued automatically. For sole traders, small practices, agencies.
+- White-label / enterprise: separate commercial conversation. Annual contract, volume-based, custom subdomain, dedicated onboarding. Not a checkout — direct contact with Rajesh.
+- Do NOT bundle API into Production Max as a default feature — different buying motion, different pricing conversation.
+
+**AP session plan:**
+- AP-1: /notes/ article pipeline — titles, sequencing, audience, draft structure for articles 2–5
+- AP-2: API architecture — auth model, credential issuance on behalf of end users, Mullvad email decoupling for Stripe, client dashboard scope
+- AP-3: White-label implementation — custom hostname flow, badge/no-badge config, IT handover doc, pricing model lock
+---
+
 *"Nothing stops this train."*

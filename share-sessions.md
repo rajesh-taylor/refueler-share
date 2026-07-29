@@ -434,4 +434,10 @@ Buffer consumed only if genuinely needed — reviewed at S83a.
 4. Test Lightning wallet for payment testing: Blink app on a second device, or Phoenix wallet.
 5. 2 GB test file if not already done: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
 
+| AP-0 | 29 Jul | — | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. 
+Mullvad payment decoupling. Client dashboard scoped (firm-scoped, privacy-intact). IT handover 
+doc confirmed. API pricing model direction set. Susie/BHODL contacts logged. |
+| AP-1 | TBD | — | Ad-hoc: /notes/ article pipeline session. Titles, sequencing, target audience, 
+product dependency flags, draft structure for articles 2-5. Context files updated at close. |
+
 *"Nothing stops this train."*
