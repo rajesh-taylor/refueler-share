@@ -356,6 +356,7 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 - PayNym column on payment privacy table — "coming soon" placeholder only at B7
 - Own node stub cards (routing fee income, channel liquidity) — greyed until B9
 - LNbits webhook signing cards (delivery rate, signature failures) — greyed until B9
+- Renewal warning banner: 7-day pre-expiry notice on upgrade page for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Build in same session as API credential renewal work.
 
 ---
 
@@ -560,38 +561,41 @@ All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IB
 - BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback reader, potential case study subject.
 ---
 
-## API / white-label — planning item
+## API / white-label — architecture locked (AP-2)
 
-**Status:** Formal planning item. Sessions AP-1, AP-2, AP-3 scheduled as ad-hoc sessions before btc++ Berlin (October 2026). Build slots into B8 or post-B7 depending on B7 landing cleanly.
+**Auth model:** HMAC signing (Option B). Every API request signed with HMAC-SHA256 over `method + path + timestamp + body_hash`. Two credentials issued as a pair: API key `rfs_live_{32b base58}` (identification) + signing secret `rfs_sign_{32b base58}` (request integrity). Rate limiting per `api_key_id` via KV sliding window — same pattern as existing endpoints.
 
-**Two tiers:**
-- White-label: custom subdomain (e.g. `secure.smithjones-solicitors.co.uk`), no Refueler branding. Target: high-end legal, financial, enterprise.
-- Refueler-badged: "Powered by Refueler Share" badge. Target: SME professional services, creative agencies, dental/medical practices.
+**Credential issuance on behalf of end users:**
+- `POST /api/v1/credential/issue` — HMAC-authenticated
+- Request: `{ tier, transfer_ref, expiry_hours }`
+- Worker generates UUID (never client-generated)
+- `transfer_ref` = client's internal reference (matter number, case ID). Logged to AE as `blob1`. Never stored in Supabase. Opaque to Refueler.
+- Worker issues NUT-00 Cashu credential, returns `{ uuid, credential, upload_url_base }`
+- Client hands credential to end user however they see fit — Refueler never touches that step
+- Quota tracked in KV: `api_quota_{key_id}` = `{ credentials_remaining, bytes_remaining, period_end }`. 402 on exhaustion.
 
-**Setup model (white-label):** Client adds CNAME to their subdomain pointing to Cloudflare edge. We issue API key. Custom hostname SSL handled by Cloudflare automatically. One DNS change + one config value. No certificate management by client.
+**Stripe decoupling (Mullvad model):**
+- `subscribers` table = billing ledger only. Never queried on upload path.
+- At Stripe webhook receipt: Worker issues Cashu credential for tier + period, writes to KV slot keyed by `stripe_customer_id` (24h TTL).
+- User collects via `GET /subscription/credential`. If dormant past 24h: endpoint checks `subscribers` table — if `status: active` and `current_period_end` future, re-issues credential on demand. One re-issue per valid period.
+- `X-Email` header dropped from upload path entirely. Snag resolves by removal, not by fixing.
+- Renewal: new credential issued and stacked alongside existing one — no credit lost. 7-day renewal warning banner on upgrade page (sessionStorage-dismiss pattern).
+- Lapsed subscription: existing transfers unaffected — expiry baked into manifest at upload time. When subscription renews, new uploads resume at paid tier cap.
+- Honest claim: "We don't join your identity to your transfers, even on the fiat path."
 
-**Why no email required:** Credential model replaces email as identity join key. API call from client's backend issues a transfer credential on behalf of their end user. We never see end user identity. Client's internal system holds the matter/case reference.
+**Client dashboard:**
+- Hosted at `dashboard.share.refueler.io` (white-label: `dashboard.{client_domain}`)
+- Auth: API key
+- Fields visible: `transfer_ref`, `uuid`, `tier`, `file_size_bytes`, `total_chunks`, `created_at`, `expiry_timestamp`, `status` (derived: active/downloaded/expired)
+- Fields never visible: recipient/sender identity or IP, file names, download timestamps
+- Backend: AE SQL queried via `GET /api/v1/transfers?api_key_id={id}&from={ISO}&to={ISO}&transfer_ref={optional}`
+- Raw API access = enterprise tier only
 
-**Mullvad-style payment decoupling:**
-- Lightning path: already anonymous by design (B7). Credential issued to payment hash, no email in chain.
-- Stripe path: email required by Stripe's data model but need not be stored against usage. Tier enforcement moves to Cashu credential not email lookup. `subscribers` table becomes billing artefact only, not identity record. Honest claim: "we don't join your identity to your transfers, even on the fiat path."
-- API customers: their clients are never identified to Refueler regardless of payment method.
-
-**Client dashboard (firm-scoped):**
-Law firm sees: transfer reference ID (their internal matter reference), file size, creation time, expiry time, downloaded/active/expired status. Never sees: file content, end-user IP, any identity data. Honest-metadata table applies — we show exactly what we log operationally, nothing more. Retention mechanic: firm logs in regularly, Refueler stays front of mind.
-
-**IT handover documentation:**
-Two-page plain-English setup guide for IT departments / managed IT providers. Covers: DNS CNAME change, API key configuration, testing the embed, what to do if something breaks. Tone: professional, non-condescending, assumes competence but not specialist knowledge. Every client touchpoint reflects professionalism — this doc is part of that. Format: PDF, Refueler branded. Produced before first API client onboards.
-
-**API pricing model (to lock at AP-1):**
-- Refueler-badged embed: add-on to Production Max. Self-serve, dashboard included, API key issued automatically. For sole traders, small practices, agencies.
-- White-label / enterprise: separate commercial conversation. Annual contract, volume-based, custom subdomain, dedicated onboarding. Not a checkout — direct contact with Rajesh.
-- Do NOT bundle API into Production Max as a default feature — different buying motion, different pricing conversation.
-
-**AP session plan:**
-- AP-1: /notes/ article pipeline — titles, sequencing, audience, draft structure for articles 2–5
-- AP-2: API architecture — auth model, credential issuance on behalf of end users, Mullvad email decoupling for Stripe, client dashboard scope
-- AP-3: White-label implementation — custom hostname flow, badge/no-badge config, IT handover doc, pricing model lock
+**Tiers:**
+- Refueler-badged: add-on to Production Max. Self-serve. Dashboard included. API key issued automatically.
+- White-label: custom subdomain (CNAME + API key). Cloudflare handles SSL. No cert management by client. Separate commercial conversation.
+- Enterprise: annual contract, volume-based, direct contact with Rajesh. Raw API access included.
+- DO NOT bundle API into Production Max as default.
 ---
 
 *"Nothing stops this train."*

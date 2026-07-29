@@ -438,5 +438,6 @@ Buffer consumed only if genuinely needed — reviewed at S83a.
 Mullvad payment decoupling. Client dashboard scoped (firm-scoped, privacy-intact). IT handover 
 doc confirmed. API pricing model direction set. Susie/BHODL contacts logged. |
 | AP-1 | 29 Jul | — | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. REFUELER-BRIDGE.md prompt drafted for refueler-io project chat. |
+| AP-2 | 30 Jul | — | API architecture planning. Auth: HMAC signing (rfs_live_ + rfs_sign_ keypair). Credential issuance on behalf of end users (transfer_ref opaque to Refueler). Stripe decoupling: subscribers = billing ledger only, X-Email dropped. Renewal: credentials stack, no credit lost, re-issue on demand. Dashboard: hosted, AE-backed, no identity data. All decisions locked for AP-3. |
 
 *"Nothing stops this train."*
