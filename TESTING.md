@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.2 | **Created:** S63 · 27 July 2026 | **Updated:** AP-3 · 30 July 2026
+> **Version:** v0.3 | **Created:** S63 · 27 July 2026 | **Updated:** AP-3a · 30 July 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -263,6 +263,7 @@ Target cost per block: **half a session** of test-harness work, budgeted inside 
 | Block | Harness additions | Where |
 |-------|-------------------|-------|
 | B7 | Blink webhook fixture (callback payloads, double-fire dedup case), payment-hash KV fixture, credential poll helper on `client.js`; security rows: webhook replay, double-issuance | S83/S83a audit sessions |
+| SW | `webhooks.js` fixture (signed event payloads, valid/invalid/stale `rfs_whsec_` signatures, dead-letter KV entries). Integration tests: HMAC auth boundary (valid/tampered/missing/stale), quota 402 enforcement, `wl_config` fail-safe (`badge: true` on missing key), key-rotation 24h grace window, webhook delivery retry sequence, dead-letter creation. Whitepaper row: "API requests are HMAC-authenticated and replay-protected." | SW2/SW4 build sessions + SW9 close |
 | B8 | Keypair fixture, NUT-11 Mode 2 challenge-response integration test; security row: keypair auth cannot be bypassed via Mode 1 path | Inside B8 build sessions |
 | B9 | Mock LNURL callback server fixture, LNURL-withdraw credential delivery round-trip test; Merkle verification tests + whitepaper rows | Dedicated: whitepaper evidence assembly |
 | B10 | ML-KEM known-answer vectors, key-wrapping round-trip; chaos test foundation (§12) | Inside B10 spike |
@@ -312,6 +313,7 @@ refueler-share/
           supabase-mock.js
           stripe-events.js
           lightning.js                ← B7
+          webhooks.js                 ← SW4 (signed event payloads, valid/invalid/stale signatures, dead-letter entries)
           keypair.js                  ← B8
           lnurl.js                    ← B9
           mlkem-vectors.js            ← B10

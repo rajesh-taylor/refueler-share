@@ -434,11 +434,42 @@ Buffer consumed only if genuinely needed — reviewed at S83a.
 4. Test Lightning wallet for payment testing: Blink app on a second device, or Phoenix wallet.
 5. 2 GB test file if not already done: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
 
-| AP-0 | 29 Jul | — | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. 
-Mullvad payment decoupling. Client dashboard scoped (firm-scoped, privacy-intact). IT handover 
-doc confirmed. API pricing model direction set. Susie/BHODL contacts logged. |
-| AP-1 | 29 Jul | — | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. REFUELER-BRIDGE.md prompt drafted for refueler-io project chat. |
-| AP-2 | 30 Jul | — | API architecture planning. Auth: HMAC signing (rfs_live_ + rfs_sign_ keypair). Credential issuance on behalf of end users (transfer_ref opaque to Refueler). Stripe decoupling: subscribers = billing ledger only, X-Email dropped. Renewal: credentials stack, no credit lost, re-issue on demand. Dashboard: hosted, AE-backed, no identity data. All decisions locked for AP-3. |
-| AP-3 | 30 Jul | — | White-label implementation planning. Custom hostname flow (CF for SaaS, wl.share.refueler.io). Badge config via KV. IT handover doc structure locked. Five-tier structure locked. Pricing cadence 1/3/12 months, no discounts. Stripe updated: 4 new prices, 2 archived. upgrade.njk/html/css, Share-Master-Context.md, TESTING.md updated. |
+
+## AP-series — Architectural planning sessions (uncounted)
+
+| # | Date | Summary |
+|---|------|---------|
+| AP-0 | 29 Jul | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. Mullvad payment decoupling. Client dashboard scoped (firm-scoped, privacy-intact). IT handover doc confirmed. API pricing model direction set. Susie/BHODL contacts logged. |
+| AP-1 | 29 Jul | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. REFUELER-BRIDGE.md prompt drafted for refueler-io project chat. |
+| AP-2 | 30 Jul | API architecture planning. Auth: HMAC signing (rfs_live_ + rfs_sign_ keypair). Credential issuance on behalf of end users (transfer_ref opaque to Refueler). Stripe decoupling: subscribers = billing ledger only, X-Email dropped. Renewal: credentials stack, no credit lost, re-issue on demand. Dashboard: hosted, AE-backed, no identity data. All decisions locked for AP-3. |
+| AP-3 | 30 Jul | White-label implementation planning. Custom hostname flow (CF for SaaS, wl.share.refueler.io). Badge config via KV. IT handover doc structure locked. Five-tier structure locked. Pricing cadence 1/3/12 months, no discounts. Stripe updated: 4 new prices, 2 archived. |
+| AP-3a | 30 Jul | Webhook spec locked (4 events, rfs_whsec_, waitUntil retry + dead-letter, notification-not-control-flow). Single API key + rotation locked — sub-keys declined, transfer_ref handles attribution. OEM positioning paragraph drafted (verbatim, Berlin-ready). SW block created: 12 core + 2 buffer, runs post-S87. CLAUDE.md, Share-Master-Context.md, share-sessions.md, TESTING.md, notes-articles-list.md all updated. |
+
+---
+
+## SW block session plan — white-label + API build (post-B7)
+
+**Block principle:** Runs immediately after S87 (B7 close). No code before SW1.
+SW block is separate from B7 — do not append SW sessions to B7.
+B8 renumbers after SW close (SW9).
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| SW1 | CF for SaaS setup | One-time: SaaS enablement on refueler.io zone. Fallback origin `wl.share.refueler.io`. Worker route `wl.share.refueler.io/*` added to wrangler.toml. Smoke: `GET /status` via wl hostname returns 200. | S |
+| SW2 | API auth I | `worker/src/api_auth.js` — HMAC-SHA256 verify over `method+path+timestamp+body_hash`, ±300s window, key lookup from KV. Unit tests in same session. | M |
+| SW2a | API auth II | `POST /api/v1/credential/issue` + `api_quota_{key_id}` KV enforcement (402 on exhaustion). AE logging of `transfer_ref` as `blob1`. `POST /api/v1/keys/rotate` with 24h grace window. | M |
+| SW3 | Badge + /wl/config | `GET /wl/config` — reads `wl_config_{hostname}` by Host header. `Cache-Control: max-age=3600`. Fail-safe: no KV record → `{ badge: true }`. Badge component in Paper/Carbon, links to `share.refueler.io`. | S |
+| SW4 | Webhooks I | `worker/src/webhooks.js`. Registration: `POST /api/v1/webhooks` (max 3, HTTPS only, no IP literals) → `{ webhook_id, whsec }`. `GET /api/v1/webhooks` list. `DELETE /api/v1/webhooks/{id}`. `wh_config_{api_key_id}` KV schema. `rfs_whsec_` issuance — shown once. | M |
+| SW4a | Webhooks II | Delivery via `ctx.waitUntil`: immediate → +5s → +25s, 10s timeout. Non-2xx or timeout = failure. After 3rd failure: dead-letter `wh_dead_{api_key_id}_{event_id}` (7-day TTL) + AE log (`blob1=api_key_id, blob2=event_type, blob3=outcome, double1=latency_ms`). Daily cron retries dead-letter once. | M |
+| SW5 | Client dashboard I | `frontend/dashboard-client/` scaffold. API-key auth. Transfers table from AE via `GET /api/v1/transfers?api_key_id={id}&from={ISO}&to={ISO}&transfer_ref={optional}`. Paper/Carbon tokens. | M |
+| SW5a | Client dashboard II | Capability gating by tier (Prod Max / Business / Enterprise). Webhook monitoring card: AE-sourced delivery rate 24h/7d, last failure timestamp + HTTP status, dead-letter count (from KV). Hostname health card. | M |
+| SW6 | Onboarding flow | Per-client admin runbook. Steps: CF custom-hostname API call → keypair + whsec issue → `wl_config_{hostname}` KV write → activation poll + smoke test `GET /status` on client hostname. Single-line curl commands throughout. | S |
+| SW7 | IT handover PDF | Two-page branded PDF. Paper theme: bg `#F7F4EF`, gold accent `#C8A96E`, IBM Plex Mono for DNS block, Source Serif 4 body. Three substitution fields: hostname, IT contact name, date. Sections: what this is / DNS record / what happens next / how to test (3 checks) / two failure modes / ongoing / support path (support@refueler.io) / footer: what we never see. Built once, generated per client. | S |
+| SW8 | Daily cron | `[triggers] crons` in wrangler.toml. Scheduled handler: (1) poll each `wl_config_*` hostname's `/status` → AE log → dashboard health card amber/green; (2) retry `wh_dead_*` KV entries once. | S |
+| SW9 | SW close | Full smoke test both API and white-label paths. TESTING.md SW additions. Context files trim pass. B8 brief. Buffer review. | S |
+
+**Buffer pool (2 sessions):**
+- SW2b — auth implementation overrun
+- SW5b — client dashboard overrun
 
 *"Nothing stops this train."*
