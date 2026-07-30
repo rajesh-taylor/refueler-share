@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.6 | **Last updated:** M-series + /notes/ plan · 28 July 2026
+> **Version:** 4.7 | **Last updated:** AP-3 pricing + Stripe · 30 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -162,12 +162,18 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 
 Account: `rt@rajeshtaylor.com` · GBP · Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
 
+No discounts. No yearly savings framing. Price is the price.
+
 | Product | Price ID | Lookup key | Amount |
 |---------|----------|------------|--------|
 | Creative Premium monthly | `price_1Ts7lsGlctwiB9U3hdtgChU2` | `share-creative-monthly` | £12/mo |
-| Creative Premium yearly | `price_1Ts7sqGlctwiB9U3YRloCFfi` | `share-creative-yearly` | £120/yr |
+| Creative Premium 3-month | `price_1TyzF4GlctwiB9U3Zo0fG8Ic` | `share-creative-3month` | £36/3mo |
+| Creative Premium yearly | `price_1TyzKIGlctwiB9U3Dn71fGbA` | `share-creative-yearly` | £144/yr |
 | Production Max monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo |
-| Production Max yearly | `price_1Ts7xIGlctwiB9U3JyZB8Kwj` | `share-max-yearly` | £240/yr |
+| Production Max 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo |
+| Production Max yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr |
+
+Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi` (Creative £120/yr), `price_1Ts7xIGlctwiB9U3JyZB8Kwj` (Max £240/yr)
 
 Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe`
 Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
@@ -434,14 +440,18 @@ Content plan session: 28 Jul 2026. Articles live on `refueler.io/notes/` (new se
 3. Build Article 1 — draft, review, publish
 4. Article 2 — draft after B7, publish before btc++ Berlin (target: mid-September)
 
-| Tier | Cap | Expiry |
-|------|-----|--------|
-| Skint Tog (free) | 4 GB | 1 / 7 days |
-| Creative Premium (£12/mo · £120/yr) | 100 GB | 1 / 7 / 30 days |
-| Production Max (£24/mo · £240/yr) | 250 GB | 1 / 7 / 30 / 90 days |
-| Enterprise | Unlimited | Custom |
+| Tier | Cap | Expiry | Billing |
+|------|-----|--------|---------|
+| Free | 4 GB | 1 / 7 days | — |
+| Creative Premium | 100 GB | 1 / 7 / 30 days | £12/mo · £36/3mo · £144/yr |
+| Production Max | 250 GB | 1 / 7 / 30 / 90 days | £24/mo · £72/3mo · £288/yr |
+| Business | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | £250/mo (£3,000/yr min, invoiced) |
+| Enterprise | Custom · 5 TB/mo included | Custom | From £10,000/yr (contact Rajesh) |
 
-Yearly = 10 months price.
+No discounts. No savings framing. Prepay cadences (1/3/12 months) are a convenience, not a deal.
+Production Max includes API access (badged, 100 credentials + 250 GB quota via API).
+Business: custom hostname, no badge, webhook endpoints, full dashboard, multi-user API keys.
+Enterprise: everything in Business + raw AE export + named support + OEM conversation if relevant.
 
 ---
 
@@ -594,7 +604,7 @@ All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IB
 **Tiers:**
 - Refueler-badged: add-on to Production Max. Self-serve. Dashboard included. API key issued automatically.
 - White-label: custom subdomain (CNAME + API key). Cloudflare handles SSL. No cert management by client. Separate commercial conversation.
-- Enterprise: annual contract, volume-based, direct contact with Rajesh. Raw API access included.
+- Enterprise: from £10,000/yr, annual contract, direct with Rajesh. Raw AE export, custom quota, 5 TB/mo included, named support, OEM conversation if relevant.
 - DO NOT bundle API into Production Max as default.
 ---
 

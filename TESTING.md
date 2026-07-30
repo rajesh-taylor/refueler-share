@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.1 | **Created:** S63 · 27 July 2026
+> **Version:** v0.2 | **Created:** S63 · 27 July 2026 | **Updated:** AP-3 · 30 July 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -35,7 +35,7 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 | `nut00.test.js` | 30 | Full BDHKE round-trip, blinding privacy guarantee (same secret + different r → same C), `verifyCredential`, `tokenSerial`, error paths |
 | `blake3.test.js` | 27 | Hash correctness against `@noble/hashes/blake3` reference, input validation, constant-time comparison, null-guard error handling |
 | `turnstile.test.js` | 34 | Input guards, CF success/failure paths, HTTP errors, malformed JSON, fail-closed behaviour |
-| `stripe.test.js` | 44 | HMAC-SHA256 webhook signature verification, ±300s replay window, body tampering detection, checkout customer find-or-create, tier routing across all 4 live lookup keys |
+| `stripe.test.js` | 44 | HMAC-SHA256 webhook signature verification, ±300s replay window, body tampering detection, checkout customer find-or-create, tier routing across all 6 live lookup keys (monthly, 3-month, yearly × 2 tiers) |
 
 **Honest assessment — what these tests prove:** the pure logic of each module is correct in isolation. Signature maths, hash comparison, rate limit arithmetic, webhook verification, and input validation all behave as specified when their dependencies are mocked.
 
