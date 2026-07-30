@@ -91,15 +91,7 @@ html.carbon-mode {
   transition: left 0.15s, background 0.15s;
 }
 .toggle-switch.on .toggle-knob { left: 19px; background: var(--carbon); }
-.saving-badge {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--success);
-  border: 1px solid currentColor;
-  padding: 2px 8px;
-  border-radius: 3px;
-  opacity: 0.8;
-}
+
 
 /* ── Tier cards ──────────────────────────────────────────────── */
 .tiers {
