@@ -1,6 +1,6 @@
 # refueler-share
 
-> Zero-knowledge, end-to-end encrypted file transfer. No account. No tracking. No key on our side.
+> Anonymous, end-to-end encrypted file transfer. No account. No tracking. No key on our side.
 
 **Live at:** [share.refueler.io](https://share.refueler.io)  
 **Part of the [Refueler](https://refueler.io) ecosystem**
@@ -15,6 +15,7 @@
 - The server is **architected to be blind** — reading your files is not technically possible for us, regardless of policy, jurisdiction, or legal compulsion
 - Storage is **ephemeral** — hard deletion via R2 lifecycle rules, no exceptions
 - Transfers run at **full line speed** — no artificial throttling, even on the free tier
+- **No account required** — not on the free tier, not ever
 
 ---
 
@@ -54,45 +55,54 @@ This is not a policy choice. It is the consequence of how the code is written.
 | Backend | Cloudflare Workers (serverless, blind relay) |
 | Storage | Cloudflare R2 (zero egress fees, lifecycle-enforced deletion) |
 | Ledger | Supabase PostgreSQL (spent-token tracking only) |
-| Payments | Stripe · Lightning BOLT11 |
+| Payments | Stripe (fiat) · Lightning BOLT11 (coming B7) |
 | Encryption | AES-GCM 256-bit (client-side only) |
 
 ---
 
 ## Tiers
 
-| Tier | Cap | Expiry options | Price |
-|------|-----|----------------|-------|
-| Skint Tog | 4 GB | 1 / 7 days | Free |
-| Creative Premium | 100 GB | 1 / 7 / 30 days | £12/mo or £120/yr |
-| Production Max | 250 GB | 1 / 7 / 30 / 90 days | £24/mo or £240/yr |
-| Enterprise | Unlimited | Custom | Contact us |
+| Tier | Cap | Expiry options | Billing |
+|------|-----|----------------|---------|
+| Free | 4 GB | 1 / 7 days | — |
+| Creative Premium | 100 GB | 1 / 7 / 30 days | Monthly / 3-month / yearly |
+| Production Max | 250 GB + API access | 1 / 7 / 30 / 90 days | Monthly / 3-month / yearly |
+| Business | 2 TB/month · 1,000 credentials | 1 / 7 / 30 / 90 days | Invoiced annually |
+| Enterprise | Custom · 5 TB/month included | Custom | Annual contract |
 
 Full details at [share.refueler.io/upgrade](https://share.refueler.io/upgrade).
+
+No free trials. No discounts. No savings framing. The price is the price.
 
 ---
 
 ## Status
 
-🟢 **Block 6 in progress — testing infrastructure.**
+🟡 **Block 7 in progress — Lightning payments.**
 
-Full upload → share link → passphrase gate → download flow is live at 
-[share.refueler.io](https://share.refueler.io). Folder upload 
-(client-side zip, directory structure preserved) is supported.
+Full upload → share link → optional passphrase gate → download flow is live at
+[share.refueler.io](https://share.refueler.io). Folder upload (client-side zip via fflate,
+directory structure preserved, up to 2,000 files and 20 levels deep) is supported.
 
 **Completed blocks:**
-- **B1** — Eleventy SSG scaffold, Cloudflare Pages deploy
-- **B2** — Analytics Engine instrumentation, Supabase aggregation, 
-  admin dashboard
-- **B3** — Stripe checkout, webhook handler, Customer Portal
-- **B4** — Security hardening: BLAKE3 Worker WASM, server-side chunk 
-  verification, AES-GCM AAD fix, KV rate limiting, MIME denylist, 
-  UUID validation, filename sanitisation, UUID-bound credential 
-  issuance, Turnstile nonce binding
-- **B5** — Design system full pass: DESIGN-TOKENS.md, Paper/Carbon 
-  toggle, FSAA streaming download, receiver landing page
-- **B6** — Folder upload (fflate), bearer token TTL fix, Worker unit 
-  test suite (178 tests, 6 suites), integration test harness designed
+
+| Block | Scope |
+|-------|-------|
+| B1 | Eleventy SSG scaffold, Cloudflare Pages deploy, Cashu NUT-00 credential issuance |
+| B2 | Analytics Engine instrumentation, Supabase aggregation, admin dashboard |
+| B3 | Stripe checkout, webhook handler, Customer Portal |
+| B4 | Security hardening: BLAKE3 Worker WASM, server-side chunk verification, AES-GCM AAD fix, KV rate limiting, MIME denylist, UUID validation, filename sanitisation, UUID-bound credential issuance, Turnstile nonce binding |
+| B5 | Design system full pass: Paper/Carbon theme toggle, FSAA streaming download, receiver landing page |
+| B6 | Folder upload (fflate, client-side zip), bearer token TTL fix, Worker unit test suite (207 tests across 8 suites), integration test harness (wrangler dev --local, full BDHKE round-trip, security regression suite) |
+
+**Upcoming:**
+
+| Block | Scope |
+|-------|-------|
+| B7 | Lightning BOLT11 payments via Blink. Anonymous paid tier — no email, no account, credential issued on payment. |
+| SW | White-label API. Custom hostnames. Business tier dashboard. Webhook delivery. IT handover flow. |
+| B8 | NUT-11 Mode 2 keypair authentication |
+| B9 | Security whitepaper. Staging environment. LNbits fork. LNURL-withdraw credential delivery. |
 
 ---
 
