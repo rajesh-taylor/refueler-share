@@ -323,7 +323,7 @@ Row 3 (double-spend rejection) attributes the test to `security.test.js` — inc
 | S67 ✅ | Testing infra review II | Coverage audit, TESTING.md discrepancy found, k6 architecture locked. | S |
 | S68 ✅ | `53d24ee` | Load test I | chunks.js crypto.subtle removed (pre-computed hash table). credential-burst.js + concurrent-transfers.js + preissue-credentials.mjs + start-mock.mjs + debug-single-upload.mjs. All thresholds green. 207/207 tests still passing. | M |
 | S69 ✅ | `38c60e5` | Load test II | download-saturation.js (two-scenario: distributed + hammer). mixed-realistic.js (70/25/5 split, 40 VU, 60s). preload-transfers.mjs. README.md. All thresholds green. | M |
-| S70 | CI pipeline I | GitHub Actions: Eleventy build check, wrangler dry-run, lint. Confirm/create `stripe-events.js` fixture if absent. | S |
+| S70 | `731b571` | CI pipeline I. GitHub Actions Level 1 (Eleventy build, lint, unit tests, wrangler dry-run). stripe-events.js rewritten Web Crypto (k6-compatible). ESLint flat config. test/tests folder divergence from docs corrected in TESTING.md + SMC. CF_API_TOKEN secret set. CI green. |
 | S71 | CI pipeline II | Integration suite in CI. Fail-fast gate. Lightning toggle card (dashboard KV flag) — split to S72 if CI work fills session. | S |
 | S72 | B6 close | Snag sweep. TESTING.md §2 rewrite (207 tests / 8 suites). TESTING.md §5 row 3 attribution fix. Context files v5.0. B7 brief. | S |
 
