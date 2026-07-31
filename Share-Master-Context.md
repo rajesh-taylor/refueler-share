@@ -283,6 +283,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S67 | — | Testing infra review II. k6 architecture locked. TESTING.md discrepancies flagged for S72 fix. |
 | S68 | `53d24ee` | k6 load tests I. credential-burst + concurrent-transfers. All thresholds green. chunks.js hash table locked. |
 | S69 | `38c60e5` | k6 load tests II. download-saturation + mixed-realistic + preload-transfers.mjs + README. All thresholds green. |
+| S70 | `731b571` | CI pipeline I. GitHub Actions Level 1 green. stripe-events.js Web Crypto. ESLint flat config. test/tests path divergence corrected in docs. |
 
 **Test count: 207 passing across 8 suites (6 unit + 2 integration).**
 
@@ -550,13 +551,15 @@ refueler-share/
       webhooks.js   ← SW4
       wl.js         ← SW3
     tests/
-      unit/  ratelimit  manifest  nut00  blake3  turnstile  stripe  kv-mock.js
+      test/  ratelimit  manifest  nut00  blake3  turnstile  stripe      ← actual path (NOT tests/unit/)
+      helpers/  kv-mock.js
       integration/  client.js  round-trip.test.js  security.test.js
         fixtures/  credential  chunks  manifest  turnstile-mock  supabase-mock  stripe-events
                    lightning.js ← B7   webhooks.js ← SW4
                    keypair.js ← B8     lnurl.js ← B9     mlkem-vectors.js ← B10
         helpers/  wrangler-lifecycle.js
       load/  credential-burst  concurrent-transfers  download-saturation  mixed-realistic  ← S68–S69
+  eslint.config.js  ← S70
   .github/workflows/  ci.yml  integration.yml  staging-deploy.yml  ← S70–S71, B9
   docs/r2-lifecycle.md
 ```

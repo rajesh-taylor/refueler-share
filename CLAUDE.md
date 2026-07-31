@@ -74,8 +74,7 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**B6 in progress (S68 next). B7 plan locked — S73–S87, 25 core + 5 buffer.**
-**SW block locked (AP-3a) — white-label + API build, runs post-B87, before B8. 12 core + 2 buffer.**
+**B6 in progress (S71 next). B7 plan locked — S73–S87, 25 core + 5 buffer.**
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
