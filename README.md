@@ -55,7 +55,7 @@ This is not a policy choice. It is the consequence of how the code is written.
 | Backend | Cloudflare Workers (serverless, blind relay) |
 | Storage | Cloudflare R2 (zero egress fees, lifecycle-enforced deletion) |
 | Ledger | Supabase PostgreSQL (spent-token tracking only) |
-| Payments | Stripe (fiat) · Lightning BOLT11 (coming B7) |
+| Payments | Stripe (fiat) · Lightning BOLT11 via Blink |
 | Encryption | AES-GCM 256-bit (client-side only) |
 
 ---
@@ -93,7 +93,7 @@ directory structure preserved, up to 2,000 files and 20 levels deep) is supporte
 | B3 | Stripe checkout, webhook handler, Customer Portal |
 | B4 | Security hardening: BLAKE3 Worker WASM, server-side chunk verification, AES-GCM AAD fix, KV rate limiting, MIME denylist, UUID validation, filename sanitisation, UUID-bound credential issuance, Turnstile nonce binding |
 | B5 | Design system full pass: Paper/Carbon theme toggle, FSAA streaming download, receiver landing page |
-| B6 | Folder upload (fflate, client-side zip), bearer token TTL fix, Worker unit test suite (207 tests across 8 suites), integration test harness (wrangler dev --local, full BDHKE round-trip, security regression suite) |
+| B6 | Folder upload (fflate, client-side zip), bearer token TTL fix, 212 tests across 8 suites (6 unit + 2 integration), security regression suite, k6 load tests, GitHub Actions CI Level 1 |
 
 **Upcoming:**
 
