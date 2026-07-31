@@ -321,8 +321,8 @@ Row 3 (double-spend rejection) attributes the test to `security.test.js` — inc
 | S65 ✅ | `8dc8dce` | Security regression suite I | Rate limits, credential farming, nonce binding. 188 passing. | M |
 | S66 ✅ | `344e32d` | Security regression suite II | MIME, UUID, chunk bounds, tier cap. 207 passing across 8 suites. | M |
 | S67 ✅ | Testing infra review II | Coverage audit, TESTING.md discrepancy found, k6 architecture locked. | S |
-| S68 | Load test I | k6 setup. First task: `crypto.subtle` check on chunks.js. credential-burst.js + concurrent-transfers.js. 429 tagging pattern. | M |
-| S69 | Load test II | download-saturation.js + mixed-realistic.js. Threshold review. Load test README stub in `worker/tests/load/`. | M |
+| S68 ✅ | `53d24ee` | Load test I | chunks.js crypto.subtle removed (pre-computed hash table). credential-burst.js + concurrent-transfers.js + preissue-credentials.mjs + start-mock.mjs + debug-single-upload.mjs. All thresholds green. 207/207 tests still passing. | M |
+| S69 ✅ | `38c60e5` | Load test II | download-saturation.js (two-scenario: distributed + hammer). mixed-realistic.js (70/25/5 split, 40 VU, 60s). preload-transfers.mjs. README.md. All thresholds green. | M |
 | S70 | CI pipeline I | GitHub Actions: Eleventy build check, wrangler dry-run, lint. Confirm/create `stripe-events.js` fixture if absent. | S |
 | S71 | CI pipeline II | Integration suite in CI. Fail-fast gate. Lightning toggle card (dashboard KV flag) — split to S72 if CI work fills session. | S |
 | S72 | B6 close | Snag sweep. TESTING.md §2 rewrite (207 tests / 8 suites). TESTING.md §5 row 3 attribution fix. Context files v5.0. B7 brief. | S |

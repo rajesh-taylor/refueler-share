@@ -281,6 +281,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S65 | `8dc8dce` | Security regression suite I. Rate limits, UUID binding, nonce binding. 188 passing. |
 | S66 | `344e32d` | Security regression suite II. MIME, UUID validation, chunk bounds, tier cap. 207 passing across 8 suites. |
 | S67 | — | Testing infra review II. k6 architecture locked. TESTING.md discrepancies flagged for S72 fix. |
+| S68 | `53d24ee` | k6 load tests I. credential-burst + concurrent-transfers. All thresholds green. chunks.js hash table locked. |
+| S69 | `38c60e5` | k6 load tests II. download-saturation + mixed-realistic + preload-transfers.mjs + README. All thresholds green. |
 
 **Test count: 207 passing across 8 suites (6 unit + 2 integration).**
 
@@ -511,7 +513,7 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session.
 | Unit tests | Vitest 2 | 207 passing — 8 suites |
 | Integration tests | Vitest + wrangler dev --local | 207 passing across 8 suites. All 5 seams closed. |
 | Security regression suite | Vitest integration | Complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
-| Load tests | k6 | S68–S69. Architecture locked S67. |
+| Load tests | k6 | ✅ S68–S69. All four scripts passing. Local workerd thresholds. Tighten to <150ms at B9 staging. |
 | CI pipeline | GitHub Actions | S70–S71 — not yet built |
 | Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
 | Staging environment | refueler-share-staging Worker | B9 scope |
