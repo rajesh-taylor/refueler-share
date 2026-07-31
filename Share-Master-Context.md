@@ -284,6 +284,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | S68 | `53d24ee` | k6 load tests I. credential-burst + concurrent-transfers. All thresholds green. chunks.js hash table locked. |
 | S69 | `38c60e5` | k6 load tests II. download-saturation + mixed-realistic + preload-transfers.mjs + README. All thresholds green. |
 | S70 | `731b571` | CI pipeline I. GitHub Actions Level 1 green. stripe-events.js Web Crypto. ESLint flat config. test/tests path divergence corrected in docs. |
+| S71 | `93b2b86` | Lightning admin toggle (dashboard card + KV flag + upgrade page). Stripe webhook security tests (4 passing, 1 skipped — valid-sig test needs Vitest provide/inject, flagged S72). 211 passing / 1 skipped across 8 suites. |
 
 **Test count: 207 passing across 8 suites (6 unit + 2 integration).**
 
@@ -324,11 +325,12 @@ Enables Fallback 1 + Fallback 2 without a code deploy.
 - 429 tagging: use k6 `check()` for expected 429s; exclude from `http_req_failed` threshold.
 - Draft thresholds: p95 < 200ms; `http_req_failed` < 1% (excl. tagged 429s); `checks` > 99%; KV byte-counter accuracy ±1 byte.
 
-**TESTING.md fixes pending at S72:**
-- §2 rewrite: update "178 tests / 6 suites" → "207 tests / 8 suites" with revised seams assessment (all five seams closed).
-- §5 row 3: double-spend test attribution corrected from `security.test.js` → `round-trip.test.js`.
+**TESTING.md fixes — done S71 (v0.4):**
+- §2 rewritten: 211 passing + 1 skipped / 8 suites, all five seams closed, skipped test documented.
+- §5 row 3: double-spend attribution corrected to `round-trip.test.js`.
+- §5 Stripe webhook auth row added. §10 row 7 extended. §13 counts updated.
 
-**`stripe-events.js` fixture:** Not confirmed built. Check before S70 — fold creation into S70 scope if absent.
+**`stripe-events.js` fixture:** Built S70/S71. Confirmed complete with `signStripePayload`, `signStripePayloadBadSig`, `signStripePayloadStale` and three event factories.
 
 ---
 
@@ -339,7 +341,7 @@ Enables Fallback 1 + Fallback 2 without a code deploy.
 - Receiver page nav: shows main domain links, should be share-subdomain only → B13
 - Nav snag (Upgrade link on refueler.io) → B13
 - Status tile for admin dashboard → S72 sweep
-- TESTING.md §2 + §5 fixes → S72 sweep
+- TESTING.md §2 + §5 fixes → done S71
 - **Manifest-field minimalism audit** (added M-02): audit manifest fields against Blossom "blob and nothing else" benchmark. Surviving list feeds whitepaper honest-metadata table. → S72 sweep
 - **UUID/fragment token entropy pre-audit** (added M-01, Proton INFO-004 precedent): pre-audit UUID + fragment entropy against birthday-paradox analysis before B9 link-security claims. → S72 sweep
 - **REFUELER-BRIDGE.md:** Created 28 Jul 2026. Lives in both repos. Commit to `refueler-io` when `/notes/` session opens that repo. Update at every block close.
@@ -511,11 +513,11 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session.
 
 | Layer | Tool | Status |
 |-------|------|--------|
-| Unit tests | Vitest 2 | 207 passing — 8 suites |
-| Integration tests | Vitest + wrangler dev --local | 207 passing across 8 suites. All 5 seams closed. |
+| Unit tests | Vitest 2 | 211 passing + 1 skipped — 8 suites |
+| Integration tests | Vitest + wrangler dev --local | 211 passing / 1 skipped across 8 suites. All 5 seams closed. |
 | Security regression suite | Vitest integration | Complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
 | Load tests | k6 | ✅ S68–S69. All four scripts passing. Local workerd thresholds. Tighten to <150ms at B9 staging. |
-| CI pipeline | GitHub Actions | S70–S71 — not yet built |
+| CI pipeline | GitHub Actions | Level 1 live and green (S70–S71). Level 2 (integration suite in CI) — B7–B8. |
 | Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
 | Staging environment | refueler-share-staging Worker | B9 scope |
 
