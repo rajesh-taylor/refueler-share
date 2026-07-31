@@ -620,7 +620,7 @@ document.addEventListener('click', function (e) {
         <span class="tier-price-main" id="price-creative">£12</span>
         <span class="tier-price-period" id="period-creative">/ month</span>
       </div>
-      <div class="tier-yearly" id="yearly-creative">or £120/yr</div>
+      <div class="tier-yearly" id="yearly-creative">or £144/yr</div>
       <ul class="tier-features">
         <li>100 GB per transfer</li>
         <li>1 / 7 / 30 day expiry</li>
@@ -639,7 +639,7 @@ document.addEventListener('click', function (e) {
         <span class="tier-price-main" id="price-max">£24</span>
         <span class="tier-price-period" id="period-max">/ month</span>
       </div>
-      <div class="tier-yearly" id="yearly-max">or £240/yr</div>
+      <div class="tier-yearly" id="yearly-max">or £288/yr</div>
       <ul class="tier-features">
         <li>250 GB per transfer</li>
         <li>1 / 7 / 30 / 90 day expiry</li>
@@ -725,17 +725,17 @@ const STRIPE_PK  = 'pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q';
 const PRICE_IDS = {
   creative: {
     monthly: 'price_1Ts7lsGlctwiB9U3hdtgChU2',
-    yearly:  'price_1Ts7sqGlctwiB9U3YRloCFfi',
+    yearly:  'price_1TyzKIGlctwiB9U3Dn71fGbA',
   },
   max: {
     monthly: 'price_1Ts7vIGlctwiB9U3kb3NCLue',
-    yearly:  'price_1Ts7xIGlctwiB9U3JyZB8Kwj',
+    yearly:  'price_1TyzNaGlctwiB9U3T8uV4UIW',
   },
 };
 
 const PRICES_DISPLAY = {
-  creative: { monthly: { price: '£12', period: '/ month' }, yearly: { price: '£120', period: '/ year' } },
-  max:      { monthly: { price: '£24', period: '/ month' }, yearly: { price: '£240', period: '/ year' } },
+  creative: { monthly: { price: '£12', period: '/ month' }, yearly: { price: '£144', period: '/ year' } },
+  max:      { monthly: { price: '£24', period: '/ month' }, yearly: { price: '£288', period: '/ year' } },
 };
 
 let selectedTier   = 'creative';
