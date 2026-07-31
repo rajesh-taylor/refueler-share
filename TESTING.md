@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.4 | **Created:** S63 · 27 July 2026 | **Updated:** S71 · 31 July 2026
+> **Version:** v0.5 | **Created:** S63 · 27 July 2026 | **Updated:** S72a · 31 July 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -26,7 +26,7 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 ## 2. Current test suite
 
-**211 tests passing + 1 skipped across 8 suites** (Vitest 2 — 6 unit + 2 integration, run separately):
+**212 tests passing across 8 suites** (Vitest 2 — 6 unit + 2 integration, run separately):
 
 **Unit suites** (`worker/tests/unit/` — 207 passing):
 
@@ -39,24 +39,22 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 | `turnstile.test.js` | 34 | Input guards, CF success/failure paths, HTTP errors, malformed JSON, fail-closed behaviour |
 | `stripe.test.js` | 44 | HMAC-SHA256 webhook signature verification, ±300s replay window, body tampering detection, checkout customer find-or-create, tier routing across all 6 live lookup keys (monthly, 3-month, yearly × 2 tiers) |
 
-**Integration suites** (`worker/tests/integration/` — 4 passing + 1 skipped via `npm run test:integration`):
+**Integration suites** (`worker/tests/integration/` — 5 passing via `npm run test:integration`):
 
 | Suite | Tests | Covers |
 |-------|-------|--------|
 | `round-trip.test.js` | 3 | Full upload→download, passphrase-protected transfer, double-spend rejection |
-| `security.test.js` | 20 + 1 skipped | Rate limits, credential farming, nonce binding, MIME denylist, UUID validation, chunk bounds, tier cap, Stripe webhook auth (4 rejection tests passing; 1 valid-sig test skipped — see note below) |
+| `security.test.js` | 21 | Rate limits, credential farming, nonce binding, MIME denylist, UUID validation, chunk bounds, tier cap, Stripe webhook auth (all 5 passing including valid-sig → 200, un-skipped S72) |
 
-**Honest assessment — what these tests prove:** the pure logic of each module is correct in isolation (unit), and the full Worker runtime enforces it correctly against real workerd with real KV/R2 simulation (integration). All five original seams are closed.
+**Honest assessment — what these tests prove:** the pure logic of each module is correct in isolation (unit), and the full Worker runtime enforces it correctly against real workerd with real KV/R2 simulation (integration). All five original seams are closed. No skipped tests.
 
-**Original seams — all closed (S64–S71):**
+**Original seams — all closed (S64–S72):**
 
 1. **R2 and KV behaviour** — closed S64. Integration tests exercise real KV persistence and R2 writes via wrangler dev --local.
 2. **BLAKE3 WASM in the CF runtime** — closed S64. Wrong-hash test in `round-trip.test.js` exercises the real WASM bundle inside workerd.
 3. **The credential→upload chain** — closed S64. Full Turnstile → credential issue → melt → upload → download sequence runs end-to-end.
-4. **Stripe webhook → Supabase** — closed S71. Stripe webhook auth enforced in the real Worker route (`security.test.js`). Supabase upsert path covered by `round-trip.test.js` double-spend test via the mock.
+4. **Stripe webhook → Supabase** — closed S71/S72. Stripe webhook auth enforced in real Worker route including valid-sig positive test (S72 Vitest provide/inject fix). Supabase upsert path covered by `round-trip.test.js`.
 5. **HTTP routing** — closed S64–S66. Every integration test exercises route dispatch, CORS, and auth header extraction in workerd.
-
-**One remaining gap — skipped test:** `security.test.js` contains one `it.skip`: the Stripe webhook valid-signature positive test (→ 200). Root cause: `STRIPE_WEBHOOK_SECRET` set in Vitest `globalSetup` does not propagate to test worker processes via `process.env`. Fix at S72 using Vitest `provide`/`inject` API — small addition to `wrangler-lifecycle.js` and `security.test.js`. The four rejection tests (tampered sig, stale timestamp, missing header, empty body) all pass and prove the security property. Unit coverage for the same signing logic is comprehensive in `unit/stripe.test.js`.
 
 ---
 
@@ -149,7 +147,7 @@ Rationale: fixtures are shared between Vitest integration tests and k6 load scri
 | UUID validation | S41 | `rejects non-RFC4122 UUID in upload path` | Path traversal / key-forgery via malformed UUIDs closed |
 | Chunk bounds | S41/S42b | `rejects chunk index beyond declared total` | Storage-stuffing beyond manifest bounds closed |
 | Bearer token scope | S58 | `bearer token exp equals manifest expiry; expired token rejected` | Token lifetime bound to transfer, not hardcoded |
-| Stripe webhook auth | S71 | `tampered signature → 401` · `stale timestamp → 401` · `missing header → 401` · `empty body → 401` | Webhook auth enforced in real Worker route; forgery and replay rejected. Valid-sig positive test skipped pending S72 Vitest provide/inject fix. |
+| Stripe webhook auth | S71/S72 | `tampered signature → 401` · `stale timestamp → 401` · `missing header → 401` · `empty body → 401` · `valid signature → 200` | Webhook auth enforced in real Worker route; forgery and replay rejected. All five tests passing. |
 
 Rule: **no security fix ships in future blocks without a row added to this table and a test added to this file.** The table is copied verbatim into whitepaper §Evidence at B9.
 
@@ -260,7 +258,7 @@ The B9 whitepaper makes integrity claims; this section is the audit path from ea
 | 4 | All public endpoints are rate-limited | `unit/ratelimit.test.js` + `integration/security.test.js` | boundary tests per endpoint · `returns 429 at limit+1` | Limits hold at exact boundaries under the real KV path |
 | 5 | Credentials are bound to a Worker-generated UUID | `integration/security.test.js` | `rejects credential for foreign UUID` | Cross-transfer credential farming is closed without identity linkage |
 | 6 | Execution-capable uploads are refused at the boundary | `integration/security.test.js` | `rejects denylisted Content-Type on chunk 0 (415)` | Declared-intent MIME gate enforced, correctly scoped to chunk 0 |
-| 7 | Webhook payloads are authenticated and replay-protected | `unit/stripe.test.js` + `integration/security.test.js` | `rejects invalid HMAC signature` · `rejects timestamp outside ±300s` · `tampered signature → 401` · `stale timestamp → 401` · `missing header → 401` | Stripe events cannot be forged or replayed; enforcement proven in real Worker runtime. Valid-sig positive test skipped pending S72. |
+| 7 | Webhook payloads are authenticated and replay-protected | `unit/stripe.test.js` + `integration/security.test.js` | `rejects invalid HMAC signature` · `rejects timestamp outside ±300s` · `tampered signature → 401` · `stale timestamp → 401` · `missing header → 401` · `valid signature → 200` | Stripe events cannot be forged or replayed; enforcement proven in real Worker runtime including positive case. |
 
 **Scope honesty (mirrors CLAUDE.md marketing rulings):** this trail proves server-side *chunk* integrity, not end-to-end file integrity — full Merkle root verification is unimplemented until B9 and no test claims otherwise. Rows are added for NUT-11 Mode 2 (B8), Merkle verification (B9), and ML-KEM (B10) when those tests exist — never before.
 

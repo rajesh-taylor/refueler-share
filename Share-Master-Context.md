@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 4.8 | **Last updated:** AP-3a white-label + SW block · 30 July 2026
+> **Version:** 4.9 | **Last updated:** S72a B6 close · 31 July 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -31,99 +31,37 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 
 ## Lightning infrastructure — B7 plan
 
-**Account structure:** Separate Blink account for Share (not shared with refueler.io merchant POS).
-Privacy, regulatory, and webhook separation all require distinct accounts. Share Blink account:
-email `rt+share@rajeshtaylor.com` (or equivalent). API key `refueler-share-b7` — scopes READ +
-RECEIVE only (no WRITE — Share only receives payments, never sends). Wallet ID queried post-creation
-via `me { defaultAccount { wallets { id walletCurrency } } }`.
+**Account structure:** Separate Blink account for Share. Email `rt+share@rajeshtaylor.com`. API key `refueler-share-b7` — READ + RECEIVE scopes only. Wallet ID queried via `me { defaultAccount { wallets { id walletCurrency } } }`.
 
-**Callback endpoint:** Registered on Share Blink account pointing to
-`https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. No signing secret — Blink does not
-sign payloads. Verification via KV payment hash lookup. Blink fires twice per payment — Worker
-deduplicates via `settled: true` KV flag. Endpoint ID logged at registration.
+**Callback endpoint:** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. No signing secret — Blink does not sign payloads. Verification via KV payment hash lookup. Blink fires twice per payment — Worker deduplicates via `settled: true` KV flag.
 
 **Lightning payment flow (B7 — BOLT11 invoice model):**
 1. Frontend → `POST /subscription/lightning` with `{ tier, period }`
-2. Worker queries Blink `btcPrice` for live GBP/sats rate at invoice creation time
-3. Worker calls `lnInvoiceCreate` → BOLT11 string + payment hash
+2. Worker queries Blink `btcPrice` → live GBP/sats rate
+3. Worker calls `lnInvoiceCreate` → BOLT11 + payment hash
 4. Worker writes `{ paymentHash, tier, period, created_at, expires_at, settled: false }` to KV — 25h TTL
 5. Frontend displays QR + BOLT11 copy. User pays from any Lightning wallet.
-6. Blink fires callback to `/webhook/lightning` — Worker verifies hash against KV
-7. Worker issues Cashu credential for tier (NUT-00 path, capacity-appropriate)
-8. Worker marks KV entry `settled: true` — prevents double-issuance
-9. Worker writes credential to short-lived KV slot keyed by `paymentHash` — 10 min TTL
-10. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}` → picks up credential
-11. Credential stored in browser memory only. No Supabase row. No email. No persistent record.
+6. Blink fires callback → Worker verifies hash, issues Cashu credential, marks `settled: true`
+7. Credential written to KV keyed by `paymentHash` — 10 min TTL. Browser memory only. No Supabase row.
+8. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`.
 
-**GBP/sats rate:** Blink `btcPrice` query at invoice creation time. No external dependency.
+**Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var (default: `blink`). LNbits slots in via env var swap + new secret.
 
-**Backend abstraction (built at B7 — enables Tier 2 switch without rework):**
-`worker/src/lightning.js` exports `createInvoice()` and `getInvoiceStatus()`.
-`LIGHTNING_BACKEND` env var (default: `blink`) routes to correct implementation.
-LNbits slots in via env var swap + new secret — zero frontend or Cashu logic changes.
+**Migration trigger to LNbits (Tier 2):** 2 of 3: >100 paid Lightning accounts · >£2k/mo Lightning volume · Blink reliability <99.5%.
 
-**Migration trigger to LNbits (Tier 2):** When any 2 of 3 conditions are true:
-- Paid Lightning subscriber count exceeds 100 active accounts, OR
-- Monthly Lightning settlement volume exceeds £2,000 GBP equivalent, OR
-- Blink API reliability falls below 99.5% over a 30-day window
+**Fallbacks:** KV flag `lightning_available: true/false/blink`. Fallback 1 (LNbits down): revert to Blink, 4h target. Fallback 2 (both down): Lightning hidden on upgrade page, Stripe fiat fully operational. Both via dashboard toggle, no code deploy.
 
-**Fallback 1 — LNbits instability:** Revert to Blink within 4 hours.
-`wrangler secret put LIGHTNING_BACKEND blink` → `wrangler deploy`. Dashboard toggle executes
-without a code deploy (KV flag `lightning_available: blink`).
+**Privacy model:** Stripe payer = name/email/card visible to Refueler. Lightning payer = payment hash + amount + tier only. Blink internal correlation documented on upgrade page. DO NOT claim "anonymous" for Lightning. Honest claim: "Pseudonymous."
 
-**Fallback 2 — both unavailable:** Activate graceful degradation within 30 minutes.
-KV flag `lightning_available: false`. Lightning option hidden on upgrade page.
-Stripe fiat path remains fully operational. Dashboard toggle executes without a code deploy.
+**Payment privacy table:** `src/_data/payment_privacy.json`. Three columns: Stripe / Lightning (Blink) / PayNym (coming soon). Also appears verbatim in B9 whitepaper §Privacy model.
 
-**Privacy model — Lightning vs Stripe vs PayNym:**
-- Stripe payer: Refueler sees name, email, card last 4. Stripe sees full identity. Supabase row
-  persists with email + customer ID. Not anonymous. Honest framing: "Private by default."
-- Lightning payer: Refueler sees payment hash, amount, tier, timestamp only. Blink sees invoice
-  paid + receiving wallet. Blink can internally correlate if sender is also a Blink user — this
-  is documented explicitly in the upgrade page privacy table. KV entry expires 25h post-settlement.
-  No Supabase row. No email. Honest claim: "Pseudonymous. No identity data collected."
-- PayNym payer (on-chain, future): BIP47 reusable payment code. No Lightning routing. Sparrow cold
-  storage wallet, manual/semi-manual settlement. Column present on upgrade page marked "coming soon."
-- DO NOT claim "anonymous" for Lightning — Lightning graph is public; Blink internal correlation
-  is a real and documented caveat.
+**Own node (B9 scope):** Hetzner CX22, separate from personal + refueler.io nodes. Graph isolation. Stub dashboard cards (routing fee income, channel liquidity health) greyed until B9.
 
-**Payment privacy table — upgrade page:**
-Data-driven Eleventy partial. Source: `src/_data/payment_privacy.json`. Rendered in collapsible
-section on `src/upgrade.njk` headed "What does each payment method know about you?" Three columns:
-Stripe / Lightning (Blink) / PayNym (coming soon). Provider-specific caveats (e.g. Blink
-correlation) are rows in the JSON, not hardcoded HTML. Update JSON when provider changes —
-single redeploy, no HTML edits. Also appears verbatim in B9 whitepaper §Privacy model.
+**LNURL-withdraw (B9 scope):** Cashu credential encoded as LNURL-withdraw. Gift use case: sender purchases capacity, forwards link to recipient. Wallet redeems. Refueler never knows who used it. NUT-20 binding potential. World-first for file transfer.
 
-**Own dedicated Lightning node (B9 scope):**
-Separate from personal node and refueler.io node. Graph isolation — no shared channels, no common
-funding wallet. Three separate entities in the Lightning graph. Separate HMRC ledger per product.
-Hosting: Hetzner CX22 (~£4/month). Full-disk encryption. Enclave hardening assessed at B9 planning
-— not urgent for Blink/LNbits phase. Routing fee income and channel liquidity metrics activate on
-own node — stubbed as greyed dashboard cards until then.
+**LNbits fork (B9 scope):** Strip consumer UI, apply Paper/Carbon tokens, add webhook signing (HMAC-SHA256). B9 planning session required before touching repo.
 
-**LNURL-withdraw credential delivery (B9 scope — gift use case primary):**
-Cashu credential encoded as LNURL-withdraw payload. Recipient scans QR in Lightning wallet →
-wallet calls back → node returns Cashu credential as withdrawal response. Primary narrative: gift
-use case — sender purchases upload capacity, forwards LNURL-withdraw link to recipient. Recipient
-redeems in their wallet. Refueler never knows who used the capacity. NUT-20 binding potential:
-mint signs `{ lnurlw_nonce, tier, expiry }` → unforgeable chain from Lightning payment to
-credential. World-first for file transfer — no existing service delivers credentials wallet-natively.
-Scoped to B9. Two dedicated sessions minimum.
-
-**LNbits fork (B9 scope):**
-Fork `lnbits/lnbits` (Apache 2.0). Strip consumer wallet UI. Keep: invoice creation, payment
-tracking, webhook dispatch, extension loader (LNURLp, LNURLw, Boltcard). Apply Paper/Carbon
-design tokens to admin templates — Satoshi figures, IBM Plex Mono for hashes, gold accent on
-Carbon. B9 planning session required before touching the repo. No branding work until planning
-session locks scope. Webhook signing (HMAC-SHA256) activates dashboard metrics: delivery rate,
-confirmation latency, signature failures. Saves KV writes vs Blink polling model.
-
-**Dashboard cards — Lightning (B7):**
-- Lightning confirmation latency (p95) — LIVE at B7 (KV timestamps, works on Blink)
-- Webhook delivery rate — STUB greyed (requires LNbits signing, B9)
-- Webhook signature failures — STUB greyed (requires LNbits signing, B9)
-- Routing fee income (MTD) — STUB greyed (requires own node, B9)
-- Channel liquidity health — STUB greyed (requires own node, B9)
+**Dashboard cards — Lightning (B7):** Confirmation latency p95 LIVE. Webhook delivery rate / signature failures / routing fee income / channel liquidity health — STUB greyed (B9).
 
 ---
 
@@ -270,23 +208,14 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B6 Testing infrastructure + folder upload — current. S68 (Load tests I) next.**
+**B6 ✓ complete (S72a). B7 next — S73 opens.**
 
-| Session | Commit | Shipped |
-|---------|--------|---------|
-| S60 | `e59305c` | Vitest 2 harness. ratelimit + manifest tests. 43 passing. |
-| S61 | `5f425ca` | NUT-00 BDHKE + blake3 unit tests. 100 passing. blake3.js null-guard fix. |
-| S62 | `5f425ca` | turnstile + stripe unit tests. 178 passing across 6 suites. |
-| S64 | `def77b5` | Integration harness. wrangler dev --local + Supabase mock. Full BDHKE in client.js. 181 passing. |
-| S65 | `8dc8dce` | Security regression suite I. Rate limits, UUID binding, nonce binding. 188 passing. |
-| S66 | `344e32d` | Security regression suite II. MIME, UUID validation, chunk bounds, tier cap. 207 passing across 8 suites. |
-| S67 | — | Testing infra review II. k6 architecture locked. TESTING.md discrepancies flagged for S72 fix. |
-| S68 | `53d24ee` | k6 load tests I. credential-burst + concurrent-transfers. All thresholds green. chunks.js hash table locked. |
-| S69 | `38c60e5` | k6 load tests II. download-saturation + mixed-realistic + preload-transfers.mjs + README. All thresholds green. |
-| S70 | `731b571` | CI pipeline I. GitHub Actions Level 1 green. stripe-events.js Web Crypto. ESLint flat config. test/tests path divergence corrected in docs. |
-| S71 | `93b2b86` | Lightning admin toggle (dashboard card + KV flag + upgrade page). Stripe webhook security tests (4 passing, 1 skipped — valid-sig test needs Vitest provide/inject, flagged S72). 211 passing / 1 skipped across 8 suites. |
+| Block | Commit | Summary |
+|-------|--------|---------|
+| B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
+| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6 load tests (all green), CI Level 1, Lightning admin toggle, Stripe webhook security suite, Vitest provide/inject fix (S72). |
 
-**Test count: 207 passing across 8 suites (6 unit + 2 integration).**
+**Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
 
 ---
 
@@ -298,7 +227,7 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 |-------|----------|-------|
 | B1–B4 ✓ | S1–S42e | Foundation through security hardening |
 | B5 ✓ | S43–S52 | Design full pass |
-| B6 | S53–S72+ | Testing infrastructure + folder upload ← current |
+| B6 ✓ | S53–S72a | Testing infrastructure + folder upload |
 | B7 | S73–S87+ | Lightning/Blink + anonymous paid tier — 25 core + 5 buffer |
 | SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer · runs post-S87 |
 | B8 | TBD | NUT-11 Mode 2 keypair auth (renumbered post-SW) |
@@ -312,39 +241,15 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · 
 
 ---
 
-## B6 notes
+## B6 carried snags
 
-**Admin dashboard Lightning toggle (B6 scope):**
-KV flag `lightning_available: true/false/blink`. Dashboard toggle card. Upgrade page reads flag.
-Enables Fallback 1 + Fallback 2 without a code deploy.
-
-**k6 load test architecture (locked S67):**
-- Target: `wrangler dev --local` for S68–S69. Staging deferred to B9.
-- Four scripts: `credential-burst.js`, `concurrent-transfers.js`, `download-saturation.js`, `mixed-realistic.js`.
-- S68 first task: verify `chunks.js` has no `crypto.subtle` dependency — k6 cannot use Web Crypto API.
-- 429 tagging: use k6 `check()` for expected 429s; exclude from `http_req_failed` threshold.
-- Draft thresholds: p95 < 200ms; `http_req_failed` < 1% (excl. tagged 429s); `checks` > 99%; KV byte-counter accuracy ±1 byte.
-
-**TESTING.md fixes — done S71 (v0.4):**
-- §2 rewritten: 211 passing + 1 skipped / 8 suites, all five seams closed, skipped test documented.
-- §5 row 3: double-spend attribution corrected to `round-trip.test.js`.
-- §5 Stripe webhook auth row added. §10 row 7 extended. §13 counts updated.
-
-**`stripe-events.js` fixture:** Built S70/S71. Confirmed complete with `signStripePayload`, `signStripePayloadBadSig`, `signStripePayloadStale` and three event factories.
-
----
-
-## B6 open snags (resolve at S72)
-
-- QR logo centre (Refueler mark in quiet zone) → B11 prep
-- X-Email header wiring for paid tier enforcement → resolved by removal (AP-2 decision)
-- Receiver page nav: shows main domain links, should be share-subdomain only → B13
+- QR logo centre (Refueler mark in quiet zone) → B11
+- Receiver page nav (shows main domain links) → B13
 - Nav snag (Upgrade link on refueler.io) → B13
-- Status tile for admin dashboard → S72 sweep
-- TESTING.md §2 + §5 fixes → done S71
-- **Manifest-field minimalism audit** (added M-02): audit manifest fields against Blossom "blob and nothing else" benchmark. Surviving list feeds whitepaper honest-metadata table. → S72 sweep
-- **UUID/fragment token entropy pre-audit** (added M-01, Proton INFO-004 precedent): pre-audit UUID + fragment entropy against birthday-paradox analysis before B9 link-security claims. → S72 sweep
-- **REFUELER-BRIDGE.md:** Created 28 Jul 2026. Lives in both repos. Commit to `refueler-io` when `/notes/` session opens that repo. Update at every block close.
+- Status tile for admin dashboard → B7 buffer (S87 sweep)
+- Manifest-field minimalism audit (M-02 Blossom benchmark) → B9 whitepaper prep
+- UUID/fragment token entropy pre-audit (birthday-paradox, Proton INFO-004 precedent) → B9
+- REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
 
 ---
 
@@ -405,38 +310,9 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 - `wh_dead_{api_key_id}_{event_id}` — dead-letter payload, 7-day TTL
 - `api_quota_{key_id}` — `{ credentials_remaining, bytes_remaining, period_end }`
 
-**Webhook spec (locked AP-3a):**
+**Webhook spec (locked AP-3a):** 4 events: `credential.issued`, `transfer.completed`, `quota.threshold`, `quota.exhausted`. Payload fields: `id`, `type`, `created`, `data.transfer_ref`, `data.uuid`, `data.tier`, `data.file_size_bytes`, `data.total_chunks`, `data.expiry_timestamp`. Never in payload: filenames, IPs, sender/recipient identity, download timestamps. Signing: `X-Refueler-Signature: t={unix},v1={hex}` — HMAC-SHA256 over `{t}.{raw_body}`. Replay window ±300s.
 
-Events (four at launch):
-- `credential.issued` — fires on `POST /api/v1/credential/issue` success
-- `transfer.completed` — fires when final chunk written and manifest created
-- `quota.threshold` — fires once per period when quota crosses 75%
-- `quota.exhausted` — fires on first 402 of the period
-
-Payload shape:
-```json
-{
-  "id": "evt_{16b base58}",
-  "type": "transfer.completed",
-  "created": 1738224000,
-  "data": {
-    "transfer_ref": "MATTER-2291",
-    "uuid": "…",
-    "tier": "business",
-    "file_size_bytes": 104857600,
-    "total_chunks": 10,
-    "expiry_timestamp": 1738828800
-  }
-}
-```
-
-Never in payload: filenames, IPs, sender/recipient identity, download timestamps.
-
-Signing header: `X-Refueler-Signature: t={unix},v1={hex}` — HMAC-SHA256 over `{t}.{raw_body}`.
-Replay window: ±300s (document for clients; we do not enforce inbound on our own side for Blink).
-
-**Multi-user (Business) — locked AP-3a:**
-One API keypair per commercial relationship. No sub-keys. "Multi-user" = shared firm key + `transfer_ref` attribution (client encodes user ID into it) + multiple read-only dashboard logins scoped to same `api_key_id`. Rotation via `POST /api/v1/keys/rotate` — old pair valid 24h grace. Revisit sub-keys only if a paying Business client presents a concrete per-user revocation compliance requirement.
+**Multi-user (Business):** One keypair per commercial relationship. No sub-keys. `transfer_ref` encodes user attribution. `POST /api/v1/keys/rotate` — old pair valid 24h grace.
 
 ---
 
@@ -513,11 +389,11 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session.
 
 | Layer | Tool | Status |
 |-------|------|--------|
-| Unit tests | Vitest 2 | 211 passing + 1 skipped — 8 suites |
-| Integration tests | Vitest + wrangler dev --local | 211 passing / 1 skipped across 8 suites. All 5 seams closed. |
+| Unit tests | Vitest 2 | 212 passing · 0 skipped · 8 suites |
+| Integration tests | Vitest + wrangler dev --local | 212 passing / 0 skipped. All 5 seams closed. |
 | Security regression suite | Vitest integration | Complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
 | Load tests | k6 | ✅ S68–S69. All four scripts passing. Local workerd thresholds. Tighten to <150ms at B9 staging. |
-| CI pipeline | GitHub Actions | Level 1 live and green (S70–S71). Level 2 (integration suite in CI) — B7–B8. |
+| CI pipeline | GitHub Actions | Level 1 live and green (S70–S72). Level 2 (integration suite in CI) — B7–B8. |
 | Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
 | Staging environment | refueler-share-staging Worker | B9 scope |
 
@@ -596,36 +472,13 @@ All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IB
 
 ## API / white-label — architecture locked (AP-2 + AP-3a)
 
-**Auth model:** HMAC signing. Every API request signed with HMAC-SHA256 over `method + path + timestamp + body_hash`. Three credentials per commercial relationship: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, Business tier only, issued on first webhook registration, shown once).
+**Auth:** HMAC-SHA256 over `method + path + timestamp + body_hash`. Three credentials per relationship: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, Business only, shown once).
 
-**Credential issuance on behalf of end users:**
-- `POST /api/v1/credential/issue` — HMAC-authenticated
-- Request: `{ tier, transfer_ref, expiry_hours }`
-- Worker generates UUID (never client-generated)
-- `transfer_ref` = client's internal reference. Logged to AE as `blob1`. Never stored in Supabase. Opaque to Refueler.
-- Worker issues NUT-00 Cashu credential, returns `{ uuid, credential, upload_url_base }`
-- Quota in KV: `api_quota_{key_id}` = `{ credentials_remaining, bytes_remaining, period_end }`. 402 on exhaustion.
+**Credential issuance:** `POST /api/v1/credential/issue`. Request: `{ tier, transfer_ref, expiry_hours }`. `transfer_ref` logged to AE as `blob1`, never Supabase, opaque to Refueler. Returns `{ uuid, credential, upload_url_base }`. Quota in KV `api_quota_{key_id}`. 402 on exhaustion.
 
-**Key rotation:** `POST /api/v1/keys/rotate` — reissues `rfs_live_` + `rfs_sign_` pair. Old pair valid 24h grace window. Webhook secret `rfs_whsec_` rotated separately on request.
+**Stripe decoupling:** `subscribers` = billing ledger only, never queried on upload path. Credential issued at webhook receipt, collected via `GET /subscription/credential`. `X-Email` dropped. Renewal: credentials stack, 7-day warning banner (sessionStorage-dismiss).
 
-**Stripe decoupling (Mullvad model):**
-- `subscribers` table = billing ledger only. Never queried on upload path.
-- At Stripe webhook receipt: Worker issues Cashu credential, writes to KV slot keyed by `stripe_customer_id` (24h TTL).
-- User collects via `GET /subscription/credential`. Re-issues on demand if subscription active.
-- `X-Email` header dropped from upload path entirely.
-- Renewal: credentials stack, no credit lost. 7-day renewal warning banner (sessionStorage-dismiss).
-- Honest claim: "We don't join your identity to your transfers, even on the fiat path."
-
-**Multi-user (Business):** Shared firm key + `transfer_ref` attribution (client encodes user ID into `transfer_ref`) + multiple read-only dashboard logins scoped to same `api_key_id`. No sub-keys. See SW block notes for rationale.
-
-**Client dashboard:**
-- Hosted at `dashboard.share.refueler.io` (white-label: client's own subdomain)
-- Fields visible: `transfer_ref`, `uuid`, `tier`, `file_size_bytes`, `total_chunks`, `created_at`, `expiry_timestamp`, `status`
-- Fields never visible: recipient/sender identity, IPs, filenames, download timestamps
-- Backend: AE SQL via `GET /api/v1/transfers`
-- Raw AE export = Enterprise tier only
-
-**Five-tier structure (pricing numbers off-repo):**
+**Five-tier structure (pricing off-repo):**
 
 | Tier | Cap | Expiry | Billing |
 |------|-----|--------|---------|
@@ -633,15 +486,13 @@ All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IB
 | Creative Premium | 100 GB | 1 / 7 / 30 days | Monthly / 3-month / yearly |
 | Production Max | 250 GB + API (100 creds + 250 GB quota) | 1 / 7 / 30 / 90 days | Monthly / 3-month / yearly |
 | Business | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Invoiced (annual minimum) |
-| Enterprise | Custom · 5 TB/mo included | Custom | Annual contract, direct with Rajesh |
+| Enterprise | Custom · 5 TB/mo included | Custom | Annual contract |
 
 No discounts. No savings framing. Prepay cadences are convenience, not a deal.
 
-**Badge:** "Powered by Refueler Share" — Production Max API usage only. Links to `share.refueler.io`. Removed at Business and above. Stored in `wl_config_{hostname}`. Fail-safe: no KV record → `badge: true`.
+**Badge:** "Powered by Refueler Share" — Production Max API only. Removed at Business+. Fail-safe: no KV record → `badge: true`.
 
-**Custom hostname:** CF for SaaS on refueler.io zone. Client CNAME → `wl.share.refueler.io`. Worker route `wl.share.refueler.io/*` → existing refueler-share Worker. No new Worker.
-
-**Webhooks (Business tier — locked AP-3a):** see SW block notes for full spec.
+**Custom hostname:** CF for SaaS. Client CNAME → `wl.share.refueler.io`. Existing Worker. No new Worker.
 
 ---
 
