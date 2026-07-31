@@ -9,6 +9,7 @@
  *   3. Spawn wrangler dev --local
  *   4. Poll /status until ready
  *   5. Expose WORKER_BASE_URL + SUPABASE_MOCK_URL via process.env for tests
+ *   6. provide('stripeWebhookSecret') so test processes can inject it via Vitest API
  *
  * Teardown reverses the order: kill wrangler → close mock → restore .dev.vars
  */
@@ -68,7 +69,7 @@ function serialiseDevVars(obj) {
   return Object.entries(obj).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
 }
 
-export async function setup() {
+export async function setup({ provide }) {
   // ── 1. Start Supabase mock ──────────────────────────────────────────────
   supabaseMock = await startSupabaseMock();
   mockHandle   = supabaseMock;
@@ -115,6 +116,13 @@ export async function setup() {
 
   process.env.WORKER_BASE_URL    = WORKER_URL;
   process.env.SUPABASE_MOCK_URL  = supabaseMock.url;
+
+  // ── 6. Provide stripeWebhookSecret to test processes ───────────────────
+  // process.env set here does not cross the globalSetup → Vitest worker boundary.
+  // provide/inject is the only mechanism that does.
+  const stripeWebhookSecret = vars['STRIPE_WEBHOOK_SECRET'] ?? '';
+  provide('stripeWebhookSecret', stripeWebhookSecret);
+  console.log(`[wrangler-lifecycle] stripeWebhookSecret provided (${stripeWebhookSecret ? 'present' : 'MISSING — check .dev.vars'})`);
 }
 
 export async function teardown() {

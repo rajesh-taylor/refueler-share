@@ -31,7 +31,7 @@
  *   What CAN be tested locally: nonce KV deduplication (same token -> 429 on reuse).
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, inject } from 'vitest';
 import { blake3 } from '@noble/hashes/blake3';
 import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
@@ -622,22 +622,27 @@ describe('Tier cap enforcement — free tier upload cap', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// § STRIPE WEBHOOK AUTHENTICATION (S71)
+// § STRIPE WEBHOOK AUTHENTICATION (S71 + S72)
 // TESTING.md §5 claim: "Webhook payloads are authenticated and replay-protected"
 //
 // Worker returns 401 for all auth failures (bad/missing sig, stale timestamp).
-// The valid-signature positive test is skipped: STRIPE_WEBHOOK_SECRET set in
-// globalSetup does not propagate to Vitest worker processes via process.env.
-// Fix at S72 using Vitest provide/inject API. Unit coverage is comprehensive
-// in unit/stripe.test.js — these integration tests prove the Worker route
-// enforces auth in the real workerd runtime.
+// STRIPE_WEBHOOK_SECRET is injected via Vitest provide/inject (S72 fix) —
+// it cannot be passed via process.env across the globalSetup → worker process
+// boundary. inject() is the only mechanism that crosses that boundary.
+// Unit coverage for the same signing logic is comprehensive in unit/stripe.test.js.
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('Stripe webhook authentication', () => {
   const SAMPLE_EVENT = makeSubscriptionUpdatedEvent();
 
-  it.skip('valid signed webhook -> 200 (skipped: STRIPE_WEBHOOK_SECRET unavailable in test process — fix at S72)', async () => {
-    const { body, headers } = await signStripePayload(SAMPLE_EVENT);
+  it('valid signed webhook -> 200', async () => {
+    const secret = inject('stripeWebhookSecret');
+    if (!secret) {
+      console.warn('[S72] stripeWebhookSecret not injected — is STRIPE_WEBHOOK_SECRET in .dev.vars?');
+    }
+    expect(secret, 'STRIPE_WEBHOOK_SECRET must be available via inject()').toBeTruthy();
+
+    const { body, headers } = await signStripePayload(SAMPLE_EVENT, secret);
     const res = await postRaw('/webhook/stripe', body, { 'Content-Type': 'application/json', ...headers });
     expect([200, 204]).toContain(res.status);
   });
