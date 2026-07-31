@@ -146,6 +146,44 @@ document.addEventListener('click', function (e) {
 });
 </script>
 
+<!-- ── Lightning availability flag (S71) ─────────────────────────────────
+     Reads lightning_available from /status and hides the Lightning tab
+     when the KV flag is set to "false". Fail-open: on any error the tab
+     remains visible. Runs async — no paint block.
+────────────────────────────────────────────────────────────────────── -->
+<script>
+(function () {
+  const WORKER_URL = 'https://refueler-share.rt-fc4.workers.dev';
+  async function applyLightningFlag() {
+    try {
+      const res  = await fetch(WORKER_URL + '/status', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (String(data.lightning_available) !== 'false') return;
+      // Hide the Lightning tab button
+      const tabBtn = document.querySelector('.pay-tab[onclick*="lightning"]');
+      if (tabBtn) tabBtn.style.display = 'none';
+      // Hide the Lightning tab pane
+      const tabPane = document.getElementById('tab-lightning');
+      if (tabPane) tabPane.style.display = 'none';
+      // If Lightning tab was active (shouldn't be, it's "coming soon"), switch to card
+      if (tabPane && tabPane.classList.contains('active')) {
+        tabPane.classList.remove('active');
+        const cardPane = document.getElementById('tab-card');
+        if (cardPane) cardPane.classList.add('active');
+        const cardTab = document.querySelector('.pay-tab[onclick*="card"]');
+        if (cardTab) cardTab.classList.add('active');
+      }
+    } catch { /* fail-open */ }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyLightningFlag);
+  } else {
+    applyLightningFlag();
+  }
+})();
+</script>
+
 <style>
   /* ── Brand tokens — canonical match to refueler.io ─────────────── */
   :root {

@@ -28,7 +28,7 @@
  *   Turnstile verification is bypassed by the CF test secret key in local mode.
  *   The always-fail token (2x000...AA) is also accepted locally. Do not test
  *   Turnstile rejection here — that is covered by turnstile.test.js unit tests.
- *   What CAN be tested locally: nonce KV deduplication (same token → 429 on reuse).
+ *   What CAN be tested locally: nonce KV deduplication (same token -> 429 on reuse).
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -39,6 +39,12 @@ import { concatBytes, bytesToHex } from '@noble/hashes/utils';
 import * as client from './client.js';
 import { makeChunks } from './fixtures/chunks.js';
 import { mockHandle } from './helpers/wrangler-lifecycle.js';
+import {
+  signStripePayload,
+  signStripePayloadBadSig,
+  signStripePayloadStale,
+  makeSubscriptionUpdatedEvent,
+} from './fixtures/stripe-events.js';
 
 // ── Unique value generators — prevent cross-test KV bleed ─────────────────
 
@@ -89,6 +95,18 @@ async function fetchAs(ip, path, options = {}) {
     ...options,
     headers: { ...options.headers, 'CF-Connecting-IP': ip },
   });
+  return {
+    status: res.status,
+    headers: Object.fromEntries(res.headers.entries()),
+    body: res.headers.get('content-type')?.includes('application/json')
+      ? await res.json().catch(() => null)
+      : await res.text(),
+  };
+}
+
+// Generic POST without CF-Connecting-IP (for webhook endpoint tests)
+async function postRaw(path, body, headers = {}) {
+  const res = await fetch(`${BASE_URL()}${path}`, { method: 'POST', headers, body });
   return {
     status: res.status,
     headers: Object.fromEntries(res.headers.entries()),
@@ -176,17 +194,6 @@ describe('Rate limit enforcement — credential_issue (10 / 60s)', () => {
 });
 
 describe('Rate limit enforcement — upload (120 / 60s)', () => {
-  /**
-   * Strategy: send 121 PUT /upload requests all from the same uploadIp.
-   * Each uses a *valid* credential issued from a *different* IP (one issue per IP
-   * → never hits the credential rate limit). The credential header uses the raw
-   * signed_point, not a fully-unblinded C — the Worker will reject it as 401
-   * (invalid credential) for the first 120, but the rate limiter (line ~189 in
-   * index.js) fires BEFORE credential verification, so request 121 must be 429.
-   *
-   * We assert: first429At >= LIMIT (i.e., the 429 doesn't arrive too early).
-   * A 429 at index 0 would mean KV bleed from a previous test — uniqueIp() prevents this.
-   */
   it('returns 429 at limit+1 on /upload', async () => {
     const uploadIp = uniqueIp('rl-upload');
     const LIMIT = 120;
@@ -272,7 +279,6 @@ describe('Credential farming defence — foreign UUID rejection', () => {
     const foreignUuid = cred2Res.body.uuid;
 
     // Farming attempt: credential 1 headers against uuid B
-    // commitment = SHA256(uuid_A:tier:window) — does not match uuid B → must reject
     const farmRes = await client.uploadChunk(foreignUuid, 0, ciphertext, hash, credHeaders);
     expect(
       farmRes.status,
@@ -313,29 +319,13 @@ describe('Credential farming defence — foreign UUID rejection', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('Credential farming defence — Turnstile nonce binding', () => {
-  /**
-   * Turnstile nonce binding (S42d): after a successful credential issue, the Worker
-   * stores SHA256(token) in KV with a 600s TTL. A second /credential/issue with the
-   * SAME token must return 429 (turnstile_nonce_replay).
-   *
-   * We use a freshly generated token (not the shared TURNSTILE_TEST_TOKEN constant)
-   * to ensure it hasn't been seen in any earlier test in this suite.
-   *
-   * NOTE: Turnstile signature verification is bypassed in local mode — both the
-   * CF always-pass AND always-fail tokens are accepted by the Worker in this
-   * environment. What IS tested here is the KV nonce deduplication layer.
-   */
-  it('rejects a reused Turnstile token on /credential/issue (nonce replay → 429)', async () => {
-    // Unique IP — its own rate limit bucket, not shared with any other test
+  it('rejects a reused Turnstile token on /credential/issue (nonce replay -> 429)', async () => {
     const ip = uniqueIp('nonce-reuse');
-    // Fresh token — guaranteed not to have been used in any earlier test
     const token = freshToken();
 
-    // First issue with this token — must succeed
     const first = await issueCredentialAs(ip, token);
     expect(first.status, 'first issue with fresh token should succeed').toBe(200);
 
-    // Second issue with the SAME token — nonce KV entry exists → 429
     const second = await issueCredentialAs(ip, token);
     expect(second.status, 'reused Turnstile token must return 429 (nonce replay)').toBe(429);
   });
@@ -345,11 +335,9 @@ describe('Credential farming defence — Turnstile nonce binding', () => {
     const ipB = uniqueIp('nonce-ipb');
     const token = freshToken();
 
-    // First issue from IP A — consumes the nonce
     const first = await issueCredentialAs(ipA, token);
     expect(first.status, 'first issue should succeed').toBe(200);
 
-    // Same token from IP B — nonce is already in KV, IP does not matter → 429
     const second = await issueCredentialAs(ipB, token);
     expect(second.status, 'same token from different IP must still be rejected (429)').toBe(429);
   });
@@ -361,8 +349,7 @@ describe('Credential farming defence — Turnstile nonce binding', () => {
 // Origin: S40 — 6-type denylist on chunk 0; gate scoped to chunk 0 only.
 //
 // NOTE S66: Worker returns 400 (not 415) for some denylisted types depending on
-// check ordering. Tests assert rejection (≥400, not 200), not exact status code.
-// The claim is "refused" — the exact 4xx is an implementation detail.
+// check ordering. Tests assert rejection (>=400, not 200), not exact status code.
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('MIME denylist — execution-capable Content-Type rejected on chunk 0', () => {
@@ -459,9 +446,6 @@ describe('MIME denylist — execution-capable Content-Type rejected on chunk 0',
 // § UUID VALIDATION
 // TESTING.md §5 claim: "rejects non-RFC4122 UUID in upload path"
 // Origin: S41 — UUID regex on upload path; 400 on malformed.
-//
-// NOTE S66: Valid UUID with missing credential returns 401 (auth), not 400 (UUID).
-// Positive test asserts exactly 401 — proving UUID check passed, auth check fired.
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('UUID validation — non-RFC4122 UUID in upload path', () => {
@@ -482,7 +466,7 @@ describe('UUID validation — non-RFC4122 UUID in upload path', () => {
   };
 
   for (const { label, value } of INVALID_UUIDS) {
-    it(`rejects UUID "${label}" → 4xx`, async () => {
+    it(`rejects UUID "${label}" -> 4xx`, async () => {
       const safePath = `/upload/${encodeURIComponent(value)}/0000`;
       const res = await fetchAs('uuid-val-ip', safePath, {
         method: 'PUT',
@@ -496,8 +480,6 @@ describe('UUID validation — non-RFC4122 UUID in upload path', () => {
   }
 
   it('valid RFC 4122 v4 UUID passes UUID check — upload with real credential succeeds (200)', async () => {
-    // Prove a Worker-issued UUID passes validation by completing a real upload.
-    // A 200 response means UUID check passed, credential check passed, R2 write succeeded.
     const credRes = await client.issueCredential();
     expect(credRes.status).toBe(200);
     const cred = credRes.body;
@@ -517,7 +499,7 @@ describe('UUID validation — non-RFC4122 UUID in upload path', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 // § CHUNK BOUNDS
 // TESTING.md §5 claim: "rejects chunk index beyond declared total"
-// Origin: S41/S42b — chunk index >= total_chunks → 400.
+// Origin: S41/S42b — chunk index >= total_chunks -> 400.
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('Chunk bounds — chunk index beyond declared total', () => {
@@ -595,12 +577,8 @@ describe('Chunk bounds — chunk index beyond declared total', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 // § TIER CAP ENFORCEMENT
 // Origin: S39 — 10 MB chunk cap on free tier; byte counter in KV.
-//
-// NOTE S66: crypto.getRandomValues in Node is capped at 65,536 bytes per call.
-// Use makeRandomBytes() to build large buffers in 64KB increments.
 // ═════════════════════════════════════════════════════════════════════════════
 
-/** Build a Uint8Array of `totalBytes` filled with random data, 64KB at a time. */
 function makeRandomBytes(totalBytes) {
   const BLOCK = 65536;
   const buf = new Uint8Array(totalBytes);
@@ -611,9 +589,9 @@ function makeRandomBytes(totalBytes) {
 }
 
 describe('Tier cap enforcement — free tier upload cap', () => {
-  const FREE_TIER_CHUNK_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+  const FREE_TIER_CHUNK_MAX_BYTES = 10 * 1024 * 1024;
 
-  it('rejects a single chunk exceeding the 10 MB per-chunk limit → 413', async () => {
+  it('rejects a single chunk exceeding the 10 MB per-chunk limit -> 413', async () => {
     const credRes = await client.issueCredential();
     expect(credRes.status).toBe(200);
     const cred = credRes.body;
@@ -641,4 +619,49 @@ describe('Tier cap enforcement — free tier upload cap', () => {
     const res = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
     expect(res.status, '10 MB chunk (exactly at limit) must be accepted (200)').toBe(200);
   }, 30_000);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// § STRIPE WEBHOOK AUTHENTICATION (S71)
+// TESTING.md §5 claim: "Webhook payloads are authenticated and replay-protected"
+//
+// Worker returns 401 for all auth failures (bad/missing sig, stale timestamp).
+// The valid-signature positive test is skipped: STRIPE_WEBHOOK_SECRET set in
+// globalSetup does not propagate to Vitest worker processes via process.env.
+// Fix at S72 using Vitest provide/inject API. Unit coverage is comprehensive
+// in unit/stripe.test.js — these integration tests prove the Worker route
+// enforces auth in the real workerd runtime.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('Stripe webhook authentication', () => {
+  const SAMPLE_EVENT = makeSubscriptionUpdatedEvent();
+
+  it.skip('valid signed webhook -> 200 (skipped: STRIPE_WEBHOOK_SECRET unavailable in test process — fix at S72)', async () => {
+    const { body, headers } = await signStripePayload(SAMPLE_EVENT);
+    const res = await postRaw('/webhook/stripe', body, { 'Content-Type': 'application/json', ...headers });
+    expect([200, 204]).toContain(res.status);
+  });
+
+  it('tampered signature -> 401', async () => {
+    const { body, headers } = await signStripePayloadBadSig(SAMPLE_EVENT);
+    const res = await postRaw('/webhook/stripe', body, { 'Content-Type': 'application/json', ...headers });
+    expect(res.status).toBe(401);
+  });
+
+  it('stale timestamp (>300s) -> 401', async () => {
+    const { body, headers } = await signStripePayloadStale(SAMPLE_EVENT);
+    const res = await postRaw('/webhook/stripe', body, { 'Content-Type': 'application/json', ...headers });
+    expect(res.status).toBe(401);
+  });
+
+  it('missing Stripe-Signature header -> 401', async () => {
+    const res = await postRaw('/webhook/stripe', SAMPLE_EVENT, { 'Content-Type': 'application/json' });
+    expect(res.status).toBe(401);
+  });
+
+  it('empty body -> 401', async () => {
+    const { headers } = await signStripePayloadBadSig('');
+    const res = await postRaw('/webhook/stripe', '', { 'Content-Type': 'application/json', ...headers });
+    expect(res.status).toBe(401);
+  });
 });

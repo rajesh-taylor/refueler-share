@@ -360,6 +360,12 @@ async function handleAdminStatus(request, env) {
     return err(400, `Invalid state. Must be one of: ${validStates.join(', ')}`);
   }
 
+  // S71: validate lightning_available if present
+  const validLightning = ['blink', 'true', 'false'];
+  if (body.lightning_available !== undefined && !validLightning.includes(String(body.lightning_available))) {
+    return err(400, `Invalid lightning_available. Must be one of: ${validLightning.join(', ')}`);
+  }
+
   let current = null;
   try {
     current = await env.STATUS_KV.get('status:current', { type: 'json' });

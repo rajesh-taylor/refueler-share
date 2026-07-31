@@ -213,3 +213,15 @@ export async function getStatus() {
 export async function getMeta(uuid) {
   return request(`/meta/${uuid}`);
 }
+
+/**
+ * Generic POST (S71) — used by Stripe webhook security tests.
+ * Returns { status, headers, body }.
+ */
+export async function post(path, body, headers = {}) {
+  return request(path, {
+    method: 'POST',
+    headers,
+    body,
+  });
+}

@@ -517,3 +517,36 @@ body {
   .group-footer               { display: none; }
   body { background: #F7F4EF !important; color: #3D3A36 !important; }
 }
+
+/* ── Lightning toggle card (S71) ────────────────────────────────────────── */
+.lightning-toggle-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.toggle-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 0.5px solid var(--border-mid);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.toggle-btn:hover {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.toggle-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.val-green { color: var(--c-green); }
+.val-warn  { color: var(--c-amber); }

@@ -39,6 +39,7 @@ function showDashboard() {
   document.getElementById('gate').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('sb-auth').textContent = 'admin · authenticated';
+  initLightningToggle();
 }
 
 async function tryUnlock() {
@@ -553,6 +554,59 @@ function startTimer() {
 function updateCountdown() {
   const el = document.getElementById('countdown');
   if (el) el.textContent = `↻ ${countdown}s`;
+}
+
+// ── Lightning availability toggle (S71) ────────────────────────────────────
+const LIGHTNING_STATE_LABELS = {
+  blink:  { display: 'Blink',  sub: 'Lightning live — Blink backend active' },
+  true:   { display: 'On',     sub: 'Lightning live — all backends accepted' },
+  false:  { display: 'Off',    sub: 'Lightning hidden — Stripe path only' },
+};
+
+function renderLightningToggle(val) {
+  const info    = LIGHTNING_STATE_LABELS[val] ?? { display: val, sub: '' };
+  const stateEl = document.getElementById('lightning-toggle-state');
+  const subEl   = document.getElementById('lightning-toggle-sub');
+  if (!stateEl) return;
+  stateEl.textContent = info.display;
+  stateEl.className   = 'card-value ' + (val === 'false' ? 'val-warn' : 'val-green');
+  subEl.textContent   = info.sub;
+  document.querySelectorAll('#card-lightning-toggle .toggle-btn').forEach(btn => {
+    btn.classList.toggle('toggle-btn--active', btn.dataset.value === val);
+  });
+}
+
+async function loadLightningToggleState() {
+  try {
+    const res  = await fetch(`${WORKER}/status`);
+    const data = await res.json();
+    const val  = String(data.lightning_available ?? 'blink');
+    renderLightningToggle(val);
+  } catch {
+    const subEl = document.getElementById('lightning-toggle-sub');
+    if (subEl) subEl.textContent = 'error reading state';
+  }
+}
+
+async function setLightningAvailability(value) {
+  try {
+    const res = await fetch(`${WORKER}/admin/status`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body:    JSON.stringify({ lightning_available: value }),
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    renderLightningToggle(value);
+  } catch (err) {
+    showError(`Lightning toggle: ${err.message}`);
+  }
+}
+
+function initLightningToggle() {
+  document.querySelectorAll('#card-lightning-toggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLightningAvailability(btn.dataset.value));
+  });
+  loadLightningToggleState();
 }
 
 // ── Smoke test ─────────────────────────────────────────────────────────────
