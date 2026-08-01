@@ -315,26 +315,17 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 
 ## B9 scope additions (AP-4)
 
-**Incident response plan** — build before first customer:
-- Three severity tiers: S1 (active breach, 30min response/2hr public ack) · S2 (suspected/degradation, 4hr) · S3 (operational, status page update).
-- Pre-written S1 template: what happened (one sentence, honest) / what we know / what we don't / what we're doing in the next 2hrs / next update time (specific, not "soon").
-- Channel order: status page first → email (paid users via Stripe) → SimpleX group (enterprise) → public post.
-- Free tier anonymity is a positive narrative in breach scenario: "we cannot notify free tier users individually because we hold no identity data — this is by design."
-- UK GDPR Article 33: 72hr ICO notification window for personal data breaches. Share architecture minimises exposure.
-- Run tabletop simulation (S1 scenario walkthrough) before alpha. Questions to answer in the simulation: who can post to status page at 3am; notify before or after full scope understood (answer: before, with caveats); pre/post-breach communication distinction.
-- Coldcard lesson: silence compounds damage faster than the breach itself.
+---
+**Incident response plan and breach register:**
+Full playbook in `docs/incident-response.md`. Breach log in `docs/security-breach.md`.
+Both created AP-5. Build scope B9 — implement status page incident dashboard panel, `incident_active`
+KV schema extension, homepage status widget, and tabletop simulation before alpha.
+Key architectural point: R2 breach exposes ciphertext only (key never held). Supabase breach
+triggers UK GDPR Article 33 (72hr ICO notification). Free tier: no personal data held, no
+notification obligation, positive architectural narrative. Run tabletop simulation
+(scenario documented in `docs/incident-response.md` §8) before first customer.
 
-**Status page incident dashboard** (`share.refueler.io/status`):
-- Homepage: small persistent modal (bottom-right corner) showing current operational status colour (green/amber/red). Click → `/status` full page.
-- Status page: existing operational view plus dedicated incident dashboard panel for S1/S2/S3 events.
-- Incident panel fields: severity tier · declared at (timestamp) · last updated · summary (one sentence) · current actions · next update time (countdown).
-- S1 panel: prominent, full-width, red border. Auto-refreshes every 60s. Cannot be dismissed.
-- S2 panel: amber, same auto-refresh. Dismissible after reading.
-- S3 panel: standard informational. Standard sessionStorage dismiss.
-- All powered by existing KV status system (`STATUS_KV`) — extend schema, no new infrastructure.
-- KV key: `incident_active` → `{ severity, declared_at, updated_at, summary, actions, next_update }`. Null = no active incident.
-- Admin sets via extended `POST /admin/status` with `incident` field.
-- Build in same B9 session as whitepaper and staging environment.
+---
 
 **SimpleX Chat:**
 - Self-hosted SMP server on Hetzner alongside Lightning node (B9+).
