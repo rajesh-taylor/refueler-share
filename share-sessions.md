@@ -63,8 +63,6 @@
 - DO NOT attempt Customer Portal without active subscription — Stripe returns `resource_missing`
 - 4242 card is test-mode only — never works in live mode
 
-**B3 gap (deferred to B11):** Full cancel → webhook → Supabase loop requires a real live subscriber. `cus_UtlpRELAdcZXk2` has no active subscription.
-
 ---
 
 ## Sessions 34–52 — B4 Security hardening + B5 Design full pass
@@ -105,7 +103,6 @@
 
 ---
 
-
 ## Sessions 53–72a — B6 Testing infrastructure + folder upload
 
 | # | Commit | Summary |
@@ -132,14 +129,6 @@
 | S72 | `319225f` | Stripe webhook provide/inject fix. Valid-sig test un-skipped. 212 passing / 0 skipped. |
 | S72a | — | B6 close. Snag sweep. TESTING.md v0.5. Context trim. B7 brief. B6 formally closed. |
 
-**B6 snag disposition (S72a):**
-- Resolved by removal: X-Email header (AP-2 decision). TESTING.md fixes (S71/S72).
-- → B7 buffer (S87): status tile for admin dashboard.
-- → B9: manifest-field minimalism audit; UUID/fragment entropy pre-audit.
-- → B13: receiver page nav; nav snag (Upgrade link on refueler.io).
-- → B11: QR logo centre.
-- Open: REFUELER-BRIDGE.md — commit to `refueler-io` when /notes/ session opens that repo.
-
 **B6 do-not-retry (permanent):**
 - DO NOT use `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x — bare `new Uint8Array(buf)` only.
 - DO NOT load fflate or qr-creator from cdnjs — self-hosted only (`frontend/`).
@@ -153,135 +142,70 @@
 
 ---
 
-## B6 notes — competitor/privacy analysis (M-series)
+## AP-series — Architectural planning sessions (uncounted)
 
-**Rationale:** Buffer sessions available + genuine strategic value before btc++ Berlin and B13 go-to-market block. Three focused sessions using a pre-planned prompt dropped into Opus. Output feeds B13 positioning, btc++ pitch, and the B9 whitepaper §Privacy comparison.
-
-**M-01 — Privacy-native peers (Proton Drive, Tresorit, Internxt):**
-- How do they handle encryption at rest vs in transit vs zero-knowledge?
-- Where does the key live? Who can see it? Under what legal compulsion?
-- What metadata do they collect? (filenames, access times, IP addresses)
-- Security audit posture: have they published audit reports? Which firms? How old?
-- Honest assessment of their claims vs actual architecture.
-
-**M-02 — File transfer peers (WeTransfer, Smash, Wormhole, OnionShare):**
-- What actually happens to a file after upload? Storage duration, deletion guarantees.
-- Do any offer client-side encryption? What's the key model?
-- Payment anonymity: do any take Lightning or crypto? Do any offer anonymous access?
-- What GDPR/compliance language do they use and what does it actually mean?
-- OnionShare: what does a Tor-based model give that a Cloudflare Workers model doesn't?
-
-**M-03 — Architectural inspiration (Bitmail EHL, Nostr file hosting, Blossom protocol):**
-- Bitmail's Encrypted Hashlink concept: content hash as delivery receipt on a blockchain ledger. What's the threat model difference vs Refueler's KV manifest approach?
-- Nostr NIP-96 file storage: how do relay-based storage models handle anonymity?
-- Blossom (BUD-01/03): content-addressed blob storage over HTTP. Overlap with BLAKE3 content addressing in Refueler?
-- What does decentralisation buy vs what does Cloudflare's edge buy? Honest comparison.
-
-**Session format:** Plan the prompt in a dedicated mini-session → run in Opus → summarise findings back into `Share-Master-Context.md` §Competitive intelligence (new section, B13 scope) at S72 or in a standalone M-series commit outside the numbered sessions.
-
----
-
-## M-series — Competitive & architectural intelligence (outside repo, not version-controlled)
-
-Labelled M-01/M-02 (merged from planned M-01/M-02/M-03 — M-01/M-02 merged per S67 decision).
-Output files live at `/Users/rajeshtaylor/Documents/`. Not committed to any repo.
-Feeds: B9 whitepaper §Competitive context + §Design rationale + §Alternatives considered + §Threat model. B13 go-to-market. btc++ Berlin pitch.
-
-| # | Date | File | Summary |
-|---|------|------|---------|
-| M-01 | 28 Jul | `COMPETITIVE-INTEL.md` | Privacy & security analysis: Proton Drive, Tresorit, Wormhole, OnionShare, WeTransfer, Smash, SwissTransfer. 7-dimension comparison across all products. Grounded in Securitum Proton Drive audit (Oct 2021, Michał Bentkowski). Key findings: Proton accepts on-chain BTC — do not claim "no competitor offers anonymous payment". Anonymity spectrum: WeTransfer/Smash/SwissTransfer → Tresorit/Proton → Wormhole → **Refueler Share** → OnionShare. Positioning: "professional-grade anonymity where only one side needs to be sophisticated." B13 wedges: vs WeTransfer (ML-terms/content access), vs SwissTransfer ("jurisdiction is not architecture"), vs Proton ("no account to correlate; payment is blinded"), vs OnionShare ("close your laptop; transfer survives"). Two `/notes/` article titles confirmed: "What a subpoena gets from seven file transfer services" · "Why our till is blind." |
-| M-02 | 28 Jul | `ARCHITECTURAL-INSPIRATION.md` | Decentralised protocol analysis: Bitmail EHL, Nostr NIP-96 (effectively deprecated → Blossom), Blossom BUD-01/BUD-04. Key findings: (1) Bitmail EHL solves non-repudiation — our anti-product. Decline chain-anchoring. (2) NIP-96 deprecated; say "Blossom" at Berlin. (3) BUD mirroring is BUD-04 not BUD-03 (BUD-03 = user server list). (4) "Pseudonymous is not unlinkable" — the Berlin line. (5) Cashu whitepaper paragraph drafted verbatim. (6) btc++ "why not Blossom?" answer ready to rehearse. (7) Blossom metadata-minimalism benchmark → manifest-field audit added to S72 snag sweep. Decline table: chain anchoring, blockchain ledger, Nostr relay manifest, content-addressed read interface, BUD-04 mirroring (defer B10), NIP-98 keypair auth. |
-
-**Do-not-say (from M-01):** "No competitor offers anonymous payment" — false. Proton accepts on-chain Bitcoin and cash by post.
-**Do-not-use framing (from M-01):** "Swiss-grade privacy", "zero-knowledge" as headline, "military-grade encryption", "anonymous payments."
-**Whitepaper framing that is genuinely ours (M-01):** "The server is blind and so is the till." Blind-signature credentials as the third leg — nobody detaches payment from usage. Open-source verifiability of a hosted service. Honest-metadata table (sizes/timing visible, published voluntarily). Executable evidence trail.
+| # | Date | Summary |
+|---|------|---------|
+| AP-0 | 29 Jul | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. Mullvad payment decoupling. Client dashboard scoped. API pricing model direction set. Susie/BHODL contacts logged. |
+| AP-1 | 29 Jul | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. |
+| AP-2 | 30 Jul | API architecture planning. Auth: HMAC signing. Credential issuance on behalf of end users. Stripe decoupling. Renewal: credentials stack. Dashboard: hosted, AE-backed. All decisions locked. |
+| AP-3 | 30 Jul | White-label implementation planning. Custom hostname flow. Badge config via KV. IT handover doc locked. Five-tier structure locked. Pricing cadence 1/3/12 months. |
+| AP-3a | 30 Jul | Webhook spec locked. Single API key + rotation locked. OEM positioning paragraph drafted. SW block created: 12 core + 2 buffer. All context files updated. |
+| AP-4 | 1 Aug | Security and cryptography strategy session. Argon2id for Enterprise API (client-side KDF, post-B8). ML-KEM shipping order locked (Prod Max + Enterprise first, B10). BIP-39 12-word account creation for enterprise. BIP-85 staff key derivation (B8 planning). FROST threshold signatures (B12, whitepaper §Future work). Silent Payments over PayNym long-term. Nostr keypair dashboard auth (SW/B8). SimpleX Chat for internal + enterprise support comms (B9+). Incident response plan (B9 scope): three severity tiers, pre-written S1 template, tabletop simulation before alpha. Status page incident dashboard: homepage modal, S1/S2/S3 panel with KV-backed `incident_active` key. No social media — refueler.io is the canonical destination. refueler-multi-core: Esplora/Mempool.space fork post-B9. |
 
 ---
 
 ## B7 session plan — Lightning/Blink + anonymous paid tier
 
-**Block principle:** No session holds more than one architecturally complex piece of work.
-M difficulty = 2 sessions (a/b). L difficulty = 3 sessions (a/b/c). S = 1 session.
-Buffer consumed only if genuinely needed — reviewed at S83a.
-
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| S73 | Lightning infra I-a | Worker secrets set (`BLINK_API_KEY`, `BLINK_WALLET_ID`). `worker/src/lightning.js` scaffold. `createInvoice()` stub. `LIGHTNING_BACKEND` env var abstraction. | M |
-| S73a | Lightning infra I-b | `createBlinkInvoice()` implementation. `lnInvoiceCreate` GraphQL call. Response parsing. Unit smoke test: curl → invoice returned. | M |
-| S74 | Lightning infra II-a | `POST /webhook/lightning` endpoint. KV payment tracking schema: `{ paymentHash, tier, period, created_at, expires_at, settled: false }` — 25h TTL. | M |
-| S74a | Lightning infra II-b | Dedup logic: second webhook call finds `settled: true`, returns 200 silently. `getBlinkInvoiceStatus()` polling fallback. Smoke test: curl invoice → fake webhook → KV settled flag confirmed. | M |
-| S75 | Credential issuance I-a | On settled webhook: resolve `{ tier, period }` from KV. Issue Cashu credential via NUT-00 path with tier-appropriate capacity. | L |
-| S75a | Credential issuance I-b | Write credential to short-lived KV slot keyed by `paymentHash` (10 min TTL). `GET /subscription/lightning/credential?hash=` poll endpoint. | L |
-| S75b | Credential issuance I-c | Tier cap wiring for Lightning credentials (no X-Email — credential-based enforcement design). Error states: expired invoice, already-redeemed hash. Smoke test full chain. | L |
-| S76 | Frontend Lightning flow I-a | `src/upgrade.njk`: Lightning tier cards enabled. `POST /subscription/lightning` wired. Paper/Carbon tokens throughout. | M |
-| S76a | Frontend Lightning flow I-b | QR display (qr-creator, same pattern as share flow). BOLT11 copy button. Rate display (GBP + sats equivalent, "rate locked 24h" copy). Polling for credential on payment hash. | M |
+| S73 | Lightning infra I-a | Worker secrets set. `worker/src/lightning.js` scaffold. `createInvoice()` stub. `LIGHTNING_BACKEND` env var abstraction. | M |
+| S73a | Lightning infra I-b | `createBlinkInvoice()` implementation. `lnInvoiceCreate` GraphQL call. Response parsing. Unit smoke test. | M |
+| S74 | Lightning infra II-a | `POST /webhook/lightning` endpoint. KV payment tracking schema — 25h TTL. | M |
+| S74a | Lightning infra II-b | Dedup logic. `getBlinkInvoiceStatus()` polling fallback. Smoke test full chain. | M |
+| S75 | Credential issuance I-a | On settled webhook: resolve `{ tier, period }`. Issue Cashu credential. | L |
+| S75a | Credential issuance I-b | Write credential to KV keyed by `paymentHash` (10 min TTL). `GET /subscription/lightning/credential` poll endpoint. | L |
+| S75b | Credential issuance I-c | Tier cap wiring for Lightning credentials. Error states. Smoke test full chain. | L |
+| S76 | Frontend Lightning flow I-a | `src/upgrade.njk`: Lightning tier cards enabled. `POST /subscription/lightning` wired. Paper/Carbon tokens. | M |
+| S76a | Frontend Lightning flow I-b | QR display. BOLT11 copy button. Rate display. Polling for credential on payment hash. | M |
 | S77 | Frontend Lightning flow II-a | Credential receipt → browser memory. Upload flow unlocks paid tier cap on credential receipt. | M |
-| S77a | Frontend Lightning flow II-b | Error states: expired invoice UI, already-redeemed UI, payment timeout (24h). Full frontend smoke test both Paper and Carbon. | M |
-| S78 | GBP/sats pricing display | Blink `btcPrice` query wired in Worker at invoice creation. Rate stored in KV entry alongside hash. Displayed on frontend: "£12 = ~82,400 sats (rate at time of invoice)." | S |
-| S79 | Payment privacy table I | `src/_data/payment_privacy.json` created. Schema: array of rows, each with `label`, `stripe`, `lightning`, `paynym` fields. Stripe and Lightning columns populated. PayNym column: "Coming soon" placeholder throughout. | S |
-| S79a | Payment privacy table II | Eleventy partial `src/_includes/payment-privacy-table.njk` renders JSON. Collapsible section added to `src/upgrade.njk`. Paper/Carbon tokens. Blink correlation row explicit. Full build + visual check. | S |
-| S80 | Dashboard Lightning cards I-a | `frontend/admin/dashboard.html`: new Lightning section. Lightning confirmation latency card (p95, live — KV `invoice_created_at` vs `webhook_received_at`). AE logging for latency datapoint added to `/webhook/lightning` handler. | M |
-| S80a | Dashboard Lightning cards I-b | Four stub cards (greyed, labelled): webhook delivery rate (needs LNbits), webhook signature failures (needs LNbits), routing fee income MTD (needs own node), channel liquidity health (needs own node). CSS: greyed state, "available at B9" tooltip. | M |
-| S81 | KV Lightning admin toggle | Dashboard toggle card: `lightning_available: true/false/blink`. `POST /admin/status` extended. Upgrade page reads flag — Lightning option hidden when `false`. Graceful degradation copy. Smoke test both states. | S |
-| S82 | Paid tier activation I-a | Re-enable Creative Premium + Production Max cards (greyed since S35-e). Stripe path smoke test: checkout → webhook → Supabase row → tier enforced. | M |
-| S82a | Paid tier activation I-b | Lightning path smoke test: invoice → pay (test wallet) → credential issued → tier enforced → upload cap active. Both payment paths confirmed live. | M |
-| S83 | B7 security audit I-a | Full security review Lightning flow: invoice expiry handling, KV race conditions, credential farming via Lightning path, double-issuance attack vectors. | M |
-| S83a | B7 security audit I-b | Webhook replay attack surface. Any findings from S83 fixed and retested. Marketing claim rulings updated — Lightning pseudonymity claims audited. | M |
-| S84 | LNbits planning I | Read `lnbits/lnbits` repo. Map keep/strip/brand decisions. Extension shortlist: LNURLp, LNURLw, Boltcard. Webhook signing spec. Dashboard metrics enabled by signing logged. No code this session. | S |
-| S85 | LNbits planning II | Skinning scope: which templates, which tokens, effort estimate. LNURL-withdraw gift architecture design. NUT-20 binding spec. Session output: locked decisions list for B9. No code this session. | S |
-| S86 | LNURL-withdraw gift architecture | Design document: Cashu credential as LNURL-withdraw payload. Wallet compatibility matrix (Zeus, Phoenix, Blink, Breez). Gift flow UX spec. B9 session scope locked. | S |
-| S87 | B7 close | Snag sweep. Context files updated. §Lightning infrastructure finalised. B8 brief. Rajesh B9 background tasks listed. Buffer review. | S |
+| S77a | Frontend Lightning flow II-b | Error states: expired invoice, already-redeemed, payment timeout. Full frontend smoke test. | M |
+| S78 | GBP/sats pricing display | Blink `btcPrice` query wired. Rate stored in KV. Displayed on frontend. | S |
+| S79 | Payment privacy table I | `src/_data/payment_privacy.json`. Stripe and Lightning columns populated. PayNym: "Coming soon." | S |
+| S79a | Payment privacy table II | Eleventy partial renders JSON. Collapsible section on upgrade page. Paper/Carbon tokens. | S |
+| S80 | Dashboard Lightning cards I-a | Lightning section. Confirmation latency p95 LIVE. AE logging for latency datapoint. | M |
+| S80a | Dashboard Lightning cards I-b | Four stub cards (greyed, "available at B9" tooltip). | M |
+| S81 | KV Lightning admin toggle | `lightning_available` flag. `POST /admin/status` extended. Graceful degradation copy. | S |
+| S82 | Paid tier activation I-a | Re-enable Creative Premium + Production Max. Stripe path smoke test. | M |
+| S82a | Paid tier activation I-b | Lightning path smoke test. Both payment paths confirmed live. | M |
+| S83 | B7 security audit I-a | Full security review Lightning flow: expiry, KV races, credential farming, double-issuance. | M |
+| S83a | B7 security audit I-b | Webhook replay attack surface. Findings fixed. Marketing claim rulings updated. | M |
+| S84 | LNbits planning I | Read lnbits repo. Keep/strip/brand decisions. Extension shortlist. Webhook signing spec. No code. | S |
+| S85 | LNbits planning II | Skinning scope. LNURL-withdraw gift architecture design. NUT-20 binding spec. No code. | S |
+| S86 | LNURL-withdraw gift architecture | Design document. Wallet compatibility matrix. Gift flow UX spec. B9 scope locked. | S |
+| S87 | B7 close | Snag sweep. Context files updated. §Lightning infrastructure finalised. B8 brief. | S |
 
-**Buffer pool (5 sessions):**
-- S75c — credential issuance complexity overrun
-- S76b — frontend Lightning flow overrun
-- S83b — security audit findings requiring additional fixes
-- S84a — LNbits planning scope larger than expected
-- S87a — B7 close sweep overrun
-
-**Background work for Rajesh during B7:**
-1. Complete pre-B7 checklist (see Share-Master-Context.md §B7 notes) before S73 starts.
-2. Read LNbits repo before S84: `https://github.com/lnbits/lnbits`
-3. Hetzner account setup (no VPS yet — just have login ready for B9): `https://hetzner.com`
-4. Test Lightning wallet for payment testing: Blink app on a second device, or Phoenix wallet.
-5. 2 GB test file if not already done: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-
-
-## AP-series — Architectural planning sessions (uncounted)
-
-| # | Date | Summary |
-|---|------|---------|
-| AP-0 | 29 Jul | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. Mullvad payment decoupling. Client dashboard scoped (firm-scoped, privacy-intact). IT handover doc confirmed. API pricing model direction set. Susie/BHODL contacts logged. |
-| AP-1 | 29 Jul | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. REFUELER-BRIDGE.md prompt drafted for refueler-io project chat. |
-| AP-2 | 30 Jul | API architecture planning. Auth: HMAC signing (rfs_live_ + rfs_sign_ keypair). Credential issuance on behalf of end users (transfer_ref opaque to Refueler). Stripe decoupling: subscribers = billing ledger only, X-Email dropped. Renewal: credentials stack, no credit lost, re-issue on demand. Dashboard: hosted, AE-backed, no identity data. All decisions locked for AP-3. |
-| AP-3 | 30 Jul | White-label implementation planning. Custom hostname flow (CF for SaaS, wl.share.refueler.io). Badge config via KV. IT handover doc structure locked. Five-tier structure locked. Pricing cadence 1/3/12 months, no discounts. Stripe updated: 4 new prices, 2 archived. |
-| AP-3a | 30 Jul | Webhook spec locked (4 events, rfs_whsec_, waitUntil retry + dead-letter, notification-not-control-flow). Single API key + rotation locked — sub-keys declined, transfer_ref handles attribution. OEM positioning paragraph drafted (verbatim, Berlin-ready). SW block created: 12 core + 2 buffer, runs post-S87. CLAUDE.md, Share-Master-Context.md, share-sessions.md, TESTING.md, notes-articles-list.md all updated. |
+**Buffer pool (5 sessions):** S75c · S76b · S83b · S84a · S87a
 
 ---
 
 ## SW block session plan — white-label + API build (post-B7)
 
-**Block principle:** Runs immediately after S87 (B7 close). No code before SW1.
-SW block is separate from B7 — do not append SW sessions to B7.
-B8 renumbers after SW close (SW9).
-
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| SW1 | CF for SaaS setup | One-time: SaaS enablement on refueler.io zone. Fallback origin `wl.share.refueler.io`. Worker route `wl.share.refueler.io/*` added to wrangler.toml. Smoke: `GET /status` via wl hostname returns 200. | S |
-| SW2 | API auth I | `worker/src/api_auth.js` — HMAC-SHA256 verify over `method+path+timestamp+body_hash`, ±300s window, key lookup from KV. Unit tests in same session. | M |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + `api_quota_{key_id}` KV enforcement (402 on exhaustion). AE logging of `transfer_ref` as `blob1`. `POST /api/v1/keys/rotate` with 24h grace window. | M |
-| SW3 | Badge + /wl/config | `GET /wl/config` — reads `wl_config_{hostname}` by Host header. `Cache-Control: max-age=3600`. Fail-safe: no KV record → `{ badge: true }`. Badge component in Paper/Carbon, links to `share.refueler.io`. | S |
-| SW4 | Webhooks I | `worker/src/webhooks.js`. Registration: `POST /api/v1/webhooks` (max 3, HTTPS only, no IP literals) → `{ webhook_id, whsec }`. `GET /api/v1/webhooks` list. `DELETE /api/v1/webhooks/{id}`. `wh_config_{api_key_id}` KV schema. `rfs_whsec_` issuance — shown once. | M |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`: immediate → +5s → +25s, 10s timeout. Non-2xx or timeout = failure. After 3rd failure: dead-letter `wh_dead_{api_key_id}_{event_id}` (7-day TTL) + AE log (`blob1=api_key_id, blob2=event_type, blob3=outcome, double1=latency_ms`). Daily cron retries dead-letter once. | M |
-| SW5 | Client dashboard I | `frontend/dashboard-client/` scaffold. API-key auth. Transfers table from AE via `GET /api/v1/transfers?api_key_id={id}&from={ISO}&to={ISO}&transfer_ref={optional}`. Paper/Carbon tokens. | M |
-| SW5a | Client dashboard II | Capability gating by tier (Prod Max / Business / Enterprise). Webhook monitoring card: AE-sourced delivery rate 24h/7d, last failure timestamp + HTTP status, dead-letter count (from KV). Hostname health card. | M |
-| SW6 | Onboarding flow | Per-client admin runbook. Steps: CF custom-hostname API call → keypair + whsec issue → `wl_config_{hostname}` KV write → activation poll + smoke test `GET /status` on client hostname. Single-line curl commands throughout. | S |
-| SW7 | IT handover PDF | Two-page branded PDF. Paper theme: bg `#F7F4EF`, gold accent `#C8A96E`, IBM Plex Mono for DNS block, Source Serif 4 body. Three substitution fields: hostname, IT contact name, date. Sections: what this is / DNS record / what happens next / how to test (3 checks) / two failure modes / ongoing / support path (support@refueler.io) / footer: what we never see. Built once, generated per client. | S |
-| SW8 | Daily cron | `[triggers] crons` in wrangler.toml. Scheduled handler: (1) poll each `wl_config_*` hostname's `/status` → AE log → dashboard health card amber/green; (2) retry `wh_dead_*` KV entries once. | S |
-| SW9 | SW close | Full smoke test both API and white-label paths. TESTING.md SW additions. Context files trim pass. B8 brief. Buffer review. | S |
+| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. Smoke: `GET /status` via wl hostname. | S |
+| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. | M |
+| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rotation with 24h grace. | M |
+| SW3 | Badge + /wl/config | `GET /wl/config` by Host header. Fail-safe `badge: true`. Badge component Paper/Carbon. | S |
+| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. | M |
+| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. Daily cron retry. | M |
+| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. | M |
+| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. | M |
+| SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. | S |
+| SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. Built once, generated per client. | S |
+| SW8 | Daily cron | Hostname health checks → AE. Dead-letter webhook retry. `[triggers]` in wrangler.toml. | S |
+| SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. | S |
 
-**Buffer pool (2 sessions):**
-- SW2b — auth implementation overrun
-- SW5b — client dashboard overrun
+**Buffer pool (2 sessions):** SW2b · SW5b
 
 *"Nothing stops this train."*

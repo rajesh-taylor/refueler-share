@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.0 | **Last updated:** Ad hoc · 1 Aug 2026
+> **Version:** 5.0 | **Last updated:** AP-4 ad-hoc · 1 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -77,8 +77,6 @@ Project: `tihgvdokeofnjxjkenmm`
 
 Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Content-Range: 0-0/TOTAL`.
 
-**Supabase posture note (reviewed 1 Aug 2026):** Supabase remains appropriate for its current role — ledger only, RLS deny-all, never queried on the upload hot path. No meaningful weakening since project start. Watch: Supabase free tier project pausing (auto-pause after 1 week inactivity) — upgrade to Pro before alpha to eliminate pause risk. Also watch their SOC 2 Type II renewal cadence; last report was 2024.
-
 ---
 
 ## Cloudflare resources
@@ -130,7 +128,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 **Crypto layers (never conflate):**
 - BLAKE3 = chunk integrity. Browser: local WASM at `frontend/blake3/`. Worker: `worker/blake3-wasm/` via `blake3_worker.js`. Server verifies every chunk — 400 on mismatch.
 - Cashu = anonymous auth (NUT-00/07/11). No monetary usage. No external mint.
-- Passphrase hash = SHA-256 only (`crypto.subtle.digest`). Stored in manifest as `p2sh_secret_hash`.
+- Passphrase hash = SHA-256 only (`crypto.subtle.digest`). Stored in manifest as `p2sh_secret_hash`. Argon2id KDF replaces this for Enterprise API tier post-B8.
 - AES-GCM session key lives in URL fragment only — never in requests, never in logs.
 - Upload boundary: `Content-Type` header validated on chunk 0 against denylist of execution-capable MIME types. 415 on missing or denylisted type, logged to AE. MIME type is never stored.
 - AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`. Never `new Uint8Array([i])`.
@@ -165,17 +163,15 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 **Regulatory (UK):**
 - Share mint issues access credentials only — capability tokens, not monetary instruments. FCA authorisation not required.
 - Cashu in Share = anonymous authentication mechanism, not payment instrument.
-- NUT-29 orchestration boundary (locked ad hoc 1 Aug): Refueler issues credentials with spending conditions encoded — it verifies conditions at melt. It never custodies funds, never holds keys to third-party wallets, never controls settlement. This must be documented in writing in the B9-NUT29-plan session before any NUT-29 code ships. The regulatory line between orchestration and custody is the line we must never cross silently.
+- UK GDPR Article 33: 72hr ICO notification for personal data breaches. Share's architecture minimises exposure — free tier holds no identity data; encrypted noise only at rest.
 
-**Payment flow (locked):**
-- Lightning → Blink API (primary) → LNbits (Tier 2 on trigger)
-- PayNym → Sparrow cold storage wallet, manual/semi-manual settlement
-- Share mint → upload credentials only, zero monetary value, no e-money
+**Marketing / outreach:**
+- No social media presence. refueler.io is the canonical destination for all outreach. Clients visit the site; Share does not go to them. This is by design and consistent with the product's values.
 
 **Marketing claim rulings (S42e — update again after B8, B9, B10):**
 - ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; Turnstile nonce binding; anonymous transfer (no account, free tier).
 - 🔒 Blocked: full Merkle tree verification; NUT-11 Mode 2; "audit-certified"; ML-KEM; any "end-to-end file integrity" without the server-side-chunks-only qualifier.
-- 📅 Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle (Option A) · B10 → Merkle Option B (binary tree) + ML-KEM.
+- 📅 Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle · B10 → ML-KEM.
 
 ---
 
@@ -206,6 +202,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `ProjectivePoint.subtract()` in noble v2 | Use `.add(point.negate())` |
 | Cloudflare Queues / Durable Objects / D1 for webhooks | `ctx.waitUntil` + KV dead-letter only |
 | Sub-keys per API user (Business tier) | One keypair per commercial relationship + `transfer_ref` attribution |
+| Never edit `frontend/upgrade.html` directly | Eleventy overwrites it from `src/upgrade.njk` on every build |
 
 ---
 
@@ -216,7 +213,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Block | Commit | Summary |
 |-------|--------|---------|
 | B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
-| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6 load tests (all green), CI Level 1, Lightning admin toggle, Stripe webhook security suite, Vitest provide/inject fix (S72). |
+| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6 load tests (all green), CI Level 1, Lightning admin toggle, Stripe webhook security suite. |
 
 **Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
 
@@ -234,13 +231,13 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B7 | S73–S87+ | Lightning/Blink + anonymous paid tier — 25 core + 5 buffer |
 | SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer · runs post-S87 |
 | B8 | TBD | NUT-11 Mode 2 keypair auth (renumbered post-SW) |
-| B9 | TBD | LNbits fork + node + LNURL-withdraw + whitepaper + staging + NUT-29 use cases |
-| B10 | TBD | Enterprise + ML-KEM + Merkle Option B + chaos tests + contract tests |
+| B9 | TBD | LNbits fork + node + LNURL-withdraw + whitepaper + staging + incident response plan |
+| B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
 | B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
-| B12 | TBD | Public beta launch |
+| B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
 | B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) |
 
-Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · B9-NUT29→B10-Merkle (advanced crypto chain).
+Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard).
 
 ---
 
@@ -284,6 +281,94 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 
 ---
 
+## Post-B8 agenda (locked AP-4)
+
+**Argon2id for Enterprise API passphrase-protected transfers:**
+- Client-side KDF only. WASM bundle ~200KB, one-time page load, not per-chunk.
+- Worker never sees raw passphrase — only the Argon2id-derived 32-byte key.
+- Parameters: `m=65536`, `t=3`, `p=4` (OWASP minimum). ~300ms browser-side, imperceptible to user.
+- Positioned as security feature to enterprise clients, not a caveat.
+- Free tier review only if competitors force the issue.
+- After B8 NUT-11 Mode 2 work is live: propose Argon2id as NUT-11 Mode 1 KDF extension via Cashu GitHub. Would replace SHA-256 in the P2SH secret hash path. Precedent: BIP-38 uses scrypt for the same purpose. Framing: "NUT-11 Mode 1 with optional KDF hardening for high-value secrets."
+
+**ML-KEM (post-quantum key wrapping):**
+- Ship Production Max and Enterprise tiers first. Free tier deferred until paid tier stable.
+- Positioned as progression path — customers buy up into post-quantum security.
+- B10 scope.
+
+**BIP-85 for enterprise user management:**
+- Enterprise admin generates master seed (BIP-39, 12-word phrase, confirmed on account creation).
+- BIP-85 derives child signing keys per staff member from master.
+- Admin can revoke/rotate individual child keys without affecting others.
+- Server only verifies signatures — key hierarchy entirely client-owned.
+- Staff offboarding: rotate child key derivation path, issue new `rfs_live_` against new child public key.
+- Build scope: SW or B8 — confirm at SW close.
+
+**Nostr keypair auth for dashboard (paid + enterprise):**
+- secp256k1 challenge-response. No password, no email loop, no OAuth third-party dependency.
+- Admin signs staff public keys into allowlist. BIP-85 derives staff Nostr keys from master seed.
+- Team usage dashboard: per-user upload history, quota remaining, aggregated from KV.
+- Creatives and Bitcoin-native users will already have Nostr keys.
+- Notes article 12 reframed around this as "API technical integration guide."
+
+---
+
+## B9 scope additions (AP-4)
+
+**Incident response plan** — build before first customer:
+- Three severity tiers: S1 (active breach, 30min response/2hr public ack) · S2 (suspected/degradation, 4hr) · S3 (operational, status page update).
+- Pre-written S1 template: what happened (one sentence, honest) / what we know / what we don't / what we're doing in the next 2hrs / next update time (specific, not "soon").
+- Channel order: status page first → email (paid users via Stripe) → SimpleX group (enterprise) → public post.
+- Free tier anonymity is a positive narrative in breach scenario: "we cannot notify free tier users individually because we hold no identity data — this is by design."
+- UK GDPR Article 33: 72hr ICO notification window for personal data breaches. Share architecture minimises exposure.
+- Run tabletop simulation (S1 scenario walkthrough) before alpha. Questions to answer in the simulation: who can post to status page at 3am; notify before or after full scope understood (answer: before, with caveats); pre/post-breach communication distinction.
+- Coldcard lesson: silence compounds damage faster than the breach itself.
+
+**Status page incident dashboard** (`share.refueler.io/status`):
+- Homepage: small persistent modal (bottom-right corner) showing current operational status colour (green/amber/red). Click → `/status` full page.
+- Status page: existing operational view plus dedicated incident dashboard panel for S1/S2/S3 events.
+- Incident panel fields: severity tier · declared at (timestamp) · last updated · summary (one sentence) · current actions · next update time (countdown).
+- S1 panel: prominent, full-width, red border. Auto-refreshes every 60s. Cannot be dismissed.
+- S2 panel: amber, same auto-refresh. Dismissible after reading.
+- S3 panel: standard informational. Standard sessionStorage dismiss.
+- All powered by existing KV status system (`STATUS_KV`) — extend schema, no new infrastructure.
+- KV key: `incident_active` → `{ severity, declared_at, updated_at, summary, actions, next_update }`. Null = no active incident.
+- Admin sets via extended `POST /admin/status` with `incident` field.
+- Build in same B9 session as whitepaper and staging environment.
+
+**SimpleX Chat:**
+- Self-hosted SMP server on Hetzner alongside Lightning node (B9+).
+- Internal Share team comms on infrastructure we control.
+- Enterprise clients: dedicated SimpleX group per client as private support/incident channel.
+- API too immature for dashboard embedding — revisit post-B12.
+- Position as optional enhanced security channel, not mandatory.
+
+---
+
+## Future work (whitepaper §Future work + B12+)
+
+**FROST threshold signatures (B12):**
+- Require M-of-N co-signatories to authorise credential issuance before a transfer can proceed.
+- Use cases: law firm partner sign-off before junior uploads client documents; music masters delivery requiring producer + manager + label co-authorisation; film/VFX delivery requiring director + supervisor sign-off.
+- Framing: cryptographic chain of custody built into the transfer itself — not bolted on via a third-party witness service.
+- Competitive displacement: DocuSign eSignature Business ~£200–£300/user/year for advanced signing workflows. Enterprise contracts: five figures annually. FROST-based approach is architecturally superior — no central attestation to subpoena, breach, or compel.
+- Mention in B9 whitepaper §Future work. Build scope B12.
+
+**Silent Payments (BIP-352) — replaces PayNym/BIP-47:**
+- Static payment address produces unique on-chain output per sender. No interaction transaction required. No notification transaction on-chain. Simpler to explain: "one address, every payment private."
+- Requires continuous blockchain scanning node — B9 infrastructure dependency.
+- Disadvantage vs BIP-47: thinner wallet support currently (Cake Wallet and others). BIP-47 has broader support now but worse privacy model.
+- Long-term direction: Silent Payments over PayNym. PayNym column on upgrade page remains placeholder until B9 node is live.
+
+**refueler-multi-core (blockchain scanning):**
+- Fork Esplora (Blockstream, MIT) or Mempool.space (MIT) for Bitcoin blockchain scanning.
+- Use case: Silent Payments scanning for Enterprise clients without their own node; internal infrastructure for Share's own on-chain payment rails.
+- Strip consumer UI, apply Paper/Carbon tokens — same pattern as LNbits fork.
+- Consider combining with LNbits fork into a single Refueler infrastructure repo pass.
+- Prerequisite: Lightning node live at B9. Do not start before B9 operational.
+
+---
+
 ## SW block notes — white-label + API (locked AP-3a)
 
 **Block principle:** runs immediately after S87 (B7 close). No code before SW1.
@@ -312,106 +397,20 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 - `wh_config_{api_key_id}` — array of `{ webhook_id, url, events[], created_at }`
 - `wh_dead_{api_key_id}_{event_id}` — dead-letter payload, 7-day TTL
 - `api_quota_{key_id}` — `{ credentials_remaining, bytes_remaining, period_end }`
+- `incident_active` — `{ severity, declared_at, updated_at, summary, actions, next_update }` · null = no active incident (B9)
 
-**Webhook spec (locked AP-3a):** 4 events: `credential.issued`, `transfer.completed`, `quota.threshold`, `quota.exhausted`. Payload fields: `id`, `type`, `created`, `data.transfer_ref`, `data.uuid`, `data.tier`, `data.file_size_bytes`, `data.total_chunks`, `data.expiry_timestamp`. Never in payload: filenames, IPs, sender/recipient identity, download timestamps. Signing: `X-Refueler-Signature: t={unix},v1={hex}` — HMAC-SHA256 over `{t}.{raw_body}`. Replay window ±300s.
-
-**Multi-user (Business):** One keypair per commercial relationship. No sub-keys. `transfer_ref` encodes user attribution. `POST /api/v1/keys/rotate` — old pair valid 24h grace.
-
----
-
-## B9 notes — NUT-29 + advanced privacy features
-
-**NUT-29 scope (locked ad hoc 1 Aug 2026):** Two use cases confirmed. Refueler is orchestration layer only — never custody, never fund control.
-
-**Use case 1 — Time-locked credential for legal document exchange.**
-Credential encodes a validity window via NUT-29 spending conditions: not-before T1, not-after T2. Client computes the condition before upload; Worker enforces it at melt time. Server never sees document content. Use case: court deadline submissions, regulatory filings, closing date document exchange. The timing constraint is cryptographic, not policy. One dedicated session.
-
-**Use case 2 — Payment-conditioned release.**
-BOLT11 payment hash becomes the spending condition on the transfer credential. Recipient reveals the payment preimage to unlock the transfer. Refueler issues the credential with the condition baked in, verifies the preimage at melt, never touches the underlying funds. Orchestration boundary must be documented in writing at B9-NUT29-plan before any code. PayNym integration eligible here: sender pays to recipient's BIP-47 reusable payment code, payment notification triggers credential issuance, recipient redeems without exchanging contact details. Refueler never knows either party's identity.
-
-**NUT-29 regulatory boundary (mandatory pre-code document):** Written record stating: Refueler encodes conditions into credentials and verifies them at melt. It does not hold funds, does not control third-party wallets, does not intermediate settlement. This document lives in the B9 planning session commit and is referenced in the B9 whitepaper §Regulatory posture.
-
-**B9 NUT-29 session plan additions:**
-
-| Session | Label | Scope | Size |
-|---------|-------|-------|------|
-| B9-NUT29-plan | NUT-29 planning | Design both use cases. Regulatory boundary document (orchestration vs custody). PayNym flow design. Wallet compatibility matrix (Zeus, Phoenix, Blink, Breez). Locked decisions list. No code this session. | S |
-| B9-NUT29-a | Time-locked credential | NUT-29 spending condition: validity window. Worker enforcement at melt. Unit + integration tests. | M |
-| B9-NUT29-b | Payment-conditioned release | Payment hash as spending condition. Preimage verification at melt. PayNym notification flow design (implementation B10 if complex). | M |
-
-**Cashu protocol watch items (from ad hoc 1 Aug):**
-- NUT-29 (spending conditions) — active build target B9.
-- cashu-ts library updates — reference implementation only, not a direct dependency. Check against our NUT-00 BDHKE at B8 when running coco.
-- coco (interoperability suite) — use at B8 to validate NUT-11 Mode 2 implementation.
-- NUT-04/05 (mint/melt quotes) — irrelevant, we run no monetary mint. Ignore.
-- NUT-13 (deterministic secrets) — not applicable; our credentials are intentionally ephemeral and non-recoverable by design.
+**Webhook spec (locked AP-3a):** 4 events: `credential.issued`, `transfer.completed`, `quota.threshold`, `quota.exhausted`. Signing: `X-Refueler-Signature: t={unix},v1={hex}` — HMAC-SHA256 over `{t}.{raw_body}`. Replay window ±300s.
 
 ---
 
-## B10 notes — Merkle tree Option B + ML-KEM
+## Competitive intelligence — M-series (outside repo)
 
-**Merkle tree staged plan (locked ad hoc 1 Aug 2026):**
-- B9: Option A — BLAKE3 full-file root in manifest, verified server-side. Unlocks whitepaper claim with honest scope ("server-side chunk integrity verified against committed root"). One session.
-- B10: Option B — Binary Merkle tree over chunk hashes. Leaves = per-chunk BLAKE3 hashes (already computed). Interior nodes = BLAKE3(left || right). Root committed in manifest AND in the share URL alongside the AES key. Client computes root before any chunk leaves the browser. Worker verifies full tree on receipt of final chunk. Closes a class of attacks that Option A cannot: a compromised R2 or rogue Worker deployment could substitute chunks silently; Option B catches this at any individual chunk without full reassembly.
-
-**B10 Merkle session plan additions:**
-
-| Session | Label | Scope | Size |
-|---------|-------|-------|------|
-| B10-Mx-a | Merkle tree build | Binary Merkle tree client-side. Root in manifest + URL fragment. Worker verifies on final chunk. Unit tests same session. | M |
-| B10-Mx-b | Operator dashboard cards | Merkle verification latency (AE). Mismatch event log: chunk index + declared hash vs recomputed hash + UUID (8 chars). Zero-mismatch rate tile — non-zero is an alert signal. | M |
-| B10-Mx-c | Enterprise client receipt | Per-transfer integrity receipt: UUID (truncated), tier, size, chunk count, BLAKE3 Merkle root (hex), upload timestamp, verification timestamp. HMAC-signed with client's `rfs_sign_` key. JSON endpoint + PDF render. Downloadable from client dashboard. The compliance officer deliverable. | M |
-
-**Enterprise client dashboard with Option B live:**
-- Per-transfer integrity proof status with "Merkle root verified" per completed transfer.
-- Verification timestamp separate from upload completion timestamp — two-point audit trail.
-- Downloadable signed transfer receipt (JSON + PDF) per transfer.
-- Aggregate integrity rate across all firm transfers — displayed as a figure, alerted if it moves from 100.00%.
-
-**ML-KEM (CRYSTALS-Kyber, NIST FIPS 203):**
-- B10 scope. Priority: as early in B10 as the block structure allows — post-quantum key wrapping for the AES-GCM session key.
-- Watch: browser `SubtleCrypto` ML-KEM support. If it lands natively before B10, the WASM dependency for key wrapping drops. Check at B9 close.
-- `mlkem-vectors.js` fixture already scaffolded in `worker/tests/integration/fixtures/`.
-
----
-
-## B11 notes
-
-- Add `POST /admin/test-results` to Worker endpoints table and to `index.js` when dashboard test card is built (S119+). Payload: JSON reporter output from CI. KV key: `test_results_latest`.
-
----
-
-## Post-B12 continuous review cadence (locked ad hoc 1 Aug 2026)
-
-**Rhythm:** weeks 10–11 of every quarter. Not a full audit — a posture check against four surfaces.
-
-| Surface | What to review | Signal to act |
-|---------|---------------|---------------|
-| Cryptographic primitives | AES-GCM PQ readiness; BLAKE3 crate changelog; `@noble/secp256k1` releases; browser SubtleCrypto additions | Any NIST advisory; ML-KEM native browser support landing |
-| Cashu / NUT protocol | NUT spec changes touching NUT-00, NUT-07, NUT-11, NUT-29; coco suite results against live implementation | Spec change that alters BDHKE semantics or spending condition enforcement |
-| UK regulatory framing | FCA utility token / payment instrument boundary; EMR 2011 / PSR 2017 amendments; NUT-29 orchestration position | Any FCA guidance touching tokenised access credentials or Lightning settlement |
-| Competitor attack vectors | PE-backed competitors launching loss-leader products targeting corporate buyers; pricing undercutting; feature parity claims | New product announcements from Proton, Tresorit, or well-funded newcomers targeting legal/financial sector |
-
-**Blink dependency review:** at each quarterly check, assess whether migration trigger thresholds (100 paid subs / £2k/mo / 99.5% reliability) were calibrated correctly. Move to LNbits before hitting the trigger if Blink policy changes.
-
-**Honest metadata table review:** `honest_metadata.json` reviewed and updated before any architectural change ships that alters what Refueler can and cannot see. A stale table is a misrepresentation, not a minor snag.
-
-**Legal review contact:** BHODL co-founder (lawyer + Bitcoiner) — annual brief on UK regulatory posture. Framed as a check-in, not a formal engagement, unless something material has moved.
-
----
-
-## Competitive intelligence — M-series (outside repo, not version-controlled)
-
-**Status: M-01 + M-02 complete (28 Jul 2026).** Files: `COMPETITIVE-INTEL.md` + `ARCHITECTURAL-INSPIRATION.md` — both at `/Users/rajeshtaylor/Documents/`. Not committed to any repo.
-
-**Key locked findings — do not contradict these in any copy:**
+**Key locked findings — do not contradict in any copy:**
 - Anonymity spectrum: WeTransfer/Smash/SwissTransfer → Tresorit/Proton → Wormhole → **Refueler Share** → OnionShare.
 - DO NOT claim "no competitor offers anonymous payment" — Proton accepts on-chain Bitcoin and cash by post.
 - Positioning: "professional-grade anonymity where only one side needs to be sophisticated."
 - Core framing: "the server is blind and so is the till."
 - "Pseudonymous is not unlinkable" — the Berlin line.
-- Decline permanently: chain-anchoring manifests, blockchain delivery ledger, Nostr relay manifest, content-addressed read interface, NIP-98 keypair auth.
-- btc++ "why not Blossom?" answer drafted verbatim in ARCHITECTURAL-INSPIRATION.md — rehearse before October.
 
 **OEM positioning paragraph (Berlin, verbatim — locked AP-3a):**
 > "Some companies want to offer encrypted file delivery inside their own product, under their own name — and that's a conversation I'm genuinely happy to have. What you'd be taking on isn't a widget, it's the architecture: blind-signature credentials, client-side encryption, and a server that only ever stores noise — so it can't be compelled to hand over anything it never saw. Your users get transfers even we can't read, and you get to make that promise honestly, because it's structural, not a line in a privacy policy. It's not a tier on a pricing page — every integration is scoped with me directly, because embedding this properly depends on what your product already promises its users. If that's interesting, email support@refueler.io — it comes straight to me — and tell me what you'd want your users to be able to do. I'd rather have that conversation than hand you a feature list."
@@ -424,7 +423,7 @@ BOLT11 payment hash becomes the spending condition on the transfer credential. R
 |--------|------|
 | Complete | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
 | Deferred B8 | NUT-11 Mode 2 (keypair challenge-response, Prod Max) |
-| Deferred B9 | NUT-29 (spending conditions — time-lock + payment-conditioned release) |
+| Post-B8 proposal | Argon2id as NUT-11 Mode 1 KDF extension (Cashu GitHub discussion) |
 | Deferred B10 | ML-KEM key wrapping |
 
 ---
@@ -434,7 +433,7 @@ BOLT11 payment hash becomes the spending condition on the transfer credential. R
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/status` | public | Operational state from KV |
-| POST | `/admin/status` | X-Admin-Key | Update KV state (inc. lightning_available flag) |
+| POST | `/admin/status` | X-Admin-Key | Update KV state (inc. lightning_available + incident_active flags) |
 | GET | `/admin/metrics` | X-Admin-Key | Supabase aggregation |
 | GET | `/admin/ae-metrics` | X-Admin-Key | AE SQL proxy |
 | GET | `/admin/snapshot` | X-Admin-Key | 6-field combined snapshot |
@@ -476,59 +475,12 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session.
 | Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
 | Staging environment | refueler-share-staging Worker | B9 scope |
 
-Fixture factories: `worker/tests/integration/fixtures/` — importable by both Vitest and k6. Pure ESM, no vitest/node imports.
-
-## File map
-
-```
-refueler-share/
-  CLAUDE.md  share-sessions.md  Share-Master-Context.md  TESTING.md  LICENSE  README.md
-  notes-articles-list.md
-  .eleventy.js   package.json   package-lock.json
-  src/
-    index.njk  upgrade.njk  status.njk
-    _includes/  head.njk  nav.njk  footer.njk  shared-styles.njk
-    _data/  payment_privacy.json  ← B7
-  frontend/
-    index.html  upgrade.html  status.html
-    share.css  share.js  upgrade.css
-    fflate.min.js  qr-creator.min.js
-    blake3/
-    admin/  dashboard.html  dashboard.css  dashboard.js
-    dashboard-client/  ← SW5 (client-facing dashboard)
-  worker/
-    wrangler.toml
-    package.json
-    blake3-wasm/
-    src/
-      index.js  nut00.js  nut11.js  blake3.js  blake3_worker.js
-      manifest.js  turnstile.js  stripe.js  ratelimit.js
-      lightning.js  ← B7
-      api_auth.js   ← SW2
-      webhooks.js   ← SW4
-      wl.js         ← SW3
-      nut29.js      ← B9
-      merkle.js     ← B10
-    tests/
-      test/  ratelimit  manifest  nut00  blake3  turnstile  stripe
-      helpers/  kv-mock.js
-      integration/  client.js  round-trip.test.js  security.test.js
-        fixtures/  credential  chunks  manifest  turnstile-mock  supabase-mock  stripe-events
-                   lightning.js ← B7   webhooks.js ← SW4
-                   keypair.js ← B8     nut29.js ← B9    lnurl.js ← B9
-                   mlkem-vectors.js ← B10   merkle-vectors.js ← B10
-        helpers/  wrangler-lifecycle.js
-      load/  credential-burst  concurrent-transfers  download-saturation  mixed-realistic
-  eslint.config.js
-  .github/workflows/  ci.yml  integration.yml  staging-deploy.yml
-  docs/r2-lifecycle.md
-```
-
 ---
 
 ## /notes/ article pipeline — refueler.io
 
 All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IBM Plex Mono for data/tables.
+No social media distribution. refueler.io is the canonical destination.
 **Full editorial detail:** see `notes-articles-list.md` in repo root.
 
 | # | Title (short) | Publish order | Dependency | Status |
@@ -544,11 +496,11 @@ All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IB
 | 9 | After the link expires | Anytime | None | Planned |
 | 10 | Case study (video editor) | Last | Real user + history | Planned |
 | 11 | API / white-label notes | After SW complete | SW block | Planned |
-| 12 | API technical integration | After SW complete | SW block | Planned |
+| 12 | API technical integration / Nostr auth | After SW complete | SW block | Planned |
 
 **Key contacts:**
-- Susie, Bitcoin Policy UK — article 7 / journalist angle.
-- BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback reader, potential case study subject. Annual regulatory posture review contact.
+- Susie, Bitcoin Policy UK — article 7 / journalist angle. Approach after article 2 is live.
+- BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback reader, potential case study subject.
 
 ---
 
@@ -568,7 +520,7 @@ All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IB
 | Creative Premium | 100 GB | 1 / 7 / 30 days | Monthly / 3-month / yearly |
 | Production Max | 250 GB + API (100 creds + 250 GB quota) | 1 / 7 / 30 / 90 days | Monthly / 3-month / yearly |
 | Business | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Invoiced (annual minimum) |
-| Enterprise | Custom · 5 TB/mo included | Custom | Annual contract |
+| Enterprise | Custom · 5 TB/mo included · Argon2id KDF · BIP-85 key mgmt | Custom | Annual contract |
 
 No discounts. No savings framing. Prepay cadences are convenience, not a deal.
 
