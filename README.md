@@ -76,6 +76,32 @@ No free trials. No discounts. No savings framing. The price is the price.
 
 ---
 
+## Security and Incident Response
+
+### What a breach at Refueler Share actually exposes
+
+| Data | Held by us? | Readable under compulsion or breach? |
+|------|------------|--------------------------------------|
+| File contents | No — ciphertext only in R2 | No — key never existed on our servers |
+| AES-GCM session key | No — URL fragment, never transmitted | No — does not exist in our infrastructure |
+| Sender / recipient identity (free tier) | No | No |
+| File sizes and transfer timestamps | Yes | Yes — disclosed voluntarily in `honest_metadata.json` |
+| Stripe subscriber email and name (paid tier) | Yes | Yes |
+| Lightning payment hashes | Yes, 25h TTL | Yes, within TTL window |
+
+The short version: a full exfiltration of our R2 storage returns encrypted noise. The key was in the link. We never held it.
+
+This is documented in advance because it should be documented in advance. A company that has thought through the worst case before it happens is more trustworthy than one that works it out under pressure.
+
+### Incident response documentation
+
+- `incident-response.md` — the standing playbook: severity tiers (S1/S2/S3), pre-written communication templates, channel order, UK GDPR Article 33 obligations and process, status page KV schema, tabletop simulation checklist.
+- `security-breach.md` — the living breach register: one entry per confirmed or suspected incident, entry template included, currently empty.
+
+The tabletop simulation (a structured walkthrough of a realistic S1 scenario) will be completed before the first paying customer. The results will be documented in `security-breach.md`.
+
+---
+
 ## Status
 
 🟡 **Block 7 in progress — Lightning payments.**
@@ -101,8 +127,11 @@ directory structure preserved, up to 2,000 files and 20 levels deep) is supporte
 |-------|-------|
 | B7 | Lightning BOLT11 payments via Blink. Anonymous paid tier — no email, no account, credential issued on payment. |
 | SW | White-label API. Custom hostnames. Business tier dashboard. Webhook delivery. IT handover flow. |
-| B8 | NUT-11 Mode 2 keypair authentication |
-| B9 | Security whitepaper. Staging environment. LNbits fork. LNURL-withdraw credential delivery. |
+| B8 | NUT-11 Mode 2 keypair authentication (Production Max). Argon2id KDF for Enterprise passphrase-protected transfers. |
+| B9 | Security whitepaper. Staging and demo environment. LNbits fork. LNURL-withdraw credential delivery. Status page incident dashboard. Tabletop simulation. |
+| B10 | ML-KEM post-quantum key wrapping. Enterprise tier. Chaos tests. |
+| B11 | Alpha. Full load test. CI Level 3. Dashboard test card. |
+| B12 | Public beta. FROST threshold signatures (M-of-N transfer authorisation). |
 
 ---
 
