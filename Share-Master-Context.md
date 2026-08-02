@@ -253,7 +253,8 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · 
 - UUID/fragment token entropy pre-audit (birthday-paradox, Proton INFO-004 precedent) → B9
 - REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
 - First-transfer experience aesthetic (Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests) — copy preparation in ad-hoc sessions; build scope B13a
-- Pay-to-extend transfer window design — design document due B8; use case is recipient extending lapsed window without contacting sender; do not build before design locked
+- Pay-to-extend transfer window design — design document due B8. Framing locked: **"Purchase a recovery window"** — never "pay to extend." Use case: recipient (or sender) purchases additional download time without contacting the other party, preserving the professional relationship. Self-purchase scenario: junior partner extends window on firm's business account without interrupting senior partner or client. Privacy properties: (1) Refueler cannot correlate the extension payment with the original upload — the server is blind to *who* is extending and *why*; (2) Lightning payment preserves pseudonymity of the purchasing party; (3) original sender's anonymity is structurally unchanged. Tone in all copy: discreet, convenient, professional — not punitive. Do not build before design locked at B8.
+- Context file archive strategy — implement at S87: split `Share-Master-Context.md` into working memory (≤350 lines, current + next block only) and new `Share-Archive.md` (compacted block summaries B1–B6, one paragraph per block, key commit hashes, permanent do-not-retry items not already in CLAUDE.md). `Share-Archive.md` lives in repo root, never loaded by default — attach to Project only if historical question arises. Seven attachments total, well within project context limits.
 
 ---
 
