@@ -152,7 +152,8 @@
 | AP-3 | 30 Jul | White-label implementation planning. Custom hostname flow. Badge config via KV. IT handover doc locked. Five-tier structure locked. Pricing cadence 1/3/12 months. |
 | AP-3a | 30 Jul | Webhook spec locked. Single API key + rotation locked. OEM positioning paragraph drafted. SW block created: 12 core + 2 buffer. All context files updated. |
 | AP-4 | 1 Aug | Security and cryptography strategy session. Argon2id for Enterprise API (client-side KDF, post-B8). ML-KEM shipping order locked (Prod Max + Enterprise first, B10). BIP-39 12-word account creation for enterprise. BIP-85 staff key derivation (B8 planning). FROST threshold signatures (B12, whitepaper §Future work). Silent Payments over PayNym long-term. Nostr keypair dashboard auth (SW/B8). SimpleX Chat for internal + enterprise support comms (B9+). Incident response plan (B9 scope): three severity tiers, pre-written S1 template, tabletop simulation before alpha. Status page incident dashboard: homepage modal, S1/S2/S3 panel with KV-backed `incident_active` key. No social media — refueler.io is the canonical destination. refueler-multi-core: Esplora/Mempool.space fork post-B9. |
-| AP-5 | 1 Aug | Incident response and security breach planning. `docs/incident-response.md` (playbook: severity tiers, communication templates, channel order, ICO Article 33 obligations, tabletop simulation, status page KV spec, Coldcard principle) and `docs/security-breach.md` (living breach register with entry template, pre-alpha empty) created. B9 build scope confirmed. Context files updated. |
+| AP-5 | 1 Aug | Incident response and security breach planning. `docs/incident-response.md` and `docs/security-breach.md` created. B9 build scope confirmed. |
+| AP-6 | 2 Aug | Competitive analysis: DashBeam (dashbeam.net). Synchronous P2P vs asynchronous cloud relay — confirmed different product categories. DashBeam free tier not a threat to professional buyer segment. Resumable upload/download gap confirmed as the one genuine weakness. HTTP/3 + BLAKE3 positioning locked. Pay-to-extend transfer window design deferred to B8 — use case is the recipient extending a lapsed window without contacting sender, preserving professional relationship. First-transfer experience aesthetic locked: Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests via existing sessionStorage infrastructure. R-series and HQ-series post-SW blocks created. |
 
 ---
 
@@ -208,5 +209,48 @@
 | SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. | S |
 
 **Buffer pool (2 sessions):** SW2b · SW5b
+
+---
+
+## R-series — Resumable uploads (post-SW)
+
+Runs after SW9. Self-contained. No Lightning or API dependency.
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| RU1 | Resumable uploads I | IndexedDB schema: write chunk completion state on each 200 ACK (`{ uuid, chunkIndex, total, credentialExpiry }`). On page load: detect interrupted transfer, offer resume or discard. Resume flow: skip confirmed chunks, start from first unconfirmed. Unit tests same session. | M |
+| RU2 | Resumable uploads II | Resume UI: progress bar shows "Resuming from chunk N of M." Credential expiry awareness — if credential lapsed, show clean error ("This transfer can no longer be resumed. Please start a new upload.") not silent failure. Integration test: interrupt at chunk 3, reload, confirm resume from chunk 3. | M |
+
+**Buffer pool (2 sessions):** RU1b · RU2b
+
+**RU1b scope (if needed):** Edge cases — partial final chunk interrupted mid-write, corrupted IndexedDB state (fallback: treat as fresh upload), cross-tab conflict detection. Security regression: confirm resumed upload cannot switch UUID mid-transfer.
+
+**RU2b scope (if needed):** Download resumability for unprotected transfers. HTTP Range requests on chunk GETs. IndexedDB checkpoints received chunks. On reconnect, request only missing chunks. Free tier only — no bearer complexity. Integration test: interrupt download at chunk 2, reload, confirm resumes from chunk 2.
+
+**Design note — pay-to-extend (deferred B8):** Paid tier download resumability where bearer has expired requires a design decision. The use case is a recipient extending a lapsed window without contacting the sender — preserving the professional relationship. Design document due B8. Do not build before design is locked.
+
+---
+
+## HQ-series — HTTP/3 + BLAKE3 integrity positioning (post-R-series)
+
+Runs after RU2 (or RU2b if buffer consumed). Two tracks: technical verification + copy/editorial.
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| HQ1 | HTTP/3 verification + AE instrumentation | Confirm HTTP/3 active on Cloudflare edge via `curl --http3` and Worker response headers. Add `Alt-Svc` logging to AE — data on HTTP/3 adoption by client. Add chunk upload latency datapoint to AE per chunk (if not already present from B7 dashboard work). Draft canonical copy string: "Transfers run over HTTP/3 on Cloudflare's global edge network with per-chunk BLAKE3 integrity verification." Wire to upgrade page and index page. | M |
+| HQ2 | Competitive positioning copy + /notes/ hook | Write the technical distinction cleanly: TLS/QUIC proves the channel; BLAKE3 proves the content. DashBeam (and every synchronous P2P tool) has the former, not the latter. This becomes the spine of /notes/ article 4 ("The difference between a secure server and a blind one"). Ensure all copy across index, upgrade, and notes articles is consistent and accurate. No overclaiming — "server-side chunk integrity" not "end-to-end file integrity" (Merkle still blocked until B9). | S |
+
+**Buffer pool (2 sessions):** HQ1b · HQ2b
+
+**HQ1b scope (if needed):** Performance dashboard card — p95 chunk upload latency per tier, visible in admin dashboard. Gives real data to cite in sales conversations and investor materials.
+
+**HQ2b scope (if needed):** Full competitive copy review. Ensure DashBeam, Wormhole, WeTransfer, and Proton comparisons across all surfaces are accurate, consistent, and won't require correction after B9 Merkle work lands.
+
+---
+
+**R-series and HQ-series notes:**
+- Both series are post-SW. Do not pull forward before B7 is complete except if pre-B7 checklist hits a blocker (Blink geographic restriction etc.) and sessions are idle.
+- R-series first, then HQ-series. Total: 4 core + 4 buffer = 8 sessions maximum.
+- First-transfer experience aesthetic (Jaeger-LeCoultre restraint, ceremonial link presentation, haptics, A/B tests) is B13a scope but copy preparation begins in ad-hoc sessions before then. Do not bundle with R or HQ build sessions.
 
 *"Nothing stops this train."*

@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.0 | **Last updated:** AP-4 ad-hoc · 1 Aug 2026
+> **Version:** 5.1 | **Last updated:** AP-6 ad-hoc · 2 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -230,6 +230,8 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B6 ✓ | S53–S72a | Testing infrastructure + folder upload |
 | B7 | S73–S87+ | Lightning/Blink + anonymous paid tier — 25 core + 5 buffer |
 | SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer · runs post-S87 |
+| R-series | RU1–RU2+ | Resumable uploads — IndexedDB state persistence — 2 core + 2 buffer · runs post-SW |
+| HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning — 2 core + 2 buffer · runs post-R-series |
 | B8 | TBD | NUT-11 Mode 2 keypair auth (renumbered post-SW) |
 | B9 | TBD | LNbits fork + node + LNURL-withdraw + whitepaper + staging + incident response plan |
 | B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
@@ -237,7 +239,7 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
 | B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) |
 
-Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard).
+Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · SW9→RU1→RU2 (resumable uploads) · RU2→HQ1→HQ2 (HTTP/3 + BLAKE3 positioning).
 
 ---
 
@@ -250,6 +252,8 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · 
 - Manifest-field minimalism audit (M-02 Blossom benchmark) → B9 whitepaper prep
 - UUID/fragment token entropy pre-audit (birthday-paradox, Proton INFO-004 precedent) → B9
 - REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
+- First-transfer experience aesthetic (Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests) — copy preparation in ad-hoc sessions; build scope B13a
+- Pay-to-extend transfer window design — design document due B8; use case is recipient extending lapsed window without contacting sender; do not build before design locked
 
 ---
 
@@ -402,6 +406,14 @@ notification obligation, positive architectural narrative. Run tabletop simulati
 - Positioning: "professional-grade anonymity where only one side needs to be sophisticated."
 - Core framing: "the server is blind and so is the till."
 - "Pseudonymous is not unlinkable" — the Berlin line.
+
+**DashBeam (dashbeam.net) — assessed AP-6, 2 Aug 2026:**
+- Synchronous P2P (both parties must be online simultaneously). QUIC via Iroh framework. Unlimited free tier (no storage cost — nothing stored server-side). Resumable transfers. Open source. No B2B intent. Anonymity = IP-to-IP direct handshakes (both IPs visible to each other and relay).
+- **Not a threat to professional buyer segment.** A solicitor cannot tell a client "stay online for 4 hours while the contract transfers." Asynchronous delivery is a structural advantage for this audience.
+- **Does not eat the paid tier funnel.** Casual "send a friend a video" users were never going to convert. Professional buyers need the asynchronous + blind server model.
+- **One genuine gap confirmed:** resumable uploads. Addressed by R-series post-SW.
+- **HTTP/3 positioning:** Cloudflare edge already runs HTTP/3. Honest claim: "Transfers run over HTTP/3 on Cloudflare's global edge network with per-chunk BLAKE3 integrity verification." DashBeam has QUIC for the P2P leg; we have HTTP/3 client-to-edge plus server-side content verification. TLS/QUIC proves the channel; BLAKE3 proves the content. They have the former, not the latter. Addressed by HQ-series post-R-series.
+- Do not name DashBeam in any public copy — positioning by architecture, not by competitor name.
 
 **OEM positioning paragraph (Berlin, verbatim — locked AP-3a):**
 > "Some companies want to offer encrypted file delivery inside their own product, under their own name — and that's a conversation I'm genuinely happy to have. What you'd be taking on isn't a widget, it's the architecture: blind-signature credentials, client-side encryption, and a server that only ever stores noise — so it can't be compelled to hand over anything it never saw. Your users get transfers even we can't read, and you get to make that promise honestly, because it's structural, not a line in a privacy policy. It's not a tier on a pricing page — every integration is scoped with me directly, because embedding this properly depends on what your product already promises its users. If that's interesting, email support@refueler.io — it comes straight to me — and tell me what you'd want your users to be able to do. I'd rather have that conversation than hand you a feature list."
