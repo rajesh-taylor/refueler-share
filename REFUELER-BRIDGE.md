@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.0 | **Created:** 28 July 2026
+> **Version:** 1.1 | **Created:** 28 July 2026 | **Updated:** AP-7 ad-hoc · 2 Aug 2026
 > Lives in both `refueler-share` and `refueler-io` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -25,6 +25,11 @@ The product in active development is **Refueler Share**.
 Anonymous, encrypted peer-to-peer file transfer. No account. No identity. The server stores encrypted noise and cannot read file content or identify users.
 
 **The one-line positioning:** "Professional-grade anonymity where only one side needs to be sophisticated."
+
+**Two-axis category definition (locked AP-7):**
+Refueler Share is the only architecture that solves both failures simultaneously:
+1. **The recipient problem** — the transfer survives the sender closing their laptop; it survives the recipient being on a plane. Every synchronous P2P tool fails this by design.
+2. **The compulsion problem** — there is nothing to hand over, not because we'd refuse, but because we never had it. Every storing service with server-side keys fails this by design.
 
 **The core technical claim (honest scope):**
 - Files are AES-GCM encrypted client-side. The encryption key lives in the URL fragment — never transmitted to the server.
@@ -84,17 +89,33 @@ All Refueler surfaces share these tokens. Divergences are bugs.
 **`/editorial/`** — Investor/partner long-form. Curated, slow, considered. Existing articles live here.
 Example: `refueler.io/editorial/looks-done-isnt-done`
 
-**`/notes/`** — NEW. SEO-targeted technical content for professional buyers. Higher cadence.
-Audiences: lawyers, journalists, accountants, Bitcoin-adjacent professionals.
+**`/notes/`** — SEO-targeted technical content for professional buyers. Higher cadence.
+Audiences: lawyers, journalists, accountants, Bitcoin-adjacent professionals, legal/human rights workers.
 Register: authoritative, precise, dry wit permitted. Shorter sentences than editorial.
 Index: card grid (title, one-sentence description, date, read time). Each article its own URL.
 Articles live on `refueler.io/notes/[slug]/` — domain authority consolidates on main domain.
 
 **Do not publish Share-specific articles on `share.refueler.io`** — all content on `refueler.io`.
 
-**`/notes/` articles planned:**
-1. "What a subpoena gets from seven file transfer services" — publish immediately (no product dependency)
-2. "Why our till is blind" — publish after B7 Lightning is live (article references Lightning payment)
+**`/notes/` articles — current pipeline (full detail in `notes-articles-list.md`):**
+
+| # | Title (short) | Status |
+|---|--------------|--------|
+| 1 | Subpoena table | Live — iteration open from 5 Aug |
+| 2 | Client files / inbox | Planned |
+| 3 | Metadata value | Planned |
+| 4 | Blind vs secure server | Planned — btc++ Berlin warm-up |
+| 5 | Jurisdiction vs architecture | Planned |
+| 6 | Anonymous payment option | Unlocks after B7 |
+| 7 | Journalists and file transfer | Planned — Susie intro first |
+| 8 | PI insurer risk | After SW block |
+| 9 | After the link expires | Anytime |
+| 10 | Case study (video editor) | Last — needs real user |
+| 11 | API / white-label notes | After SW block |
+| 12 | API technical integration / Nostr auth | After SW block |
+| 13 | Transmitting evidence when your witness cannot travel | Planned — legal/human rights audience |
+
+**Article 13 note:** Covers confined witnesses, endangered sources, asylum cases, ICC evidence, human rights documentation. Recorded video works today on Share — encrypted chunks, fragment URL as key, server blind. Range request support (post-B9) enables streaming without full download first. This article may embed a video player demonstrating the use case (see §Video player in /notes/).
 
 ---
 
@@ -110,6 +131,43 @@ Articles live on `refueler.io/notes/[slug]/` — domain authority consolidates o
 
 ---
 
+## Video player in /notes/ and founder S1 modal
+
+### /notes/ article video player
+
+Articles (particularly article 13) may embed a video player in a modal or inline section.
+Architecture:
+
+- Video file stored in a dedicated R2 bucket on the `refueler.io` side (separate from Share's transfer R2).
+- Worker generates a signed, time-limited R2 URL per request — prevents hotlinking and direct download via URL.
+- HTML5 `<video>` tag renders the stream. Cloudflare edge delivers at full line speed — R2 + CF edge is effectively a CDN with zero egress fees. 1080p plays cleanly.
+- Download blocker: CSS `pointer-events` on the video element + JS `contextmenu` and `dragstart` intercepts. Prevents casual download-and-reshare. Does not stop screen recording — intent, not technical certainty.
+- Paper/Carbon tokens throughout the modal. `modal radius: 12px`. No external video platform dependencies (no YouTube, no Vimeo — own infrastructure only, consistent with Share's values).
+
+**Use case for article 13:** a short produced demonstration of the witness/confined-testimony scenario. "Here is what it looks like when a barrister receives a recorded statement from a client who cannot travel." 90 seconds. More persuasive than prose for a legal audience.
+
+**Build scope:** B9 or B13 depending on priority. Does not block any article from publishing — the article works without the video. Video is enhancement, not dependency.
+
+### Founder S1 incident video modal
+
+During an S1 incident, the status page (`/status`) displays a pre-recorded video statement from Rajesh alongside the KV-backed incident panel. Architecture is identical to the article video player above.
+
+**Purpose:** removes the "who speaks for the company" ambiguity under pressure. A named founder on camera, factual and calm, stating what is known and what is being done, is the response Coldcard did not give. It is also faster to consume than a text statement for users checking the status page in distress.
+
+**Pre-record template:** filmed at B9 alongside the tabletop simulation. Low production value is fine — honest and fast is the requirement. Broad template:
+
+> "I'm Rajesh Taylor, the founder of Refueler Share. At [time] today we identified [one sentence]. Here is what we know. Here is what we don't know yet. Here is what we're doing in the next two hours. I'll update this page at [specific time]."
+
+**Key properties:**
+- Stored in R2, served via signed URL from the Worker. Not uploaded to any third-party platform.
+- Displayed only when `incident_active` KV key is set to S1 severity. Hidden otherwise.
+- Sits alongside the text incident panel, not instead of it. Text remains for screen readers and low-bandwidth connections.
+- sessionStorage does not dismiss it during an S1 — the video and panel are persistent until the incident is resolved.
+
+**Build scope:** B9, same session as the status page incident dashboard panel.
+
+---
+
 ## Competitive positioning — locked findings (M-series, July 2026)
 
 **Anonymity spectrum** (weakest→strongest, hosted services): WeTransfer/Smash/SwissTransfer → Tresorit/Proton Drive → Wormhole → **Refueler Share** → OnionShare.
@@ -121,6 +179,7 @@ Articles live on `refueler.io/notes/[slug]/` — domain authority consolidates o
 - vs SwissTransfer: "Jurisdiction is not architecture."
 - vs Proton Drive: "No account to correlate. The payment itself is blinded."
 - vs OnionShare: "Close your laptop. The transfer survives."
+- vs DashBeam / synchronous P2P: "The transfer survives your client being on a plane." (Do not name DashBeam publicly.)
 
 **B9 whitepaper framing (ours, not used by competitors):** "The server is blind and so is the till."
 
@@ -128,12 +187,10 @@ Articles live on `refueler.io/notes/[slug]/` — domain authority consolidates o
 
 ## Current build status
 
-**`refueler-share`:** Block 6 (B6) in progress — S68 (k6 load tests) is next session.
-207 tests passing across 8 suites. Integration harness complete against `wrangler dev --local`.
-Lightning/Blink payment (B7) not yet built. Paid tier cards greyed out until B7 complete.
+**`refueler-share`:** B6 complete (S72a). B7 next — S73 opens after pre-B7 checklist complete.
+212 tests passing across 8 suites. Lightning/Blink payment (B7) not yet built. Paid tier cards greyed out until B7 complete.
 
-**`refueler-io`:** `/notes/` section being built now. Article 1 ready to publish.
-Nav integration required (add `/notes/` entry to shared top nav).
+**`refueler-io`:** `/notes/` section live. Article 1 published, iteration open from 5 Aug. Articles 2–13 planned — see `notes-articles-list.md` in `refueler-share/` for full detail.
 
 ---
 
@@ -147,6 +204,7 @@ Nav integration required (add `/notes/` entry to shared top nav).
 - Do not claim "audit-certified" or "security-audited" — blocked until B11 pentest published.
 - Do not claim "anonymous payment" — Proton accepts BTC/cash, claim is false.
 - Do not claim "end-to-end file integrity" — only server-side chunk integrity is verified today.
+- No external video platforms (YouTube, Vimeo) — R2 + Worker signed URL only.
 
 ---
 
