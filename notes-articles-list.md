@@ -1,5 +1,5 @@
 # notes-articles-list.md — refueler.io /notes/ pipeline
-> **Version:** 1.0 | **Created:** AP-1 · 29 July 2026
+> **Version:** 1.1 | **Created:** AP-1 · 29 July 2026 | **Updated:** AP-7 · 2 Aug 2026
 > Editorial planning document. Lives in `refueler-share/` alongside CLAUDE.md and TESTING.md.
 > Load when in an editorial planning or article build session. Not by default.
 > Publishing platform: `refueler.io/notes/` (main domain, not share subdomain).
@@ -36,12 +36,12 @@ the articles are context, not a campaign.
 ---
 
 ## Article 1 — What a subpoena gets from seven file transfer services
-**Status:** Live — iteration pending (give it a week from 29 Jul before touching)
+**Status:** Live — iteration now open (hold cleared week of 5 Aug 2026)
 **Audience:** Lawyers, journalists, accountants
 **Product dependency:** None
 **SEO targets:** "file transfer privacy", "secure file transfer lawyers", "file transfer subpoena"
 
-**Iteration decisions locked (do not action until week of 5 Aug):**
+**Iteration decisions locked:**
 - Split the large table into two passes: (1) seven services — jurisdiction + what can be compelled, short; (2) breathing paragraph ("what these services have in common is not malice, it's architecture"); (3) Refueler honest-metadata table as contrast and resolution. Eyes need room between data bursts.
 - All table columns: same font, same weight, same colour. Remove shy right-column secondary treatment.
 - Add founder-voice closing paragraph — one or two sentences, first person, that don't feel like marketing.
@@ -115,6 +115,8 @@ the articles are context, not a campaign.
 
 **Note:** This is the conceptual centrepiece of the series. Everything else orbits it. Also the btc++ Berlin warm-up article — technical developers at the conference should have seen it or been linked to it before October.
 
+**Index/upgrade page copy priority (locked AP-7):** When drafting the hero copy for the index page, this article's framing sets the priority order for a first-time visitor: (1) asynchronous framing — the recipient collects on their own time; (2) the blind server claim in honest form — "we store encrypted noise; sizes and timestamps are the only things we can see, and we publish that"; (3) no account required. The honesty of point 2 is itself a differentiator for lawyers — they read privacy policies for a living and will notice you volunteering your own metadata exposure. Never lead with speed on the upgrade page — cannot win against direct P2P and it is not why professional buyers purchase.
+
 **Outreach hooks:**
 - Link from any btc++ Berlin abstract or talk materials
 - The article that rewards readers who've been following the series
@@ -135,6 +137,8 @@ the articles are context, not a campaign.
 4. Refueler's position: UK-incorporated, Cloudflare edge globally. Architectural blindness is the pitch, not Swiss jurisdiction. Honest that jurisdiction matters at the margins.
 5. Four-quadrant table: threat model × jurisdiction × architecture. Readers place themselves.
 6. CTA: own ending, earned.
+
+**Two-axis spine (locked AP-7):** The four-quadrant table maps directly to the two-axis category framing: the "recipient problem" (transfer survives laptop closure / recipient unavailability — synchronous P2P fails this by design) and the "compulsion problem" (nothing to hand over because server is blind — storing services with server-side keys fail this by design). Refueler Share is the only architecture that solves both simultaneously. This is the structural argument the quadrant table should make visible, not just imply. The axis labels and quadrant copy should be drafted with this in mind — readers should be able to place themselves and immediately understand which failure mode each alternative carries.
 
 **Outreach hooks:**
 - Target compliance-focused Twitter/LinkedIn accounts
@@ -196,7 +200,7 @@ the articles are context, not a campaign.
 ## Articles 11 and 12 — API/white-label
 **Status:** Planned — unlock after AP-2 and AP-3 complete and API is built
 **11:** API/white-label for professional services — IT decision-makers, practice managers
-**12:** API technical integration guide (notes register, not docs) — developers at law firms/agencies
+**12:** API technical integration guide (notes register, not docs) — developers at law firms/agencies. Reframed around Nostr keypair dashboard auth (AP-4).
 
 ---
 
@@ -215,7 +219,7 @@ the articles are context, not a campaign.
 | 9 | After the link expires | Anytime | None | SEO long tail |
 | 10 | Case study (video editor) | Last | Real user + history | Social proof — alpha |
 | 11 | API / white-label notes | After API built | AP-2/AP-3 + build | IT decision-makers |
-| 12 | API technical integration | After API built | AP-2/AP-3 + build | Developers at firms |
+| 12 | API technical integration / Nostr auth | After API built | AP-2/AP-3 + build | Developers at firms |
 
 ---
 

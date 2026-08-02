@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.1 | **Last updated:** AP-6 ad-hoc · 2 Aug 2026
+> **Version:** 5.2 | **Last updated:** AP-7 ad-hoc · 2 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -178,7 +178,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 ## Known broken / do not retry
 
 | Pattern | Correct approach |
-|---------|--------------------|
+|---------|------------------|
 | `checkout/sessions ui_mode:embedded` | Direct Subscription + PaymentIntent expansion |
 | `new Uint8Array([i])` for AES-GCM AAD | `DataView.setUint32(0, i, false)` into 4-byte buffer |
 | AE SQL `doubles[N]` / `blob[N]` syntax | Named columns: `double1`, `blob1` etc. |
@@ -253,8 +253,8 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · 
 - UUID/fragment token entropy pre-audit (birthday-paradox, Proton INFO-004 precedent) → B9
 - REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
 - First-transfer experience aesthetic (Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests) — copy preparation in ad-hoc sessions; build scope B13a
-- Pay-to-extend transfer window design — design document due B8. Framing locked: **"Purchase a recovery window"** — never "pay to extend." Use case: recipient (or sender) purchases additional download time without contacting the other party, preserving the professional relationship. Self-purchase scenario: junior partner extends window on firm's business account without interrupting senior partner or client. Privacy properties: (1) Refueler cannot correlate the extension payment with the original upload — the server is blind to *who* is extending and *why*; (2) Lightning payment preserves pseudonymity of the purchasing party; (3) original sender's anonymity is structurally unchanged. Tone in all copy: discreet, convenient, professional — not punitive. Do not build before design locked at B8.
-- Context file archive strategy — implement at S87: split `Share-Master-Context.md` into working memory (≤350 lines, current + next block only) and new `Share-Archive.md` (compacted block summaries B1–B6, one paragraph per block, key commit hashes, permanent do-not-retry items not already in CLAUDE.md). `Share-Archive.md` lives in repo root, never loaded by default — attach to Project only if historical question arises. Seven attachments total, well within project context limits.
+- Pay-to-extend transfer window design — design document due B8. Framing locked: **"Purchase a recovery window"** — never "pay to extend." Use case: recipient (or sender) purchases additional download time without contacting the other party, preserving the professional relationship. Self-purchase scenario: junior partner extends window on firm's business account without interrupting senior partner or client. **Privacy properties (locked AP-7):** (1) Refueler cannot correlate the extension payment with the original upload — server is blind to who is extending and why; (2) Lightning payment preserves pseudonymity of the purchasing party; (3) original sender's anonymity is structurally unchanged. **Publication restriction (locked AP-7):** mention in B9 whitepaper §Future work only — no public product copy or marketing before the feature ships. Shipping first prevents misreading as punitive artificial-scarcity monetisation and prevents storing competitors implementing a degraded version and poisoning the framing. Tone in all copy when it ships: discreet, convenient, professional — not punitive. Do not build before design locked at B8.
+- Context file archive strategy — implement at S87: split `Share-Master-Context.md` into working memory (≤350 lines, current + next block only) and new `Share-Archive.md` (compacted block summaries B1–B6, one paragraph per block, key commit hashes, permanent do-not-retry items not already in CLAUDE.md). `Share-Archive.md` lives in repo root, never loaded by default — attach to Project only if historical question arises.
 
 ---
 
@@ -282,7 +282,7 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 - PayNym column on payment privacy table — "coming soon" placeholder only at B7
 - Own node stub cards (routing fee income, channel liquidity) — greyed until B9
 - LNbits webhook signing cards (delivery rate, signature failures) — greyed until B9
-- Renewal warning banner: 7-day pre-expiry notice on upgrade page for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Build in same session as API credential renewal work.
+- Renewal warning banner: 7-day pre-expiry notice on upgrade page for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Copy: *"Your subscription renews on [date]. Your transfers will remain accessible."* Build in same session as API credential renewal work.
 
 ---
 
@@ -320,7 +320,6 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 
 ## B9 scope additions (AP-4)
 
----
 **Incident response plan and breach register:**
 Full playbook in `docs/incident-response.md`. Breach log in `docs/security-breach.md`.
 Both created AP-5. Build scope B9 — implement status page incident dashboard panel, `incident_active`
@@ -329,8 +328,6 @@ Key architectural point: R2 breach exposes ciphertext only (key never held). Sup
 triggers UK GDPR Article 33 (72hr ICO notification). Free tier: no personal data held, no
 notification obligation, positive architectural narrative. Run tabletop simulation
 (scenario documented in `docs/incident-response.md` §8) before first customer.
-
----
 
 **SimpleX Chat:**
 - Self-hosted SMP server on Hetzner alongside Lightning node (B9+).
@@ -347,20 +344,21 @@ notification obligation, positive architectural narrative. Run tabletop simulati
 - Require M-of-N co-signatories to authorise credential issuance before a transfer can proceed.
 - Use cases: law firm partner sign-off before junior uploads client documents; music masters delivery requiring producer + manager + label co-authorisation; film/VFX delivery requiring director + supervisor sign-off.
 - Framing: cryptographic chain of custody built into the transfer itself — not bolted on via a third-party witness service.
-- Competitive displacement: DocuSign eSignature Business ~£200–£300/user/year for advanced signing workflows. Enterprise contracts: five figures annually. FROST-based approach is architecturally superior — no central attestation to subpoena, breach, or compel.
+- Competitive displacement: DocuSign eSignature Business ~£200–£300/user/year. FROST-based approach is architecturally superior — no central attestation to subpoena, breach, or compel.
 - Mention in B9 whitepaper §Future work. Build scope B12.
 
+**Recovery window ("Purchase a recovery window") — also B9 whitepaper §Future work only:**
+- See B6 carried snags for full framing, privacy properties, and publication restriction.
+- Only public mention permitted before shipping: B9 whitepaper §Future work. No product copy, no upgrade page, no marketing.
+
 **Silent Payments (BIP-352) — replaces PayNym/BIP-47:**
-- Static payment address produces unique on-chain output per sender. No interaction transaction required. No notification transaction on-chain. Simpler to explain: "one address, every payment private."
+- Static payment address, unique on-chain output per sender. No interaction transaction required.
 - Requires continuous blockchain scanning node — B9 infrastructure dependency.
-- Disadvantage vs BIP-47: thinner wallet support currently (Cake Wallet and others). BIP-47 has broader support now but worse privacy model.
 - Long-term direction: Silent Payments over PayNym. PayNym column on upgrade page remains placeholder until B9 node is live.
 
 **refueler-multi-core (blockchain scanning):**
 - Fork Esplora (Blockstream, MIT) or Mempool.space (MIT) for Bitcoin blockchain scanning.
-- Use case: Silent Payments scanning for Enterprise clients without their own node; internal infrastructure for Share's own on-chain payment rails.
-- Strip consumer UI, apply Paper/Carbon tokens — same pattern as LNbits fork.
-- Consider combining with LNbits fork into a single Refueler infrastructure repo pass.
+- Use case: Silent Payments scanning for Enterprise clients; internal infrastructure for Share's own on-chain payment rails.
 - Prerequisite: Lightning node live at B9. Do not start before B9 operational.
 
 ---
@@ -373,17 +371,17 @@ notification obligation, positive architectural narrative. Run tabletop simulati
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| SW1 | CF for SaaS setup | One-time: SaaS enablement on refueler.io zone, fallback origin `wl.share.refueler.io`, Worker route added. Smoke: `GET /status` via wl hostname. | S |
-| SW2 | API auth I | `worker/src/api_auth.js` — HMAC-SHA256 verify (method+path+timestamp+body_hash), key lookup, ±300s window. Unit tests same session. | M |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV (`api_quota_{key_id}`), 402 on exhaustion, AE `transfer_ref` logging. `POST /api/v1/keys/rotate` with 24h grace. | M |
-| SW3 | Badge + /wl/config | `GET /wl/config` by Host header, `Cache-Control: max-age=3600`, fail-safe `badge: true`. Badge component Paper/Carbon, links to `share.refueler.io`. | S |
-| SW4 | Webhooks I | Registration endpoints (`POST/GET/DELETE /api/v1/webhooks`), `rfs_whsec_` issuance, `wh_config_` KV schema, URL validation (HTTPS only, no IP literals, max 3 endpoints per key). | M |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`: immediate + 5s + 25s retry. Dead-letter KV `wh_dead_{api_key_id}_{event_id}` (7-day TTL). AE log per attempt. Daily cron retries dead-letter once. | M |
-| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold: API-key auth, transfers table from AE via `GET /api/v1/transfers`, `transfer_ref` prefix filter. | M |
-| SW5a | Client dashboard II | Capability gating (Prod Max / Business / Enterprise), webhook monitoring card (AE-sourced: delivery rate 24h/7d, last failure, dead-letter count), hostname health card. Paper/Carbon. | M |
-| SW6 | Onboarding flow | Per-client admin runbook: CF custom-hostname API call → keypair issue → `wl_config_{hostname}` KV write → activation poll + smoke test. Single-line curl commands throughout. | S |
-| SW7 | IT handover PDF | Two-page branded PDF, Paper theme (bg `#F7F4EF`, gold `#C8A96E`, IBM Plex Mono DNS block, Source Serif 4 body). Three substitution fields: hostname, IT contact name, date. Built once, generated per client. | S |
-| SW8 | Daily cron | Scheduled Worker handler: hostname health checks → AE, dead-letter webhook retry. `[triggers]` in wrangler.toml. | S |
+| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. Smoke: `GET /status` via wl hostname. | S |
+| SW2 | API auth I | `worker/src/api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. | M |
+| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rotation with 24h grace. | M |
+| SW3 | Badge + /wl/config | `GET /wl/config` by Host header, fail-safe `badge: true`. Badge component Paper/Carbon. | S |
+| SW4 | Webhooks I | Registration endpoints, `rfs_whsec_` issuance, `wh_config_` KV schema, URL validation. | M |
+| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. Daily cron retry. | M |
+| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. | M |
+| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. | M |
+| SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. | S |
+| SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. Built once, generated per client. | S |
+| SW8 | Daily cron | Hostname health checks → AE. Dead-letter webhook retry. `[triggers]` in wrangler.toml. | S |
 | SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. | S |
 
 **Buffer:** SW2b (auth overrun), SW5b (dashboard overrun).
@@ -408,12 +406,18 @@ notification obligation, positive architectural narrative. Run tabletop simulati
 - Core framing: "the server is blind and so is the till."
 - "Pseudonymous is not unlinkable" — the Berlin line.
 
+**Two-axis category framing (locked AP-7):**
+Refueler Share is the only architecture that solves both of these simultaneously:
+1. **The recipient problem:** the transfer survives the sender closing their laptop; it survives the recipient being on a plane. Every synchronous P2P tool (DashBeam, Wormhole) fails this by design.
+2. **The compulsion problem:** there is nothing to hand over — not because we'd refuse, but because we never had it. Every storing service with server-side keys fails this by design.
+
+This two-axis framing is the category definition and the spine of article 5's four-quadrant table. It is also the strongest candidate for the index page hero. Do not conflate with the one-line positioning ("only one side needs to be sophisticated") — they are complementary, not substitutes.
+
 **DashBeam (dashbeam.net) — assessed AP-6, 2 Aug 2026:**
-- Synchronous P2P (both parties must be online simultaneously). QUIC via Iroh framework. Unlimited free tier (no storage cost — nothing stored server-side). Resumable transfers. Open source. No B2B intent. Anonymity = IP-to-IP direct handshakes (both IPs visible to each other and relay).
-- **Not a threat to professional buyer segment.** A solicitor cannot tell a client "stay online for 4 hours while the contract transfers." Asynchronous delivery is a structural advantage for this audience.
-- **Does not eat the paid tier funnel.** Casual "send a friend a video" users were never going to convert. Professional buyers need the asynchronous + blind server model.
+- Synchronous P2P (both parties must be online simultaneously). QUIC via Iroh framework. Unlimited free tier. Resumable transfers. Open source. No B2B intent. Anonymity = IP-to-IP direct handshakes (both IPs visible to each other and relay).
+- **Not a threat to professional buyer segment.** Asynchronous delivery is a structural advantage.
 - **One genuine gap confirmed:** resumable uploads. Addressed by R-series post-SW.
-- **HTTP/3 positioning:** Cloudflare edge already runs HTTP/3. Honest claim: "Transfers run over HTTP/3 on Cloudflare's global edge network with per-chunk BLAKE3 integrity verification." DashBeam has QUIC for the P2P leg; we have HTTP/3 client-to-edge plus server-side content verification. TLS/QUIC proves the channel; BLAKE3 proves the content. They have the former, not the latter. Addressed by HQ-series post-R-series.
+- **HTTP/3 positioning:** "Transfers run over HTTP/3 on Cloudflare's global edge network with per-chunk BLAKE3 integrity verification." TLS/QUIC proves the channel; BLAKE3 proves the content. Addressed by HQ-series post-R-series.
 - Do not name DashBeam in any public copy — positioning by architecture, not by competitor name.
 
 **OEM positioning paragraph (Berlin, verbatim — locked AP-3a):**
@@ -489,7 +493,7 @@ No social media distribution. refueler.io is the canonical destination.
 
 | # | Title (short) | Publish order | Dependency | Status |
 |---|--------------|---------------|------------|--------|
-| 1 | Subpoena table | 1st | None | Live — iteration hold until 5 Aug |
+| 1 | Subpoena table | 1st | None | Live — iteration ready from week of 5 Aug |
 | 2 | Client files / inbox | 2nd | None | Planned — structure locked AP-1 |
 | 3 | Metadata value | 3rd | None | Planned — structure locked AP-1 |
 | 4 | Blind vs secure server | 4th | None | Planned — structure locked AP-1 |

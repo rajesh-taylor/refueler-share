@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.5 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** AP-3a white-label + SW block · 30 July 2026
+> **Version:** 1.6 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** AP-7 ad-hoc · 2 Aug 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Blink, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -79,6 +79,20 @@ Session count is a guide not a constraint — split early, never overload. Plann
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
 the first session of a group — never skipped. See Share-Master-Context.md §B7 notes.
+
+---
+
+## Session hygiene — mandatory
+
+**After every `git commit`, always `git push`.** Commits that stay local mean Cloudflare Pages
+never deploys. Combine into one command:
+
+```
+git commit -m "AP-7: description" && git push
+```
+
+Rajesh consistently forgets the push step. Claude must always include `&& git push` in the
+commit command at session close, without being asked.
 
 ---
 
