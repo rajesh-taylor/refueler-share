@@ -85,7 +85,7 @@ No free trials. No discounts. No savings framing. The price is the price.
 | File contents | No — ciphertext only in R2 | No — key never existed on our servers |
 | AES-GCM session key | No — URL fragment, never transmitted | No — does not exist in our infrastructure |
 | Sender / recipient identity (free tier) | No | No |
-| File sizes and transfer timestamps | Yes | Yes — disclosed voluntarily in `honest_metadata.json` |
+| File sizes and transfer timestamps | Yes | Yes — disclosed voluntarily (see B9 whitepaper) |
 | Stripe subscriber email and name (paid tier) | Yes | Yes |
 | Lightning payment hashes | Yes, 25h TTL | Yes, within TTL window |
 
@@ -95,7 +95,7 @@ This is documented in advance because it should be documented in advance. A comp
 
 ### Incident response documentation
 
-- `incident-response.md` — the standing playbook: severity tiers (S1/S2/S3), pre-written communication templates, channel order, UK GDPR Article 33 obligations and process, status page KV schema, tabletop simulation checklist.
+- `docs/incident-response.md` — the standing playbook: severity tiers (S1/S2/S3), pre-written communication templates, channel order, UK GDPR Article 33 obligations and process, status page KV schema, tabletop simulation checklist.
 - `security-breach.md` — the living breach register: one entry per confirmed or suspected incident, entry template included, currently empty.
 
 The tabletop simulation (a structured walkthrough of a realistic S1 scenario) will be completed before the first paying customer. The results will be documented in `security-breach.md`.
