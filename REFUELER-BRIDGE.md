@@ -1,6 +1,6 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.1 | **Created:** 28 July 2026 | **Updated:** AP-7 ad-hoc · 2 Aug 2026
-> Lives in both `refueler-share` and `refueler-io` repos. Committed to each.
+> **Version:** 1.2 | **Created:** 28 July 2026 | **Updated:** AP-7 ad-hoc · 2 Aug 2026
+> Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-multi-core` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 
@@ -10,11 +10,12 @@
 
 Refueler is a suite of Bitcoin-native products built by Rajesh Taylor (solo founder, London).
 The wider ecosystem includes a merchant POS (`refueler.io`), a mint, and several experimental repos.
-The product in active development is **Refueler Share**.
+Products in active development: **Refueler Share** (file transfer) and **Legend** (private chain explorer, post-B9).
 
 **Local paths:**
-- Main site + POS: `/Users/rajeshtaylor/Documents/refueler-io/`
+- Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/`
 - Share: `/Users/rajeshtaylor/Documents/refueler-share/`
+- Legend / multi-core: `/Users/rajeshtaylor/Documents/refueler-multi-core/`
 
 **GitHub:** `github.com/rajesh-taylor`
 
@@ -44,6 +45,67 @@ Refueler Share is the only architecture that solves both failures simultaneously
 - Not zero-knowledge in the metadata sense — file sizes, chunk counts, and timestamps are visible to the operator. Published honestly.
 - Lightning payments are pseudonymous, not anonymous (Blink internal correlation possible — documented).
 - No independent security audit yet. Target: B9 (cryptographic design review) → B11 (scoped pentest, findings published).
+
+---
+
+## What Legend is
+
+**Legend** is a privacy-first Bitcoin block explorer and chain analytics tool built on a fork of Esplora (Blockstream, MIT licensed). It lives in `refueler-multi-core`.
+
+**The problem it solves:** Every query to a public block explorer (Mempool.space, Blockstream.info) tells that server exactly which addresses and transactions you're watching. This is a structural metadata leak that affects everyone from individual Bitcoiners to family offices managing significant holdings. No existing explorer is architected to prevent it.
+
+**URL:** `refueler.io/legend` (not a separate domain — domain authority consolidates on main domain)
+**Licence:** Apache 2.0. Open source. Self-hosting available — "don't trust us, read the code."
+**Prerequisite:** Lightning node live at B9. Do not start before B9 operational.
+
+### What Legend does that nobody else does
+
+**Privacy-first query architecture:**
+- Own infrastructure — no query metadata leaks to Blockstream, Mempool.space, or any third party
+- Ephemeral query sessions — no session persistence, no cookie tracking, no client correlation across queries
+- Tor-native API for Enterprise — client IP never reaches the server
+- PIR-inspired sharding (3-5 Hetzner nodes, fixed cost regardless of client count) — no single node sees the complete query; client reassembles locally. A world first for production Bitcoin chain data.
+
+**Cashu query credentials — the Cashu model applied to chain queries:**
+- Query budgets issued as Cashu blind signature tokens — same infrastructure as Share
+- Server cannot reconstruct a client's query history across sessions — structurally impossible, not a policy promise
+- Free tier: 10 Legend queries earned per Share upload, 50/day cap
+- Paid Share tiers: 50 queries per upload, uncapped daily
+- Enterprise: unlimited, PIR-sharded, Tor-native
+
+**Proof-of-query receipts:**
+- Blind receipt issued per query — cryptographic proof the query was processed without linking receipt to query content
+- Client can verify they received N responses without revealing what they asked
+- Useful for compliance-conscious enterprise clients and family offices demonstrating unloggable query behaviour to their legal team
+
+**Silent Payments native (BIP-352):**
+- First block explorer to display Silent Payments static addresses and derived outputs correctly
+- Requires scanning every block — public explorers do not support this
+
+**Modern analysis layer (beyond Mempool/Esplora legacy tooling):**
+- UTXO age and provenance scoring — for compliance professionals understanding what they're receiving, without third-party analytics logging the query
+- Lightning channel correlation — on-chain channel opens/closes correlated with own node data, privately
+- Payment path reconstruction for own transactions — credential-gated, never revealed to operator
+- Family office tooling: track BTC movements, flag suspicious activity, generate private reports
+
+### Who Legend serves — the full stack, not just enterprise
+
+**Plebs first.** The free tier (10 queries per Share upload, or 50/day standalone) gives every Bitcoiner a private alternative to Mempool.space for basic lookups. No account. No tracking. Privacy is not a luxury — it is the default.
+
+**Lightning and Cashu wallet users.** Lightning nodes open and close channels on-chain. Those events are queryable. Legend gives Lightning wallet users (Mutiny, Phoenix, Breez, Zeus, Sparrow) a private way to track their own channel activity without revealing their node's footprint to a public explorer. Potential partnership: Sparrow Wallet (Craig Raw, post-B9) — already supports custom Esplora endpoints; Legend is API-compatible out of the box.
+
+**Family offices (UK and US).** A family office managing significant Bitcoin holdings needs to track movements, verify receipt of payments, and monitor for suspicious activity — without broadcasting which addresses they watch to a public explorer. The compliance reporting layer (UTXO provenance scoring, movement history for credentialed addresses) maps directly to what a family office's legal team needs.
+
+**The Coldcard/Coinkite moment (August 2026):** The breach exposed customer shipping addresses and potentially wallet addresses. Anyone who purchased a Coldcard has reason to believe their Bitcoin addresses may be known to the attacker. Checking whether those addresses have been swept on a public explorer tells Mempool.space exactly which addresses you're worried about — compounding the privacy loss. Legend is the correct tool for this scenario: private address monitoring, no metadata leak, no third-party knowledge of what you're watching. This is a genuine product-market fit moment. Article 14 should be written with this context in mind. The opening line is locked: "Every time you look up a Bitcoin address on a public block explorer, you're telling that server exactly what you own and what you're watching. Here's what we built instead, and why it matters for our clients."
+
+### Business model
+
+- Free: 10 queries per Share upload or 50/day standalone. No account required.
+- Paid Share subscribers: 50 queries per upload, uncapped daily, included in Creative Premium and above.
+- Enterprise: unlimited, full PIR stack, Tor API, Silent Payments scanning, family office reporting, self-hosting option with setup and support contract.
+- Open source: self-hosting encouraged. Enterprise value lives in the Cashu credential integration, Silent Payments scanning layer, and managed infrastructure — not in closed code.
+
+**Traffic and cost model:** Free access is rate-limited by Cashu credentials. Enterprise revenue subsidises infrastructure before free tier scales. Sequence: Enterprise infrastructure first → open source → article 14 → free tier as proof of concept → Enterprise conversion. Legend does not open as a free unlimited public explorer until business model is proven.
 
 ---
 
@@ -86,36 +148,15 @@ All Refueler surfaces share these tokens. Divergences are bugs.
 
 ## Content architecture — refueler.io
 
-**`/editorial/`** — Investor/partner long-form. Curated, slow, considered. Existing articles live here.
-Example: `refueler.io/editorial/looks-done-isnt-done`
+**`/editorial/`** — Investor/partner long-form. Curated, slow, considered.
 
 **`/notes/`** — SEO-targeted technical content for professional buyers. Higher cadence.
-Audiences: lawyers, journalists, accountants, Bitcoin-adjacent professionals, legal/human rights workers.
-Register: authoritative, precise, dry wit permitted. Shorter sentences than editorial.
-Index: card grid (title, one-sentence description, date, read time). Each article its own URL.
-Articles live on `refueler.io/notes/[slug]/` — domain authority consolidates on main domain.
+Audiences: lawyers, journalists, accountants, Bitcoin-adjacent professionals, legal/human rights workers, family offices.
+Full pipeline in `notes-articles-list.md` in `refueler-share/`.
 
-**Do not publish Share-specific articles on `share.refueler.io`** — all content on `refueler.io`.
+**`/legend/`** — Legend product surface. Post-B9.
 
-**`/notes/` articles — current pipeline (full detail in `notes-articles-list.md`):**
-
-| # | Title (short) | Status |
-|---|--------------|--------|
-| 1 | Subpoena table | Live — iteration open from 5 Aug |
-| 2 | Client files / inbox | Planned |
-| 3 | Metadata value | Planned |
-| 4 | Blind vs secure server | Planned — btc++ Berlin warm-up |
-| 5 | Jurisdiction vs architecture | Planned |
-| 6 | Anonymous payment option | Unlocks after B7 |
-| 7 | Journalists and file transfer | Planned — Susie intro first |
-| 8 | PI insurer risk | After SW block |
-| 9 | After the link expires | Anytime |
-| 10 | Case study (video editor) | Last — needs real user |
-| 11 | API / white-label notes | After SW block |
-| 12 | API technical integration / Nostr auth | After SW block |
-| 13 | Transmitting evidence when your witness cannot travel | Planned — legal/human rights audience |
-
-**Article 13 note:** Covers confined witnesses, endangered sources, asylum cases, ICC evidence, human rights documentation. Recorded video works today on Share — encrypted chunks, fragment URL as key, server blind. Range request support (post-B9) enables streaming without full download first. This article may embed a video player demonstrating the use case (see §Video player in /notes/).
+**Do not publish Share or Legend articles on subdomains** — all content on `refueler.io`.
 
 ---
 
@@ -125,72 +166,45 @@ Articles live on `refueler.io/notes/[slug]/` — domain authority consolidates o
 - One idea per paragraph. Short paragraphs.
 - Precision over completeness. Say the true thing simply.
 - Dry wit from the gap between marketing claims and reality — let the gap do the work, don't point at it.
-- Never: "military-grade", "zero-knowledge" as a headline, "Swiss-grade privacy", "anonymous payments" (Proton accepts BTC/cash — this claim is false).
-- Always: honest about what the operator *can* see (sizes, timing, edge IPs). State it before anyone asks.
+- Never: "military-grade", "zero-knowledge" as a headline, "Swiss-grade privacy", "anonymous payments".
+- Always: honest about what the operator *can* see. State it before anyone asks.
 - Source Serif 4 for body. IBM Plex Mono for data, table cells, any inline technical values.
 
 ---
 
 ## Video player in /notes/ and founder S1 modal
 
-### /notes/ article video player
+**Article video player:** R2 bucket → Worker signed URL → HTML5 `<video>` → Cloudflare edge at 1080p.
+Download blocker via CSS + JS. No external platforms. Build scope: B9 or B13.
 
-Articles (particularly article 13) may embed a video player in a modal or inline section.
-Architecture:
-
-- Video file stored in a dedicated R2 bucket on the `refueler.io` side (separate from Share's transfer R2).
-- Worker generates a signed, time-limited R2 URL per request — prevents hotlinking and direct download via URL.
-- HTML5 `<video>` tag renders the stream. Cloudflare edge delivers at full line speed — R2 + CF edge is effectively a CDN with zero egress fees. 1080p plays cleanly.
-- Download blocker: CSS `pointer-events` on the video element + JS `contextmenu` and `dragstart` intercepts. Prevents casual download-and-reshare. Does not stop screen recording — intent, not technical certainty.
-- Paper/Carbon tokens throughout the modal. `modal radius: 12px`. No external video platform dependencies (no YouTube, no Vimeo — own infrastructure only, consistent with Share's values).
-
-**Use case for article 13:** a short produced demonstration of the witness/confined-testimony scenario. "Here is what it looks like when a barrister receives a recorded statement from a client who cannot travel." 90 seconds. More persuasive than prose for a legal audience.
-
-**Build scope:** B9 or B13 depending on priority. Does not block any article from publishing — the article works without the video. Video is enhancement, not dependency.
-
-### Founder S1 incident video modal
-
-During an S1 incident, the status page (`/status`) displays a pre-recorded video statement from Rajesh alongside the KV-backed incident panel. Architecture is identical to the article video player above.
-
-**Purpose:** removes the "who speaks for the company" ambiguity under pressure. A named founder on camera, factual and calm, stating what is known and what is being done, is the response Coldcard did not give. It is also faster to consume than a text statement for users checking the status page in distress.
-
-**Pre-record template:** filmed at B9 alongside the tabletop simulation. Low production value is fine — honest and fast is the requirement. Broad template:
-
-> "I'm Rajesh Taylor, the founder of Refueler Share. At [time] today we identified [one sentence]. Here is what we know. Here is what we don't know yet. Here is what we're doing in the next two hours. I'll update this page at [specific time]."
-
-**Key properties:**
-- Stored in R2, served via signed URL from the Worker. Not uploaded to any third-party platform.
-- Displayed only when `incident_active` KV key is set to S1 severity. Hidden otherwise.
-- Sits alongside the text incident panel, not instead of it. Text remains for screen readers and low-bandwidth connections.
-- sessionStorage does not dismiss it during an S1 — the video and panel are persistent until the incident is resolved.
-
-**Build scope:** B9, same session as the status page incident dashboard panel.
+**Founder S1 modal:** Pre-recorded statement on `/status` during S1 incidents. R2 + signed URL.
+Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. Pre-record at B9 tabletop.
 
 ---
 
-## Competitive positioning — locked findings (M-series, July 2026)
+## Competitive positioning — locked findings
 
-**Anonymity spectrum** (weakest→strongest, hosted services): WeTransfer/Smash/SwissTransfer → Tresorit/Proton Drive → Wormhole → **Refueler Share** → OnionShare.
-
-**Key differentiator:** Cashu blind signatures decouple payment, credential, and usage — three events nobody can join, including the operator. Keypair auth (Nostr/Blossom) is pseudonymous; Cashu is unlinkable. "Pseudonymous is not unlinkable."
+**Anonymity spectrum:** WeTransfer/Smash/SwissTransfer → Tresorit/Proton Drive → Wormhole → **Refueler Share** → OnionShare.
 
 **Wedge statements:**
 - vs WeTransfer: "A server that can read your files is a server whose terms about your files matter. Ours stores noise."
 - vs SwissTransfer: "Jurisdiction is not architecture."
 - vs Proton Drive: "No account to correlate. The payment itself is blinded."
 - vs OnionShare: "Close your laptop. The transfer survives."
-- vs DashBeam / synchronous P2P: "The transfer survives your client being on a plane." (Do not name DashBeam publicly.)
+- vs synchronous P2P: "The transfer survives your client being on a plane."
+- vs Mempool/Blockstream: "We can't see what you're watching. Neither can anyone else."
 
-**B9 whitepaper framing (ours, not used by competitors):** "The server is blind and so is the till."
+**B9 whitepaper framing:** "The server is blind and so is the till."
 
 ---
 
 ## Current build status
 
-**`refueler-share`:** B6 complete (S72a). B7 next — S73 opens after pre-B7 checklist complete.
-212 tests passing across 8 suites. Lightning/Blink payment (B7) not yet built. Paid tier cards greyed out until B7 complete.
+**`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
 
-**`refueler-io`:** `/notes/` section live. Article 1 published, iteration open from 5 Aug. Articles 2–13 planned — see `notes-articles-list.md` in `refueler-share/` for full detail.
+**`refueler-io`:** `/notes/` live. Article 1 published, iteration open from 5 Aug. Articles 2–14 planned.
+
+**`refueler-multi-core` (Legend):** Repo created. No code. Starts post-B9 node.
 
 ---
 
@@ -205,6 +219,7 @@ During an S1 incident, the status page (`/status`) displays a pre-recorded video
 - Do not claim "anonymous payment" — Proton accepts BTC/cash, claim is false.
 - Do not claim "end-to-end file integrity" — only server-side chunk integrity is verified today.
 - No external video platforms (YouTube, Vimeo) — R2 + Worker signed URL only.
+- Legend does not start before B9 Lightning node is live. No exceptions.
 
 ---
 
