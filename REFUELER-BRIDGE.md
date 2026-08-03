@@ -1,6 +1,6 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.2 | **Created:** 28 July 2026 | **Updated:** AP-7 ad-hoc · 2 Aug 2026
-> Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-multi-core` repos. Committed to each.
+> **Version:** 1.3 | **Created:** 28 July 2026 | **Updated:** Multi-7 · 3 Aug 2026
+> Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 
@@ -15,7 +15,7 @@ Products in active development: **Refueler Share** (file transfer) and **Legend*
 **Local paths:**
 - Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/`
 - Share: `/Users/rajeshtaylor/Documents/refueler-share/`
-- Legend / multi-core: `/Users/rajeshtaylor/Documents/refueler-multi-core/`
+- Legend / multi-core: `/Users/rajeshtaylor/Documents/refueler-legend/`
 
 **GitHub:** `github.com/rajesh-taylor`
 
@@ -50,7 +50,7 @@ Refueler Share is the only architecture that solves both failures simultaneously
 
 ## What Legend is
 
-**Legend** is a privacy-first Bitcoin block explorer and chain analytics tool built on a fork of Esplora (Blockstream, MIT licensed). It lives in `refueler-multi-core`.
+**Legend** is a privacy-first Bitcoin block explorer and chain analytics tool built on a fork of Esplora (Blockstream, MIT licensed). It lives in `refueler-legend`.
 
 **The problem it solves:** Every query to a public block explorer (Mempool.space, Blockstream.info) tells that server exactly which addresses and transactions you're watching. This is a structural metadata leak that affects everyone from individual Bitcoiners to family offices managing significant holdings. No existing explorer is architected to prevent it.
 
@@ -203,8 +203,10 @@ Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. P
 **`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
 
 **`refueler-io`:** `/notes/` live. Article 1 published, iteration open from 5 Aug. Articles 2–14 planned.
+Legend shell live at `refueler.io/legend` (Multi-7). Nav updated: App → Legend. `src/assets` passthrough added to Eleventy config.
+Pending: shared nav/footer CSS extraction (see Cross-project actions below).
 
-**`refueler-multi-core` (Legend):** Repo created. No code. Starts post-B9 node.
+**`refueler-legend` (Legend):** Phase 1 open (Multi-7). Shell and SPA mount live in `refueler-io`. No query logic yet. Next: Multi-8 — first query flow.
 
 ---
 
@@ -220,6 +222,52 @@ Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. P
 - Do not claim "end-to-end file integrity" — only server-side chunk integrity is verified today.
 - No external video platforms (YouTube, Vimeo) — R2 + Worker signed URL only.
 - Legend does not start before B9 Lightning node is live. No exceptions.
+
+---
+
+## Cross-project actions — pending
+
+These items span two projects and must be actioned in the project indicated.
+Do not close the relevant session without confirming each item is resolved.
+
+### refueler-io — action at end of next session
+
+**1. Extract shared nav and footer CSS.**
+Nav and footer styles are currently defined inline in `src/index.njk` only.
+Every other page (Legend, Notes, Editorial, Privacy) loads unstyled nav and footer
+because there is no shared stylesheet. Extract all nav, footer, and base reset CSS
+from `src/index.njk` into `src/assets/css/global.css`. Add to `eleventy.config.js`:
+`eleventyConfig.addPassthroughCopy("src/assets")` (already done — just add the
+`<link>` to `head.njk`). Update `src/index.njk` to remove the now-redundant inline
+nav/footer styles.
+
+**2. Fix theme detection bug in `head.njk` and `src/index.njk`.**
+Both files use `localStorage` and `classList.add('carbon-mode')`.
+Locked spec requires `dataset.theme === 'carbon'` detection only.
+Never `classList.contains('carbon-mode')`. Fix the inline theme script in `head.njk`
+and the duplicate script in `src/index.njk` to use `dataset.theme` throughout.
+
+**3. Rotate the Anthropic API key.**
+A key was found in `refueler_csuite_briefing_v2_4.html` and is now in git history.
+Rotate it at `console.anthropic.com`. The push was allowed but the key is compromised.
+
+### refueler-legend — action after refueler-io session completes
+
+**Legend cross-project sign-off.**
+Once refueler-io session has extracted shared CSS and fixed theme detection,
+open a Legend session and load `http://localhost:8080/legend/` to confirm:
+- Nav renders correctly with Refueler design system styles
+- `Refueler / Legend` wordmark shows correctly
+- `Legend` nav link is active-highlighted
+- Paper/Carbon toggle works and persists via `rs-theme` cookie
+- Gold credential dot visible top-right
+- Query input renders with correct surface background and border
+- Below-fold three-column section renders correctly
+- Footer renders correctly
+- No console errors
+
+Only after all items above confirm green does Multi-8 (first query flow) open.
+Record sign-off confirmation in `SESSIONS.md` before closing the Legend session.
 
 ---
 

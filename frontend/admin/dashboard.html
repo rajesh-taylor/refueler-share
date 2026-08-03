@@ -67,6 +67,23 @@
       </div>
     </div>
 
+<!-- ─── Lightning availability toggle card ───────────────────────────────
+     Add this card inside the admin ops row in dashboard.html.
+     Sits alongside the maintenance / status toggle cards.
+     Backend: POST /admin/status with { lightning_available: "true"|"false"|"blink" }
+     STATUS_KV key: lightning_available
+──────────────────────────────────────────────────────────────────────── -->
+<div class="card" id="card-lightning-toggle">
+  <div class="card-label">Lightning availability</div>
+  <div class="card-value" id="lightning-toggle-state">—</div>
+  <div class="card-sub" id="lightning-toggle-sub">checking…</div>
+  <div class="lightning-toggle-controls">
+    <button class="toggle-btn" id="btn-lightning-blink"  data-value="blink">Blink (live)</button>
+    <button class="toggle-btn" id="btn-lightning-true"   data-value="true">On (any)</button>
+    <button class="toggle-btn" id="btn-lightning-false"  data-value="false">Off</button>
+  </div>
+</div>
+
     <div id="error-banner"></div>
 
     <div class="card-group">
