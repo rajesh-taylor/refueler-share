@@ -8,7 +8,7 @@
   --success:         #1E8A4A;
   --danger:          #C0392B;
 }
-html.carbon-mode {
+[data-theme="carbon"] {
   --card-bg-raised:  rgba(245,240,232,0.06);
   --stripe-bg:       #2E2E2E;
   --success:         #4CAF82;
