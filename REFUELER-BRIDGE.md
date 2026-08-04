@@ -115,7 +115,7 @@ All Refueler surfaces share these tokens. Divergences are bugs.
 
 **Backgrounds:**
 - Paper (light): `--bg: #F5F0E8` · `--surface: #EDEAE4` · `--surface-raised: #E4E1DA`
-- Carbon (dark): `--bg: #1E1F22` · `--surface: #26282C` · `--surface-raised: #2E3035`
+- Carbon (dark): `--bg: #1A1A1A` · `--surface: #26282C` · `--surface-raised: #2E3035`
 
 **Text:**
 - Paper: `--text-primary: #3D3A36` · `--text-secondary: #5A5751` · `--text-tertiary: #9A948D`
