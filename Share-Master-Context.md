@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.2 | **Last updated:** AP-7 ad-hoc · 2 Aug 2026
+> **Version:** 5.3 | **Last updated:** AP-8 ad-hoc · 4 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -147,6 +147,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Folder upload via client-side zip (fflate, S53–S56). DO NOT implement multi-file manifest.
 - DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/share.js`, `frontend/upgrade.css` only (extracted S51).
 - `share.js` must remain `type="module"` — scoped deps, top-level await support.
+- `src/_includes/head.njk` theme script: `localStorage`/`rfTheme` replaced with `rs-theme` cookie scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`). `dataset.theme` attribute only — `[data-theme="carbon"]` CSS selector. `window.toggleTheme` exposed as global for nav pill `onclick`. Cross-domain theme persistence confirmed working (AP-8).
+- `src/_includes/nav.njk` link set (AP-8): Notes (`refueler.io/notes/`), Upgrade (`/upgrade.html`), Support (`refueler.io/support/`), theme pill. App / Editorial / Privacy links removed. Legend deliberately omitted (not fully live). Wordmark stays `REFUELER / SHARE`.
 
 **Stripe:**
 - Direct Subscription + `expand[0]=latest_invoice.payment_intent` → `pi_...` secret for `stripe.elements()`.
@@ -200,6 +202,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Dummy blinded message in `issueCredential` test helper | Must do real BDHKE unblinding (`C_ - r*K`) or `verifyCredential` returns 401 |
 | Supabase mock started in test file | Lifecycle owns it — must start before wrangler so URL lands in `.dev.vars` |
 | `ProjectivePoint.subtract()` in noble v2 | Use `.add(point.negate())` |
+| `localStorage` / `rfTheme` for theme in `head.njk` | `rs-theme` cookie scoped to `.refueler.io`, `dataset.theme` only (AP-8) |
+| `classList.add('carbon-mode')` in theme script | `document.documentElement.dataset.theme = 'carbon'` (AP-8) |
 | Cloudflare Queues / Durable Objects / D1 for webhooks | `ctx.waitUntil` + KV dead-letter only |
 | Sub-keys per API user (Business tier) | One keypair per commercial relationship + `transfer_ref` attribution |
 | Never edit `frontend/upgrade.html` directly | Eleventy overwrites it from `src/upgrade.njk` on every build |
