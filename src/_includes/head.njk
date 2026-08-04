@@ -14,26 +14,34 @@
 
 <!-- Theme: applied before first paint to avoid flash -->
 <script>
-  const THEME_KEY = 'rfTheme';
-  function applyTheme(theme) {
-    const root = document.documentElement;
-    const pill = document.getElementById('themePill');
-    if (theme === 'carbon') {
-      root.classList.add('carbon-mode');
-      root.setAttribute('data-theme', 'carbon');
-      if (pill) pill.textContent = 'Carbon / Paper';
-    } else {
-      root.classList.remove('carbon-mode');
-      root.removeAttribute('data-theme');
-      if (pill) pill.textContent = 'Paper / Carbon';
+  (function () {
+    function getCookie(name) {
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
     }
-  }
-  function toggleTheme() {
-    const current = localStorage.getItem(THEME_KEY) || 'paper';
-    const next = current === 'paper' ? 'carbon' : 'paper';
-    localStorage.setItem(THEME_KEY, next);
-    applyTheme(next);
-    {% if stripeThemeRemount %}if (typeof remountStripeForTheme === 'function') remountStripeForTheme();{% endif %}
-  }
-  (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
+    function setCookie(name, value) {
+      var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; domain=.refueler.io; SameSite=Lax';
+    }
+    function applyTheme(theme) {
+      var root = document.documentElement;
+      var pill = document.getElementById('themePill');
+      if (theme === 'carbon') {
+        root.setAttribute('data-theme', 'carbon');
+        if (pill) pill.textContent = 'Carbon / Paper';
+      } else {
+        root.removeAttribute('data-theme');
+        if (pill) pill.textContent = 'Paper / Carbon';
+      }
+    }
+    function toggleTheme() {
+      var current = getCookie('rs-theme') || 'paper';
+      var next = current === 'paper' ? 'carbon' : 'paper';
+      setCookie('rs-theme', next);
+      applyTheme(next);
+      {% if stripeThemeRemount %}if (typeof remountStripeForTheme === 'function') remountStripeForTheme();{% endif %}
+    }
+    window.toggleTheme = toggleTheme;
+    applyTheme(getCookie('rs-theme') || 'paper');
+  })();
 </script>
