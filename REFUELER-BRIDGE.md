@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.8 | **Created:** 28 July 2026 | **Updated:** CC-76 · 4 Aug 2026
+> **Version:** 1.9 | **Created:** 28 July 2026 | **Updated:** CC-78 · 4 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -96,7 +96,7 @@ Refueler Share is the only architecture that solves both failures simultaneously
 
 **Family offices (UK and US).** A family office managing significant Bitcoin holdings needs to track movements, verify receipt of payments, and monitor for suspicious activity — without broadcasting which addresses they watch to a public explorer. The compliance reporting layer (UTXO provenance scoring, movement history for credentialed addresses) maps directly to what a family office's legal team needs.
 
-**The Coldcard/Coinkite moment (August 2026):** The breach exposed customer shipping addresses and potentially wallet addresses. Anyone who purchased a Coldcard has reason to believe their Bitcoin addresses may be known to the attacker. Checking whether those addresses have been swept on a public explorer tells Mempool.space exactly which addresses you're worried about — compounding the privacy loss. Legend is the correct tool for this scenario: private address monitoring, no metadata leak, no third-party knowledge of what you're watching. This is a genuine product-market fit moment. Article 14 should be written with this context in mind. The opening line is locked: "Every time you look up a Bitcoin address on a public block explorer, you're telling that server exactly what you own and what you're watching. Here's what we built instead, and why it matters for our clients."
+**The Coldcard/Coinkite moment (August 2026):** A serious entropy bug was discovered in Coldcard MK3 seed generation. Weak entropy means the keyspace is dramatically smaller than it should be — brute-force attacks on MK3 wallets are viable right now. Affected users need to check whether their addresses have been swept. But the moment you type your address into Mempool.space or Blockstream.info, you've told that server exactly which addresses you're worried about — handing a complete briefing to anyone monitoring those queries. Legend is the correct tool for this moment: private address monitoring, no metadata leak, no third-party knowledge of what you're checking. This is a genuine product-market fit moment. Article 14 should be written with this context in mind. The opening line is locked: "Every time you look up a Bitcoin address on a public block explorer, you're telling that server exactly what you own and what you're watching. Here's what we built instead, and why it matters for our clients."
 
 ### Business model
 
@@ -210,6 +210,63 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. Same architectu
 
 These lines are not available for homepage or general marketing use. Do not repurpose.
 
+**Homepage copy (locked CC-78):**
+- Headline: *Your transaction is nobody else's business.*
+- Subhead: *Fiat or Bitcoin — privacy included.*
+- Capability block:
+  - Encrypted transfers / *The server is blind, so is the till.*
+  - Bitcoin explorer / *Your search history is showing.*
+  - Lightning payments / *Tap and go. Sats or card, your call.*
+
+"Two rails. One principle." opener dropped CC-78 — headline stands alone.
+"Chain queries" replaced with "Bitcoin explorer" — plainer, works across all audiences.
+Subhead elevated to full `var(--fg)` colour, `clamp(18px, 2vw, 24px)` — no longer a caption.
+Capability descriptors: DM Sans 400 / 17px — was 300 / 15px, was unreadable on a sparse page.
+
+---
+
+## Legend — copy locked CC-78
+
+**Homepage capability block (locked):**
+- Label: *Bitcoin explorer*
+- Descriptor: *Your search history is showing.*
+
+Rationale: creates the itch without revealing it. Non-bitcoiner reads it as a general privacy statement. Pleb reads it and knows exactly what their Mempool query log means. The reveal happens on the Legend index page.
+
+**Legend index page (locked):**
+- Headline: *Bitcoin, privately.* (locked CC-77)
+- Opening line: *Buys non-KYC Bitcoin, then logs every address ever searched...*
+
+Rationale: the irony lands instantly for the target audience. No explanation needed. Pairs with the homepage hook — the homepage planted the seed, the Legend page detonates it.
+
+**Discarded candidates (do not resurrect):**
+- "Your queries don't leave a record." — too explanatory, loses the hook quality
+- "Check your addresses. We won't remember that you did." — too long for capability descriptor
+- "Look up what you need. Nothing is logged." — too plain
+- "The privacy gap you didn't know you had." — too vague
+- "We can't see what you're watching. Neither can anyone else." — better as mid-page feature claim, not opener
+
+---
+
+## Notes — article seeds (logged CC-78)
+
+These article concepts emerged from CC-78 planning discussion. Add to `notes-articles-list.md` in `refueler-share/` at next Share session.
+
+**Article: The browsing history problem**
+*Audience:* lawyers, family offices, journalists, compliance professionals.
+*Angle:* A Mempool or Esplora query log is extraordinarily valuable to the right buyer. Every query is timestamped and IP-tagged. Aggregate enough of them and you can reconstruct which addresses a person monitors, transaction timing relative to query time, session clustering (addresses queried together are probably related), and behavioural patterns. Chain analysis firms don't just work on-chain — off-chain behavioural signals dramatically improve clustering confidence. A Mempool query log handed to Chainalysis cross-references on-chain clusters with real IP addresses and timestamps. For hackers: a stolen query log is pre-attack reconnaissance delivered voluntarily by the victim. For insurers: query logs are actuarial data the policyholder never consented to share — UK insurers taking on BTC custody risk will want this data. Legend is the answer before it becomes the problem.
+*Opening line candidate:* "Every address you look up on a public block explorer goes into a log you've never seen and cannot delete."
+
+**Article: Family offices, UK merchants, and the Bitcoin address problem**
+*Audience:* family offices (UK and US), UK merchants now holding BTC on the books, compliance professionals.
+*Angle:* Family offices need to verify receipts, monitor addresses, and track movements for compliance — without broadcasting which addresses they watch to a third party whose query logs could surface in discovery, be subpoenaed, or be sold after an acquisition. UK merchants checking incoming payments are mapping their customer base and transaction volume with every query — a competitor, an insurer, or HMRC with a data request to the explorer operator could reconstruct their Bitcoin revenue picture. The compliance workflow (address monitoring, movement history, UTXO provenance) is the same whether you're a family office or a café in Limehouse. The metadata leak is identical. Legend solves both.
+*Opening line candidate:* "Your accountant doesn't send your bank statements to a third party every time they check your balance. Your Bitcoin explorer does."
+
+**Article: The Coldcard entropy bug — what to do and how to check privately**
+*Audience:* Coldcard MK3 users, hardware wallet holders, security-conscious Bitcoiners.
+*Angle:* The MK3 entropy bug means the keyspace for affected seed phrases is dramatically smaller than users assumed — brute-force is viable. The natural instinct is to check whether your addresses have been swept. But checking on a public explorer compounds the problem: you've now told Mempool.space exactly which addresses you're monitoring, at exactly the moment those addresses are at risk. The correct procedure: check privately, sweep to a new wallet generated on unaffected hardware, verify the sweep privately. Legend is the tool for steps 1 and 3.
+*Note:* Time-sensitive. Publish as close to the bug disclosure as possible. Do not wait for B9 — if Legend is not live, the article can reference the architecture and link to the waitlist.
+
 ---
 
 ## Competitive positioning — locked findings
@@ -235,9 +292,9 @@ CSS architecture complete (CC-75): `share-tokens.css` is single token source. Th
 Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry to Share project.
 
 **`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
-CSS architecture partially complete. `global.css` owns all tokens for notes, support, privacy, editorial index, legend. Theme carries correctly on those pages.
-Remaining unmigrated pages (CC-78/79/80): `src/index.njk` (homepage — old `html.carbon-mode`/`localStorage` pattern, wrong token block), all four editorial articles (wrong hex values `#1E1F22`/`#F7F4EF` from stale EDITORIAL-MASTER.md spec). These cause visible colour divergence between pages.
-Homepage copy being reworked CC-77 — mission-led, ecosystem positioning, no product-specific copy.
+CSS architecture partially complete. `global.css` owns all tokens for notes, support, privacy, editorial index, legend, homepage. Theme carries correctly on those pages.
+Homepage migrated CC-78 (commit `f267602`): `home.css` created, `src/index.njk` rewritten — tokens stripped, `head.njk` added, `rs-theme` cookie pattern, `backdrop-filter` removed, CC-77/78 copy dropped in, sign-in panel removed, mobile auth deep-link handler retained.
+Remaining unmigrated pages (CC-79/80): all four editorial articles (wrong hex values `#1E1F22`/`#F7F4EF` from stale EDITORIAL-MASTER.md spec). These cause visible colour divergence between editorial articles and the rest of the site.
 
 **`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
@@ -289,14 +346,17 @@ Multi-8 (first query flow) can proceed.
 
 `share-tokens.css` is the single token source for all Share pages. Loaded via `head.njk` on every Eleventy page, linked externally from `frontend/index.html`. No Share page defines its own `:root` token block. Theme toggle confirmed working live on all three pages (CC-76).
 
-### refueler-io — homepage and editorial articles ⚠️ Open — CC-78/79/80
+### refueler-io — homepage ✅ Closed CC-78
 
-**Problem:** `src/index.njk` (homepage) and all four editorial articles have inline `<style>` blocks with their own token definitions, causing visible colour divergence between pages. Homepage uses old `html.carbon-mode`/`localStorage` pattern. Editorial articles use wrong hex values (`#1E1F22`, `#F7F4EF`) from stale EDITORIAL-MASTER.md.
+`src/index.njk` migrated. `home.css` created. Tokens stripped. `head.njk` added. `rs-theme` cookie. `backdrop-filter` removed. CC-77/78 copy live. Sign-in panel removed. Mobile auth deep-link handler retained. Commit `f267602`.
+
+### refueler-io — editorial articles ⚠️ Open — CC-79/80
+
+**Problem:** All four editorial articles have inline `<style>` blocks with `:root` token definitions using wrong hex values (`#1E1F22`, `#F7F4EF`) from stale EDITORIAL-MASTER.md. Causes visible colour divergence between editorial articles and the rest of the site.
 
 **Fix sequence:**
-- CC-78: Homepage — extract to `home.css`, migrate to `head.njk` + `rs-theme` cookie, remove `backdrop-filter`, drop agreed copy
-- CC-79: Editorial articles 1 + 2 — strip `:root` token blocks only (widget/layout CSS stays inline)
-- CC-80: Editorial articles 3 + 4 — same. Colour divergence permanently resolved.
+- CC-79: `the-city-worker` + `nothing-to-collect` — strip `:root` token blocks only. Widget/layout CSS stays inline.
+- CC-80: `looks-done-isnt-done` + `the-float` — same. Colour divergence permanently resolved.
 
 **Rule locked CC-76:** Editorial articles may keep widget/layout CSS inline. They must never define a `:root` token block.
 
