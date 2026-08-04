@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.7 | **Created:** 28 July 2026 | **Updated:** CC-74 · 4 Aug 2026
+> **Version:** 1.8 | **Created:** 28 July 2026 | **Updated:** CC-76 · 4 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -203,11 +203,13 @@ Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. P
 ## Current build status
 
 **`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
-Theme toggle broken on `upgrade.html` and `status.html` — CC-75 fix pending.
-Root cause: those pages do not load `share-tokens.css`. `upgrade.njk` loads only `upgrade.css`; `status.njk` has inline `<style>` block. Neither has the token definitions needed for `[data-theme="carbon"]` to take effect.
+CSS architecture complete (CC-75): `share-tokens.css` is single token source. Theme toggle confirmed working live on index, upgrade, and status pages (CC-76 verification).
+Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry to Share project.
 
 **`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
-CSS architecture complete (CC-74): `global.css` owns all tokens; all pages use `head.njk` + one external CSS link; no inline `:root` blocks; no body theme scripts. Theme carries correctly across all main domain pages.
+CSS architecture partially complete. `global.css` owns all tokens for notes, support, privacy, editorial index, legend. Theme carries correctly on those pages.
+Remaining unmigrated pages (CC-78/79/80): `src/index.njk` (homepage — old `html.carbon-mode`/`localStorage` pattern, wrong token block), all four editorial articles (wrong hex values `#1E1F22`/`#F7F4EF` from stale EDITORIAL-MASTER.md spec). These cause visible colour divergence between pages.
+Homepage copy being reworked CC-77 — mission-led, ecosystem positioning, no product-specific copy.
 
 **`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
@@ -255,13 +257,20 @@ Legend page Paper/Carbon confirmed working. `global.css` loads correctly from `/
 `legend.css` stripped to layout only — no token overrides.
 Multi-8 (first query flow) can proceed.
 
-### refueler-share — CSS architecture ⚠️ Open — CC-75
+### refueler-share — CSS architecture ✅ Closed CC-75
 
-**Problem:** Every Share page (`index.html`, `upgrade.html`, `status.html`) has its own token definitions. Theme toggle does not work on `upgrade.html` or `status.html`. Adding a new Share page requires per-page token work — same drift problem the main site had before CC-74.
+`share-tokens.css` is the single token source for all Share pages. Loaded via `head.njk` on every Eleventy page, linked externally from `frontend/index.html`. No Share page defines its own `:root` token block. Theme toggle confirmed working live on all three pages (CC-76).
 
-**Fix (CC-75):** `share-tokens.css` becomes the single token source for all Share pages — equivalent of `global.css` on the main domain. Loaded via `head.njk` `<link>` on every Eleventy Share page. Linked externally from `frontend/index.html`. All per-page `:root` token blocks removed.
+### refueler-io — homepage and editorial articles ⚠️ Open — CC-78/79/80
 
-**Rule to lock in CC-75:** No Share page may define its own `:root` token block.
+**Problem:** `src/index.njk` (homepage) and all four editorial articles have inline `<style>` blocks with their own token definitions, causing visible colour divergence between pages. Homepage uses old `html.carbon-mode`/`localStorage` pattern. Editorial articles use wrong hex values (`#1E1F22`, `#F7F4EF`) from stale EDITORIAL-MASTER.md.
+
+**Fix sequence:**
+- CC-78: Homepage — extract to `home.css`, migrate to `head.njk` + `rs-theme` cookie, remove `backdrop-filter`, drop agreed copy
+- CC-79: Editorial articles 1 + 2 — strip `:root` token blocks only (widget/layout CSS stays inline)
+- CC-80: Editorial articles 3 + 4 — same. Colour divergence permanently resolved.
+
+**Rule locked CC-76:** Editorial articles may keep widget/layout CSS inline. They must never define a `:root` token block.
 
 ---
 
@@ -348,6 +357,34 @@ Multi-8 (first query flow) can proceed.
 - AP-8 session entry: nav rewrite + head.njk theme script rewrite. Committed to `refueler-share` main.
 - Files changed: `src/_includes/nav.njk`, `src/_includes/head.njk`
 - No Eleventy collection changes. No CSS changes. No JS changes.
+
+---
+
+## CC-75/76 — Share CSS complete, refueler-io divergence diagnosed · 4 Aug 2026
+
+**Repos touched:** `refueler-share`, `refueler-io`
+
+### CC-75 — Share CSS architecture
+
+- `share-tokens.css` created as single token source for all Share pages
+- `head.njk` (Share) updated to load `share-tokens.css` via `<link>` on every Eleventy page
+- `frontend/index.html` updated to link `share-tokens.css` externally — inline `<style>` block removed
+- `upgrade.css` stripped to layout only — no `:root` block
+- `status.css` created — layout only, no `:root` block
+- Theme toggle confirmed working on index, upgrade, status (CC-76 live verification)
+
+### CC-76 — Live verification and divergence diagnosis
+
+- Full source audit of refueler.io and share.refueler.io confirmed
+- Colour divergence root cause identified: homepage and editorial articles have own token blocks with wrong hex values
+- Session plan CC-77–82 locked (see refueler-io MasterContext)
+
+### Locked rules added CC-75/76
+
+- **No Share page may define its own `:root` token block** — `share-tokens.css` is the single source
+- **Editorial articles may keep widget/layout CSS inline — never a `:root` token block**
+- **Every new page on any Refueler domain must load the domain token file before any other code** (`head.njk` on refueler.io and share.refueler.io; equivalent on any future domain)
+- **EDITORIAL-MASTER.md CSS token values are wrong** — that file predates the CC-74 hex lock. Never use `#1E1F22` or `#F7F4EF`. Canonical values: Carbon `#1A1A1A`, Paper `#F5F0E8`.
 
 ---
 
