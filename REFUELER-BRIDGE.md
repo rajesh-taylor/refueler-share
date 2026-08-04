@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.5 | **Created:** 28 July 2026 | **Updated:** CC-74 · 4 Aug 2026
+> **Version:** 1.7 | **Created:** 28 July 2026 | **Updated:** CC-74 · 4 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -141,6 +141,8 @@ All Refueler surfaces share these tokens. Divergences are bugs.
 - Border weight: `0.5px` throughout. Card radius: `10px`. Button radius: `8px`. Modal radius: `12px`.
 - Theme toggle transition: `0.35s` simultaneous on all token properties.
 - Theme detection: always `dataset.theme === 'carbon'`. Never `classList.contains('carbon-mode')`.
+- Nav background: solid — no backdrop-filter or blur on any surface. `--nav-bg` is `#F5F0E8` (Paper) and `#1A1A1A` (Carbon).
+- Note cards (Notes section): border-only in Carbon (transparent background). Surface tint in Paper only.
 
 **Theme persistence:** cookie `rs-theme` scoped to `.refueler.io` (set on both domains).
 
@@ -201,12 +203,13 @@ Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. P
 ## Current build status
 
 **`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
+Theme toggle broken on `upgrade.html` and `status.html` — CC-75 fix pending.
+Root cause: those pages do not load `share-tokens.css`. `upgrade.njk` loads only `upgrade.css`; `status.njk` has inline `<style>` block. Neither has the token definitions needed for `[data-theme="carbon"]` to take effect.
 
-**`refueler-io`:** `/notes/` live. Article 1 published, iteration open from 5 Aug. Articles 2–14 planned.
-Legend shell live at `refueler.io/legend` (Multi-7). Nav updated: App → Legend. `src/assets` passthrough added to Eleventy config.
-Pending: shared nav/footer CSS extraction (see Cross-project actions below).
+**`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
+CSS architecture complete (CC-74): `global.css` owns all tokens; all pages use `head.njk` + one external CSS link; no inline `:root` blocks; no body theme scripts. Theme carries correctly across all main domain pages.
 
-**`refueler-legend` (Legend):** Phase 1 open (Multi-7). Shell and SPA mount live in `refueler-io`. No query logic yet. Next: Multi-8 — first query flow.
+**`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
 ---
 
@@ -246,15 +249,56 @@ and `share/frontend/index.html`. CSS selectors use `[data-theme="carbon"]` throu
 Key disabled. `refueler_csuite_briefing_v2_4.html` cleaned — placeholder in place.
 New key must be generated and stored outside any repo before csuite briefing is reused.
 
-### refueler-legend — cross-project sign-off ⚠️ Partially open
+### refueler-legend — cross-project sign-off ✅ Closed CC-74
 
-Legend page still rendering white in Paper mode after CC-74 CSS fixes.
-Suspect `global.css` path not resolving from `/legend/` route on Cloudflare Pages,
-or a Cloudflare cache issue. First action of next Legend session: verify via
-browser devtools network tab that `/assets/css/global.css` loads on `/legend/`.
-Multi-8 (first query flow) gated until this is confirmed green.
+Legend page Paper/Carbon confirmed working. `global.css` loads correctly from `/legend/` route.
+`legend.css` stripped to layout only — no token overrides.
+Multi-8 (first query flow) can proceed.
+
+### refueler-share — CSS architecture ⚠️ Open — CC-75
+
+**Problem:** Every Share page (`index.html`, `upgrade.html`, `status.html`) has its own token definitions. Theme toggle does not work on `upgrade.html` or `status.html`. Adding a new Share page requires per-page token work — same drift problem the main site had before CC-74.
+
+**Fix (CC-75):** `share-tokens.css` becomes the single token source for all Share pages — equivalent of `global.css` on the main domain. Loaded via `head.njk` `<link>` on every Eleventy Share page. Linked externally from `frontend/index.html`. All per-page `:root` token blocks removed.
+
+**Rule to lock in CC-75:** No Share page may define its own `:root` token block.
 
 ---
+
+## CC-74 — Global CSS migration completion · 4 Aug 2026
+
+**Repos touched:** `refueler-io`, `refueler-share`, `refueler-legend`
+
+### What was done
+
+**`refueler-io`:**
+- `legend.css` stripped to layout only — was overriding `global.css` with wrong token values
+- `editorial.css`, `support.css`, `privacy.css` created — all page-specific layout extracted from inline `<style>` blocks
+- Inline `<style>` and body-level theme `<script>` removed from `editorial/index.njk`, `privacy/index.njk`, `support/index.njk`
+- `notes.js` theme migrated from `localStorage`/`rfTheme` to `rs-theme` cookie
+- Carbon background standardised to `#1A1A1A` in `notes.css` (was `#1E1F22`)
+- BRIDGE `--bg` Carbon token updated to `#1A1A1A` across all three repos
+
+**`refueler-share`:**
+- `upgrade.css` `html.carbon-mode` selector → `[data-theme="carbon"]`
+- `frontend/index.html` three conflicting theme scripts → one clean `rs-theme` cookie script
+- `frontend/index.html` inline `<style>` Carbon selector: `html.carbon-mode` → `[data-theme="carbon"]`
+- `frontend/index.html` wordmark `href` fixed: `https://refueler.io/` → `/`
+- `src/_includes/nav.njk` wordmark `href` fixed: `https://refueler.io/` → `/`
+
+**Additional CSS fixes (same session):**
+- `global.css` — backdrop-filter and -webkit-backdrop-filter removed. `--nav-bg` made solid: `#F5F0E8` Paper, `#1A1A1A` Carbon. No frosted glass on any Refueler surface.
+- `legend.css` — `.legend-cred-icon` background changed from `var(--accent)` (gold) to `#1E8A4A` (green). Credential dot should indicate operational status, not earned/premium state.
+- `notes.css` — `.note-card` background transparent in Carbon via `[data-theme="carbon"]` override. Paper retains `var(--surface)` tint. Hover in Carbon: border lift only, no background flash.
+
+### Locked rules added CC-74
+
+- **Carbon background:** `#1A1A1A` canonical on all surfaces. `#1E1F22` is wrong.
+- **Paper background:** `#F5F0E8` canonical on all surfaces. `#F7F4EF` is wrong.
+- **No backdrop-filter / frosted glass:** Banned on all Refueler surfaces. Nav backgrounds are solid. `global.css` and `share-tokens.css` must never include `backdrop-filter`.
+- **No body theme scripts:** `head.njk` is the single theme script owner on each domain.
+- **No inline `:root` blocks:** Page CSS files define layout only. Token file owns all tokens.
+- **Index.njk naming:** Files produced by Claude named with section prefix (e.g. `legend-index.njk`) to prevent upload collisions. Real names on disk.
 
 ## AP-8 — Nav, theme, and support fixes · 4 Aug 2026
 
