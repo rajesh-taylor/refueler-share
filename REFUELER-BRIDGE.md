@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.3 | **Created:** 28 July 2026 | **Updated:** Multi-7 · 3 Aug 2026
+> **Version:** 1.4 | **Created:** 28 July 2026 | **Updated:** AP-8 · 4 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -268,6 +268,57 @@ open a Legend session and load `http://localhost:8080/legend/` to confirm:
 
 Only after all items above confirm green does Multi-8 (first query flow) open.
 Record sign-off confirmation in `SESSIONS.md` before closing the Legend session.
+
+---
+
+## AP-8 — Nav, theme, and support fixes · 4 Aug 2026
+
+**Repos touched:** `refueler-io`, `refueler-share`
+
+### What was done
+
+**`refueler-io` — `src/_includes/nav.njk`:**
+- Fixed hardcoded `"Legend"` breadcrumb default. Wordmark breadcrumb (`/ SECTION`) now only renders when a page explicitly passes `wordmarkSection` in its frontmatter. Pages that omit it (homepage, support, privacy, editorial, notes) show a clean `REFUELER` wordmark with no slash.
+- Legend page already passes `wordmarkSection: "Legend"` — unaffected.
+- Any future product page should pass its own `wordmarkSection` value.
+
+**`refueler-io` — `src/support/index.njk`:**
+- `privacy@refueler.io` replaced with `support@refueler.io` throughout (body copy, contact panel, footer email link). `privacy@` retained as a secondary option in the contact panel body — correct for GDPR queries.
+- Inset blockquote rewritten: removed app-specific "missed order / reward" copy. Now generic across all Refueler products.
+- "What can I raise?" list items 1 and 2 genericised — previously named app-specific scenarios.
+- Inline theme script updated: `localStorage` + `classList.add('carbon-mode')` replaced with `rs-theme` cookie scoped to `.refueler.io` + `dataset.theme` attribute. Consistent with CC-72 pattern across the rest of the site.
+- Footer email link updated to `support@refueler.io`.
+
+**`refueler-share` — `src/_includes/nav.njk`:**
+- Removed: App, Editorial, Privacy links (wrong domain, wrong audience for Share).
+- Added: Notes (`refueler.io/notes/`), Support (`refueler.io/support/`).
+- Kept: Upgrade (`/upgrade.html` — Share-specific, correct home), theme pill.
+- Wordmark stays `REFUELER / SHARE`.
+- Legend deliberately omitted — not fully live, adding a link now is premature.
+
+**`refueler-share` — `src/_includes/head.njk`:**
+- Theme script rewritten: `localStorage` + `rfTheme` key replaced with `rs-theme` cookie scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`).
+- `classList` pattern removed entirely. `dataset.theme` attribute only — `[data-theme="carbon"]` CSS selector.
+- `window.toggleTheme` exposed as global for nav pill `onclick`.
+- Cross-domain theme persistence now works between `refueler.io` and `share.refueler.io` — visitor toggling on either domain carries their preference to the other.
+
+### Nav architecture decision — locked AP-8
+
+**Main site (`refueler.io`):** Ecosystem nav. Carries Legend, Editorial, Notes, Privacy, theme pill. No Upgrade link — Upgrade is Share-specific.
+
+**Share (`share.refueler.io`):** Product nav. Notes, Upgrade, Support, theme pill. No Editorial, no Privacy (footer only on Share — correct for a legal document). Status in Share footer only.
+
+### Required updates — Share project
+
+**`Share-Master-Context.md` must record:**
+- `head.njk` theme script: `localStorage`/`rfTheme` → `rs-theme` cookie, `.refueler.io` scoped, `dataset.theme` only
+- `nav.njk` link set: Notes, Upgrade, Support, theme pill. App/Editorial/Privacy removed.
+- Theme persistence: cross-domain between `refueler.io` and `share.refueler.io` via `rs-theme` cookie — confirmed working AP-8
+
+**`share-sessions.md` must record:**
+- AP-8 session entry: nav rewrite + head.njk theme script rewrite. Committed to `refueler-share` main.
+- Files changed: `src/_includes/nav.njk`, `src/_includes/head.njk`
+- No Eleventy collection changes. No CSS changes. No JS changes.
 
 ---
 
