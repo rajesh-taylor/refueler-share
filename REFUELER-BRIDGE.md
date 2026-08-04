@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.4 | **Created:** 28 July 2026 | **Updated:** AP-8 · 4 Aug 2026
+> **Version:** 1.5 | **Created:** 28 July 2026 | **Updated:** CC-74 · 4 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -114,7 +114,7 @@ Refueler Share is the only architecture that solves both failures simultaneously
 All Refueler surfaces share these tokens. Divergences are bugs.
 
 **Backgrounds:**
-- Paper (light): `--bg: #F7F4EF` · `--surface: #EDEAE4` · `--surface-raised: #E4E1DA`
+- Paper (light): `--bg: #F5F0E8` · `--surface: #EDEAE4` · `--surface-raised: #E4E1DA`
 - Carbon (dark): `--bg: #1E1F22` · `--surface: #26282C` · `--surface-raised: #2E3035`
 
 **Text:**
@@ -230,44 +230,29 @@ Pending: shared nav/footer CSS extraction (see Cross-project actions below).
 These items span two projects and must be actioned in the project indicated.
 Do not close the relevant session without confirming each item is resolved.
 
-### refueler-io — action at end of next session
+### refueler-io — AP-7 actions ✅ Closed CC-72/CC-74
 
-**1. Extract shared nav and footer CSS.**
-Nav and footer styles are currently defined inline in `src/index.njk` only.
-Every other page (Legend, Notes, Editorial, Privacy) loads unstyled nav and footer
-because there is no shared stylesheet. Extract all nav, footer, and base reset CSS
-from `src/index.njk` into `src/assets/css/global.css`. Add to `eleventy.config.js`:
-`eleventyConfig.addPassthroughCopy("src/assets")` (already done — just add the
-`<link>` to `head.njk`). Update `src/index.njk` to remove the now-redundant inline
-nav/footer styles.
+**1. Extract shared nav and footer CSS.** ✅ Done CC-72.
+`src/assets/css/global.css` created. All nav, footer, brand tokens, and reset extracted.
+Loaded via `head.njk` `<link>` on every page. `src/index.njk` inline styles redundant.
 
-**2. Fix theme detection bug in `head.njk` and `src/index.njk`.**
-Both files use `localStorage` and `classList.add('carbon-mode')`.
-Locked spec requires `dataset.theme === 'carbon'` detection only.
-Never `classList.contains('carbon-mode')`. Fix the inline theme script in `head.njk`
-and the duplicate script in `src/index.njk` to use `dataset.theme` throughout.
+**2. Fix theme detection.** ✅ Done CC-72/CC-73/CC-74.
+All pages now use `rs-theme` cookie + `dataset.theme` only.
+`localStorage`, `rfTheme`, and `classList.add('carbon-mode')` fully removed
+from `head.njk`, `editorial/index.njk`, `privacy/index.njk`, `support/index.njk`,
+and `share/frontend/index.html`. CSS selectors use `[data-theme="carbon"]` throughout.
 
-**3. Rotate the Anthropic API key.**
-A key was found in `refueler_csuite_briefing_v2_4.html` and is now in git history.
-Rotate it at `console.anthropic.com`. The push was allowed but the key is compromised.
+**3. Rotate the Anthropic API key.** ✅ Done CC-72.
+Key disabled. `refueler_csuite_briefing_v2_4.html` cleaned — placeholder in place.
+New key must be generated and stored outside any repo before csuite briefing is reused.
 
-### refueler-legend — action after refueler-io session completes
+### refueler-legend — cross-project sign-off ⚠️ Partially open
 
-**Legend cross-project sign-off.**
-Once refueler-io session has extracted shared CSS and fixed theme detection,
-open a Legend session and load `http://localhost:8080/legend/` to confirm:
-- Nav renders correctly with Refueler design system styles
-- `Refueler / Legend` wordmark shows correctly
-- `Legend` nav link is active-highlighted
-- Paper/Carbon toggle works and persists via `rs-theme` cookie
-- Gold credential dot visible top-right
-- Query input renders with correct surface background and border
-- Below-fold three-column section renders correctly
-- Footer renders correctly
-- No console errors
-
-Only after all items above confirm green does Multi-8 (first query flow) open.
-Record sign-off confirmation in `SESSIONS.md` before closing the Legend session.
+Legend page still rendering white in Paper mode after CC-74 CSS fixes.
+Suspect `global.css` path not resolving from `/legend/` route on Cloudflare Pages,
+or a Cloudflare cache issue. First action of next Legend session: verify via
+browser devtools network tab that `/assets/css/global.css` loads on `/legend/`.
+Multi-8 (first query flow) gated until this is confirmed green.
 
 ---
 
