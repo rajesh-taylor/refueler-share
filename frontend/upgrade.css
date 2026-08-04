@@ -1,7 +1,9 @@
-/* ── upgrade.css — extracted from src/upgrade.njk at S51 ────────────────────── */
-/* DO NOT edit inline CSS in upgrade.njk — edit this file only.                  */
+/* ── upgrade.css — layout for /upgrade.html ─────────────────────────────────
+   Tokens owned by share-tokens.css. No :root block here.
+   Page-specific token extensions only.
+   ──────────────────────────────────────────────────────────────────────────── */
 
-/* ── Upgrade-specific tokens ─────────────────────────────────── */
+/* ── Page-specific token extensions ─────────────────────────── */
 :root {
   --card-bg-raised:  rgba(26,26,26,0.06);
   --stripe-bg:       #FFFFFF;
@@ -91,7 +93,6 @@
   transition: left 0.15s, background 0.15s;
 }
 .toggle-switch.on .toggle-knob { left: 19px; background: var(--carbon); }
-
 
 /* ── Tier cards ──────────────────────────────────────────────── */
 .tiers {

@@ -1,5 +1,8 @@
 /* ── share-tokens.css — brand tokens for share.refueler.io ──────────────────
-   Extracted from index.html inline <style> at S51. Do not edit index.html.
+   Single token source for all Share pages. Equivalent of global.css on
+   refueler.io. Loaded via head.njk <link> on every Eleventy Share page and
+   linked directly from frontend/index.html.
+   Rule: no Share page may define its own :root token block.
    Token reference: REFUELER-BRIDGE.md § Design system
    Theme detection: document.documentElement.dataset.theme === 'carbon'
    Theme persistence: cookie rs-theme scoped to .refueler.io (30-day rolling)
@@ -19,7 +22,7 @@
   --fg-muted:        #5A5550;
   --fg-subtle:       #9A9590;
   --border:          rgba(26,26,26,0.12);
-  --nav-bg:          rgba(245,240,232,0.88);
+  --nav-bg:          #F5F0E8;
   --card-bg:         rgba(26,26,26,0.04);
   --card-border:     rgba(26,26,26,0.08);
   --input-bg:        #FFFFFF;
@@ -58,7 +61,7 @@
   --fg-muted:        #B0AAA2;
   --fg-subtle:       #6A6560;
   --border:          rgba(245,240,232,0.10);
-  --nav-bg:          rgba(26,26,26,0.90);
+  --nav-bg:          #1A1A1A;
   --card-bg:         rgba(245,240,232,0.04);
   --card-border:     rgba(245,240,232,0.08);
   --input-bg:        #252525;
@@ -96,8 +99,6 @@ html, body {
   top: 0;
   z-index: 100;
   background: var(--nav-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--inset-rule);
   padding: 0 clamp(1.25rem, 4vw, 3rem);
   transition: background 0.35s ease, border-color 0.25s ease;

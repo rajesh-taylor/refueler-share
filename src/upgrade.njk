@@ -507,7 +507,7 @@ function showManageSection(email, tierName) {
 
 // ── Stripe appearance — theme-aware ────────────────────────────
 function stripeAppearance() {
-  const isDark = document.documentElement.classList.contains('carbon-mode');
+const isDark = document.documentElement.dataset.theme === 'carbon';
   return {
     theme: isDark ? 'night' : 'stripe',
     variables: {

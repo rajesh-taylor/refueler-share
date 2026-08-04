@@ -1,0 +1,276 @@
+/* ── status.css — layout for /status.html ───────────────────────────────────
+   Tokens owned by share-tokens.css. No :root block here.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Status page layout ────────────────────────────────────────────── */
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 56px clamp(1.25rem, 4vw, 3rem) 80px;
+}
+
+.status-hero {
+  margin-bottom: 48px;
+}
+.status-back-link {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+  margin-bottom: 20px;
+  padding: 6px 12px;
+  border: 0.5px solid var(--border-mid);
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.status-back-link:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.status-hero-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: 12px;
+}
+.status-hero-headline {
+  font-family: var(--display);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+.status-hero-updated {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-subtle);
+}
+
+/* ── State indicator ────────────────────────────────────────────────── */
+.state-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  margin-bottom: 32px;
+  transition: background 0.25s, border-color 0.25s;
+}
+.state-card[data-state="operational"] {
+  background: color-mix(in srgb, #27AE60 8%, var(--bg));
+  border-color: color-mix(in srgb, #27AE60 22%, transparent);
+}
+.state-card[data-state="degraded"] {
+  background: color-mix(in srgb, #C0392B 8%, var(--bg));
+  border-color: color-mix(in srgb, #C0392B 22%, transparent);
+}
+.state-card[data-state="maintenance"] {
+  background: color-mix(in srgb, #C8A951 8%, var(--bg));
+  border-color: color-mix(in srgb, #C8A951 22%, transparent);
+}
+.state-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+[data-state="operational"] .state-dot { background: #27AE60; }
+[data-state="degraded"]    .state-dot { background: #C0392B; animation: pulse-red 1.6s ease infinite; }
+[data-state="maintenance"] .state-dot { background: #C8A951; animation: pulse-amber 1.6s ease infinite; }
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(192,57,43,0); }
+}
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200,169,81,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(200,169,81,0); }
+}
+
+.state-label {
+  font-family: var(--display);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--fg);
+}
+.state-message {
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+/* ── Section headers ───────────────────────────────────────────────── */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--inset-rule);
+}
+.section-title {
+  font-family: var(--display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* ── Maintenance window ─────────────────────────────────────────────── */
+.maintenance-block {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 24px;
+}
+.maintenance-block-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.maintenance-block-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  line-height: 1.7;
+}
+
+/* ── Incidents ──────────────────────────────────────────────────────── */
+.incident-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+.incident-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.incident-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.incident-severity {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+.severity-minor    { background: color-mix(in srgb, #C8A951 15%, var(--bg)); color: #C8A951; }
+.severity-major    { background: color-mix(in srgb, #C0392B 15%, var(--bg)); color: #C0392B; }
+.severity-critical { background: color-mix(in srgb, #C0392B 25%, var(--bg)); color: #C0392B; font-weight: 600; }
+
+.incident-title {
+  font-family: var(--display);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--fg);
+}
+.incident-resolved-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #27AE60;
+}
+.incident-times {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-subtle);
+  margin-bottom: 8px;
+}
+.incident-updates { display: flex; flex-direction: column; gap: 6px; }
+.incident-update {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+.incident-update-time {
+  font-family: var(--mono);
+  color: var(--fg-subtle);
+  font-size: 11px;
+}
+.incident-update-body { color: var(--fg-muted); line-height: 1.5; }
+
+.no-incidents {
+  font-size: 13px;
+  color: var(--fg-subtle);
+  font-family: var(--mono);
+  padding: 12px 0;
+}
+
+/* ── Cryptographic integrity section ────────────────────────────────── */
+.integrity-section { margin-top: 48px; }
+
+.integrity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 560px) { .integrity-grid { grid-template-columns: 1fr; } }
+
+.integrity-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-left: 0.5px solid var(--inset-rule);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.integrity-card-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: 8px;
+}
+.integrity-card-value {
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+.integrity-card-note {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--fg-muted);
+  line-height: 1.7;
+}
+
+/* Known gap — amber treatment */
+.integrity-card.gap {
+  border-color: color-mix(in srgb, #C8A951 30%, transparent);
+  background: color-mix(in srgb, #C8A951 5%, var(--bg));
+}
+.integrity-card.gap .integrity-card-value { color: #C8A951; }
+
+/* ── Loading / error states ─────────────────────────────────────────── */
+.loading-state {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-subtle);
+  padding: 20px 0;
+  text-align: center;
+}
+.fetch-error {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  padding: 12px 0;
+}
