@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 1.9 | **Created:** 28 July 2026 | **Updated:** CC-78 · 4 Aug 2026
+> **Version:** 2.0 | **Created:** 28 July 2026 | **Updated:** CC-79 · 5 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -210,18 +210,21 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. Same architectu
 
 These lines are not available for homepage or general marketing use. Do not repurpose.
 
-**Homepage copy (locked CC-78):**
-- Headline: *Your transaction is nobody else's business.*
-- Subhead: *Fiat or Bitcoin — privacy included.*
+**Homepage copy (locked CC-79):**
+- Overline: *Privacy Infrastructure · London*
+- Headline: *Your transaction / is nobody else's / business.* *(three forced lines — "business." alone on line 3)*
+- Accent column: *Est. 2026 · vertical rule · REFUELER* *(gold, right of headline)*
+- Subhead: *Privacy isn't a feature. It's the architecture.* *(DM Sans 300, full --fg, no hairline above)*
 - Capability block:
   - Encrypted transfers / *The server is blind, so is the till.*
   - Bitcoin explorer / *Your search history is showing.*
   - Lightning payments / *Tap and go. Sats or card, your call.*
 
-"Two rails. One principle." opener dropped CC-78 — headline stands alone.
-"Chain queries" replaced with "Bitcoin explorer" — plainer, works across all audiences.
-Subhead elevated to full `var(--fg)` colour, `clamp(18px, 2vw, 24px)` — no longer a caption.
-Capability descriptors: DM Sans 400 / 17px — was 300 / 15px, was unreadable on a sparse page.
+"Fiat or Bitcoin — privacy included." retired from homepage CC-79 — doesn't represent Share or Legend. Belongs on product pages only.
+Headline font changed CC-79: Cormorant Garamond 600 — replaces DM Sans 300. Loaded in `src/index.njk` only, not global.
+Subhead: DM Sans 300 roman, full `var(--fg)` — no italic, no hairline above, reads as next sentence after headline.
+Hairline between headline and subhead removed — subhead flows as continuation, not new section.
+Accent column: Est. 2026 / vertical rule / REFUELER in gold. Replace with Companies House reg number on incorporation.
 
 ---
 
@@ -293,8 +296,9 @@ Known issue: `ReferenceError: share is not defined` on upgrade page — pre-exis
 
 **`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
 CSS architecture partially complete. `global.css` owns all tokens for notes, support, privacy, editorial index, legend, homepage. Theme carries correctly on those pages.
-Homepage migrated CC-78 (commit `f267602`): `home.css` created, `src/index.njk` rewritten — tokens stripped, `head.njk` added, `rs-theme` cookie pattern, `backdrop-filter` removed, CC-77/78 copy dropped in, sign-in panel removed, mobile auth deep-link handler retained.
-Remaining unmigrated pages (CC-79/80): all four editorial articles (wrong hex values `#1E1F22`/`#F7F4EF` from stale EDITORIAL-MASTER.md spec). These cause visible colour divergence between editorial articles and the rest of the site.
+Homepage redesigned CC-79 (commit `f34a944`): Cormorant Garamond 600 headline, banded layout, overline + accent column, new subhead copy. `home.css` fully rewritten. `src/index.njk` rewritten. Mobile auth deep-link handler retained.
+Two editorial articles migrated CC-79 (commit `553313f`): `the-city-worker` + `nothing-to-collect-nothing-to-hide` — `:root` token blocks stripped, wrong hex values removed.
+Remaining unmigrated pages (CC-80): `looks-done-isnt-done` + `the-float` — same `:root` issue. After CC-80 all pages share one token system and colour divergence is permanently resolved.
 
 **`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
@@ -350,13 +354,13 @@ Multi-8 (first query flow) can proceed.
 
 `src/index.njk` migrated. `home.css` created. Tokens stripped. `head.njk` added. `rs-theme` cookie. `backdrop-filter` removed. CC-77/78 copy live. Sign-in panel removed. Mobile auth deep-link handler retained. Commit `f267602`.
 
-### refueler-io — editorial articles ⚠️ Open — CC-79/80
+### refueler-io — editorial articles ⚠️ Partial — CC-80 pending
 
-**Problem:** All four editorial articles have inline `<style>` blocks with `:root` token definitions using wrong hex values (`#1E1F22`, `#F7F4EF`) from stale EDITORIAL-MASTER.md. Causes visible colour divergence between editorial articles and the rest of the site.
+**Problem:** Four editorial articles had inline `<style>` `:root` blocks with wrong hex values (`#1E1F22`, `#F7F4EF`). Causes colour divergence.
 
-**Fix sequence:**
-- CC-79: `the-city-worker` + `nothing-to-collect` — strip `:root` token blocks only. Widget/layout CSS stays inline.
-- CC-80: `looks-done-isnt-done` + `the-float` — same. Colour divergence permanently resolved.
+**Status:**
+- CC-79 ✅ `the-city-worker` + `nothing-to-collect` — `:root` blocks stripped. Commit `553313f`.
+- CC-80 ⚠️ `looks-done-isnt-done` + `the-float` — pending. Read live files first before touching.
 
 **Rule locked CC-76:** Editorial articles may keep widget/layout CSS inline. They must never define a `:root` token block.
 
