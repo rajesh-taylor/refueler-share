@@ -184,6 +184,34 @@ Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. P
 
 ---
 
+## Mission north star — internal only, never copy
+
+> *"They come for privacy, they stay and then fall in love with Bitcoin."*
+
+Every product decision, onboarding choice, and copy line across all repos is tested against this. If it accelerates that journey, ship it. If it doesn't, cut it.
+
+**Ecosystem positioning (locked CC-77):** Refueler sits at the intersection of fiat and Bitcoin rails. Users choose their rail transaction by transaction. Refueler does not force, convert, or evangelise — it builds the infrastructure where both work, privately. The normie comes for privacy. Bitcoin does the rest.
+
+---
+
+## Upcoming product — Refueler Pass (working name)
+
+Anonymous, fraud-resistant ticketing using Cashu NUT primitives. Same architectural principle as Share: blind credential issuance, offline-capable, no secondary market leakage. The ticket is a Cashu token. No repo yet. Name may change. Do not build copy or architecture around this name — note for ecosystem context only.
+
+---
+
+## Locked copy — do not reassign
+
+| Line | Assigned to | Locked |
+|---|---|---|
+| *"Bitcoin, privately."* | Legend index page headline | CC-77 |
+| *"Built for jurisdictions that have laws. And lawyers."* | Share API / paid plans page | CC-77 |
+| *"Lightning payments — Tap and go. Sats or card, your call."* | Share paid plans / upgrade page | CC-77 |
+
+These lines are not available for homepage or general marketing use. Do not repurpose.
+
+---
+
 ## Competitive positioning — locked findings
 
 **Anonymity spectrum:** WeTransfer/Smash/SwissTransfer → Tresorit/Proton Drive → Wormhole → **Refueler Share** → OnionShare.
