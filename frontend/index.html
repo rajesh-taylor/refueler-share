@@ -21,28 +21,34 @@
 
 <!-- Theme: applied before first paint to avoid flash -->
 <script>
-  const THEME_KEY = 'rfTheme';
-  function applyTheme(theme) {
-    const root = document.documentElement;
-    const pill = document.getElementById('themePill');
-    if (theme === 'carbon') {
-      root.classList.add('carbon-mode');
-      root.setAttribute('data-theme', 'carbon');
-      if (pill) pill.textContent = 'Carbon / Paper';
-    } else {
-      root.classList.remove('carbon-mode');
-      root.removeAttribute('data-theme');
-      if (pill) pill.textContent = 'Paper / Carbon';
+  (function () {
+    function getCookie(name) {
+      var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+      return m ? decodeURIComponent(m[1]) : null;
     }
-  }
-  function toggleTheme() {
-    const current = localStorage.getItem(THEME_KEY) || 'paper';
-    const next = current === 'paper' ? 'carbon' : 'paper';
-    localStorage.setItem(THEME_KEY, next);
-    applyTheme(next);
-    
-  }
-  (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
+    function setCookie(name, value) {
+      var expires = new Date(Date.now() + 30 * 864e5).toUTCString();
+      document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; domain=.refueler.io; SameSite=Lax';
+    }
+    function applyTheme(theme) {
+      var root = document.documentElement;
+      var pill = document.getElementById('themePill');
+      if (theme === 'carbon') {
+        root.setAttribute('data-theme', 'carbon');
+        if (pill) pill.textContent = 'Carbon / Paper';
+      } else {
+        root.removeAttribute('data-theme');
+        if (pill) pill.textContent = 'Paper / Carbon';
+      }
+    }
+    window.toggleTheme = function () {
+      var current = getCookie('rs-theme') || 'paper';
+      var next = current === 'paper' ? 'carbon' : 'paper';
+      setCookie('rs-theme', next);
+      applyTheme(next);
+    };
+    applyTheme(getCookie('rs-theme') || 'paper');
+  }());
 </script>
 
 <!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
@@ -154,41 +160,6 @@ function showMaintenanceModal(status) {
 })();
 </script>
 
-<!-- ── Theme: read cookie → localStorage → system pref, apply before paint ── -->
-<!-- Must run synchronously before <style> to avoid flash of wrong theme.     -->
-<script>
-(function () {
-  function getCookie(name) {
-    var m = document.cookie.match('(?:^|;)\\s*' + name + '=([^;]*)');
-    return m ? decodeURIComponent(m[1]) : null;
-  }
-  function getLs(key) { try { return localStorage.getItem(key); } catch { return null; } }
-  var saved = getCookie('rs-theme') || getLs('theme')
-    || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'carbon' : 'paper');
-  if (saved === 'carbon') {
-    document.documentElement.classList.add('carbon-mode');
-    document.documentElement.dataset.theme = 'carbon';
-  }
-})();
-</script>
-
-<!-- ── Theme cookie write — delegated, fires on theme-pill click on any page ── -->
-<script>
-document.addEventListener('click', function (e) {
-  if (!e.target.closest('.theme-pill')) return;
-  // Small delay so nav.njk's own handler (which toggles the class) runs first
-  setTimeout(function () {
-    var isDark = document.documentElement.classList.contains('carbon-mode');
-    var val = isDark ? 'carbon' : 'paper';
-    // Belt-and-braces: write both cookie and localStorage
-    document.cookie = 'rs-theme=' + val + '; domain=.refueler.io; path=/; max-age=31536000; SameSite=Lax';
-    try { localStorage.setItem('theme', val); } catch {}
-    // Keep data-theme in sync for surfaces that read it (dashboard, QR, Turnstile)
-    document.documentElement.dataset.theme = val;
-  }, 0);
-});
-</script>
-
 <style>
   /* ── Brand tokens — canonical match to refueler.io ─────────────── */
   :root {
@@ -231,7 +202,7 @@ document.addEventListener('click', function (e) {
   }
 
   /* Carbon override — canonical match to refueler.io */
-  html.carbon-mode {
+  [data-theme="carbon"] {
     --bg:              var(--carbon);
     --fg:              var(--paper);
     --fg-muted:        #B0AAA2;
@@ -535,7 +506,7 @@ document.addEventListener('click', function (e) {
 
 <header class="site-header">
   <div class="header-inner">
-    <a href="https://refueler.io/" class="wordmark">
+    <a href="/" class="wordmark">
       Refueler
       <span class="wordmark-divider">/</span>
       <span class="wordmark-section">Share</span>
