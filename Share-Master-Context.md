@@ -242,7 +242,7 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
 | B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
 | B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
-| B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) |
+| B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) — includes compression strategy + creative market tier positioning (see B13 notes below) |
 
 Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · SW9→RU1→RU2 (resumable uploads) · RU2→HQ1→HQ2 (HTTP/3 + BLAKE3 positioning).
 
@@ -543,6 +543,34 @@ No discounts. No savings framing. Prepay cadences are convenience, not a deal.
 **Badge:** "Powered by Refueler Share" — Production Max API only. Removed at Business+. Fail-safe: no KV record → `badge: true`.
 
 **Custom hostname:** CF for SaaS. Client CNAME → `wl.share.refueler.io`. Existing Worker. No new Worker.
+
+---
+
+## B13 notes — compression strategy + creative market positioning
+
+**Context (logged 5 Aug 2026):** Live stall on 1.51 GB photo folder revealed that fflate level-6 compression on already-compressed files (JPEG, video, audio) wastes significant CPU and time for zero size benefit, contributing to a ~20–40% speed deficit vs unencrypted services like Smash. This is acceptable for legal/professional buyers; it is a real barrier for creative professionals working with video.
+
+**Compression strategy — build and test at B13a (or HQ-series if speed benchmarking is in scope there):**
+
+Skip compression (fflate level 0 — store only, no DEFLATE pass) for file types that are already compressed. The zip wrapper is retained for receiver convenience; only the compression pass is skipped.
+
+| Category | Skip compression | Notes |
+|----------|-----------------|-------|
+| Video | `.mov .mp4 .mxf .r3d .braw .ari .mkv .avi .wmv .webm .m4v .mpg .mpeg` | All compressed codecs. Raw formats (.r3d, .braw, .ari) are proprietary compressed. |
+| Audio | `.mp3 .aac .m4a .ogg .flac .opus .wma` | FLAC is lossless but already compressed. |
+| Images | `.jpg .jpeg .heic .heif .webp .avif` | PNG and TIFF are compressible — keep level 6 for those. |
+| Archives | `.zip .gz .bz2 .xz .7z .rar .tar.gz` | Already compressed — level 0. |
+| Office/PDF | `.pdf .docx .xlsx .pptx` | Modern Office formats are zipped internally — marginal gain only, test both. |
+| Documents | `.txt .md .csv .json .xml .html` | Keep level 6 — compress well, small files. |
+
+**Implementation:** detect MIME type or extension at the point fflate receives each file entry. Pass `{ level: 0 }` for skip-list types, default level 6 for everything else. One function, ~30 lines. Test against: (a) 1.5 GB JPEG folder, (b) 500 MB ProRes folder, (c) mixed document folder. Benchmark against Smash for each. Target: ≤15% slower than Smash on video/photo folders.
+
+**Creative market positioning — B13a decision:**
+- Creative Premium tier is well-named for photographers and designers (document + image heavy, reasonable file sizes)
+- Production Max is the correct tier for video professionals (250 GB cap, longer expiry windows)
+- The privacy story for video is strong: unreleased footage, NDA'd productions, talent contracts, music not yet announced — all genuine use cases
+- **Market sequencing (locked 5 Aug 2026):** lawyers and professionals first; creatives second; general consumer never. Do not optimise marketing for creatives until legal/professional channel is proven.
+- **Speed honesty:** do not claim parity with Smash or WeTransfer. Honest framing: "Faster than email. Slower than services that can read your files. That's the trade."
 
 ---
 
