@@ -9,6 +9,7 @@ let countdown   = 60;
 let lastMetrics  = null;
 let lastAe       = null;
 let lastSnapshot = null;
+let clientErrorsDetail = []; // S73a — detail rows from AE client_errors_detail
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 function getTheme() {
@@ -220,6 +221,9 @@ function renderAeMetrics(d) {
     ceEl.textContent = ce;
     ceEl.className = 'sm-value' + (ce > 10 ? ' red' : ce > 0 ? ' amber' : '');
   } else { ceEl.textContent = 'n/a'; ceEl.className = 'sm-value'; }
+
+  // S73a — store detail rows for client-errors modal
+  clientErrorsDetail = Array.isArray(d.client_errors_detail) ? d.client_errors_detail : [];
 
   lastAe = d;
 }
@@ -445,9 +449,61 @@ function openModal(key, triggerEl) {
       const ce = ae.client_errors_24h;
       if (ce !== null && ce !== undefined) {
         value = String(ce);
-        sub = 'Browser failures reported via /log/error';
-        colorClass = ce > 10 ? ' red' : ce > 0 ? ' amber' : '';
-      } else { value = 'n/a'; isNA = true; sub = 'No client error data in AE'; }
+        colorClass = ce > 10 ? ' red' : ce > 0 ? ' amber' : ' green';
+      } else { value = 'n/a'; isNA = true; }
+
+      const count = clientErrorsDetail.length;
+
+      if (count === 0) {
+        sub = 'No client errors logged in the last 24 hours.';
+        // Replace sparkline stub with green empty state
+        document.getElementById('modal-sparkline').innerHTML =
+          '<div class="ce-empty">No errors in the last 24 hours.</div>';
+      } else {
+        sub = count === 1
+          ? '1 browser-side failure reported via /log/error'
+          : `${count} browser-side failures reported via /log/error`;
+
+        const rows = clientErrorsDetail.map(r => {
+          const ts = r.ts
+            ? new Date(r.ts).toLocaleString('en-GB', {
+                day: '2-digit', month: 'short',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+              })
+            : '—';
+          const context = escHtml(r.context || '—');
+          const msg     = r.message
+            ? escHtml(r.message.slice(0, 80)) + (r.message.length > 80 ? '&hellip;' : '')
+            : '—';
+          const browser = escHtml(parseUA(r.detail));
+          return `<tr>
+            <td class="ce-ts">${ts}</td>
+            <td class="ce-ctx">${context}</td>
+            <td class="ce-msg">${msg}</td>
+            <td class="ce-browser">${browser}</td>
+          </tr>`;
+        }).join('');
+
+        document.getElementById('modal-sparkline').innerHTML = `
+          <div class="modal-section-title" style="margin-top:0">Detail</div>
+          <div class="ce-table-wrap">
+            <table class="ce-table">
+              <thead><tr>
+                <th>Time</th>
+                <th>Context</th>
+                <th>Message</th>
+                <th>Browser</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+          <p class="ce-provenance-note">
+            Errors logged before the S73 deploy (5 Aug 2026) do not carry browser data —
+            the <code>blob4</code> UA field was added in that release.
+            Rows with no browser data show&nbsp;—.
+          </p>`;
+      }
       break;
     }
     case 'farming': {
@@ -521,6 +577,42 @@ function closeModal() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// S73a — parse a raw UA string into a human-readable "Browser / OS" label.
+// Order matters: Edge and Opera share Chrome tokens, so they must come first.
+function parseUA(ua) {
+  if (!ua || ua.length < 4) return '—';
+  let browser = 'Unknown', os = 'Unknown';
+
+  if      (/Edg\/(\d+)/.test(ua))                   browser = 'Edge '    + ua.match(/Edg\/(\d+)/)[1];
+  else if (/OPR\/(\d+)/.test(ua))                   browser = 'Opera '   + ua.match(/OPR\/(\d+)/)[1];
+  else if (/Firefox\/(\d+)/.test(ua))               browser = 'Firefox ' + ua.match(/Firefox\/(\d+)/)[1];
+  else if (/Chrome\/(\d+)/.test(ua))                browser = 'Chrome '  + ua.match(/Chrome\/(\d+)/)[1];
+  else if (/Version\/(\d+)[^)]*Safari/.test(ua))    browser = 'Safari '  + ua.match(/Version\/(\d+)/)[1];
+  else if (/Safari\//.test(ua))                     browser = 'Safari';
+  else if (/Trident\//.test(ua))                    browser = 'IE';
+
+  if      (/Windows NT 10/.test(ua))  os = 'Windows 10/11';
+  else if (/Windows NT/.test(ua))     os = 'Windows';
+  else if (/iPhone/.test(ua))         os = 'iOS';
+  else if (/iPad/.test(ua))           os = 'iPadOS';
+  else if (/Android/.test(ua))        os = 'Android';
+  else if (/CrOS/.test(ua))           os = 'ChromeOS';
+  else if (/Mac OS X/.test(ua))       os = 'macOS';
+  else if (/Linux/.test(ua))          os = 'Linux';
+
+  return `${browser} / ${os}`;
+}
+
+// S73a — minimal HTML escaping for user-supplied strings in the detail table.
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function setText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text ?? '';
