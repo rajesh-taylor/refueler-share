@@ -330,7 +330,7 @@ async function handleLogError(request, env) {
 
   try {
     env.AE.writeDataPoint({
-      blobs:   ['client_error', context, message],
+      blobs:   ['client_error', context, message, detail],
       doubles: [Date.now()],
       indexes: ['client_error'],
     });
@@ -1299,7 +1299,7 @@ async function fetchAeMetricsData(env) {
     return res.json();
   }
 
-  const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult, clientErrorsResult] = await Promise.allSettled([
+  const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult, clientErrorsResult, clientErrorsDetailResult] = await Promise.allSettled([
 
     aeQuery(`
       SELECT blob2 AS tier, count() AS issued
@@ -1330,8 +1330,8 @@ async function fetchAeMetricsData(env) {
     aeQuery(`
       SELECT
         blob1 AS endpoint,
-        quantilesTDigest(0.95)(double1)[1] AS p95_ms,
-        quantilesTDigest(0.99)(double1)[1] AS p99_ms,
+        quantile(0.95)(double1) AS p95_ms,
+        quantile(0.99)(double1) AS p99_ms,
         count() AS requests
       FROM share_events
       WHERE timestamp > NOW() - INTERVAL '1' DAY
@@ -1356,6 +1356,19 @@ async function fetchAeMetricsData(env) {
       FROM share_events
       WHERE blob1 = 'client_error'
       AND timestamp > NOW() - INTERVAL '1' DAY
+    `),
+
+    aeQuery(`
+      SELECT
+        blob2 AS context,
+        blob3 AS message,
+        blob4 AS detail,
+        double1 AS ts_ms
+      FROM share_events
+      WHERE blob1 = 'client_error'
+      AND timestamp > NOW() - INTERVAL '1' DAY
+      ORDER BY ts_ms DESC
+      LIMIT 20
     `),
   ]);
 
@@ -1442,6 +1455,17 @@ async function fetchAeMetricsData(env) {
     clientErrorsNote = `AE query failed: ${clientErrorsResult.reason?.message}`;
   }
 
+  let clientErrorsDetail = null;
+  if (clientErrorsDetailResult.status === 'fulfilled') {
+    const rows = clientErrorsDetailResult.value?.data ?? [];
+    clientErrorsDetail = rows.map(r => ({
+      ts:      r.ts_ms ? new Date(r.ts_ms).toISOString() : null,
+      context: r.context ?? '',
+      message: r.message ?? '',
+      detail:  r.detail  ?? '',
+    }));
+  }
+
   return {
     as_of: new Date().toISOString(),
     window_notes: {
@@ -1466,6 +1490,7 @@ async function fetchAeMetricsData(env) {
     error_rate_note: errorRateNote,
     client_errors_24h: clientErrors24h,
     client_errors_24h_note: clientErrorsNote,
+    client_errors_detail: clientErrorsDetail,
   };
 }
 
