@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.3 | **Last updated:** AP-8 ad-hoc · 4 Aug 2026
+> **Version:** 5.4 | **Last updated:** S73a · 5 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -212,12 +212,13 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B6 ✓ complete (S72a). B7 next — S73 opens.**
+**B7 in progress — S73a complete. S74 next (Lightning infra I-a).**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
 | B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
 | B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6 load tests (all green), CI Level 1, Lightning admin toggle, Stripe webhook security suite. |
+| B7 in progress | `a19778c` | S73/S73a: client errors modal — UA parsing, detail table, provenance note, layout fix. |
 
 **Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
 
@@ -287,6 +288,8 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 - Own node stub cards (routing fee income, channel liquidity) — greyed until B9
 - LNbits webhook signing cards (delivery rate, signature failures) — greyed until B9
 - Renewal warning banner: 7-day pre-expiry notice on upgrade page for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Copy: *"Your subscription renews on [date]. Your transfers will remain accessible."* Build in same session as API credential renewal work.
+- Theme toggle absent from modals — minor UX, add at S87 snag sweep
+- `receiver_ab_shown` / `receiver_ab_downloaded` events routing to `/log/error` instead of AE — S47c A/B tracking code calling `reportError()` in error. Investigate `frontend/share.js` at S87.
 
 ---
 

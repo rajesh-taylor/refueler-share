@@ -159,12 +159,25 @@
 
 ---
 
+## Sessions 73–73a — B7 in progress (5 Aug 2026)
+
+| # | Commit | Summary |
+|---|--------|---------|
+| S73 | `2a20177` | Dashboard: client errors modal — `client_errors_detail` stored from AE response; `parseUA()` + `escHtml()` helpers added; detail table renders Time · Context · Message · Browser; stub class stripped on open, restored on close. |
+| S73a | `a19778c` | Fix: static Trend/Export section titles were overlapping the injected table. Strip `.modal-sparkline-stub` class on open; hide `.modal-section-title` and CSV button; restore all on `closeModal()`. Both Paper and Carbon confirmed working. |
+
+**B7 snags added (resolve at S87):**
+- Theme toggle absent from modals — minor UX, add to S87 snag sweep
+- `receiver_ab_shown` / `receiver_ab_downloaded` events routed to `/log/error` instead of AE — S47c A/B tracking code calling `reportError()` in error. Investigate in `frontend/share.js` at S87.
+
+---
+
 ## B7 session plan — Lightning/Blink + anonymous paid tier
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| S73 | Lightning infra I-a | Worker secrets set. `worker/src/lightning.js` scaffold. `createInvoice()` stub. `LIGHTNING_BACKEND` env var abstraction. | M |
-| S73a | Lightning infra I-b | `createBlinkInvoice()` implementation. `lnInvoiceCreate` GraphQL call. Response parsing. Unit smoke test. | M |
+| S73 ✓ | Dashboard: client errors modal | `client_errors_detail` stored from AE; `parseUA()` + `escHtml()`; detail table with Time · Context · Message · Browser. | M |
+| S73a ✓ | Dashboard: client errors modal fix | Strip `.modal-sparkline-stub` on open; hide static section titles + CSV btn; restore on close. Both themes confirmed. | S |
 | S74 | Lightning infra II-a | `POST /webhook/lightning` endpoint. KV payment tracking schema — 25h TTL. | M |
 | S74a | Lightning infra II-b | Dedup logic. `getBlinkInvoiceStatus()` polling fallback. Smoke test full chain. | M |
 | S75 | Credential issuance I-a | On settled webhook: resolve `{ tier, period }`. Issue Cashu credential. | L |
