@@ -454,11 +454,18 @@ function openModal(key, triggerEl) {
 
       const count = clientErrorsDetail.length;
 
+      // Hide the static Trend / Export section titles — this modal owns its own layout
+      const sparkEl = document.getElementById('modal-sparkline');
+      sparkEl.classList.remove('modal-sparkline-stub');
+      sparkEl.closest('.modal-body').querySelectorAll('.modal-section-title').forEach(el => {
+        el.style.display = 'none';
+      });
+      document.getElementById('modal-csv-btn').style.display  = 'none';
+      document.getElementById('modal-csv-note').style.display = 'none';
+
       if (count === 0) {
         sub = 'No client errors logged in the last 24 hours.';
-        // Replace sparkline stub with green empty state
-        document.getElementById('modal-sparkline').innerHTML =
-          '<div class="ce-empty">No errors in the last 24 hours.</div>';
+        sparkEl.innerHTML = '<div class="ce-empty">No errors in the last 24 hours.</div>';
       } else {
         sub = count === 1
           ? '1 browser-side failure reported via /log/error'
@@ -485,8 +492,8 @@ function openModal(key, triggerEl) {
           </tr>`;
         }).join('');
 
-        document.getElementById('modal-sparkline').innerHTML = `
-          <div class="modal-section-title" style="margin-top:0">Detail</div>
+        sparkEl.innerHTML = `
+          <div class="modal-section-title">Detail</div>
           <div class="ce-table-wrap">
             <table class="ce-table">
               <thead><tr>
@@ -566,6 +573,19 @@ function closeModal() {
   modal.removeEventListener('keydown', _trapFocus);
   document.body.style.overflow = '';
   document.getElementById('modal-csv-note').style.display = 'none';
+
+  // Restore elements that the client-errors modal hides, so other modals render correctly
+  const sparkEl = document.getElementById('modal-sparkline');
+  if (sparkEl) {
+    sparkEl.classList.add('modal-sparkline-stub');
+    sparkEl.innerHTML = 'Trend history — coming B5 polish pass';
+    sparkEl.closest('.modal-body').querySelectorAll('.modal-section-title').forEach(el => {
+      el.style.display = '';
+    });
+    const csvBtn = document.getElementById('modal-csv-btn');
+    if (csvBtn) csvBtn.style.display = '';
+  }
+
   if (_modalTrigger) {
     _modalTrigger.classList.remove('modal-active');
     const t = _modalTrigger;
