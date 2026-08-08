@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 2.3 | **Created:** 28 July 2026 | **Updated:** CSS-1a · 8 Aug 2026
+> **Version:** 2.4 | **Created:** 28 July 2026 | **Updated:** M-2 · 8 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -10,7 +10,7 @@
 
 Refueler is a suite of Bitcoin-native products built by Rajesh Taylor (solo founder, London).
 The wider ecosystem includes a merchant POS (`refueler.io`), a mint, and several experimental repos.
-Products in active development: **Refueler Share** (file transfer, migrating to `refueler.io/share/`) and **Legend** (private chain explorer, post-B9).
+Products in active development: **Refueler Share** (file transfer, live at `refueler.io/share/`) and **Legend** (private chain explorer, post-B9).
 
 **Local paths:**
 - Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/`
@@ -19,7 +19,7 @@ Products in active development: **Refueler Share** (file transfer, migrating to 
 
 **GitHub:** `github.com/rajesh-taylor`
 
-**Subdomain policy (locked CSS-1a):** All products live at `refueler.io/[product]/`. No new subdomains without a documented technical constraint. `share.refueler.io` is being migrated to `refueler.io/share/` in Block M. Legend stays at `refueler.io/legend/`. Domain authority consolidates on `refueler.io`.
+**Subdomain policy (locked CSS-1a):** All products live at `refueler.io/[product]/`. No new subdomains without a documented technical constraint. `share.refueler.io` migrated to `refueler.io/share/` in M-2. Legend stays at `refueler.io/legend/`. Domain authority consolidates on `refueler.io`.
 
 ---
 
@@ -29,8 +29,8 @@ Anonymous, encrypted peer-to-peer file transfer. No account. No identity. The se
 
 **The one-line positioning:** "Professional-grade anonymity where only one side needs to be sophisticated."
 
-**URL (post Block M migration):** `refueler.io/share/`
-**Current URL (pre-migration):** `share.refueler.io`
+**URL:** `refueler.io/share/` *(live — M-2 complete)*
+**Legacy URL:** `share.refueler.io` — still resolves until M-3 retires the Pages project
 **Repo:** `rajesh-taylor/refueler-share` (Apache 2.0, public)
 
 **Two-axis category definition (locked AP-7):**
@@ -188,7 +188,7 @@ Full pipeline in `notes-articles-list.md` in `refueler-share/`.
 
 **`/legend/`** — Legend product surface. Post-B9.
 
-**`/share/`** — Share product surface. Post Block M migration.
+**`/share/`** — Share product surface. Live as of M-2.
 
 **All content on `refueler.io`.** No product content on subdomains.
 
@@ -314,13 +314,14 @@ Add to `notes-articles-list.md` in `refueler-share/` at next Share session.
 ## Current build status
 
 **`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
-Confirmed Eleventy (`@11ty/eleventy ^3.0.0`) — has been the whole time. Migration to `refueler.io/share/` planned as Block M (3 sessions: M-1 planning, M-2 execution, M-3 verification).
-Cloudflare: separate Pages project (`refueler-share`) and Worker (`refueler-share.rt-fc4.workers.dev`). Pages project retires post-M; Worker stays with CORS updated.
-Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry through migration.
+Confirmed Eleventy (`@11ty/eleventy ^3.0.0`). Migrated to `refueler.io/share/` in M-2.
+Cloudflare: `refueler-share` Pages project still serving `share.refueler.io` — retire after M-3. Worker (`refueler-share.rt-fc4.workers.dev`, version `af37c80b`) CORS updated to accept `https://refueler.io`.
+Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry through to M-3.
+Outstanding M-3: Stripe return URLs in Worker (lines 1052, 1053, 1117 of `worker/src/index.js`) still point to `share.refueler.io/upgrade`. Fix in M-3.
 
 **`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
 Homepage redesigned CC-79. All four editorial articles migrated CC-79/80. Nav pages restored CC-80.
-Block M (Share migration) next. CSS rationalisation track (CSS-1b, CSS-2 through CSS-6) follows.
+Share live at `refueler.io/share/` — M-2 complete. M-3 verification next. CSS rationalisation track (CSS-1b, CSS-2 through CSS-6) follows M-3.
 
 **`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
@@ -354,11 +355,12 @@ Block M (Share migration) next. CSS rationalisation track (CSS-1b, CSS-2 through
 ### refueler-share — CSS architecture ✅ Closed CC-75
 ### refueler-io — homepage ✅ Closed CC-78
 ### refueler-io — editorial articles ✅ Closed CC-80
+### refueler-share — Block M migration (M-1, M-2) ✅ M-1 + M-2 closed
 
-### refueler-share — Block M migration 🟡 Next
-Move `share.refueler.io` → `refueler.io/share/`. Three sessions. See SESSIONS file for M-1 opening prompt.
+### refueler-share — Block M migration (M-3) 🟡 Next
+Verify `refueler.io/share/` end-to-end. Fix Stripe return URLs in Worker. Fix Plans active state. Retire `refueler-share` Pages project. See SESSIONS for M-3 opening prompt.
 
-### refueler-io — CSS rationalisation track 🟡 After Block M
+### refueler-io — CSS rationalisation track 🟡 After M-3
 CSS-1b (nav architecture, Opus) → CSS-2 through CSS-6. See SESSIONS file for full sequence and opening prompts.
 
 ---
@@ -382,7 +384,7 @@ CC-74 `--inset-rule: #C8A96E` Carbon global rule **superseded by CSS-1a.** See D
 
 *(History preserved.)*
 
-Nav architecture from AP-8 is superseded by CSS-1b output (pending). The AP-8 nav decisions for the subdomain (`share.refueler.io`) are moot post Block M migration — Share nav is redesigned as part of M-2.
+Nav architecture from AP-8 is superseded by CSS-1b output (pending). The AP-8 nav decisions for the subdomain (`share.refueler.io`) are moot post Block M migration.
 
 ---
 
@@ -390,7 +392,13 @@ Nav architecture from AP-8 is superseded by CSS-1b output (pending). The AP-8 na
 
 *(History preserved.)*
 
-`share-tokens.css` single token source confirmed. Post Block M, `share-tokens.css` merges into `global.css` and Share pages load via the shared `head.njk`.
+`share-tokens.css` single token source confirmed. Post Block M, `share-tokens.css` merges into `global.css` and Share pages load via the shared `head.njk`. Currently staging as `src/share/assets/share-tokens.css` in `refueler-io`.
+
+---
+
+## M-2 — Share migration execution · 8 Aug 2026
+
+`refueler.io/share/` live. Commits `213798d`, `8abf0c5`, `e577379`. Worker redeployed `af37c80b`. Turnstile `refueler.io` hostname added. Share nav/footer as `src/_includes/share-nav.njk` and `src/_includes/share-footer.njk`. Main site nav updated with Share link.
 
 ---
 
