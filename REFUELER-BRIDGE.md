@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 2.0 | **Created:** 28 July 2026 | **Updated:** CC-79 · 5 Aug 2026
+> **Version:** 2.2 | **Created:** 28 July 2026 | **Updated:** CC-80 · 8 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -55,7 +55,7 @@ Refueler Share is the only architecture that solves both failures simultaneously
 **The problem it solves:** Every query to a public block explorer (Mempool.space, Blockstream.info) tells that server exactly which addresses and transactions you're watching. This is a structural metadata leak that affects everyone from individual Bitcoiners to family offices managing significant holdings. No existing explorer is architected to prevent it.
 
 **URL:** `refueler.io/legend` (not a separate domain — domain authority consolidates on main domain)
-**Licence:** Apache 2.0. Open source. Self-hosting available — "don't trust us, read the code."
+**Licence:** MIT. Open source. Self-hosting available — "don't trust us, read the code."
 **Prerequisite:** Lightning node live at B9. Do not start before B9 operational.
 
 ### What Legend does that nobody else does
@@ -64,14 +64,14 @@ Refueler Share is the only architecture that solves both failures simultaneously
 - Own infrastructure — no query metadata leaks to Blockstream, Mempool.space, or any third party
 - Ephemeral query sessions — no session persistence, no cookie tracking, no client correlation across queries
 - Tor-native API for Enterprise — client IP never reaches the server
-- PIR-inspired sharding (3-5 Hetzner nodes, fixed cost regardless of client count) — no single node sees the complete query; client reassembles locally. A world first for production Bitcoin chain data.
+- PIR-inspired sharding (three dedicated nodes across two providers and two legal jurisdictions, fixed cost regardless of client count) — no single node sees the complete query; client reassembles locally. A world first for production Bitcoin chain data.
 
 **Cashu query credentials — the Cashu model applied to chain queries:**
-- Query budgets issued as Cashu blind signature tokens — same infrastructure as Share
+- Query budgets issued as Cashu blind signature tokens — same blind-signature infrastructure as Share
 - Server cannot reconstruct a client's query history across sessions — structurally impossible, not a policy promise
 - Free tier: 10 Legend queries earned per Share upload, 50/day cap
 - Paid Share tiers: 50 queries per upload, uncapped daily
-- Enterprise: unlimited, PIR-sharded, Tor-native
+- Enterprise: unlimited, PIR-sharded, Tor-native, NUT-11 P2PK-bound credentials
 
 **Proof-of-query receipts:**
 - Blind receipt issued per query — cryptographic proof the query was processed without linking receipt to query content
@@ -100,10 +100,13 @@ Refueler Share is the only architecture that solves both failures simultaneously
 
 ### Business model
 
-- Free: 10 queries per Share upload or 50/day standalone. No account required.
-- Paid Share subscribers: 50 queries per upload, uncapped daily, included in Creative Premium and above.
-- Enterprise: unlimited, full PIR stack, Tor API, Silent Payments scanning, family office reporting, self-hosting option with setup and support contract.
-- Open source: self-hosting encouraged. Enterprise value lives in the Cashu credential integration, Silent Payments scanning layer, and managed infrastructure — not in closed code.
+- Free: unlimited queries. No account. No payment. No rate limit. Funded by Enterprise cross-subsidy — the free tier is the proof the architecture works, not the product.
+- Enterprise (family office): £1,500/month (v1) → £2,500/month (v2: Tor API, Double Ratchet, ML-KEM-768) → £3,500/month (v2+: dedicated node isolation). Invite-only at v1, capped at five clients. Full detail in `legend-enterprise-pricing.md`.
+- Merchant add-on: £250/month per business entity, sold only into the existing Refueler POS merchant base. Never bundled with POS.
+- Estate reports: £50 per block-height balance statement (v2), £150 full verified estate report (v3).
+- Open source: self-hosting encouraged. Enterprise value lives in the institutional wrapper — FROST key management, warrant canaries, geographic jurisdiction distribution, SLA, compliance pack, named contact — not in closed code.
+
+**Infrastructure cost:** ~€360/month (two Hetzner AX52 nodes in Germany and Finland; one FlokiNET dedicated node in Iceland). One Enterprise contract covers the infrastructure cost many times over. Full cost model in `legend-economics.md`.
 
 **Traffic and cost model:** Free access is rate-limited by Cashu credentials. Enterprise revenue subsidises infrastructure before free tier scales. Sequence: Enterprise infrastructure first → open source → article 14 → free tier as proof of concept → Enterprise conversion. Legend does not open as a free unlimited public explorer until business model is proven.
 
@@ -295,10 +298,11 @@ CSS architecture complete (CC-75): `share-tokens.css` is single token source. Th
 Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry to Share project.
 
 **`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
-CSS architecture partially complete. `global.css` owns all tokens for notes, support, privacy, editorial index, legend, homepage. Theme carries correctly on those pages.
-Homepage redesigned CC-79 (commit `f34a944`): Cormorant Garamond 600 headline, banded layout, overline + accent column, new subhead copy. `home.css` fully rewritten. `src/index.njk` rewritten. Mobile auth deep-link handler retained.
-Two editorial articles migrated CC-79 (commit `553313f`): `the-city-worker` + `nothing-to-collect-nothing-to-hide` — `:root` token blocks stripped, wrong hex values removed.
-Remaining unmigrated pages (CC-80): `looks-done-isnt-done` + `the-float` — same `:root` issue. After CC-80 all pages share one token system and colour divergence is permanently resolved.
+Homepage redesigned CC-79: Cormorant Garamond 600 headline, banded layout, "Privacy isn't a feature. It's the architecture." subhead. All homepage classes prefixed `home-` to prevent global.css cascade collisions. Gold hardcoded `#C8A96E !important` on overline — `var(--accent)` overridden by body cascade on `p` tags. Subhead in `div.home-subhead-band` wrapper — padding-bottom on `<p>` zeroed by global reset. Commits `553313f`, `f34a944`, `2ac19ea`, `17f69d6`.
+Two editorial articles migrated CC-79: `the-city-worker` + `nothing-to-collect-nothing-to-hide` — `:root` blocks stripped.
+Remaining unmigrated (CC-80): `looks-done-isnt-done` + `the-float`.
+Nav links broken on live site (CC-80 fix): Legend, Editorial, Privacy in nav + all three footer links non-functional. Notes works. Cause unknown — read nav.njk and footer.njk live to diagnose.
+CSS rationalisation track (CSS-1 through CSS-6) planned before Block 3 — global.css has body cascade conflict and duplicate token naming that caused multiple CC-79 fixes.
 
 **`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
@@ -307,6 +311,8 @@ Remaining unmigrated pages (CC-80): `looks-done-isnt-done` + `the-float` — sam
 ## Key rules that apply everywhere
 
 - Theme detection: `dataset.theme === 'carbon'` only. Never `classList.contains`.
+- `var(--accent)` fails on `<p>` tags — `global.css` body sets `color: var(--fg)` which cascades in and wins. Use `#C8A96E !important` for gold on `p` elements until CSS rationalisation complete.
+- All new homepage classes prefixed `home-` — CSS cascade defence. Do not introduce unprefixed classes on the homepage.
 - Cookie `rs-theme` scoped to `.refueler.io` for cross-domain theme persistence.
 - No inline CSS/JS in Nunjucks templates — external files only.
 - `showSaveFilePicker()` must fire synchronously from a user gesture.
@@ -400,6 +406,8 @@ Multi-8 (first query flow) can proceed.
 - **No body theme scripts:** `head.njk` is the single theme script owner on each domain.
 - **No inline `:root` blocks:** Page CSS files define layout only. Token file owns all tokens.
 - **Index.njk naming:** Files produced by Claude named with section prefix (e.g. `legend-index.njk`) to prevent upload collisions. Real names on disk.
+
+---
 
 ## AP-8 — Nav, theme, and support fixes · 4 Aug 2026
 
