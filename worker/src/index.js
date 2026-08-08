@@ -90,7 +90,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ─────────────────────────────────────────────────────────────────────────────
 function corsHeaders(request) {
   const origin = request.headers.get('Origin') ?? '';
-  const allowed = ['https://share.refueler.io', 'https://upgrade.refueler.io'];
+  const allowed = ['https://share.refueler.io', 'https://upgrade.refueler.io', 'https://refueler.io'];
   const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
   return {
     'Access-Control-Allow-Origin': allowOrigin,
@@ -1049,8 +1049,8 @@ async function handleCheckout(request, env) {
   try {
     const { clientSecret } = await createCheckoutSession(
       price_id, email,
-      'https://share.refueler.io/upgrade?success=1',
-      'https://share.refueler.io/upgrade?cancelled=1',
+      'https://refueler.io/share/upgrade/?success=1',
+      'https://refueler.io/share/upgrade/?cancelled=1',
       env.STRIPE_SECRET_KEY
     );
     return json({ client_secret: clientSecret });
@@ -1114,7 +1114,7 @@ async function handlePortal(request, env) {
     },
     body: new URLSearchParams({
       customer:   customerId,
-      return_url: 'https://share.refueler.io/upgrade.html',
+      return_url: 'https://refueler.io/share/upgrade/',
     }).toString(),
   });
 
