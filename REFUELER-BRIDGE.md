@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 2.2 | **Created:** 28 July 2026 | **Updated:** CC-80 · 8 Aug 2026
+> **Version:** 2.3 | **Created:** 28 July 2026 | **Updated:** CSS-1a · 8 Aug 2026
 > Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -10,7 +10,7 @@
 
 Refueler is a suite of Bitcoin-native products built by Rajesh Taylor (solo founder, London).
 The wider ecosystem includes a merchant POS (`refueler.io`), a mint, and several experimental repos.
-Products in active development: **Refueler Share** (file transfer) and **Legend** (private chain explorer, post-B9).
+Products in active development: **Refueler Share** (file transfer, migrating to `refueler.io/share/`) and **Legend** (private chain explorer, post-B9).
 
 **Local paths:**
 - Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/`
@@ -19,6 +19,8 @@ Products in active development: **Refueler Share** (file transfer) and **Legend*
 
 **GitHub:** `github.com/rajesh-taylor`
 
+**Subdomain policy (locked CSS-1a):** All products live at `refueler.io/[product]/`. No new subdomains without a documented technical constraint. `share.refueler.io` is being migrated to `refueler.io/share/` in Block M. Legend stays at `refueler.io/legend/`. Domain authority consolidates on `refueler.io`.
+
 ---
 
 ## What Refueler Share is
@@ -26,6 +28,10 @@ Products in active development: **Refueler Share** (file transfer) and **Legend*
 Anonymous, encrypted peer-to-peer file transfer. No account. No identity. The server stores encrypted noise and cannot read file content or identify users.
 
 **The one-line positioning:** "Professional-grade anonymity where only one side needs to be sophisticated."
+
+**URL (post Block M migration):** `refueler.io/share/`
+**Current URL (pre-migration):** `share.refueler.io`
+**Repo:** `rajesh-taylor/refueler-share` (Apache 2.0, public)
 
 **Two-axis category definition (locked AP-7):**
 Refueler Share is the only architecture that solves both failures simultaneously:
@@ -37,9 +43,6 @@ Refueler Share is the only architecture that solves both failures simultaneously
 - Every chunk is BLAKE3-hashed and verified server-side. The server confirms integrity without reading content.
 - Access is gated by Cashu NUT-00 blind signatures — anonymous credentials the mint cannot link to issuance. The server is blind. The till is also blind.
 - No account required. Free tier: 4 GB, 7-day expiry. Paid tiers via Stripe (identified) or Lightning (pseudonymous).
-
-**Live at:** `share.refueler.io`
-**Repo:** `rajesh-taylor/refueler-share` (Apache 2.0, public)
 
 **What it is not:**
 - Not zero-knowledge in the metadata sense — file sizes, chunk counts, and timestamps are visible to the operator. Published honestly.
@@ -57,6 +60,10 @@ Refueler Share is the only architecture that solves both failures simultaneously
 **URL:** `refueler.io/legend` (not a separate domain — domain authority consolidates on main domain)
 **Licence:** MIT. Open source. Self-hosting available — "don't trust us, read the code."
 **Prerequisite:** Lightning node live at B9. Do not start before B9 operational.
+
+**Legend page layout (locked CSS-1a):** Wordmark, input field, tagline only above results. No green credential dot (removed — no semantic meaning until canary system is designed). No Silent Payments card (removed — feature not yet live). No below-fold three-column block (removed — turns a tool into a pitch; leaks competitive detail). Results render below input in the cleared space.
+
+**Legend theme default (locked CSS-1a):** `getCookie('rs-theme') || 'carbon'` on the Legend template only. Carbon at rest for new visitors — narrows attention onto the query input. Cookie wins for returning visitors with an existing preference.
 
 ### What Legend does that nobody else does
 
@@ -116,38 +123,58 @@ Refueler Share is the only architecture that solves both failures simultaneously
 
 All Refueler surfaces share these tokens. Divergences are bugs.
 
-**Backgrounds:**
-- Paper (light): `--bg: #F5F0E8` · `--surface: #EDEAE4` · `--surface-raised: #E4E1DA`
+**Backgrounds (CSS-1a updated):**
+- Paper (light): `--bg: #E8E2D8` · `--surface: #DAD4CA` · `--surface-raised: #D0C9BE`
 - Carbon (dark): `--bg: #1A1A1A` · `--surface: #26282C` · `--surface-raised: #2E3035`
 
+*Paper updated CSS-1a from `#F5F0E8` to `#E8E2D8` (quality laid paper / Middle Temple ivory — eases extended reading sessions for legal and family office users). Surface tokens adjusted proportionally.*
+
+**Input fields (CSS-1a):**
+- Paper: `#CCC7BE` (recessed well — cooler and more grey than background, not white)
+- Carbon: `#252525` (unchanged — correct as-is)
+
 **Text:**
-- Paper: `--text-primary: #3D3A36` · `--text-secondary: #5A5751` · `--text-tertiary: #9A948D`
-- Carbon: `--text-primary: #E4E2DC` · `--text-secondary: #8A8680` · `--text-tertiary: #5A5751`
+- Paper: `--fg: #1A1A1A` · `--fg-muted: #5A5550` · `--fg-subtle: #9A9590`
+- Carbon: `--fg: #F5F0E8` · `--fg-muted: #B0AAA2` · `--fg-subtle: #6A6560`
+
+*Token naming: `--fg*` is the canonical primary system. `--text-primary/secondary/tertiary` are aliases pointing to `--fg*` values. Migration of `notes.css` from `--text-*` to `--fg*` happens in CSS-6.*
 
 **Borders:**
-- Paper: `--border: #D6D1C8` · `--border-mid: #B8B2A8` · `--inset-rule: var(--border)`
-- Carbon: `--border: #35373B` · `--border-mid: #4A4D52` · `--inset-rule: #C8A96E`
+- Paper: `--border: rgba(26,26,26,0.12)` · `--border-mid: #B8B2A8` · `--inset-rule: var(--border)`
+- Carbon: `--border: rgba(245,240,232,0.10)` · `--border-mid: #4A4D52` · `--inset-rule: var(--border)`
+
+**`--inset-rule` gold scope (CSS-1a — CC-74 lock superseded):**
+Gold `--inset-rule` (`#C8A96E`) is valid **only** as an inline element style on `h2` dividers and blockquotes inside editorial and Notes article body content. It is **never** a token applied to nav borders, footer borders, card borders, or any chrome on any surface. Carbon `--inset-rule` is `var(--border)` — not gold globally. The CC-74 decision to set `--inset-rule: #C8A96E` in Carbon globally is superseded. Rationale: gold trim confirmed visually overdone in CSS-1a review across Share and Legend.
 
 **Accent:**
 - Gold (brand chrome, never CTA): `--accent: #C8A96E` · `--accent-hover: #E0C48A`
-- Orange (CTA only, consumer surfaces): Paper `--accent-action: #D4690A` · Carbon `--accent-action: #F5820A`
+- **No CTA orange.** `--accent-action` is abolished. `#F5820A` and `#D4690A` do not exist in this codebase. Do not use. Do not define. Do not propose. This supersedes any prior reference to orange CTA tokens in any version of this document.
 
-**Never:** orange on internal/admin surfaces. Never gold as a primary CTA.
+**Never:** gold as a primary CTA. Never orange anywhere.
+
+**Card body text (locked CSS-1a):**
+DM Sans 400, `line-height: 1.7`, `color: var(--fg)`. Not muted, not weight 300. The card surface provides visual softening — the text inside does not retreat further. Reference: Share status page card treatment.
 
 **Typography:**
-- `--heading: 'Satoshi', 'DM Sans', sans-serif` — metric values, wordmark, key labels (700)
-- `--sans: 'DM Sans', sans-serif` — UI, body copy (300/400/500)
-- `--serif: 'Source Serif 4', Georgia, serif` — long-form, editorial, `/notes/` body (300/400)
-- `--mono: 'IBM Plex Mono', monospace` — timestamps, codes, data, table cells (400/500)
+- `--font-heading / --heading: 'Satoshi', 'DM Sans', sans-serif` — metric values, wordmark, key labels (600/700)
+- `--font-sans / --sans: 'DM Sans', sans-serif` — UI, body copy (300/400/500)
+- `--font-serif / --serif: 'Source Serif 4', Georgia, serif` — long-form, editorial, `/notes/` body (300/400)
+- `--font-mono / --mono: 'IBM Plex Mono', monospace` — timestamps, codes, data, table cells (400/500)
+- Homepage headline only: `'Cormorant Garamond', Georgia, serif` 600 — loaded in `src/index.njk` only, never global
 
 **Structural:**
 - Border weight: `0.5px` throughout. Card radius: `10px`. Button radius: `8px`. Modal radius: `12px`.
 - Theme toggle transition: `0.35s` simultaneous on all token properties.
 - Theme detection: always `dataset.theme === 'carbon'`. Never `classList.contains('carbon-mode')`.
-- Nav background: solid — no backdrop-filter or blur on any surface. `--nav-bg` is `#F5F0E8` (Paper) and `#1A1A1A` (Carbon).
+- Nav background: solid — no backdrop-filter or blur on any surface. `--nav-bg` is `#E8E2D8` (Paper) and `#1A1A1A` (Carbon).
 - Note cards (Notes section): border-only in Carbon (transparent background). Surface tint in Paper only.
 
-**Theme persistence:** cookie `rs-theme` scoped to `.refueler.io` (set on both domains).
+**Theme defaults:**
+- All web surfaces: Paper default on page load (`getCookie('rs-theme') || 'paper'`).
+- Legend template only: Carbon default (`getCookie('rs-theme') || 'carbon'`). Cookie wins for returning visitors.
+- App / Command Centre / merchant terminal: Carbon always (separate from web cookie system).
+
+**Theme persistence:** cookie `rs-theme` scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`).
 
 ---
 
@@ -161,7 +188,9 @@ Full pipeline in `notes-articles-list.md` in `refueler-share/`.
 
 **`/legend/`** — Legend product surface. Post-B9.
 
-**Do not publish Share or Legend articles on subdomains** — all content on `refueler.io`.
+**`/share/`** — Share product surface. Post Block M migration.
+
+**All content on `refueler.io`.** No product content on subdomains.
 
 ---
 
@@ -208,26 +237,24 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. Same architectu
 | Line | Assigned to | Locked |
 |---|---|---|
 | *"Bitcoin, privately."* | Legend index page headline | CC-77 |
-| *"Built for jurisdictions that have laws. And lawyers."* | Share API / paid plans page | CC-77 |
-| *"Lightning payments — Tap and go. Sats or card, your call."* | Share paid plans / upgrade page | CC-77 |
+| *"Built for jurisdictions that have laws. And lawyers."* | Share plans/API page | CC-77 |
+| *"Lightning payments — Tap and go. Sats or card, your call."* | Share plans page | CC-77 |
 
 These lines are not available for homepage or general marketing use. Do not repurpose.
 
 **Homepage copy (locked CC-79):**
 - Overline: *Privacy Infrastructure · London*
 - Headline: *Your transaction / is nobody else's / business.* *(three forced lines — "business." alone on line 3)*
-- Accent column: *Est. 2026 · vertical rule · REFUELER* *(gold, right of headline)*
 - Subhead: *Privacy isn't a feature. It's the architecture.* *(DM Sans 300, full --fg, no hairline above)*
 - Capability block:
   - Encrypted transfers / *The server is blind, so is the till.*
   - Bitcoin explorer / *Your search history is showing.*
   - Lightning payments / *Tap and go. Sats or card, your call.*
 
-"Fiat or Bitcoin — privacy included." retired from homepage CC-79 — doesn't represent Share or Legend. Belongs on product pages only.
-Headline font changed CC-79: Cormorant Garamond 600 — replaces DM Sans 300. Loaded in `src/index.njk` only, not global.
-Subhead: DM Sans 300 roman, full `var(--fg)` — no italic, no hairline above, reads as next sentence after headline.
-Hairline between headline and subhead removed — subhead flows as continuation, not new section.
-Accent column: Est. 2026 / vertical rule / REFUELER in gold. Replace with Companies House reg number on incorporation.
+"Fiat or Bitcoin — privacy included." retired from homepage CC-79. Product pages only.
+Headline font: Cormorant Garamond 600. Loaded in `src/index.njk` only, not global.
+Accent column (Est. 2026 / rule / REFUELER): removed CC-79 — replace with Companies House reg on incorporation.
+Homepage locked one month from CC-79. No iteration without a formal session decision.
 
 ---
 
@@ -237,41 +264,34 @@ Accent column: Est. 2026 / vertical rule / REFUELER in gold. Replace with Compan
 - Label: *Bitcoin explorer*
 - Descriptor: *Your search history is showing.*
 
-Rationale: creates the itch without revealing it. Non-bitcoiner reads it as a general privacy statement. Pleb reads it and knows exactly what their Mempool query log means. The reveal happens on the Legend index page.
-
 **Legend index page (locked):**
 - Headline: *Bitcoin, privately.* (locked CC-77)
 - Opening line: *Buys non-KYC Bitcoin, then logs every address ever searched...*
 
-Rationale: the irony lands instantly for the target audience. No explanation needed. Pairs with the homepage hook — the homepage planted the seed, the Legend page detonates it.
-
 **Discarded candidates (do not resurrect):**
-- "Your queries don't leave a record." — too explanatory, loses the hook quality
-- "Check your addresses. We won't remember that you did." — too long for capability descriptor
+- "Your queries don't leave a record." — too explanatory
+- "Check your addresses. We won't remember that you did." — too long
 - "Look up what you need. Nothing is logged." — too plain
 - "The privacy gap you didn't know you had." — too vague
-- "We can't see what you're watching. Neither can anyone else." — better as mid-page feature claim, not opener
+- "We can't see what you're watching. Neither can anyone else." — mid-page feature claim only, never opener
 
 ---
 
 ## Notes — article seeds (logged CC-78)
 
-These article concepts emerged from CC-78 planning discussion. Add to `notes-articles-list.md` in `refueler-share/` at next Share session.
+Add to `notes-articles-list.md` in `refueler-share/` at next Share session.
 
 **Article: The browsing history problem**
 *Audience:* lawyers, family offices, journalists, compliance professionals.
-*Angle:* A Mempool or Esplora query log is extraordinarily valuable to the right buyer. Every query is timestamped and IP-tagged. Aggregate enough of them and you can reconstruct which addresses a person monitors, transaction timing relative to query time, session clustering (addresses queried together are probably related), and behavioural patterns. Chain analysis firms don't just work on-chain — off-chain behavioural signals dramatically improve clustering confidence. A Mempool query log handed to Chainalysis cross-references on-chain clusters with real IP addresses and timestamps. For hackers: a stolen query log is pre-attack reconnaissance delivered voluntarily by the victim. For insurers: query logs are actuarial data the policyholder never consented to share — UK insurers taking on BTC custody risk will want this data. Legend is the answer before it becomes the problem.
 *Opening line candidate:* "Every address you look up on a public block explorer goes into a log you've never seen and cannot delete."
 
 **Article: Family offices, UK merchants, and the Bitcoin address problem**
 *Audience:* family offices (UK and US), UK merchants now holding BTC on the books, compliance professionals.
-*Angle:* Family offices need to verify receipts, monitor addresses, and track movements for compliance — without broadcasting which addresses they watch to a third party whose query logs could surface in discovery, be subpoenaed, or be sold after an acquisition. UK merchants checking incoming payments are mapping their customer base and transaction volume with every query — a competitor, an insurer, or HMRC with a data request to the explorer operator could reconstruct their Bitcoin revenue picture. The compliance workflow (address monitoring, movement history, UTXO provenance) is the same whether you're a family office or a café in Limehouse. The metadata leak is identical. Legend solves both.
 *Opening line candidate:* "Your accountant doesn't send your bank statements to a third party every time they check your balance. Your Bitcoin explorer does."
 
 **Article: The Coldcard entropy bug — what to do and how to check privately**
 *Audience:* Coldcard MK3 users, hardware wallet holders, security-conscious Bitcoiners.
-*Angle:* The MK3 entropy bug means the keyspace for affected seed phrases is dramatically smaller than users assumed — brute-force is viable. The natural instinct is to check whether your addresses have been swept. But checking on a public explorer compounds the problem: you've now told Mempool.space exactly which addresses you're monitoring, at exactly the moment those addresses are at risk. The correct procedure: check privately, sweep to a new wallet generated on unaffected hardware, verify the sweep privately. Legend is the tool for steps 1 and 3.
-*Note:* Time-sensitive. Publish as close to the bug disclosure as possible. Do not wait for B9 — if Legend is not live, the article can reference the architecture and link to the waitlist.
+*Note:* Time-sensitive. Publish close to bug disclosure. If Legend not live, reference architecture and link to waitlist.
 
 ---
 
@@ -294,15 +314,13 @@ These article concepts emerged from CC-78 planning discussion. Add to `notes-art
 ## Current build status
 
 **`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
-CSS architecture complete (CC-75): `share-tokens.css` is single token source. Theme toggle confirmed working live on index, upgrade, and status pages (CC-76 verification).
-Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry to Share project.
+Confirmed Eleventy (`@11ty/eleventy ^3.0.0`) — has been the whole time. Migration to `refueler.io/share/` planned as Block M (3 sessions: M-1 planning, M-2 execution, M-3 verification).
+Cloudflare: separate Pages project (`refueler-share`) and Worker (`refueler-share.rt-fc4.workers.dev`). Pages project retires post-M; Worker stays with CORS updated.
+Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry through migration.
 
 **`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
-Homepage redesigned CC-79: Cormorant Garamond 600 headline, banded layout, "Privacy isn't a feature. It's the architecture." subhead. All homepage classes prefixed `home-` to prevent global.css cascade collisions. Gold hardcoded `#C8A96E !important` on overline — `var(--accent)` overridden by body cascade on `p` tags. Subhead in `div.home-subhead-band` wrapper — padding-bottom on `<p>` zeroed by global reset. Commits `553313f`, `f34a944`, `2ac19ea`, `17f69d6`.
-Two editorial articles migrated CC-79: `the-city-worker` + `nothing-to-collect-nothing-to-hide` — `:root` blocks stripped.
-Remaining unmigrated (CC-80): `looks-done-isnt-done` + `the-float`.
-Nav links broken on live site (CC-80 fix): Legend, Editorial, Privacy in nav + all three footer links non-functional. Notes works. Cause unknown — read nav.njk and footer.njk live to diagnose.
-CSS rationalisation track (CSS-1 through CSS-6) planned before Block 3 — global.css has body cascade conflict and duplicate token naming that caused multiple CC-79 fixes.
+Homepage redesigned CC-79. All four editorial articles migrated CC-79/80. Nav pages restored CC-80.
+Block M (Share migration) next. CSS rationalisation track (CSS-1b, CSS-2 through CSS-6) follows.
 
 **`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
@@ -311,8 +329,8 @@ CSS rationalisation track (CSS-1 through CSS-6) planned before Block 3 — globa
 ## Key rules that apply everywhere
 
 - Theme detection: `dataset.theme === 'carbon'` only. Never `classList.contains`.
-- `var(--accent)` fails on `<p>` tags — `global.css` body sets `color: var(--fg)` which cascades in and wins. Use `#C8A96E !important` for gold on `p` elements until CSS rationalisation complete.
-- All new homepage classes prefixed `home-` — CSS cascade defence. Do not introduce unprefixed classes on the homepage.
+- `var(--accent)` fails on `<p>` tags — use `#C8A96E !important` for gold on `p` elements until CSS rationalisation complete.
+- All new homepage classes prefixed `home-` — CSS cascade defence.
 - Cookie `rs-theme` scoped to `.refueler.io` for cross-domain theme persistence.
 - No inline CSS/JS in Nunjucks templates — external files only.
 - `showSaveFilePicker()` must fire synchronously from a user gesture.
@@ -322,169 +340,57 @@ CSS rationalisation track (CSS-1 through CSS-6) planned before Block 3 — globa
 - Do not claim "end-to-end file integrity" — only server-side chunk integrity is verified today.
 - No external video platforms (YouTube, Vimeo) — R2 + Worker signed URL only.
 - Legend does not start before B9 Lightning node is live. No exceptions.
+- **`#F5820A` and `#D4690A` do not exist in this codebase.** Orange is abolished.
+- **Paper is `#E8E2D8`. Carbon is `#1A1A1A`.** All other background values are wrong.
+- **`--inset-rule` gold is article content only** — never chrome.
+- **No subdomains for new products** — `refueler.io/[product]/` always.
 
 ---
 
-## Cross-project actions — pending
+## Cross-project actions — status
 
-These items span two projects and must be actioned in the project indicated.
-Do not close the relevant session without confirming each item is resolved.
-
-### refueler-io — AP-7 actions ✅ Closed CC-72/CC-74
-
-**1. Extract shared nav and footer CSS.** ✅ Done CC-72.
-`src/assets/css/global.css` created. All nav, footer, brand tokens, and reset extracted.
-Loaded via `head.njk` `<link>` on every page. `src/index.njk` inline styles redundant.
-
-**2. Fix theme detection.** ✅ Done CC-72/CC-73/CC-74.
-All pages now use `rs-theme` cookie + `dataset.theme` only.
-`localStorage`, `rfTheme`, and `classList.add('carbon-mode')` fully removed
-from `head.njk`, `editorial/index.njk`, `privacy/index.njk`, `support/index.njk`,
-and `share/frontend/index.html`. CSS selectors use `[data-theme="carbon"]` throughout.
-
-**3. Rotate the Anthropic API key.** ✅ Done CC-72.
-Key disabled. `refueler_csuite_briefing_v2_4.html` cleaned — placeholder in place.
-New key must be generated and stored outside any repo before csuite briefing is reused.
-
+### refueler-io — AP-7 ✅ Closed CC-72/CC-74
 ### refueler-legend — cross-project sign-off ✅ Closed CC-74
-
-Legend page Paper/Carbon confirmed working. `global.css` loads correctly from `/legend/` route.
-`legend.css` stripped to layout only — no token overrides.
-Multi-8 (first query flow) can proceed.
-
 ### refueler-share — CSS architecture ✅ Closed CC-75
-
-`share-tokens.css` is the single token source for all Share pages. Loaded via `head.njk` on every Eleventy page, linked externally from `frontend/index.html`. No Share page defines its own `:root` token block. Theme toggle confirmed working live on all three pages (CC-76).
-
 ### refueler-io — homepage ✅ Closed CC-78
+### refueler-io — editorial articles ✅ Closed CC-80
 
-`src/index.njk` migrated. `home.css` created. Tokens stripped. `head.njk` added. `rs-theme` cookie. `backdrop-filter` removed. CC-77/78 copy live. Sign-in panel removed. Mobile auth deep-link handler retained. Commit `f267602`.
+### refueler-share — Block M migration 🟡 Next
+Move `share.refueler.io` → `refueler.io/share/`. Three sessions. See SESSIONS file for M-1 opening prompt.
 
-### refueler-io — editorial articles ⚠️ Partial — CC-80 pending
-
-**Problem:** Four editorial articles had inline `<style>` `:root` blocks with wrong hex values (`#1E1F22`, `#F7F4EF`). Causes colour divergence.
-
-**Status:**
-- CC-79 ✅ `the-city-worker` + `nothing-to-collect` — `:root` blocks stripped. Commit `553313f`.
-- CC-80 ⚠️ `looks-done-isnt-done` + `the-float` — pending. Read live files first before touching.
-
-**Rule locked CC-76:** Editorial articles may keep widget/layout CSS inline. They must never define a `:root` token block.
+### refueler-io — CSS rationalisation track 🟡 After Block M
+CSS-1b (nav architecture, Opus) → CSS-2 through CSS-6. See SESSIONS file for full sequence and opening prompts.
 
 ---
 
 ## CC-74 — Global CSS migration completion · 4 Aug 2026
 
-**Repos touched:** `refueler-io`, `refueler-share`, `refueler-legend`
+*(History preserved — see previous BRIDGE versions for full detail.)*
 
-### What was done
+Key locked rules from CC-74 still in force:
+- Carbon background: `#1A1A1A`. Paper background: `#E8E2D8` *(updated CSS-1a)*.
+- No backdrop-filter / frosted glass on any surface.
+- No body theme scripts — `head.njk` is the single owner.
+- No inline `:root` blocks on any page.
+- Index.njk naming: section-prefixed when produced by Claude.
 
-**`refueler-io`:**
-- `legend.css` stripped to layout only — was overriding `global.css` with wrong token values
-- `editorial.css`, `support.css`, `privacy.css` created — all page-specific layout extracted from inline `<style>` blocks
-- Inline `<style>` and body-level theme `<script>` removed from `editorial/index.njk`, `privacy/index.njk`, `support/index.njk`
-- `notes.js` theme migrated from `localStorage`/`rfTheme` to `rs-theme` cookie
-- Carbon background standardised to `#1A1A1A` in `notes.css` (was `#1E1F22`)
-- BRIDGE `--bg` Carbon token updated to `#1A1A1A` across all three repos
-
-**`refueler-share`:**
-- `upgrade.css` `html.carbon-mode` selector → `[data-theme="carbon"]`
-- `frontend/index.html` three conflicting theme scripts → one clean `rs-theme` cookie script
-- `frontend/index.html` inline `<style>` Carbon selector: `html.carbon-mode` → `[data-theme="carbon"]`
-- `frontend/index.html` wordmark `href` fixed: `https://refueler.io/` → `/`
-- `src/_includes/nav.njk` wordmark `href` fixed: `https://refueler.io/` → `/`
-
-**Additional CSS fixes (same session):**
-- `global.css` — backdrop-filter and -webkit-backdrop-filter removed. `--nav-bg` made solid: `#F5F0E8` Paper, `#1A1A1A` Carbon. No frosted glass on any Refueler surface.
-- `legend.css` — `.legend-cred-icon` background changed from `var(--accent)` (gold) to `#1E8A4A` (green). Credential dot should indicate operational status, not earned/premium state.
-- `notes.css` — `.note-card` background transparent in Carbon via `[data-theme="carbon"]` override. Paper retains `var(--surface)` tint. Hover in Carbon: border lift only, no background flash.
-
-### Locked rules added CC-74
-
-- **Carbon background:** `#1A1A1A` canonical on all surfaces. `#1E1F22` is wrong.
-- **Paper background:** `#F5F0E8` canonical on all surfaces. `#F7F4EF` is wrong.
-- **No backdrop-filter / frosted glass:** Banned on all Refueler surfaces. Nav backgrounds are solid. `global.css` and `share-tokens.css` must never include `backdrop-filter`.
-- **No body theme scripts:** `head.njk` is the single theme script owner on each domain.
-- **No inline `:root` blocks:** Page CSS files define layout only. Token file owns all tokens.
-- **Index.njk naming:** Files produced by Claude named with section prefix (e.g. `legend-index.njk`) to prevent upload collisions. Real names on disk.
+CC-74 `--inset-rule: #C8A96E` Carbon global rule **superseded by CSS-1a.** See Design system above.
 
 ---
 
 ## AP-8 — Nav, theme, and support fixes · 4 Aug 2026
 
-**Repos touched:** `refueler-io`, `refueler-share`
+*(History preserved.)*
 
-### What was done
-
-**`refueler-io` — `src/_includes/nav.njk`:**
-- Fixed hardcoded `"Legend"` breadcrumb default. Wordmark breadcrumb (`/ SECTION`) now only renders when a page explicitly passes `wordmarkSection` in its frontmatter. Pages that omit it (homepage, support, privacy, editorial, notes) show a clean `REFUELER` wordmark with no slash.
-- Legend page already passes `wordmarkSection: "Legend"` — unaffected.
-- Any future product page should pass its own `wordmarkSection` value.
-
-**`refueler-io` — `src/support/index.njk`:**
-- `privacy@refueler.io` replaced with `support@refueler.io` throughout (body copy, contact panel, footer email link). `privacy@` retained as a secondary option in the contact panel body — correct for GDPR queries.
-- Inset blockquote rewritten: removed app-specific "missed order / reward" copy. Now generic across all Refueler products.
-- "What can I raise?" list items 1 and 2 genericised — previously named app-specific scenarios.
-- Inline theme script updated: `localStorage` + `classList.add('carbon-mode')` replaced with `rs-theme` cookie scoped to `.refueler.io` + `dataset.theme` attribute. Consistent with CC-72 pattern across the rest of the site.
-- Footer email link updated to `support@refueler.io`.
-
-**`refueler-share` — `src/_includes/nav.njk`:**
-- Removed: App, Editorial, Privacy links (wrong domain, wrong audience for Share).
-- Added: Notes (`refueler.io/notes/`), Support (`refueler.io/support/`).
-- Kept: Upgrade (`/upgrade.html` — Share-specific, correct home), theme pill.
-- Wordmark stays `REFUELER / SHARE`.
-- Legend deliberately omitted — not fully live, adding a link now is premature.
-
-**`refueler-share` — `src/_includes/head.njk`:**
-- Theme script rewritten: `localStorage` + `rfTheme` key replaced with `rs-theme` cookie scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`).
-- `classList` pattern removed entirely. `dataset.theme` attribute only — `[data-theme="carbon"]` CSS selector.
-- `window.toggleTheme` exposed as global for nav pill `onclick`.
-- Cross-domain theme persistence now works between `refueler.io` and `share.refueler.io` — visitor toggling on either domain carries their preference to the other.
-
-### Nav architecture decision — locked AP-8
-
-**Main site (`refueler.io`):** Ecosystem nav. Carries Legend, Editorial, Notes, Privacy, theme pill. No Upgrade link — Upgrade is Share-specific.
-
-**Share (`share.refueler.io`):** Product nav. Notes, Upgrade, Support, theme pill. No Editorial, no Privacy (footer only on Share — correct for a legal document). Status in Share footer only.
-
-### Required updates — Share project
-
-**`Share-Master-Context.md` must record:**
-- `head.njk` theme script: `localStorage`/`rfTheme` → `rs-theme` cookie, `.refueler.io` scoped, `dataset.theme` only
-- `nav.njk` link set: Notes, Upgrade, Support, theme pill. App/Editorial/Privacy removed.
-- Theme persistence: cross-domain between `refueler.io` and `share.refueler.io` via `rs-theme` cookie — confirmed working AP-8
-
-**`share-sessions.md` must record:**
-- AP-8 session entry: nav rewrite + head.njk theme script rewrite. Committed to `refueler-share` main.
-- Files changed: `src/_includes/nav.njk`, `src/_includes/head.njk`
-- No Eleventy collection changes. No CSS changes. No JS changes.
+Nav architecture from AP-8 is superseded by CSS-1b output (pending). The AP-8 nav decisions for the subdomain (`share.refueler.io`) are moot post Block M migration — Share nav is redesigned as part of M-2.
 
 ---
 
-## CC-75/76 — Share CSS complete, refueler-io divergence diagnosed · 4 Aug 2026
+## CC-75/76 — Share CSS complete · 4 Aug 2026
 
-**Repos touched:** `refueler-share`, `refueler-io`
+*(History preserved.)*
 
-### CC-75 — Share CSS architecture
-
-- `share-tokens.css` created as single token source for all Share pages
-- `head.njk` (Share) updated to load `share-tokens.css` via `<link>` on every Eleventy page
-- `frontend/index.html` updated to link `share-tokens.css` externally — inline `<style>` block removed
-- `upgrade.css` stripped to layout only — no `:root` block
-- `status.css` created — layout only, no `:root` block
-- Theme toggle confirmed working on index, upgrade, status (CC-76 live verification)
-
-### CC-76 — Live verification and divergence diagnosis
-
-- Full source audit of refueler.io and share.refueler.io confirmed
-- Colour divergence root cause identified: homepage and editorial articles have own token blocks with wrong hex values
-- Session plan CC-77–82 locked (see refueler-io MasterContext)
-
-### Locked rules added CC-75/76
-
-- **No Share page may define its own `:root` token block** — `share-tokens.css` is the single source
-- **Editorial articles may keep widget/layout CSS inline — never a `:root` token block**
-- **Every new page on any Refueler domain must load the domain token file before any other code** (`head.njk` on refueler.io and share.refueler.io; equivalent on any future domain)
-- **EDITORIAL-MASTER.md CSS token values are wrong** — that file predates the CC-74 hex lock. Never use `#1E1F22` or `#F7F4EF`. Canonical values: Carbon `#1A1A1A`, Paper `#F5F0E8`.
+`share-tokens.css` single token source confirmed. Post Block M, `share-tokens.css` merges into `global.css` and Share pages load via the shared `head.njk`.
 
 ---
 
