@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 2.6 | **Created:** 28 July 2026 | **Updated:** CSS-1b · 9 Aug 2026
+> **Version:** 2.7 | **Created:** 28 July 2026 | **Updated:** session naming · 9 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -32,7 +32,7 @@ Products in active development: **Refueler Share** (anonymous encrypted file tra
 | `share-nav.njk`, `share-footer.njk` | Worker tests, `wrangler.toml` |
 | `share-tokens.css` (staging — merges into `global.css` at CSS-4) | BLAKE3 source and build tooling |
 | `share.js`, `blake3/` (client-side) | `Share-Master-Context.md`, `share-sessions.md` |
-| Admin dashboard pages (`src/share/admin/`) — **pending migration Block S-1** | Admin Worker endpoints (`/admin/metrics`, `/admin/ae-metrics`, `/admin/snapshot`) |
+| Admin dashboard pages (`src/share/admin/`) — **pending migration AD-1** | Admin Worker endpoints (`/admin/metrics`, `/admin/ae-metrics`, `/admin/snapshot`) |
 | Notes articles published at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning, load on demand) |
 | `REFUELER-WEBSITE-DESIGN-REFERENCE.md` canonical copy in `refueler-io/docs/` | Reference copy of `REFUELER-WEBSITE-DESIGN-REFERENCE.md` (kept for Share session context) |
 
@@ -42,7 +42,7 @@ Products in active development: **Refueler Share** (anonymous encrypted file tra
 |---|---|
 | Legend Eleventy shell at `refueler.io/legend/` (post-B9) | Node infrastructure, FROST key management |
 | `legend.css` — layout only, no `:root` block (CSS-6 migration target) | `legend-node-plan.md`, `legend-economics.md`, `legend-incident-protocol.md` |
-| Legend sub-nav strip (future Block S-2) | `legend-scope.md`, `legend-design-spec.md`, `legend-ux-language.md` |
+| Legend sub-nav strip (future SN-1/SN-2) | `legend-scope.md`, `legend-design-spec.md`, `legend-ux-language.md` |
 | Legend wordmark, theme pill wiring in `head.njk` | `legend-enterprise-pricing.md`, `MASTER.md` |
 | Article 14, 15, 16 when published at `refueler.io/notes/` | PIR sharding layer, Tor API, Silent Payments scanner code |
 | | CryptoRoadmap research files |
@@ -94,7 +94,7 @@ All hrefs relative (absolute `https://refueler.io/...` URLs are legacy — fix t
 
 Support moves to footer. Account link (`/share/account/`) added here between Notes and Plans when paid accounts go live — not before.
 
-### Share product sub-nav strip (future — Block S-2)
+### Share product sub-nav strip (future — SN-1/SN-2)
 Horizontal strip, product-scoped, visually subordinate to main nav.
 
 | # | Label | href | Visibility |
@@ -203,7 +203,7 @@ Anonymous, encrypted peer-to-peer file transfer. No account. No identity. The se
 
 **Known drift:** Dashboard uses `theme=` cookie and `setTheme()` — not the canonical `rs-theme` cookie / `document.documentElement.dataset.theme` pattern. Fix in migration session.
 
-**Migration plan (Block S-1):** Move frontend files to `refueler-io` at `src/share/admin/`. Serves at `refueler.io/share/admin/`. Apply current design tokens from `share-tokens.css`. Fix theme cookie to `rs-theme`. Wire stub sections where Worker endpoints already exist. Worker endpoints stay in `refueler-share`. Password (`X-Admin-Key`) unchanged.
+**Migration plan (AD-1):** Move frontend files to `refueler-io` at `src/share/admin/`. Serves at `refueler.io/share/admin/`. Apply current design tokens from `share-tokens.css`. Fix theme cookie to `rs-theme`. Wire stub sections where Worker endpoints already exist. Worker endpoints stay in `refueler-share`. Password (`X-Admin-Key`) unchanged.
 
 ---
 
@@ -468,9 +468,9 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. No repo yet. Se
 
 ## Current build status
 
-**`refueler-share`:** Block M complete. `refueler.io/share/` live. 212 tests passing. Worker `7a0183e1`. Admin dashboard frontend migration to `refueler-io` pending (Block S-1). `/share/upgrade/` rename to `/share/plans/` pending next Share page session. Quote emails sent to five Legend node providers; replies expected 10–11 Aug 2026.
+**`refueler-share`:** Block M complete. `refueler.io/share/` live. 212 tests passing. Worker `7a0183e1`. Admin dashboard frontend migration to `refueler-io` pending (AD-1). `/share/upgrade/` rename to `/share/plans/` pending next Share page session. Quote emails sent to five Legend node providers; replies expected 10–11 Aug 2026.
 
-**`refueler-io`:** Homepage locked (CC-79, one month). All four editorial articles migrated. `/notes/` live, Article 1 published. Share live at `refueler.io/share/`. CSS rationalisation track opens after Block S-1 (CSS-2 through CSS-7).
+**`refueler-io`:** Homepage locked (CC-79, one month). All four editorial articles migrated. `/notes/` live, Article 1 published. Share live at `refueler.io/share/`. CSS rationalisation track opens after AD-1 (CSS-2 through CSS-7).
 
 **`refueler-legend`:** Shell live at `refueler.io/legend/`. No query logic. Five-node topology locked (Legend-7B). Provider quotes pending. Build starts post-B9.
 
@@ -487,10 +487,10 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. No repo yet. Se
 | refueler-io — editorial articles | ✅ Closed CC-80 |
 | refueler-share — Block M (M-1 → M-3) | ✅ Closed — Share canonical at refueler.io/share/ |
 | refueler-io — CSS-1b nav architecture | ✅ Closed — this document |
-| **Block S-1 — admin dashboard migration** | 🟡 Next — before CSS-2 |
-| **refueler-io — CSS-2 through CSS-7** | 🟡 After Block S-1 |
-| **Block S-2 — Share product sub-nav strip** | 🟡 After CSS track |
-| **Block S-3+ — Paid account (multi-phase Opus planning)** | 🟡 Queued |
+| **AD-1 — admin dashboard migration** | 🟡 Next — before CSS-2 |
+| **refueler-io — CSS-2 through CSS-7** | 🟡 After AD-1 |
+| **SN-1/SN-2 — Share sub-nav strip** | 🟡 After CSS track |
+| **PA-series — Paid account (multi-phase Opus planning)** | 🟡 Queued |
 | **Legend — provider quote replies** | 🟡 Expected 10–11 Aug 2026 |
 | **Legend — Enterprise multi-sig account spec** | 🟡 Dedicated planning session |
 | **Receiver-pays-to-extend UX** | 🟡 Dedicated planning session before build |
