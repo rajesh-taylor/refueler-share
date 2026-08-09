@@ -1,6 +1,6 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 2.4 | **Created:** 28 July 2026 | **Updated:** M-2 · 8 Aug 2026
-> Lives in `refueler-share`, `refueler-io` (docs/), and `refueler-legend` repos. Committed to each.
+> **Version:** 2.6 | **Created:** 28 July 2026 | **Updated:** CSS-1b · 9 Aug 2026
+> Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 
@@ -9,17 +9,159 @@
 ## What Refueler is
 
 Refueler is a suite of Bitcoin-native products built by Rajesh Taylor (solo founder, London).
-The wider ecosystem includes a merchant POS (`refueler.io`), a mint, and several experimental repos.
-Products in active development: **Refueler Share** (file transfer, live at `refueler.io/share/`) and **Legend** (private chain explorer, post-B9).
+Products in active development: **Refueler Share** (anonymous encrypted file transfer, live at `refueler.io/share/`) and **Legend** (privacy-first Bitcoin block explorer, post-B9). A merchant POS app for the Fenchurch St line and a ticketing product (Refueler Pass, working name) are in the build queue.
 
 **Local paths:**
 - Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/`
 - Share: `/Users/rajeshtaylor/Documents/refueler-share/`
-- Legend / multi-core: `/Users/rajeshtaylor/Documents/refueler-legend/`
+- Legend: `/Users/rajeshtaylor/Documents/refueler-legend/`
 
 **GitHub:** `github.com/rajesh-taylor`
 
-**Subdomain policy (locked CSS-1a):** All products live at `refueler.io/[product]/`. No new subdomains without a documented technical constraint. `share.refueler.io` migrated to `refueler.io/share/` in M-2. Legend stays at `refueler.io/legend/`. Domain authority consolidates on `refueler.io`.
+---
+
+## Repo boundary rule — read this first
+
+> **If a browser requests it at `refueler.io`, it lives in `refueler-io`. If it runs on Cloudflare Workers or is backend infrastructure, it lives in `refueler-share` or `refueler-legend` respectively.**
+
+### Share boundary
+
+| Belongs in `refueler-io` | Belongs in `refueler-share` |
+|---|---|
+| All Nunjucks templates at `refueler.io/share/*` | Cloudflare Worker (`worker/src/index.js`) |
+| `share-nav.njk`, `share-footer.njk` | Worker tests, `wrangler.toml` |
+| `share-tokens.css` (staging — merges into `global.css` at CSS-4) | BLAKE3 source and build tooling |
+| `share.js`, `blake3/` (client-side) | `Share-Master-Context.md`, `share-sessions.md` |
+| Admin dashboard pages (`src/share/admin/`) — **pending migration Block S-1** | Admin Worker endpoints (`/admin/metrics`, `/admin/ae-metrics`, `/admin/snapshot`) |
+| Notes articles published at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning, load on demand) |
+| `REFUELER-WEBSITE-DESIGN-REFERENCE.md` canonical copy in `refueler-io/docs/` | Reference copy of `REFUELER-WEBSITE-DESIGN-REFERENCE.md` (kept for Share session context) |
+
+### Legend boundary
+
+| Belongs in `refueler-io` | Belongs in `refueler-legend` |
+|---|---|
+| Legend Eleventy shell at `refueler.io/legend/` (post-B9) | Node infrastructure, FROST key management |
+| `legend.css` — layout only, no `:root` block (CSS-6 migration target) | `legend-node-plan.md`, `legend-economics.md`, `legend-incident-protocol.md` |
+| Legend sub-nav strip (future Block S-2) | `legend-scope.md`, `legend-design-spec.md`, `legend-ux-language.md` |
+| Legend wordmark, theme pill wiring in `head.njk` | `legend-enterprise-pricing.md`, `MASTER.md` |
+| Article 14, 15, 16 when published at `refueler.io/notes/` | PIR sharding layer, Tor API, Silent Payments scanner code |
+| | CryptoRoadmap research files |
+
+**Cross-repo session log rule:** Any session touching both repos gets one cross-reference line in each log. Format: `"[what changed] — see [session-id] in [other-repo] SESSIONS file."` Higher MasterContext version number always wins on divergence.
+
+---
+
+## Subdomain policy — locked CSS-1a
+
+**`refueler.io` is the canonical domain for all products.** Every product lives at `refueler.io/[product]/`.
+
+`share.refueler.io` migrated to `refueler.io/share/` — Block M complete.
+
+**Action required (Rajesh — Cloudflare dashboard):** Disconnect `share.refueler.io` custom domain from `refueler-share` Pages project, then delete or disable that Pages project.
+
+**No future product gets a subdomain** without a documented technical constraint. Legend at `refueler.io/legend/`. Pass (when built) at `refueler.io/pass/`.
+
+**Cloudflare infrastructure (Share):**
+- Worker: `refueler-share.rt-fc4.workers.dev` (version `7a0183e1`). CORS accepts `https://refueler.io` and `https://share.refueler.io` (keep until Pages project retired).
+- Turnstile widget: 2 hostnames — `refueler.io` + `share.refueler.io`.
+- Cloudflare Workers KV free tier (1,000 writes/day) — upgrade to Paid ($5/month) before production volume.
+
+---
+
+## Navigation architecture — locked CSS-1b · 9 Aug 2026
+
+### Main site nav (`nav.njk`)
+Wordmark: `Refueler` → `/`
+
+| # | Label | href | activePage key |
+|---|---|---|---|
+| 1 | Legend | `/legend/` | `legend` |
+| 2 | Share | `/share/` | `share` |
+| 3 | Notes | `/notes/` | `notes` |
+| 4 | Editorial | `/editorial/` | `editorial` |
+| 5 | Privacy | `/privacy/` | `privacy` |
+| — | Paper / Carbon pill | `toggleTheme()` | — |
+
+### Share nav (`share-nav.njk`)
+Wordmark: `Refueler` → `/` · `Share` → `/share/`
+All hrefs relative (absolute `https://refueler.io/...` URLs are legacy — fix to relative in next Share nav touch).
+
+| # | Label | href | activePage key |
+|---|---|---|---|
+| 1 | Notes | `/notes/` | `notes` |
+| 2 | Plans | `/share/plans/` | `plans` |
+| — | Paper / Carbon pill | `toggleTheme()` | — |
+
+Support moves to footer. Account link (`/share/account/`) added here between Notes and Plans when paid accounts go live — not before.
+
+### Share product sub-nav strip (future — Block S-2)
+Horizontal strip, product-scoped, visually subordinate to main nav.
+
+| # | Label | href | Visibility |
+|---|---|---|---|
+| 1 | Upload | `/share/` | Always |
+| 2 | Account | `/share/account/` | Authenticated users only |
+| 3 | Plans | `/share/plans/` | Always |
+| 4 | Status | `/share/status/` | Always |
+
+Strip background: one shade off surface token (slightly darker on Paper, slightly lighter on Carbon). Same pattern applied to Legend and Pass when their sub-navs are built.
+
+### Legend nav
+Wordmark: `Refueler` → `/` · `Legend` → `/legend/`
+Theme pill only. No link list. Carbon default (`getCookie('rs-theme') || 'carbon'`). Account link (`/legend/account/`) added post-B9 when credential access exists — not before.
+
+### Footers — universal stamp and links
+
+**Stamp (all surfaces):** `© 2026 Refueler Ltd (incorporating) · refueler.io`
+
+| Surface | Links |
+|---|---|
+| Main site | Privacy `/privacy/` · Support `/support/` |
+| Share | Privacy `/privacy/` · Support `/support/` · Status `/share/status/` · Plans `/share/plans/` · Legend `/legend/` |
+| Legend | Privacy `/privacy/` · Support `/support/` · Share `/share/` |
+
+### Homepage capability block (implement when homepage lock lifts, one month from CC-79)
+
+| Label | Links to | Descriptor |
+|---|---|---|
+| Encrypted transfers | `/share/` | *The server is blind, so is the till.* |
+| Bitcoin explorer | `/legend/` | *Your search history is showing.* |
+| Lightning payments | No target yet — unlinked | *Tap and go. Sats or card, your call.* |
+
+When Refueler Pass is live, Pass replaces Lightning payments in this block.
+
+### Product nav sequencing
+- Pre-merchant-app live: `Legend · Share · Pass` once Pass exists
+- At four products: introduce `Products ▾` grouping
+
+---
+
+## Paid account architecture — decisions locked CSS-1b
+
+**Identity model:** Mullvad-style. No email, no username, no password. Account number is a 24-word BIP39 mnemonic generated entirely client-side via `crypto.getRandomValues()`. Displayed once. Never transmitted. Server stores only the derived public key and `paid_until`.
+
+**Standard path:** 24-word account key, generated in-browser. "Write it down. Lose it, start a new account."
+
+**Advanced path:** "Generate with physical dice" — links to a brief page on the Refueler domain. Label is "Generate with physical dice." The trust argument: open-source generation code, zero network traffic during generation (verifiable in browser dev tools), physical dice means the mint never touches generation.
+
+**Accounts are per-product, not pooled.** Share has its own account. Legend paid tier will have its own. Pass will have its own. Products may be incorporated as separate entities under the Refueler holding company. The account architecture supports this — separate credentials, separate `paid_until` records, no cross-product balance sheet.
+
+**Enterprise multi-sig account management.** For Legend Enterprise and Share API tiers, account actions (cancel subscription, rotate credentials, export data) can require M-of-N authorisation from named keyholders — a FROST multi-sig arrangement consistent with the node signing architecture. Prevents a single departing employee from unilaterally ending an Enterprise account. Standard paid tiers (individual, small team) are single-key. Enterprise multi-sig spec to be designed in a dedicated Legend Enterprise planning session.
+
+**Payment:** Lightning (Blink BOLT11) only for anonymous account top-up. Stripe remains for the identified sender tier on Share. Cashu tokens from the Refueler mint are credentials (access tokens, quota proofs), not payment instruments — the mint is closed-loop and non-monetary.
+
+**Receiver-pays-to-extend:** Download page shows extend option when sender has enabled it at upload time. Default: off. When enabled by sender: recipient sees extend option with honest single-line explanation (contributes toward server costs). Three UI states: sender disabled (option never shown) / sender enabled (shown with explanation) / sender's paid tier includes it automatically. UX design to be scoped in a dedicated planning session before build. Not a default feature of the free tier.
+
+**`honest_metadata.json`:** Public at `refueler.io/_data/honest_metadata.json`. The machine-readable, dated record of exactly what the operator can see. Point paying clients to it proactively — in account dashboard onboarding and in response to any privacy enquiry. For Legend Enterprise it becomes a contractual exhibit: here is the precise metadata footprint, verifiable by hash. Articles 3 and 4 in the Notes pipeline embed it directly.
+
+**NUT-29 (Batched Minting):** Parked. Relevant only for Enterprise multi-product bundle scenario. Not in scope until that tier is designed.
+
+**Cashu NUT primitives in scope for account/credential system:**
+- Blind auth NUTs — anonymous credentials gating API access without server linking sessions
+- NUT-11 (P2PK) — lock credential to account pubkey
+- NUT-13 + NUT-09 (deterministic secrets + restore) — "restore from words" flow
+- NUT-07 (state check) — verify credential unspent before gating upload
+- NUT-14 (HTLC) — conditional unlock tied to payment preimage (receiver-pays-to-extend candidate)
 
 ---
 
@@ -29,206 +171,221 @@ Anonymous, encrypted peer-to-peer file transfer. No account. No identity. The se
 
 **The one-line positioning:** "Professional-grade anonymity where only one side needs to be sophisticated."
 
-**URL:** `refueler.io/share/` *(live — M-2 complete)*
-**Legacy URL:** `share.refueler.io` — still resolves until M-3 retires the Pages project
+**URL:** `refueler.io/share/` *(live — Block M complete)*
+**Legacy URL:** `share.refueler.io` — still resolves until Pages project retired
 **Repo:** `rajesh-taylor/refueler-share` (Apache 2.0, public)
 
 **Two-axis category definition (locked AP-7):**
-Refueler Share is the only architecture that solves both failures simultaneously:
-1. **The recipient problem** — the transfer survives the sender closing their laptop; it survives the recipient being on a plane. Every synchronous P2P tool fails this by design.
+1. **The recipient problem** — the transfer survives the sender closing their laptop and the recipient being on a plane. Every synchronous P2P tool fails this by design.
 2. **The compulsion problem** — there is nothing to hand over, not because we'd refuse, but because we never had it. Every storing service with server-side keys fails this by design.
 
 **The core technical claim (honest scope):**
-- Files are AES-GCM encrypted client-side. The encryption key lives in the URL fragment — never transmitted to the server.
-- Every chunk is BLAKE3-hashed and verified server-side. The server confirms integrity without reading content.
-- Access is gated by Cashu NUT-00 blind signatures — anonymous credentials the mint cannot link to issuance. The server is blind. The till is also blind.
-- No account required. Free tier: 4 GB, 7-day expiry. Paid tiers via Stripe (identified) or Lightning (pseudonymous).
+- Files AES-GCM encrypted client-side. Encryption key lives in the URL fragment — never transmitted.
+- Every chunk BLAKE3-hashed and verified server-side. Integrity confirmed without reading content.
+- Access gated by Cashu NUT-00 blind signatures — anonymous credentials the mint cannot link to issuance.
+- Free tier: 4 GB, 7-day expiry. Paid tiers via Stripe (identified) or Lightning (pseudonymous).
 
 **What it is not:**
-- Not zero-knowledge in the metadata sense — file sizes, chunk counts, and timestamps are visible to the operator. Published honestly.
+- Not zero-knowledge in the metadata sense — file sizes, chunk counts, and timestamps visible to operator. Published honestly in `honest_metadata.json`.
 - Lightning payments are pseudonymous, not anonymous (Blink internal correlation possible — documented).
 - No independent security audit yet. Target: B9 (cryptographic design review) → B11 (scoped pentest, findings published).
+
+**Known limitations:**
+- Safari large file limitation (~1.5 GB+) — client-side AES-GCM memory constraint. Fix: chunked streaming encryption (Share B-series roadmap).
+
+**`/share/upgrade/` renamed to `/share/plans/`** (locked CSS-1b). Files: `upgrade.css` → `plans.css`, `upgrade.html` → `plans.html`, Nunjucks template renamed. Redirect `/share/upgrade/` → `/share/plans/` in `_headers`. Fix in next Share page build session.
+
+---
+
+## Share — admin dashboard
+
+**Current state:** `refueler-share/frontend/admin/` — `dashboard.html`, `dashboard.css`, `dashboard.js`. Sidebar layout, Carbon default, password-gated via `X-Admin-Key` header to Worker. Several sidebar sections are stubs (Upload latency, Transfers, Subscribers, Maintenance mode, Rate limits).
+
+**Known drift:** Dashboard uses `theme=` cookie and `setTheme()` — not the canonical `rs-theme` cookie / `document.documentElement.dataset.theme` pattern. Fix in migration session.
+
+**Migration plan (Block S-1):** Move frontend files to `refueler-io` at `src/share/admin/`. Serves at `refueler.io/share/admin/`. Apply current design tokens from `share-tokens.css`. Fix theme cookie to `rs-theme`. Wire stub sections where Worker endpoints already exist. Worker endpoints stay in `refueler-share`. Password (`X-Admin-Key`) unchanged.
 
 ---
 
 ## What Legend is
 
-**Legend** is a privacy-first Bitcoin block explorer and chain analytics tool built on a fork of Esplora (Blockstream, MIT licensed). It lives in `refueler-legend`.
+Privacy-first Bitcoin block explorer built on a BLAKE3-accelerated Esplora fork, optimised for ARM architecture. Two complementary scopes: (1) the ARM/Raspberry Pi indexer fork; (2) the Legend privacy layer on top. Lives at `refueler.io/legend/` post-B9. **Does not start before B9 Lightning node is live. No exceptions.**
 
-**The problem it solves:** Every query to a public block explorer (Mempool.space, Blockstream.info) tells that server exactly which addresses and transactions you're watching. This is a structural metadata leak that affects everyone from individual Bitcoiners to family offices managing significant holdings. No existing explorer is architected to prevent it.
+**Licence:** MIT (matches upstream esplora/electrs).
+**Shell live** at `refueler.io/legend/`. No query logic yet.
 
-**URL:** `refueler.io/legend` (not a separate domain — domain authority consolidates on main domain)
-**Licence:** MIT. Open source. Self-hosting available — "don't trust us, read the code."
-**Prerequisite:** Lightning node live at B9. Do not start before B9 operational.
+**Legend theme default (locked CSS-1a):** `getCookie('rs-theme') || 'carbon'` on Legend template only.
+**Legend page layout (locked CSS-1a):** Wordmark, input field, tagline only above results. No green credential dot. No Silent Payments card. No below-fold three-column block.
 
-**Legend page layout (locked CSS-1a):** Wordmark, input field, tagline only above results. No green credential dot (removed — no semantic meaning until canary system is designed). No Silent Payments card (removed — feature not yet live). No below-fold three-column block (removed — turns a tool into a pitch; leaks competitive detail). Results render below input in the cleared space.
+**Locked phrase (coined Multi-5):** *"Chainalysis works for the observer. Legend works for the owner."* — use in Article 14, Article 15, and any investor or conference presentation. Never in UI copy.
 
-**Legend theme default (locked CSS-1a):** `getCookie('rs-theme') || 'carbon'` on the Legend template only. Carbon at rest for new visitors — narrows attention onto the query input. Cookie wins for returning visitors with an existing preference.
+### Node infrastructure (locked Legend-7/7B · 7 Aug 2026)
 
-### What Legend does that nobody else does
+Five nodes, five independent legal frameworks. FROST 3-of-4 threshold signing across nodes A–D. Node E is chain-only cold standby (no FROST share, no Esplora index at launch — chain continuously synced so Esplora index build is the only remaining step when E is activated).
 
-**Privacy-first query architecture:**
-- Own infrastructure — no query metadata leaks to Blockstream, Mempool.space, or any third party
-- Ephemeral query sessions — no session persistence, no cookie tracking, no client correlation across queries
-- Tor-native API for Enterprise — client IP never reaches the server
-- PIR-inspired sharding (three dedicated nodes across two providers and two legal jurisdictions, fixed cost regardless of client count) — no single node sees the complete query; client reassembles locally. A world first for production Bitcoin chain data.
+| Node | Provider | Location | Jurisdiction |
+|---|---|---|---|
+| A | Hetzner | Falkenstein, DE | Germany |
+| B | Frantech/BuyVM | Luxembourg | Luxembourg |
+| C | FlokiNET | Reykjavik, IS | Iceland |
+| D | OVHcloud NA | Canada | Canada |
+| E | Infomaniak | Geneva, CH | Switzerland |
 
-**Cashu query credentials — the Cashu model applied to chain queries:**
-- Query budgets issued as Cashu blind signature tokens — same blind-signature infrastructure as Share
-- Server cannot reconstruct a client's query history across sessions — structurally impossible, not a policy promise
-- Free tier: 10 Legend queries earned per Share upload, 50/day cap
-- Paid Share tiers: 50 queries per upload, uncapped daily
-- Enterprise: unlimited, PIR-sharded, Tor-native, NUT-11 P2PK-bound credentials
+**US nodes explicitly rejected.** CLOUD Act 2018 allows US-headquartered providers to be compelled to produce data stored anywhere globally.
 
-**Proof-of-query receipts:**
-- Blind receipt issued per query — cryptographic proof the query was processed without linking receipt to query content
-- Client can verify they received N responses without revealing what they asked
-- Useful for compliance-conscious enterprise clients and family offices demonstrating unloggable query behaviour to their legal team
+**Infrastructure cost:** ~€673/month planning estimate (~£566/month ex-VAT). Five dedicated nodes across five jurisdictions and three continents. Confirmed quotes pending provider replies (expected 10–11 Aug 2026). One Enterprise client at the v1 floor (£1,500/month) covers ~2.6 years of infrastructure cost.
 
-**Silent Payments native (BIP-352):**
-- First block explorer to display Silent Payments static addresses and derived outputs correctly
-- Requires scanning every block — public explorers do not support this
+**Storage spec:** 2×1 TB NVMe minimum, 2×2 TB preferred. Chain + index total August 2026: ~1.65 TB. Storage upgrade window: target Q4 2027.
 
-**Modern analysis layer (beyond Mempool/Esplora legacy tooling):**
-- UTXO age and provenance scoring — for compliance professionals understanding what they're receiving, without third-party analytics logging the query
-- Lightning channel correlation — on-chain channel opens/closes correlated with own node data, privately
-- Payment path reconstruction for own transactions — credential-gated, never revealed to operator
-- Family office tooling: track BTC movements, flag suspicious activity, generate private reports
+**FROST 3-of-4:** Signing requires 3 of 4 full participants (nodes A–D). Sub-quorum states and operator procedures documented in `legend-incident-protocol.md` v1.1. Confirm 3-of-4 threshold and test ceremony before first node goes live with query traffic (`frost-secp256k1` crate supports configurable thresholds).
 
-### Who Legend serves — the full stack, not just enterprise
+**Architecture principle:** No gateway node ever. Browser talks to nodes directly. A gateway is a surveillance point with extra steps.
 
-**Plebs first.** The free tier (10 queries per Share upload, or 50/day standalone) gives every Bitcoiner a private alternative to Mempool.space for basic lookups. No account. No tracking. Privacy is not a luxury — it is the default.
+**Bitcoin Knots over Bitcoin Core on all nodes.** BIP110 policy, RBF disabled.
 
-**Lightning and Cashu wallet users.** Lightning nodes open and close channels on-chain. Those events are queryable. Legend gives Lightning wallet users (Mutiny, Phoenix, Breez, Zeus, Sparrow) a private way to track their own channel activity without revealing their node's footprint to a public explorer. Potential partnership: Sparrow Wallet (Craig Raw, post-B9) — already supports custom Esplora endpoints; Legend is API-compatible out of the box.
+**Go-live conditions:** (a) B9 live on Share; (b) all five provider quote replies confirmed; (c) UK legal sorted; (d) Legend design prototype live at `refueler.io/legend` for Enterprise demo. Prototype costs nothing beyond existing hosting — static shell, no live nodes required for demo.
 
-**Family offices (UK and US).** A family office managing significant Bitcoin holdings needs to track movements, verify receipt of payments, and monitor for suspicious activity — without broadcasting which addresses they watch to a public explorer. The compliance reporting layer (UTXO provenance scoring, movement history for credentialed addresses) maps directly to what a family office's legal team needs.
+### Privacy query architecture
 
-**The Coldcard/Coinkite moment (August 2026):** A serious entropy bug was discovered in Coldcard MK3 seed generation. Weak entropy means the keyspace is dramatically smaller than it should be — brute-force attacks on MK3 wallets are viable right now. Affected users need to check whether their addresses have been swept. But the moment you type your address into Mempool.space or Blockstream.info, you've told that server exactly which addresses you're worried about — handing a complete briefing to anyone monitoring those queries. Legend is the correct tool for this moment: private address monitoring, no metadata leak, no third-party knowledge of what you're checking. This is a genuine product-market fit moment. Article 14 should be written with this context in mind. The opening line is locked: "Every time you look up a Bitcoin address on a public block explorer, you're telling that server exactly what you own and what you're watching. Here's what we built instead, and why it matters for our clients."
+- Ephemeral query sessions — no session persistence, no client correlation across queries
+- PIR-inspired sharding: no single node sees the complete query; client reassembles locally
+- Tor-native API for Enterprise tier
+- Silent Payments (BIP-352) native — first explorer to display SP static addresses and derived outputs correctly
+- v1 privacy claim: collusion-resistant query splitting with blind credential unlinkability. Not PIR, not ZK. Use precise language.
+
+### Query credential model (locked CLAUDE.md / Multi-4)
+
+**Free tier: unlimited queries at v1 launch. No account. No rate limit. No friction at distress moment.** Free access is not gated by Share uploads or tokens. This is the architectural proof the system works — funded by Enterprise cross-subsidy.
+
+Enterprise: unlimited queries, PIR-sharded, Tor-native, NUT-11 P2PK-bound credentials.
+
+No token-gating on the free tier. The Share-gives-Legend-tokens model is superseded and abolished.
+
+### Proof-of-query receipts
+
+Blind receipt per query. Client verifies N responses without revealing query content. Compliance-facing for family offices and legal teams demonstrating unloggable query behaviour.
+
+### The Coldcard MK3 moment (August 2026)
+
+Entropy bug in MK3 seed generation makes brute-force attacks viable. Affected users need private address monitoring without broadcasting their concerns to a public explorer. Legend is the correct tool. Article 14 addresses this — opening line locked: *"Every time you look up a Bitcoin address on a public block explorer, you're telling that server exactly what you own and what you're watching. Here's what we built instead, and why it matters for our clients."*
 
 ### Business model
 
-- Free: unlimited queries. No account. No payment. No rate limit. Funded by Enterprise cross-subsidy — the free tier is the proof the architecture works, not the product.
-- Enterprise (family office): £1,500/month (v1) → £2,500/month (v2: Tor API, Double Ratchet, ML-KEM-768) → £3,500/month (v2+: dedicated node isolation). Invite-only at v1, capped at five clients. Full detail in `legend-enterprise-pricing.md`.
-- Merchant add-on: £250/month per business entity, sold only into the existing Refueler POS merchant base. Never bundled with POS.
-- Estate reports: £50 per block-height balance statement (v2), £150 full verified estate report (v3).
-- Open source: self-hosting encouraged. Enterprise value lives in the institutional wrapper — FROST key management, warrant canaries, geographic jurisdiction distribution, SLA, compliance pack, named contact — not in closed code.
+- **Free:** unlimited queries. No account. No payment. No rate limit. Funded by Enterprise cross-subsidy.
+- **Enterprise (family office):** £1,500/month (v1) → £2,500/month (v2: Tor API, Double Ratchet, ML-KEM-768) → £3,500/month (v2+: dedicated node isolation). Invite-only at v1, capped at five clients. Enterprise multi-sig account management (M-of-N FROST arrangement) for key-person departure protection.
+- **Merchant add-on:** £250/month per business entity. Sold into existing Refueler POS merchant base only.
+- **Estate reports:** £50 per block-height balance statement (v2). £150 full verified estate report (v3).
 
-**Infrastructure cost:** ~€360/month (two Hetzner AX52 nodes in Germany and Finland; one FlokiNET dedicated node in Iceland). One Enterprise contract covers the infrastructure cost many times over. Full cost model in `legend-economics.md`.
+*Carry-forward from Legend-7B: `legend-enterprise-pricing.md` break-even figures use old €450/month base. Update minimum contract floor from ~£385/month to ~£566/month at next session touching that file.*
 
-**Traffic and cost model:** Free access is rate-limited by Cashu credentials. Enterprise revenue subsidises infrastructure before free tier scales. Sequence: Enterprise infrastructure first → open source → article 14 → free tier as proof of concept → Enterprise conversion. Legend does not open as a free unlimited public explorer until business model is proven.
+### Legend — detail files (in `refueler-legend/`)
+
+| File | Contents |
+|---|---|
+| `MASTER.md` | Single-load summary of all nine harness files. Load alongside `CLAUDE.md` + `SESSIONS.md` in every build session. |
+| `legend-node-plan.md` | Node topology v1.2, provider specs, FROST architecture, warm standby procedure |
+| `legend-economics.md` | Five-node cost model (figures pending confirmed quotes) |
+| `legend-incident-protocol.md` | Incident runbook v1.1 — eight sections, FROST re-keying, attack simulations, pre-signed statements |
+| `legend-scope.md` | Feature scope by version (v1 → v3+) |
+| `legend-design-spec.md` | Status page spec, privacy modes, CSS tokens |
+| `legend-ux-language.md` | Copy register, 50 locked strings, voice/register rules |
+| `legend-enterprise-pricing.md` | Enterprise tier pricing model (break-even update pending) |
+
+### CryptoRoadmap block (target: January 2027)
+Six sessions (3 Opus + 3 Sonnet) covering: primitives audit (Ristretto255, FROST, Checklist PIR), transport and scanning layer (ML-KEM-768, Double Ratchet, FMD), ZK architecture (Bulletproofs+, estate/lending use case). Runs after Phase 1 working explorer is live. Before any v2 build session touches PIR or ZK layers.
 
 ---
 
 ## Design system — canonical tokens
 
-All Refueler surfaces share these tokens. Divergences are bugs.
+All Refueler web surfaces share these tokens. App/terminal surfaces have their own convention (Carbon always default, not togglable).
 
-**Backgrounds (CSS-1a updated):**
-- Paper (light): `--bg: #E8E2D8` · `--surface: #DAD4CA` · `--surface-raised: #D0C9BE`
-- Carbon (dark): `--bg: #1A1A1A` · `--surface: #26282C` · `--surface-raised: #2E3035`
+### Backgrounds (CSS-1a)
+- **Paper:** `--bg: #E8E2D8` · `--surface: #DAD4CA` · `--surface-raised: #D0C9BE`
+- **Carbon:** `--bg: #1A1A1A` · `--surface: #26282C` · `--surface-raised: #2E3035`
 
-*Paper updated CSS-1a from `#F5F0E8` to `#E8E2D8` (quality laid paper / Middle Temple ivory — eases extended reading sessions for legal and family office users). Surface tokens adjusted proportionally.*
+*Paper updated CSS-1a from `#F5F0E8` to `#E8E2D8`.*
 
-**Input fields (CSS-1a):**
-- Paper: `#CCC7BE` (recessed well — cooler and more grey than background, not white)
-- Carbon: `#252525` (unchanged — correct as-is)
+### Input fields (CSS-1a)
+- Paper: `#CCC7BE` (recessed well) · Carbon: `#252525`
 
-**Text:**
+### Text
 - Paper: `--fg: #1A1A1A` · `--fg-muted: #5A5550` · `--fg-subtle: #9A9590`
 - Carbon: `--fg: #F5F0E8` · `--fg-muted: #B0AAA2` · `--fg-subtle: #6A6560`
 
-*Token naming: `--fg*` is the canonical primary system. `--text-primary/secondary/tertiary` are aliases pointing to `--fg*` values. Migration of `notes.css` from `--text-*` to `--fg*` happens in CSS-6.*
+*`--fg*` is the canonical primary system. `--text-primary/secondary/tertiary` are aliases. Migration of `notes.css` from `--text-*` to `--fg*` in CSS-6.*
 
-**Borders:**
+### Borders
 - Paper: `--border: rgba(26,26,26,0.12)` · `--border-mid: #B8B2A8` · `--inset-rule: var(--border)`
 - Carbon: `--border: rgba(245,240,232,0.10)` · `--border-mid: #4A4D52` · `--inset-rule: var(--border)`
 
-**`--inset-rule` gold scope (CSS-1a — CC-74 lock superseded):**
-Gold `--inset-rule` (`#C8A96E`) is valid **only** as an inline element style on `h2` dividers and blockquotes inside editorial and Notes article body content. It is **never** a token applied to nav borders, footer borders, card borders, or any chrome on any surface. Carbon `--inset-rule` is `var(--border)` — not gold globally. The CC-74 decision to set `--inset-rule: #C8A96E` in Carbon globally is superseded. Rationale: gold trim confirmed visually overdone in CSS-1a review across Share and Legend.
+### `--inset-rule` gold scope (CSS-1a)
+Gold `#C8A96E` valid **only** as inline element style on `h2` dividers and blockquotes inside article body content. Never on chrome of any kind.
 
-**Accent:**
-- Gold (brand chrome, never CTA): `--accent: #C8A96E` · `--accent-hover: #E0C48A`
-- **No CTA orange.** `--accent-action` is abolished. `#F5820A` and `#D4690A` do not exist in this codebase. Do not use. Do not define. Do not propose. This supersedes any prior reference to orange CTA tokens in any version of this document.
+### Accent
+- `--accent: #C8A96E` · `--accent-hover: #E0C48A`
+- **No CTA orange. `--accent-action` abolished. `#F5820A` and `#D4690A` do not exist in this codebase.**
 
-**Never:** gold as a primary CTA. Never orange anywhere.
+### Card body text (locked CSS-1a)
+DM Sans 400, `line-height: 1.7`, `color: var(--fg)`. Not muted, not weight 300.
 
-**Card body text (locked CSS-1a):**
-DM Sans 400, `line-height: 1.7`, `color: var(--fg)`. Not muted, not weight 300. The card surface provides visual softening — the text inside does not retreat further. Reference: Share status page card treatment.
+### Typography
+- `--font-heading: 'Satoshi', 'DM Sans', sans-serif` — wordmark, labels, metric values (600/700)
+- `--font-sans: 'DM Sans', sans-serif` — UI, body copy (300/400/500)
+- `--font-serif: 'Source Serif 4', Georgia, serif` — editorial, `/notes/` body (300/400)
+- `--font-mono: 'IBM Plex Mono', monospace` — timestamps, codes, data (400/500)
+- Homepage headline only: `'Cormorant Garamond', Georgia, serif` 600 — `src/index.njk` only, never global
 
-**Typography:**
-- `--font-heading / --heading: 'Satoshi', 'DM Sans', sans-serif` — metric values, wordmark, key labels (600/700)
-- `--font-sans / --sans: 'DM Sans', sans-serif` — UI, body copy (300/400/500)
-- `--font-serif / --serif: 'Source Serif 4', Georgia, serif` — long-form, editorial, `/notes/` body (300/400)
-- `--font-mono / --mono: 'IBM Plex Mono', monospace` — timestamps, codes, data, table cells (400/500)
-- Homepage headline only: `'Cormorant Garamond', Georgia, serif` 600 — loaded in `src/index.njk` only, never global
+### Structural
+- Border weight: `0.5px`. Card radius: `10px`. Button radius: `8px`. Modal radius: `12px`.
+- Theme transition: `0.35s`. No `backdrop-filter` or blur on any surface.
+- Detection: `document.documentElement.dataset.theme === 'carbon'` only. Never `classList.contains`.
 
-**Structural:**
-- Border weight: `0.5px` throughout. Card radius: `10px`. Button radius: `8px`. Modal radius: `12px`.
-- Theme toggle transition: `0.35s` simultaneous on all token properties.
-- Theme detection: always `dataset.theme === 'carbon'`. Never `classList.contains('carbon-mode')`.
-- Nav background: solid — no backdrop-filter or blur on any surface. `--nav-bg` is `#E8E2D8` (Paper) and `#1A1A1A` (Carbon).
-- Note cards (Notes section): border-only in Carbon (transparent background). Surface tint in Paper only.
+### Theme defaults
+- All web surfaces: Paper default (`getCookie('rs-theme') || 'paper'`)
+- **Legend template only:** Carbon default (`getCookie('rs-theme') || 'carbon'`)
+- App / Command Centre / terminal: Carbon always
 
-**Theme defaults:**
-- All web surfaces: Paper default on page load (`getCookie('rs-theme') || 'paper'`).
-- Legend template only: Carbon default (`getCookie('rs-theme') || 'carbon'`). Cookie wins for returning visitors.
-- App / Command Centre / merchant terminal: Carbon always (separate from web cookie system).
+### Theme persistence
+Cookie `rs-theme` scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`).
 
-**Theme persistence:** cookie `rs-theme` scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`).
+### Stale / abolished — never use
+`#1E1F22` · `#F7F4EF` · `#F5F0E8` (old Paper) · `#F5820A` · `#D4690A` · `rfTheme` · `html.carbon-mode` · `localStorage` for theme
+
+---
+
+## CSS architecture rules — locked
+
+1. One token file per domain owns all tokens. No page defines its own `:root` block.
+2. Every page loads domain token file (via `head.njk`) before any other CSS. Page CSS is layout-only.
+3. `head.njk` is the single theme-script owner per domain.
+4. No `backdrop-filter` / frosted glass on any surface.
+5. `var(--accent)` fails on `<p>` tags — use `#C8A96E !important` until CSS-6.
+6. Homepage classes all `home-` prefixed. Do not touch outside a formal decision.
+7. Page-specific display fonts load in the page `.njk` only.
+8. No inline CSS/JS in Nunjucks templates.
+9. Claude-produced `index.njk` files carry a section prefix (e.g. `home-index.njk`); renamed on placement.
 
 ---
 
 ## Content architecture — refueler.io
 
-**`/editorial/`** — Investor/partner long-form. Curated, slow, considered.
-
-**`/notes/`** — SEO-targeted technical content for professional buyers. Higher cadence.
-Audiences: lawyers, journalists, accountants, Bitcoin-adjacent professionals, legal/human rights workers, family offices.
-Full pipeline in `notes-articles-list.md` in `refueler-share/`.
-
-**`/legend/`** — Legend product surface. Post-B9.
-
-**`/share/`** — Share product surface. Live as of M-2.
-
-**All content on `refueler.io`.** No product content on subdomains.
+- **`/editorial/`** — Investor/partner long-form. Curated, slow, considered.
+- **`/notes/`** — SEO-targeted technical content for professional buyers. Pipeline in `notes-articles-list.md` in `refueler-share/` (load on demand).
+- **`/legend/`** — Legend product surface. Post-B9.
+- **`/share/`** — Share product surface. Live.
 
 ---
 
 ## Writing style — `/notes/`
 
-- First sentence is the most interesting thing in the piece. No throat-clearing.
-- One idea per paragraph. Short paragraphs.
-- Precision over completeness. Say the true thing simply.
-- Dry wit from the gap between marketing claims and reality — let the gap do the work, don't point at it.
-- Never: "military-grade", "zero-knowledge" as a headline, "Swiss-grade privacy", "anonymous payments".
-- Always: honest about what the operator *can* see. State it before anyone asks.
-- Source Serif 4 for body. IBM Plex Mono for data, table cells, any inline technical values.
-
----
-
-## Video player in /notes/ and founder S1 modal
-
-**Article video player:** R2 bucket → Worker signed URL → HTML5 `<video>` → Cloudflare edge at 1080p.
-Download blocker via CSS + JS. No external platforms. Build scope: B9 or B13.
-
-**Founder S1 modal:** Pre-recorded statement on `/status` during S1 incidents. R2 + signed URL.
-Displayed only when `incident_active` KV = S1. Not sessionStorage-dismissible. Pre-record at B9 tabletop.
-
----
-
-## Mission north star — internal only, never copy
-
-> *"They come for privacy, they stay and then fall in love with Bitcoin."*
-
-Every product decision, onboarding choice, and copy line across all repos is tested against this. If it accelerates that journey, ship it. If it doesn't, cut it.
-
-**Ecosystem positioning (locked CC-77):** Refueler sits at the intersection of fiat and Bitcoin rails. Users choose their rail transaction by transaction. Refueler does not force, convert, or evangelise — it builds the infrastructure where both work, privately. The normie comes for privacy. Bitcoin does the rest.
-
----
-
-## Upcoming product — Refueler Pass (working name)
-
-Anonymous, fraud-resistant ticketing using Cashu NUT primitives. Same architectural principle as Share: blind credential issuance, offline-capable, no secondary market leakage. The ticket is a Cashu token. No repo yet. Name may change. Do not build copy or architecture around this name — note for ecosystem context only.
+- First sentence is the most interesting thing. No throat-clearing.
+- One idea per paragraph. Precision over completeness.
+- Dry wit from the gap between marketing claims and reality.
+- Byline: Rajesh Taylor (personal, named).
+- Source Serif 4 for body. IBM Plex Mono for data and inline technical values.
+- Never: "military-grade", "zero-knowledge" as headline, "Swiss-grade privacy", "anonymous payments", "audit-certified", "security-audited", "end-to-end file integrity", "C2C".
+- Always: honest about what the operator can see. State it before anyone asks.
 
 ---
 
@@ -237,65 +394,39 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. Same architectu
 | Line | Assigned to | Locked |
 |---|---|---|
 | *"Bitcoin, privately."* | Legend index page headline | CC-77 |
-| *"Built for jurisdictions that have laws. And lawyers."* | Share plans/API page | CC-77 |
+| *"Built for jurisdictions that have laws. And lawyers."* | Share plans page | CC-77 |
 | *"Lightning payments — Tap and go. Sats or card, your call."* | Share plans page | CC-77 |
+| *"Chainalysis works for the observer. Legend works for the owner."* | Article 14, Article 15, investor/conference materials only — never UI copy | Multi-5 |
 
-These lines are not available for homepage or general marketing use. Do not repurpose.
+**Homepage copy (locked CC-79, one month from CC-79):**
+- Overline: *Privacy Infrastructure · London* *(gold `#C8A96E !important`)*
+- Headline: *Your transaction / is nobody else's / business.* *(Cormorant Garamond 600, three forced `<br>` lines)*
+- Subhead: *Privacy isn't a feature. It's the architecture.* *(DM Sans 300, full `--fg`, in `.home-subhead-band`)*
+- Capability: Encrypted transfers / Bitcoin explorer / Lightning payments (labels link when lock lifts)
 
-**Homepage copy (locked CC-79):**
-- Overline: *Privacy Infrastructure · London*
-- Headline: *Your transaction / is nobody else's / business.* *(three forced lines — "business." alone on line 3)*
-- Subhead: *Privacy isn't a feature. It's the architecture.* *(DM Sans 300, full --fg, no hairline above)*
-- Capability block:
-  - Encrypted transfers / *The server is blind, so is the till.*
-  - Bitcoin explorer / *Your search history is showing.*
-  - Lightning payments / *Tap and go. Sats or card, your call.*
+*"Fiat or Bitcoin — privacy included."* retired from homepage CC-79. Product pages only.
 
-"Fiat or Bitcoin — privacy included." retired from homepage CC-79. Product pages only.
-Headline font: Cormorant Garamond 600. Loaded in `src/index.njk` only, not global.
-Accent column (Est. 2026 / rule / REFUELER): removed CC-79 — replace with Companies House reg on incorporation.
-Homepage locked one month from CC-79. No iteration without a formal session decision.
+**Legend copy (locked CC-77/78):**
+- Homepage capability label: *Bitcoin explorer* · Descriptor: *Your search history is showing.*
+- Legend index headline: *Bitcoin, privately.*
+- Legend index opening: *Buys non-KYC Bitcoin, then logs every address ever searched...*
 
----
+*Note: "are you leaving address queries on file?" — queued for review in a future Legend Project session. Do not change until that session resolves it.*
 
-## Legend — copy locked CC-78
+**Never-say list (all copy):**
+"military-grade" · "zero-knowledge" as headline · "Swiss-grade privacy" · "anonymous payments" · "audit-certified" / "security-audited" (blocked until B11) · "end-to-end file integrity" · "C2C" / "c2c" · "PIR" without the qualifier "inspired" (v1 is collusion-resistant query splitting, not true PIR) · "secure" for a degraded mode (say "reduced") · "no logs" without the structural qualifier
 
-**Homepage capability block (locked):**
-- Label: *Bitcoin explorer*
-- Descriptor: *Your search history is showing.*
-
-**Legend index page (locked):**
-- Headline: *Bitcoin, privately.* (locked CC-77)
-- Opening line: *Buys non-KYC Bitcoin, then logs every address ever searched...*
-
-**Discarded candidates (do not resurrect):**
-- "Your queries don't leave a record." — too explanatory
-- "Check your addresses. We won't remember that you did." — too long
-- "Look up what you need. Nothing is logged." — too plain
-- "The privacy gap you didn't know you had." — too vague
-- "We can't see what you're watching. Neither can anyone else." — mid-page feature claim only, never opener
+**North star (internal only — never render):** *"Come for privacy, stay for Bitcoin."*
 
 ---
 
-## Notes — article seeds (logged CC-78)
+## Upcoming product — Refueler Pass (working name)
 
-Add to `notes-articles-list.md` in `refueler-share/` at next Share session.
-
-**Article: The browsing history problem**
-*Audience:* lawyers, family offices, journalists, compliance professionals.
-*Opening line candidate:* "Every address you look up on a public block explorer goes into a log you've never seen and cannot delete."
-
-**Article: Family offices, UK merchants, and the Bitcoin address problem**
-*Audience:* family offices (UK and US), UK merchants now holding BTC on the books, compliance professionals.
-*Opening line candidate:* "Your accountant doesn't send your bank statements to a third party every time they check your balance. Your Bitcoin explorer does."
-
-**Article: The Coldcard entropy bug — what to do and how to check privately**
-*Audience:* Coldcard MK3 users, hardware wallet holders, security-conscious Bitcoiners.
-*Note:* Time-sensitive. Publish close to bug disclosure. If Legend not live, reference architecture and link to waitlist.
+Anonymous, fraud-resistant ticketing using Cashu NUT primitives. No repo yet. Sequencing: Pass becomes Block 3 (ahead of merchant app and POS going live), sits in main nav at position 3.
 
 ---
 
-## Competitive positioning — locked findings
+## Competitive positioning — locked
 
 **Anonymity spectrum:** WeTransfer/Smash/SwissTransfer → Tresorit/Proton Drive → Wormhole → **Refueler Share** → OnionShare.
 
@@ -304,101 +435,90 @@ Add to `notes-articles-list.md` in `refueler-share/` at next Share session.
 - vs SwissTransfer: "Jurisdiction is not architecture."
 - vs Proton Drive: "No account to correlate. The payment itself is blinded."
 - vs OnionShare: "Close your laptop. The transfer survives."
-- vs synchronous P2P: "The transfer survives your client being on a plane."
 - vs Mempool/Blockstream: "We can't see what you're watching. Neither can anyone else."
-
-**B9 whitepaper framing:** "The server is blind and so is the till."
-
----
-
-## Current build status
-
-**`refueler-share`:** B6 complete (S72a). B7 opens imminently. 212 tests passing across 8 suites.
-Confirmed Eleventy (`@11ty/eleventy ^3.0.0`). Migrated to `refueler.io/share/` in M-2.
-Cloudflare: `refueler-share` Pages project still serving `share.refueler.io` — retire after M-3. Worker (`refueler-share.rt-fc4.workers.dev`, version `af37c80b`) CORS updated to accept `https://refueler.io`.
-Known issue: `ReferenceError: share is not defined` on upgrade page — pre-existing, carry through to M-3.
-Outstanding M-3: Stripe return URLs in Worker (lines 1052, 1053, 1117 of `worker/src/index.js`) still point to `share.refueler.io/upgrade`. Fix in M-3.
-
-**`refueler-io`:** `/notes/` live. Article 1 published. Articles 2–14 planned.
-Homepage redesigned CC-79. All four editorial articles migrated CC-79/80. Nav pages restored CC-80.
-Share live at `refueler.io/share/` — M-2 complete. M-3 verification next. CSS rationalisation track (CSS-1b, CSS-2 through CSS-6) follows M-3.
-
-**`refueler-legend` (Legend):** Shell live at `refueler.io/legend`. No query logic yet. Starts post-B9.
 
 ---
 
 ## Key rules that apply everywhere
 
-- Theme detection: `dataset.theme === 'carbon'` only. Never `classList.contains`.
-- `var(--accent)` fails on `<p>` tags — use `#C8A96E !important` for gold on `p` elements until CSS rationalisation complete.
-- All new homepage classes prefixed `home-` — CSS cascade defence.
-- Cookie `rs-theme` scoped to `.refueler.io` for cross-domain theme persistence.
-- No inline CSS/JS in Nunjucks templates — external files only.
-- `showSaveFilePicker()` must fire synchronously from a user gesture.
-- No localStorage for credentials — browser memory only.
-- Do not claim "audit-certified" or "security-audited" — blocked until B11 pentest published.
-- Do not claim "anonymous payment" — Proton accepts BTC/cash, claim is false.
-- Do not claim "end-to-end file integrity" — only server-side chunk integrity is verified today.
-- No external video platforms (YouTube, Vimeo) — R2 + Worker signed URL only.
-- Legend does not start before B9 Lightning node is live. No exceptions.
-- **`#F5820A` and `#D4690A` do not exist in this codebase.** Orange is abolished.
-- **Paper is `#E8E2D8`. Carbon is `#1A1A1A`.** All other background values are wrong.
-- **`--inset-rule` gold is article content only** — never chrome.
-- **No subdomains for new products** — `refueler.io/[product]/` always.
+- `var(--accent)` fails on `<p>` — use `#C8A96E !important` until CSS-6
+- Cookie `rs-theme` scoped to `.refueler.io` for cross-domain theme persistence
+- No inline CSS/JS in Nunjucks templates
+- `showSaveFilePicker()` must fire synchronously from a user gesture
+- No localStorage for credentials — browser memory only
+- Legend does not start before B9. No exceptions.
+- `#F5820A` and `#D4690A` do not exist in this codebase. Orange is abolished.
+- Paper is `#E8E2D8`. Carbon is `#1A1A1A`. All other background values are wrong.
+- `--inset-rule` gold is article body content only — never chrome.
+- No subdomains — `refueler.io/[product]/` always.
+- No external video platforms — R2 + Worker signed URL only.
+- Admin dashboard auth: `X-Admin-Key` header. Theme: `rs-theme` cookie, `dataset.theme`. Never `rfTheme`.
+- Sats display: always `toLocaleString()` (5,284 sats — never 5.2k).
+- Routing fee: gross sats | routing fee | net sats. Unknown: "fee: pending".
+- Fenchurch St line — never "C2C".
+
+---
+
+## Support and contact
+
+- `support@refueler.io` — user-facing support. Page: `refueler.io/support/`.
+- `privacy@refueler.io` — data protection only. Page: `refueler.io/privacy/`.
+
+---
+
+## Current build status
+
+**`refueler-share`:** Block M complete. `refueler.io/share/` live. 212 tests passing. Worker `7a0183e1`. Admin dashboard frontend migration to `refueler-io` pending (Block S-1). `/share/upgrade/` rename to `/share/plans/` pending next Share page session. Quote emails sent to five Legend node providers; replies expected 10–11 Aug 2026.
+
+**`refueler-io`:** Homepage locked (CC-79, one month). All four editorial articles migrated. `/notes/` live, Article 1 published. Share live at `refueler.io/share/`. CSS rationalisation track opens after Block S-1 (CSS-2 through CSS-7).
+
+**`refueler-legend`:** Shell live at `refueler.io/legend/`. No query logic. Five-node topology locked (Legend-7B). Provider quotes pending. Build starts post-B9.
 
 ---
 
 ## Cross-project actions — status
 
-### refueler-io — AP-7 ✅ Closed CC-72/CC-74
-### refueler-legend — cross-project sign-off ✅ Closed CC-74
-### refueler-share — CSS architecture ✅ Closed CC-75
-### refueler-io — homepage ✅ Closed CC-78
-### refueler-io — editorial articles ✅ Closed CC-80
-### refueler-share — Block M migration (M-1, M-2) ✅ M-1 + M-2 closed
-
-### refueler-share — Block M migration (M-3) 🟡 Next
-Verify `refueler.io/share/` end-to-end. Fix Stripe return URLs in Worker. Fix Plans active state. Retire `refueler-share` Pages project. See SESSIONS for M-3 opening prompt.
-
-### refueler-io — CSS rationalisation track 🟡 After M-3
-CSS-1b (nav architecture, Opus) → CSS-2 through CSS-6. See SESSIONS file for full sequence and opening prompts.
-
----
-
-## CC-74 — Global CSS migration completion · 4 Aug 2026
-
-*(History preserved — see previous BRIDGE versions for full detail.)*
-
-Key locked rules from CC-74 still in force:
-- Carbon background: `#1A1A1A`. Paper background: `#E8E2D8` *(updated CSS-1a)*.
-- No backdrop-filter / frosted glass on any surface.
-- No body theme scripts — `head.njk` is the single owner.
-- No inline `:root` blocks on any page.
-- Index.njk naming: section-prefixed when produced by Claude.
-
-CC-74 `--inset-rule: #C8A96E` Carbon global rule **superseded by CSS-1a.** See Design system above.
+| Action | Status |
+|---|---|
+| refueler-io — AP-7 | ✅ Closed CC-72/CC-74 |
+| refueler-legend — cross-project sign-off | ✅ Closed CC-74 |
+| refueler-share — CSS architecture | ✅ Closed CC-75 |
+| refueler-io — homepage | ✅ Closed CC-78 |
+| refueler-io — editorial articles | ✅ Closed CC-80 |
+| refueler-share — Block M (M-1 → M-3) | ✅ Closed — Share canonical at refueler.io/share/ |
+| refueler-io — CSS-1b nav architecture | ✅ Closed — this document |
+| **Block S-1 — admin dashboard migration** | 🟡 Next — before CSS-2 |
+| **refueler-io — CSS-2 through CSS-7** | 🟡 After Block S-1 |
+| **Block S-2 — Share product sub-nav strip** | 🟡 After CSS track |
+| **Block S-3+ — Paid account (multi-phase Opus planning)** | 🟡 Queued |
+| **Legend — provider quote replies** | 🟡 Expected 10–11 Aug 2026 |
+| **Legend — Enterprise multi-sig account spec** | 🟡 Dedicated planning session |
+| **Receiver-pays-to-extend UX** | 🟡 Dedicated planning session before build |
+| refueler-share — retire share.refueler.io Pages project | 🟡 Rajesh — Cloudflare dashboard |
+| Cloudflare Workers → Paid plan | 🟡 Before production volume |
+| New Anthropic API key | 🟡 Before csuite briefing reuse |
+| legend-enterprise-pricing.md break-even update | 🟡 Next Legend session touching that file |
 
 ---
 
-## AP-8 — Nav, theme, and support fixes · 4 Aug 2026
+## Session history — major milestones
 
-*(History preserved.)*
-
-Nav architecture from AP-8 is superseded by CSS-1b output (pending). The AP-8 nav decisions for the subdomain (`share.refueler.io`) are moot post Block M migration.
-
----
-
-## CC-75/76 — Share CSS complete · 4 Aug 2026
-
-*(History preserved.)*
-
-`share-tokens.css` single token source confirmed. Post Block M, `share-tokens.css` merges into `global.css` and Share pages load via the shared `head.njk`. Currently staging as `src/share/assets/share-tokens.css` in `refueler-io`.
-
----
-
-## M-2 — Share migration execution · 8 Aug 2026
-
-`refueler.io/share/` live. Commits `213798d`, `8abf0c5`, `e577379`. Worker redeployed `af37c80b`. Turnstile `refueler.io` hostname added. Share nav/footer as `src/_includes/share-nav.njk` and `src/_includes/share-footer.njk`. Main site nav updated with Share link.
+| Session | Key outcome |
+|---|---|
+| CC-74 | Global CSS migration. Token lock. Orange abolished. |
+| CC-75/76 | Share CSS complete. `share-tokens.css` locked. |
+| CC-77 | Legend copy locked. North star locked. |
+| CC-78 | Homepage and Legend index copy locked. |
+| CC-79 | Homepage redesign live. Cormorant Garamond. `home-` prefix. |
+| CC-80 | Nav fix. Editorial `:root` strip. All four articles migrated. |
+| Legend-5 | `MASTER.md` v1.0. CryptoRoadmap block scoped. |
+| Legend-6 | `legend-incident-protocol.md` v1.0. Licence corrected MIT. |
+| Legend-7 | `legend-node-plan.md` v1.1. Five-node topology. FROST 3-of-4. |
+| Legend-7B | Five provider quotes dispatched. Node topology finalised. Cost ~€673/month. |
+| CSS-1 | `REFUELER-WEBSITE-DESIGN-REFERENCE.md` produced. |
+| CSS-1a | Paper updated to `#E8E2D8`. Orange abolished. `--inset-rule` gold scope narrowed. |
+| M-1/M-2/M-3 | Share migrated to `refueler.io/share/`. Block M closed. |
+| CSS-1b | Nav architecture locked. Repo boundary rule. Paid account architecture. BRIDGE v2.6. |
 
 ---
 
