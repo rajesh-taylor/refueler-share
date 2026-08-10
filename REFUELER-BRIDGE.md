@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 2.8 | **Created:** 28 July 2026 | **Updated:** CSS-7 · 10 Aug 2026
+> **Version:** 2.9 | **Created:** 28 July 2026 | **Updated:** CC-81 · 10 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each.
 > Updated at every block close. Attach to any Claude Project to establish shared context.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
@@ -470,7 +470,7 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. No repo yet. Se
 
 **`refueler-share`:** Block M complete. `refueler.io/share/` live. 212 tests passing. Worker `7a0183e1`. Admin dashboard frontend migration to `refueler-io` pending (AD-1). `/share/upgrade/` → `/share/plans/` rename fixed in CSS-7 (cap-warning nudge href). Quote emails sent to five Legend node providers; replies expected 10–11 Aug 2026.
 
-**`refueler-io`:** Homepage locked (CC-79, one month). All four editorial articles migrated. `/notes/` live, Article 1 published. Share live at `refueler.io/share/`. **CSS rationalisation track complete (CSS-2 through CSS-7).** All page CSS files clean — no `:root` blocks. `global.css` single token source. Share upload/download design resolved. Next: CC-81 Block 3 franchise dashboard.
+**`refueler-io`:** Homepage locked (CC-79, one month). All four editorial articles migrated. `/notes/` live, Article 1 published. Share live at `refueler.io/share/`. **CSS rationalisation track complete (CSS-2 through CSS-7).** All page CSS files clean — no `:root` blocks. `global.css` single token source. Share upload/download design resolved. **Block 3 complete (CC-81).** All operator tools moved from repo root into `src/[slug]/index.html` — served via Eleventy at `/franchise/`, `/merchant/`, `/command-centre/`, `/dev/`, `/investor/`. Franchise dashboard: RPC data layer (`franchise_dashboard_summary` SECURITY DEFINER), update policy + column-guard trigger, cross-browser magic link auth fixed. Next: CC-82 Block 5 merchant onboarding.
 
 **`refueler-legend`:** Shell live at `refueler.io/legend/`. No query logic. Five-node topology locked (Legend-7B). Provider quotes pending. Build starts post-B9.
 
@@ -487,6 +487,7 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. No repo yet. Se
 | refueler-io — editorial articles | ✅ Closed CC-80 |
 | refueler-share — Block M (M-1 → M-3) | ✅ Closed — Share canonical at refueler.io/share/ |
 | refueler-io — CSS-1b nav architecture | ✅ Closed — this document |
+| **refueler-io — Block 3 franchise dashboard** | ✅ Closed CC-81 |
 | **AD-1 — admin dashboard migration** | 🟡 Queued — `refueler-share/frontend/admin/` → `refueler-io/src/share/admin/` |
 | ~~refueler-io — CSS-2 through CSS-7~~ | ✅ Closed — CSS track complete |
 | **SN-1/SN-2 — Share sub-nav strip** | 🟡 After CSS track |
@@ -524,6 +525,7 @@ Anonymous, fraud-resistant ticketing using Cashu NUT primitives. No repo yet. Se
 | CSS-5 | Full-site verification. Legend layout removal (credential dot, below-fold block). BRIDGE v2.7. |
 | CSS-6 | All page CSS `:root` blocks stripped. `analytics.js` rfTheme fixed. Legend tagline updated. |
 | CSS-7 | Share upload complete hierarchy, receiver trust line, colophon border fixed, download progress detail. CSS track complete. BRIDGE v2.8. |
+| CC-81 | Block 3 closed. Franchise dashboard RPC data layer. Operator tools into `src/`. Cross-browser auth fix. BRIDGE v2.9. |
 
 ---
 
