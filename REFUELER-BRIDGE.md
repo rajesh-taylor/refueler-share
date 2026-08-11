@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.1 | **Created:** 28 July 2026 | **Updated:** Block-5 Review · 11 Aug 2026
+> **Version:** 3.2 | **Created:** 28 July 2026 | **Updated:** Merchant-Sats-A · 11 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -10,7 +10,7 @@
 
 Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (solo founder, London). Operating within UK jurisdictional law. Not a fintech product. Not a loyalty app.
 
-**Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant POS (Fenchurch St line cafés and restaurants) · Refueler Pass (Lightning-native ticketing and venue access, early-stage research)
+**Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant POS + Numo terminal (Fenchurch St line cafés and restaurants) · Refueler Pass (Lightning-native ticketing and venue access — own repo + Claude project) · Consumer app (React Native, Blink Lightning)
 
 **North star (internal only):** *Come for privacy, stay for Bitcoin.*
 
@@ -39,6 +39,12 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 | `legend.css` (layout only) | `MASTER.md`, `legend-node-plan.md`, `legend-economics.md`, `legend-incident-protocol.md` |
 | Legend wordmark + theme pill wiring | `legend-scope.md`, `legend-design-spec.md`, `legend-ux-language.md`, `legend-enterprise-pricing.md` |
 | Articles 14/15/16 when published | PIR sharding layer, Tor API, Silent Payments scanner code, CryptoRoadmap files |
+
+### Pass boundary
+| `refueler-io` | `refueler-pass` |
+|---|---|
+| Pass shell at `refueler.io/pass/` (when live) | All Pass product logic, ticketing backend, credential engine |
+| Pass nav integration | Pass-A/B planning docs, Pass MASTER.md |
 
 **Cross-repo session log rule:** Any session touching both repos gets one cross-reference line in each log.
 
@@ -86,6 +92,57 @@ Encrypted transfers → `/share/` · Bitcoin explorer → `/legend/` · Lightnin
 
 ---
 
+## Merchant payment architecture — locked Merchant-Sats-A · 2026-08-11
+
+### Core principle (ADR-MS-1)
+Refueler is an orchestrator and attribution layer, never a custodian or intermediary. Consumer sats settle directly to the merchant's own wallet. Consumer fiat is processed by a licensed third party (Stripe for card; merchant's own acquirer for Numo walk-in). Blink float holds only Refueler's own received revenue — never consumer funds in transit. Model A permanently excluded.
+
+### Commission (ADR-MS-2)
+App-attributed orders only. Real-time fiat off-session Stripe charge (stored PaymentMethod + off-session PaymentIntent) on Lightning settlement confirmation. Rate recorded in `orders.sats_rate` at payment time. No Stripe Connect.
+
+### Loyalty stamps (ADR-MS-3)
+Closed-loop, non-monetary Cashu ecash tokens. Buy 9 get 10th free. Cannot convert to sats or fiat. No FCA grey area.
+
+### Numo (ADR-MS-4)
+Standard merchant hardware recommendation. Scenario A (app present): attribution + commission + reward. Scenario B (no app): merchant's own Lightning address / Silent Payments, configured in owner-only terminal view. No Refueler involvement. Scenario B anticipated to become dominant as Bitcoin adoption grows.
+
+### The seven payment flows (ADR-MS-5)
+1. App pre-order, Lightning — consumer → merchant wallet, commission charged real-time
+2. App pre-order, fiat (Block 8) — Stripe processes, commission charged, stamp reward from closed-loop pool
+3. App walk-in, fiat — app attribution present, commission on staff confirmation (trigger TBC Merchant-Sats-B)
+4. App walk-in, Lightning — app attribution present, merchant's own wallet, commission trigger TBC Merchant-Sats-B
+5. Numo walk-in, no app, fiat — merchant's own acquirer, Refueler invisible
+6. Numo walk-in, no app, Lightning — merchant's own wallet direct, Refueler invisible
+7. Legend merchant add-on — £250/mo SaaS, no payment flow, price held firm
+
+### Node three-way lock (ADR-MS-6)
+1. Legend indexer (post-B9) — chain indexing only, no payments
+2. Merchant settlement (optional, long-term) — merchant's own money, merchant's own node
+3. Refueler treasury sweep — own operating capital, Blink → Silent Payment → cold storage
+
+Forbidden fourth (Refueler node between consumer and merchant) = Model A. Permanently excluded. Stage 3 sim node = Legend node — same box.
+
+### Pass initial scope (ADR-MS-7)
+Own repo (`rajesh-taylor/refueler-pass`) and Claude project. QR/NFC credential (Refueler app or Apple/Google Wallet). Conditional entitlement post-scan (e.g. free drink unlocks after door security). Fountain/LNURL streaming opt-in in-app. Inherits ADR-MS-1. Full scope in Pass-A/B sessions.
+
+### BOLT12 (ADR-MS-8)
+Roadmap only. Not beta or Block 9. Numo as client to merchant node, not as node itself.
+
+### Flywheel (ADR-MS-9)
+```
+Desktop:  Share ──────────────────────────────────► Legend
+          Pass  ──────────────────────────────────► Legend
+Mobile:   App + Pass ───────────────────────────────► Legend
+In-venue: Numo ──► Merchant dashboard ──────────────► Legend
+                                         "Come for privacy,
+                                          stay for Bitcoin"
+```
+
+### Legal caveat (ADR-MS-10 — permanently logged)
+Four points for UK payments solicitor sign-off before real-merchant go-live: (i) Lightning invoice generation as payment initiation (assessed: low risk — Lightning wallets not PSR-regulated accounts); (ii) commission-on-attribution as platform fee not merchant acquiring; (iii) Numo fiat via merchant's own acquirer excludes Refueler from PSR scope; (iv) Cashu stamp non-monetary closed-loop classification under UK e-money regs. Brief lawyer to confirm architecture, not assess open risk.
+
+---
+
 ## Simulation discipline — locked Block-5 Review
 
 No real merchant clients until all four sim stages pass Sim-Close review.
@@ -93,7 +150,7 @@ No real merchant clients until all four sim stages pass Sim-Close review.
 | Stage | Scope | Gate |
 |---|---|---|
 | 1 | Tablet fully wired: order state machine, order correction flow, refund handling, DB + financial screen repercussions | Can staff run a full shift without Rajesh touching the DB? |
-| 2 | Franchise screen wired alongside; independent→franchise migration tested (Raj's Steakhouse expansion scenario) | Does franchise view reconcile with tablet? Does migration path work? |
+| 2 | Franchise screen wired alongside; independent→franchise migration tested | Does franchise view reconcile with tablet? Does migration path work? |
 | 3 | Self-custodial Lightning node replaces Blink custodial for consumer payment settlement | B9-gated — deferred |
 | 4 | Printed handover document physically in hand; full onboard sim using doc + email only | Can a manager onboard and run tablet with no verbal guidance? |
 
@@ -169,7 +226,7 @@ US nodes rejected (CLOUD Act). Cost ~€673/month (~£566 ex-VAT). Storage: 2×1
 ### Business model
 - **Free:** unlimited, no account, funded by Enterprise cross-subsidy
 - **Enterprise:** £1,500/mo (v1) → £2,500/mo (v2: Tor, Double Ratchet, ML-KEM-768) → £3,500/mo (v2+: dedicated node isolation). Invite-only at v1, capped 5 clients.
-- **Merchant add-on:** £250/mo per entity (existing POS base only)
+- **Merchant add-on:** £250/mo per entity (existing POS base only). Price held — free tier as goodwill but never discounted from list.
 - **Estate reports:** £50 block-height balance (v2) · £150 full verified (v3)
 
 *Note: `legend-enterprise-pricing.md` break-even uses old €450/mo base — update floor to ~£566/mo at next Legend session.*
@@ -250,6 +307,7 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 - **`/notes/`** — SEO-targeted technical content for professional buyers. First sentence is the most interesting thing. Dry wit. Byline: Rajesh Taylor. Source Serif 4 body, IBM Plex Mono for data.
 - **`/legend/`** — Product surface. Post-B9.
 - **`/share/`** — Product surface. Live.
+- **`/pass/`** — Product surface. Post Pass-A/B planning.
 
 ---
 
@@ -261,11 +319,13 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 
 ## Current build status
 
-**`refueler-share`:** Block M complete. `refueler.io/share/` live. Admin dashboard live at `refueler.io/share/admin/dashboard` (AD-1 ✅). Panel wiring and card drill-downs pending (AD-2). Legend node provider quotes pending.
+**`refueler-share`:** Block M complete. `refueler.io/share/` live. Admin dashboard live (AD-1 ✅). Panel wiring and card drill-downs pending (AD-2).
 
-**`refueler-io`:** Homepage locked (one month from CC-79). All four editorial articles migrated. CSS rationalisation track complete. Block 3 (franchise dashboard) complete CC-81. **Block 5 in progress:** test merchant E2E confirmed CC-82. Snag fixes and nav redesign in CC-83. Simulation discipline locked — four stages defined, Sim-Close gating real merchant go-live.
+**`refueler-io`:** Homepage locked (one month from CC-79). CSS rationalisation track complete. Block 3 complete CC-81. **Block 5 in progress:** test merchant E2E confirmed CC-82. CC-83 next (snag fixes + nav redesign). Payment architecture locked Merchant-Sats-A. Merchant-Sats-B queued.
 
 **`refueler-legend`:** Shell live at `refueler.io/legend/`. No query logic. Five-node topology locked (Legend-7B). Provider quotes pending. Build starts post-B9.
+
+**`refueler-pass`:** Own repo and Claude project. Initial scope locked ADR-MS-7. Pass-A/B sessions after Block 8.
 
 ---
 
@@ -274,18 +334,21 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 | Action | Status |
 |---|---|
 | **Refueler IP honesty standard** | ✅ Locked — Adversarial-1 · 11 Aug 2026 |
+| **Merchant payment architecture** | ✅ Locked — Merchant-Sats-A · 11 Aug 2026 |
 | refueler-io — CSS track (CSS-2 → CSS-7b) | ✅ Complete |
 | refueler-share — Block M | ✅ Complete |
 | refueler-io — Block 3 franchise dashboard | ✅ CC-81 |
-| **AD-1 — Share admin dashboard migration** | ✅ Complete — live at `refueler.io/share/admin/dashboard` |
-| **AD-2 — Share admin dashboard panel wiring + card drill-downs** | 🟡 Queued — dedicated counted session |
+| **AD-1 — Share admin dashboard migration** | ✅ Complete |
+| **AD-2 — Share admin dashboard panel wiring + card drill-downs** | 🟡 Queued |
 | **refueler-io — Block 5 merchant onboarding** | 🔵 In progress — CC-83/84/85 |
-| **Simulation discipline** | ✅ Locked — 4 stages defined, Sim-Close gates real go-live |
-| **Onboarding-A — flow design + printed handover doc** | 🟡 Queued Opus uncounted (after CC-83) |
+| **Merchant-Sats-B — rewards backend design** | 🟡 Queued — after CC-83 files placed |
+| **Simulation discipline** | ✅ Locked — 4 stages, Sim-Close gates go-live |
+| **Onboarding-A — flow design + printed handover doc** | 🟡 Queued |
 | **Magic link email branding (S-9)** | 🟡 CC-85 |
 | **Sim-Close — formal sign-off all 4 stages** | 🟡 Up to 2 Opus uncounted sessions |
 | **Block 8 — Fiat→sats rewards** | 🟡 Promoted — next after Block 5 |
-| **Pass-A/B planning** | 🟡 After Block 8 |
+| **Pass-A/B planning** | 🟡 After Block 8. Own repo + Claude project. |
+| **Lawyer briefing prep** | 🟡 Short Opus session before appointment |
 | **SN-1/SN-2 — Share sub-nav strip** | 🟡 Post CSS track |
 | **PA-series — Paid account planning** | 🟡 Queued |
 | **Legend — provider quote replies** | 🟡 Expected |
@@ -295,6 +358,7 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 | refueler-share — retire share.refueler.io Pages project | 🟡 Rajesh — Cloudflare dashboard |
 | Cloudflare Workers → Paid plan | 🟡 Before production volume |
 | New Anthropic API key | 🟡 Before csuite briefing reuse |
+| Block 9 | ⚪ Deferred post Block 8 |
 
 ---
 
@@ -309,7 +373,9 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 | CSS-7/7b | Share design complete. Nav reordered. CSS track complete. |
 | CC-81 | Block 3 closed. Franchise dashboard RPC. Operator tools into `src/`. |
 | CC-82 | Block 5 partial. Test merchant E2E confirmed. PIN gate fix. Nav auth fix. |
-| Block-5 Review | Sim discipline locked. 4 stages defined. AD-1 complete. AD-2 added. Block 8 promoted. S-13 deleted. 550 allocation confirmed. BRIDGE v3.1. |
+| Block-5 Review | Sim discipline locked. 4 stages defined. AD-1 complete. AD-2 added. Block 8 promoted. S-13 deleted. 550 allocation confirmed. |
+| Adversarial-1 | IP honesty standard locked across all products. |
+| **Merchant-Sats-A** | **Payment architecture locked. ADR-MS-1–10. Seven flows. Pass initial scope. Flywheel confirmed. Legal caveat logged. BRIDGE v3.2.** |
 
 ---
 
