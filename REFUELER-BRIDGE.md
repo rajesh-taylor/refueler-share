@@ -98,6 +98,32 @@ Mullvad-style: 24-word BIP39 mnemonic, client-side only, never transmitted. Serv
 
 **Cashu NUTs in scope:** NUT-00 blind auth · NUT-11 P2PK · NUT-13+09 deterministic restore · NUT-07 state check · NUT-14 HTLC (receiver-pays candidate). NUT-29 parked.
 
+## Refueler IP honesty standard — locked platform principle
+
+Every Refueler product, current and future, inherits this baseline without exception.
+
+- **No product claims anonymity where IP is visible.** Free-tier standard HTTPS exposes
+  the client IP to the server. This is documented honestly on every product surface where
+  it is true. "Anonymous" is never used where "pseudonymous" or "IP-visible" is the reality.
+- **All products recommend Tor Browser for high-sensitivity use** where relevant to the
+  product context. This recommendation appears in-product (not only in documentation).
+  A privacy product that buries the Tor recommendation in a FAQ is not being honest.
+- **All products plan OHTTP (RFC 9458) or equivalent as the v2 structural fix** for free-tier
+  IP exposure where technically feasible. OHTTP gives users IP privacy without requiring
+  them to install anything — the oblivious relay sees IP-not-content, the server sees
+  content-not-IP. This is the correct architectural answer, not a UX workaround.
+- **No product retrofits honesty.** This standard applies at design time, before architecture
+  is locked. Competitors whose products were not designed with IP honesty in mind cannot
+  add it without admitting what they previously obscured. This is a durable competitive
+  advantage — it compounds with every product Refueler ships.
+
+Applies to: Share (live) · Legend (in build) · Pass (in planning) · Merchant terminal ·
+Ticketing · all future products.
+
+*Established: Adversarial-1 · 11 Aug 2026. Informed by `legend-threat-model.md` findings
+on free-tier IP exposure. Same root problem identified in Share — no file transfer product
+currently tells its users to use Tor. Refueler does.*
+
 ---
 
 ## What Refueler Share is
@@ -258,6 +284,7 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 
 | Action | Status |
 |---|---|
+| **Refueler IP honesty standard** | ✅ Locked platform principle — Adversarial-1 · 11 Aug 2026 |
 | refueler-io — CSS track (CSS-2 → CSS-7b) | ✅ Complete |
 | refueler-share — Block M | ✅ Complete |
 | refueler-io — Block 3 franchise dashboard | ✅ CC-81 |
