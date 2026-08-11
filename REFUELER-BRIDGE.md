@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.0 | **Created:** 28 July 2026 | **Updated:** CC-82 · 10 Aug 2026
+> **Version:** 3.1 | **Created:** 28 July 2026 | **Updated:** Block-5 Review · 11 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -10,7 +10,7 @@
 
 Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (solo founder, London). Operating within UK jurisdictional law. Not a fintech product. Not a loyalty app.
 
-**Products:** Share (anonymous encrypted file transfer, live) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant POS (Fenchurch St line cafés and restaurants) · Refueler Pass (ticketing, in planning)
+**Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant POS (Fenchurch St line cafés and restaurants) · Refueler Pass (Lightning-native ticketing and venue access, early-stage research)
 
 **North star (internal only):** *Come for privacy, stay for Bitcoin.*
 
@@ -29,7 +29,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 |---|---|
 | All Nunjucks templates at `refueler.io/share/*` | Cloudflare Worker (`worker/src/index.js`), `wrangler.toml` |
 | `share-nav.njk`, `share-footer.njk`, `share.js`, `blake3/` | BLAKE3 source + build tooling |
-| Admin dashboard pages `src/share/admin/` (pending AD-1) | Admin Worker endpoints, `Share-Master-Context.md`, `share-sessions.md` |
+| Admin dashboard pages `src/share/admin/` | Admin Worker endpoints, `Share-Master-Context.md`, `share-sessions.md` |
 | Notes articles at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning, load on demand) |
 
 ### Legend boundary
@@ -70,7 +70,7 @@ Encrypted transfers → `/share/` · Bitcoin explorer → `/legend/` · Lightnin
 
 ---
 
-## Merchant terminal — locked decisions (CC-82)
+## Merchant terminal — locked decisions
 
 **Auth flow:** Magic link → `/command-centre/` → role resolved via `merchant_users.user_id` (email lookup deprecated CC-82) → redirect to role destination.
 
@@ -82,7 +82,22 @@ Encrypted transfers → `/share/` · Bitcoin explorer → `/legend/` · Lightnin
 
 **Mapbox:** Franchise dashboard venue map only. Not rendered on single-venue merchant tablet.
 
-**Test account:** `steakhouse@rajeshtaylor.com` · Raj's Steakhouse · 10 Trinity Square EC3N 4AJ · independent_owner · staff PIN 1234 · owner PIN 8888 · venue_id `c476df85`
+**Test/sim account:** `steakhouse@rajeshtaylor.com` · Raj's Steakhouse · 10 Trinity Square EC3N 4AJ · independent_owner · staff PIN 1234 · owner PIN 8888 · venue_id `c476df85` · **primary simulation entity**
+
+---
+
+## Simulation discipline — locked Block-5 Review
+
+No real merchant clients until all four sim stages pass Sim-Close review.
+
+| Stage | Scope | Gate |
+|---|---|---|
+| 1 | Tablet fully wired: order state machine, order correction flow, refund handling, DB + financial screen repercussions | Can staff run a full shift without Rajesh touching the DB? |
+| 2 | Franchise screen wired alongside; independent→franchise migration tested (Raj's Steakhouse expansion scenario) | Does franchise view reconcile with tablet? Does migration path work? |
+| 3 | Self-custodial Lightning node replaces Blink custodial for consumer payment settlement | B9-gated — deferred |
+| 4 | Printed handover document physically in hand; full onboard sim using doc + email only | Can a manager onboard and run tablet with no verbal guidance? |
+
+**Sim-Close:** Up to two Opus uncounted sessions. Formally sign off all stages. Real merchant go-live decision made here.
 
 ---
 
@@ -98,31 +113,18 @@ Mullvad-style: 24-word BIP39 mnemonic, client-side only, never transmitted. Serv
 
 **Cashu NUTs in scope:** NUT-00 blind auth · NUT-11 P2PK · NUT-13+09 deterministic restore · NUT-07 state check · NUT-14 HTLC (receiver-pays candidate). NUT-29 parked.
 
+---
+
 ## Refueler IP honesty standard — locked platform principle
 
 Every Refueler product, current and future, inherits this baseline without exception.
 
-- **No product claims anonymity where IP is visible.** Free-tier standard HTTPS exposes
-  the client IP to the server. This is documented honestly on every product surface where
-  it is true. "Anonymous" is never used where "pseudonymous" or "IP-visible" is the reality.
-- **All products recommend Tor Browser for high-sensitivity use** where relevant to the
-  product context. This recommendation appears in-product (not only in documentation).
-  A privacy product that buries the Tor recommendation in a FAQ is not being honest.
-- **All products plan OHTTP (RFC 9458) or equivalent as the v2 structural fix** for free-tier
-  IP exposure where technically feasible. OHTTP gives users IP privacy without requiring
-  them to install anything — the oblivious relay sees IP-not-content, the server sees
-  content-not-IP. This is the correct architectural answer, not a UX workaround.
-- **No product retrofits honesty.** This standard applies at design time, before architecture
-  is locked. Competitors whose products were not designed with IP honesty in mind cannot
-  add it without admitting what they previously obscured. This is a durable competitive
-  advantage — it compounds with every product Refueler ships.
+- **No product claims anonymity where IP is visible.** Free-tier standard HTTPS exposes the client IP to the server. Documented honestly on every product surface where true.
+- **All products recommend Tor Browser for high-sensitivity use** where relevant. This recommendation appears in-product, not only in documentation.
+- **All products plan OHTTP (RFC 9458) or equivalent as the v2 structural fix** for free-tier IP exposure where technically feasible.
+- **No product retrofits honesty.** This standard applies at design time, before architecture is locked.
 
-Applies to: Share (live) · Legend (in build) · Pass (in planning) · Merchant terminal ·
-Ticketing · all future products.
-
-*Established: Adversarial-1 · 11 Aug 2026. Informed by `legend-threat-model.md` findings
-on free-tier IP exposure. Same root problem identified in Share — no file transfer product
-currently tells its users to use Tor. Refueler does.*
+*Established: Adversarial-1 · 11 Aug 2026.*
 
 ---
 
@@ -130,13 +132,13 @@ currently tells its users to use Tor. Refueler does.*
 
 Anonymous encrypted peer-to-peer file transfer. AES-GCM client-side, key in URL fragment, never transmitted. BLAKE3 chunk integrity server-side. Cashu NUT-00 blind signature access gate.
 
+**Admin dashboard:** Live at `refueler.io/share/admin/dashboard`. Subdomain migration complete (AD-1 ✅). Left-hand panel wiring and card drill-downs are separate build work — tracked as AD-2.
+
 **Positioning:** "Professional-grade anonymity where only one side needs to be sophisticated."
 **Two-axis lock (AP-7):** Recipient problem (survives sender closing laptop) + Compulsion problem (nothing to hand over).
 **Free tier:** 4 GB, 7-day expiry. Paid: Stripe (identified) or Lightning (pseudonymous).
-**Honest scope:** Not zero-knowledge on metadata (sizes/timestamps visible to operator — in `honest_metadata.json`). Lightning pseudonymous not anonymous. No audit yet (target B9 design review → B11 pentest, findings published).
+**Honest scope:** Not zero-knowledge on metadata. Lightning pseudonymous not anonymous. No audit yet (target B9 design review → B11 pentest, findings published).
 **Known limitation:** Safari ~1.5 GB+ constraint — chunked streaming encryption in B-series roadmap.
-
-**Admin dashboard (AD-1 pending):** `refueler-share/frontend/admin/` → migrate to `refueler-io/src/share/admin/`. Fix theme cookie (`rfTheme` → `rs-theme`/`dataset.theme`).
 
 ---
 
@@ -162,28 +164,15 @@ US nodes rejected (CLOUD Act). Cost ~€673/month (~£566 ex-VAT). Storage: 2×1
 
 **Go-live conditions:** (a) B9 live; (b) five provider quotes confirmed; (c) UK legal sorted; (d) Legend prototype live at `refueler.io/legend/` for Enterprise demo.
 
-No gateway node ever. Browser talks to nodes directly. Bitcoin Knots on all nodes. BIP110 policy, RBF disabled.
-
-### Query architecture
-Ephemeral sessions. PIR-inspired sharding — no single node sees complete query. Tor-native API (Enterprise). Silent Payments (BIP-352) native — first explorer. v1 claim: collusion-resistant query splitting with blind credential unlinkability. Not true PIR, not ZK — use precise language.
-
-### Credentials
-Free tier: unlimited queries, no account, no rate limit, no friction. Funded by Enterprise cross-subsidy. Enterprise: NUT-11 P2PK-bound, PIR-sharded, Tor-native. No token-gating on free tier.
-
-Blind receipt per query — compliance-facing for family offices.
+**Note:** The Legend/B9 node also serves as the Stage 3 sim node for self-custodial consumer Lightning settlement. One node, two purposes.
 
 ### Business model
-- **Free:** unlimited, no account, funded by Enterprise
+- **Free:** unlimited, no account, funded by Enterprise cross-subsidy
 - **Enterprise:** £1,500/mo (v1) → £2,500/mo (v2: Tor, Double Ratchet, ML-KEM-768) → £3,500/mo (v2+: dedicated node isolation). Invite-only at v1, capped 5 clients.
 - **Merchant add-on:** £250/mo per entity (existing POS base only)
 - **Estate reports:** £50 block-height balance (v2) · £150 full verified (v3)
 
 *Note: `legend-enterprise-pricing.md` break-even uses old €450/mo base — update floor to ~£566/mo at next Legend session.*
-
-### Legend detail files (in `refueler-legend/`)
-`MASTER.md` · `legend-node-plan.md` · `legend-economics.md` · `legend-incident-protocol.md` v1.1 · `legend-scope.md` · `legend-design-spec.md` · `legend-ux-language.md` · `legend-enterprise-pricing.md`
-
-**CryptoRoadmap:** 6 sessions (3 Opus + 3 Sonnet). Target January 2027. After Phase 1 working explorer. Before any v2 PIR/ZK build.
 
 ---
 
@@ -258,7 +247,7 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 ## Content architecture
 
 - **`/editorial/`** — Investor/partner long-form. Curated, slow, considered.
-- **`/notes/`** — SEO-targeted technical content for professional buyers. First sentence is the most interesting thing. Dry wit. Byline: Rajesh Taylor. Source Serif 4 body, IBM Plex Mono for data. Never: military-grade, C2C, anonymous payments, audit-certified.
+- **`/notes/`** — SEO-targeted technical content for professional buyers. First sentence is the most interesting thing. Dry wit. Byline: Rajesh Taylor. Source Serif 4 body, IBM Plex Mono for data.
 - **`/legend/`** — Product surface. Post-B9.
 - **`/share/`** — Product surface. Live.
 
@@ -272,9 +261,9 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 
 ## Current build status
 
-**`refueler-share`:** Block M complete. `refueler.io/share/` live. 212 tests passing. Worker `7a0183e1`. Admin dashboard migration (AD-1) pending. Legend node provider quotes pending (expected 10–11 Aug 2026).
+**`refueler-share`:** Block M complete. `refueler.io/share/` live. Admin dashboard live at `refueler.io/share/admin/dashboard` (AD-1 ✅). Panel wiring and card drill-downs pending (AD-2). Legend node provider quotes pending.
 
-**`refueler-io`:** Homepage locked (one month from CC-79). All four editorial articles migrated. CSS rationalisation track complete (CSS-2 → CSS-7b). All page CSS clean. Block 3 (franchise dashboard) complete CC-81. **Block 5 in progress (CC-82):** test merchant E2E confirmed — Raj's Steakhouse, steakhouse@rajeshtaylor.com, independent_owner, PINs set, Darwin live, all views working. Snag list S-1 to S-9 active. Next: Block-5 Review (Opus) then CC-83.
+**`refueler-io`:** Homepage locked (one month from CC-79). All four editorial articles migrated. CSS rationalisation track complete. Block 3 (franchise dashboard) complete CC-81. **Block 5 in progress:** test merchant E2E confirmed CC-82. Snag fixes and nav redesign in CC-83. Simulation discipline locked — four stages defined, Sim-Close gating real merchant go-live.
 
 **`refueler-legend`:** Shell live at `refueler.io/legend/`. No query logic. Five-node topology locked (Legend-7B). Provider quotes pending. Build starts post-B9.
 
@@ -284,17 +273,22 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 
 | Action | Status |
 |---|---|
-| **Refueler IP honesty standard** | ✅ Locked platform principle — Adversarial-1 · 11 Aug 2026 |
+| **Refueler IP honesty standard** | ✅ Locked — Adversarial-1 · 11 Aug 2026 |
 | refueler-io — CSS track (CSS-2 → CSS-7b) | ✅ Complete |
 | refueler-share — Block M | ✅ Complete |
 | refueler-io — Block 3 franchise dashboard | ✅ CC-81 |
-| **refueler-io — Block 5 merchant onboarding** | 🔵 In progress — CC-82/83/84 |
-| **Onboarding-A — flow design + printed handover doc** | 🟡 Queued Opus uncounted |
-| **Magic link email branding** | 🟡 Before first real merchant onboard |
-| **AD-1 — Share admin dashboard migration** | 🟡 Queued |
+| **AD-1 — Share admin dashboard migration** | ✅ Complete — live at `refueler.io/share/admin/dashboard` |
+| **AD-2 — Share admin dashboard panel wiring + card drill-downs** | 🟡 Queued — dedicated counted session |
+| **refueler-io — Block 5 merchant onboarding** | 🔵 In progress — CC-83/84/85 |
+| **Simulation discipline** | ✅ Locked — 4 stages defined, Sim-Close gates real go-live |
+| **Onboarding-A — flow design + printed handover doc** | 🟡 Queued Opus uncounted (after CC-83) |
+| **Magic link email branding (S-9)** | 🟡 CC-85 |
+| **Sim-Close — formal sign-off all 4 stages** | 🟡 Up to 2 Opus uncounted sessions |
+| **Block 8 — Fiat→sats rewards** | 🟡 Promoted — next after Block 5 |
+| **Pass-A/B planning** | 🟡 After Block 8 |
 | **SN-1/SN-2 — Share sub-nav strip** | 🟡 Post CSS track |
 | **PA-series — Paid account planning** | 🟡 Queued |
-| **Legend — provider quote replies** | 🟡 Expected 10–11 Aug 2026 |
+| **Legend — provider quote replies** | 🟡 Expected |
 | **Legend — Enterprise multi-sig account spec** | 🟡 Dedicated planning session |
 | **Receiver-pays-to-extend UX** | 🟡 Dedicated planning session before build |
 | **legend-enterprise-pricing.md break-even update** | 🟡 Next Legend session |
@@ -308,20 +302,14 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 
 | Session | Key outcome |
 |---|---|
-| CC-74 | Global CSS migration. Token lock. Orange abolished. |
-| CC-75/76 | Share CSS complete. `share-tokens.css` locked. |
-| CC-77/78 | Legend + homepage copy locked. |
 | CC-79 | Homepage redesign live. Cormorant Garamond. `home-` prefix. |
 | CC-80 | Nav fix. Editorial `:root` strip. All four articles migrated. |
 | CSS-1a | Paper → `#E8E2D8`. Orange abolished. `--inset-rule` gold scope narrowed. |
 | M-1/M-2/M-3 | Share migrated to `refueler.io/share/`. Block M closed. |
-| CSS-1b | Nav architecture locked. Repo boundary rule. Paid account architecture. |
-| CSS-4 | New `global.css`. `share-tokens.css` merged. Font aliases unified. commit `2cbc496`. |
-| CSS-5 | Full-site verification. Legend layout removal. |
-| CSS-6 | All page CSS `:root` blocks stripped. `analytics.js` rfTheme fixed. |
-| CSS-7/7b | Share design complete. QR removed. Nav reordered. CSS track complete. |
+| CSS-7/7b | Share design complete. Nav reordered. CSS track complete. |
 | CC-81 | Block 3 closed. Franchise dashboard RPC. Operator tools into `src/`. |
-| CC-82 | Block 5 partial. Test merchant E2E confirmed. PIN gate fix. Nav auth fix. BRIDGE v3.0. |
+| CC-82 | Block 5 partial. Test merchant E2E confirmed. PIN gate fix. Nav auth fix. |
+| Block-5 Review | Sim discipline locked. 4 stages defined. AD-1 complete. AD-2 added. Block 8 promoted. S-13 deleted. 550 allocation confirmed. BRIDGE v3.1. |
 
 ---
 
