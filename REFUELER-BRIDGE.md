@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.3 | **Created:** 28 July 2026 | **Updated:** Merchant-Sats-B · 11 Aug 2026
+> **Version:** 3.4 | **Created:** 28 July 2026 | **Updated:** Merchant-Sats-C · 11 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -45,6 +45,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 |---|---|
 | Pass shell at `refueler.io/pass/` (when live) | All Pass product logic, ticketing backend, credential engine |
 | Pass nav integration | Pass-A/B planning docs, Pass MASTER.md |
+| Pass Wallet card UI (app Pass tab — consumer-facing) | Varops logic, token state management, Cashu upgrade path |
 
 **Cross-repo session log rule:** Any session touching both repos gets one cross-reference line in each log.
 
@@ -118,8 +119,16 @@ Closed-loop, non-monetary Cashu ecash tokens. Cannot convert to sats or fiat. No
 
 **Competitive research item:** Verify whether Square/Toast/KDS offer multi-programme concurrent stamps. Likely differentiator.
 
-### Sats reward (ADR-MS-11)
+### Sats reward (ADR-MS-11 + ADR-MS-19–28)
 LNURL-withdraw pull model. On settlement, Refueler creates a one-time Blink LNURL-withdraw token. Customer claims from their own wallet. Float debited on successful claim only. No Lightning address ever stored — ADR-4b honoured. `reward_payouts` table: token + lifecycle state only.
+
+**Token expiry:** 7 days. Static date display. Unclaimed sats never destroyed — float never debited under pull model (ADR-MS-25).
+
+**`orders.reward_status`:** Mirror column (`none|claimable|paused|claimed|expired|declined`). App's single read surface. Piggybacks existing per-order Realtime subscription. No new channel.
+
+**`NO_WALLET` path → Pass Wallet card (ADR-MS-26):** Customers without a Lightning wallet receive the LNURL token as a card in the Pass tab. Front face: QR + amount. Single-use bearer instrument — any Lightning wallet can scan and claim. Reverse face: Refueler product referral surface (ADR-MS-27). No forwarding UX — screenshot-and-send is the natural gesture. Interim (before Pass tab exists): recovery-banner-only path.
+
+**Cashu upgrade (ADR-MS-28):** When `refueler-mint` live, Pass Wallet card upgrades to Cashu NUT-00 token. Enables offline spend, transfer without QR, gifting via string. Float debited at issuance (not claim) — NUT-07 expiry sweep mandatory. **Sats must never be destroyed — standing constraint across all reward infrastructure.**
 
 ### Float (ADR-MS-18)
 Refueler's own sats revenue only. Manual top-up by Rajesh. Low-water alert via pg_cron every 5 min → dev console tile + email. `float_config` + `float_ledger` admin-only.
@@ -149,8 +158,12 @@ Presented inline on settlement screen. Options: Claim [X] sats (LNURL-withdraw) 
 
 Forbidden fourth (Refueler node between consumer and merchant) = Model A. Permanently excluded. Stage 3 sim node = Legend node — same box.
 
-### Pass initial scope (ADR-MS-7)
-Own repo (`rajesh-taylor/refueler-pass`) and Claude project. QR/NFC credential (Refueler app or Apple/Google Wallet). Conditional entitlement post-scan. Fountain/LNURL streaming opt-in in-app. Inherits ADR-MS-1. Full scope in Pass-A/B sessions.
+### Pass initial scope (ADR-MS-7 + ADR-MS-26–28)
+Own repo (`rajesh-taylor/refueler-pass`) and Claude project. QR/NFC credential (Refueler app or Apple/Google Wallet for non-app guests). Conditional entitlement post-scan. Fountain/LNURL streaming opt-in in-app. Inherits ADR-MS-1.
+
+**Pass Wallet card** is a first-class Pass-A feature: LNURL-withdraw bearer card in the Pass tab. Varops instrument alongside the stamp token. Cashu upgrade scoped in Session A. Card reverse face is the primary acquisition surface for new users arriving via a gifted reward. Legend mobile UX (clean vs mempool.space density) is the retention pitch for those users once in the app.
+
+Full scope in Pass-A (extended thinking on). Pass-B: venue hire, Fountain detail, sats-on-first-drink.
 
 ### BOLT12 (ADR-MS-8)
 Roadmap only. Not beta or Block 9.
@@ -357,7 +370,7 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 
 **`refueler-share`:** Block M complete. `refueler.io/share/` live. Admin dashboard live (AD-1 ✅). Panel wiring and card drill-downs pending (AD-2).
 
-**`refueler-io`:** Homepage locked (one month from CC-79). CSS rationalisation track complete. Block 3 complete CC-81. **Block 5 in progress:** test merchant E2E confirmed CC-82. CC-83 next (snag fixes + nav redesign + Block 8 pre-req schema migrations). Payment architecture locked Merchant-Sats-A. Reward and commission architecture locked Merchant-Sats-B. Merchant-Sats-C queued (reward choice UI spec for consumer app).
+**`refueler-io`:** Homepage locked (one month from CC-79). CSS rationalisation track complete. Block 3 complete CC-81. **Block 5 in progress:** test merchant E2E confirmed CC-82. CC-83 next (snag fixes + nav redesign + Block 8 pre-req schema migrations including `orders.reward_status`). Payment architecture locked Merchant-Sats-A. Reward + commission architecture locked Merchant-Sats-B. Reward choice UI spec locked Merchant-Sats-C (ADR-MS-19–28). Pass Wallet card scoped for Pass-A.
 
 **`refueler-legend`:** Shell live at `refueler.io/legend/`. No query logic. Five-node topology locked (Legend-7B). Provider quotes pending. Build starts post-B9.
 
@@ -380,7 +393,7 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 | **AD-1 — Share admin dashboard migration** | ✅ Complete |
 | **AD-2 — Share admin dashboard panel wiring + card drill-downs** | 🟡 Queued |
 | **refueler-io — Block 5 merchant onboarding** | 🔵 In progress — CC-83/84/85 |
-| **Merchant-Sats-C — reward choice UI spec** | 🟡 Queued — after CC-83 |
+| **Merchant-Sats-C — reward choice UI spec** | ✅ Complete — ADR-MS-19–28 locked |
 | **Simulation discipline** | ✅ Locked — 4 stages, Sim-Close gates go-live |
 | **Onboarding-A — flow design + printed handover doc** | 🟡 Queued |
 | **Magic link email branding (S-9)** | 🟡 CC-85 |
@@ -388,7 +401,8 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 | **Block 8 — Fiat→sats rewards + stamp scaffold** | 🟡 Promoted — next after Block 5 |
 | **Session A — CDK mint architecture (refueler-mint)** | 🟡 After Block 8 — includes multi-franchise keyset partitioning |
 | **Session B — stamp lifecycle + FCA compliance** | 🟡 After Session A |
-| **Pass-A/B planning** | 🟡 After Block 8. Own repo + Claude project. |
+| **Pass-A** | 🟡 After Block 8. Pass Wallet card first-class (ADR-MS-26–28). Extended thinking on. |
+| **Pass-B** | 🟡 After Pass-A. Venue hire, Fountain, sats-on-first-drink. |
 | **Lawyer briefing prep** | 🟡 Short Opus session before appointment |
 | **SN-1/SN-2 — Share sub-nav strip** | 🟡 Post CSS track |
 | **PA-series — Paid account planning** | 🟡 Queued |
@@ -418,7 +432,8 @@ Web surfaces share these. App/terminal: Carbon always default, not togglable.
 | Block-5 Review | Sim discipline locked. 4 stages defined. AD-1 complete. AD-2 added. Block 8 promoted. S-13 deleted. 550 allocation confirmed. |
 | Adversarial-1 | IP honesty standard locked across all products. |
 | Merchant-Sats-A | Payment architecture locked. ADR-MS-1–10. Seven flows. Pass initial scope. Flywheel confirmed. Legal caveat logged. BRIDGE v3.2. |
-| **Merchant-Sats-B** | **Reward + commission architecture locked. ADR-MS-11–18. LNURL-withdraw pull model. Multi-programme stamps. Block 8 pre-req schema. Stripe shape. Walk-in trigger. Float mechanics. BRIDGE v3.3.** |
+| **Merchant-Sats-B** | Reward + commission architecture locked. ADR-MS-11–18. LNURL-withdraw pull model. Multi-programme stamps. Block 8 pre-req schema. Stripe shape. Walk-in trigger. Float mechanics. BRIDGE v3.3. |
+| **Merchant-Sats-C** | **Reward choice UI spec locked. ADR-MS-19–28. Pass Wallet card scoped as first-class Pass-A feature. Sats non-destruction guarantee. Cashu upgrade direction locked. `orders.reward_status` column. Stamp read path RLS. 7-day expiry. BRIDGE v3.4.** |
 
 ---
 
