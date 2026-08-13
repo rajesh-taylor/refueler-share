@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.5 | **Created:** 28 July 2026 | **Updated:** CC-83 · 12 Aug 2026
+> **Version:** 3.6 | **Created:** 28 July 2026 | **Updated:** CC-84 · 13 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -137,15 +137,20 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 | CC-81 | refueler-io, Supabase | Franchise dashboard |
 | CC-82 | refueler-io, Supabase | Block 5 pre-work, test env, E2E |
 | CC-83 | refueler-io (design only) | Terminal nav/UI design locked — no schema changes |
-| **CC-83b (next)** | refueler-io, Supabase | Production code: migrations, nav HTML/CSS/JS |
+| CC-83b | refueler-io, Supabase | Production code: migrations, nav HTML/CSS/JS |
+| **CC-84** | refueler-io, Supabase | Portrait layout (S-16), walk-in overlay, New Order bar, cc84_walkin_schema migration, steakhouse coords. Commit d0defcc. |
+| **CC-85 (next)** | refueler-io | Branded magic link email, first full sim run |
 
 ---
 
 ## Active action items (Rajesh)
 
-- Push `refueler-app` dev branch: `git remote set-url origin https://rajesh-taylor:REAL_TOKEN@github.com/rajesh-taylor/refueler-app.git && git push origin dev`
+- Push `refueler-app` dev branch: fix PAT placeholder in remote URL, push dev branch
 - Disconnect `share.refueler.io` custom domain from Cloudflare Pages, delete/disable project
 - Upgrade Cloudflare Workers to Paid ($5/month) before production volume
+- Send Mapbox coordinate accuracy email (drafted CC-84, in drafts)
+- Test portrait layout on physical tablet; visit Apple Store (iPad 10.9" primary target)
+- football-data.org API key held by Rajesh — ready for Events intelligence layer session
 
 ---
 
