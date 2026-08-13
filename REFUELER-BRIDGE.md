@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.7 | **Created:** 28 July 2026 | **Updated:** Pass-0b · 13 Aug 2026
+> **Version:** 3.8 | **Created:** 28 July 2026 | **Updated:** Pass-1b · 13 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), and `refueler-pass/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -62,6 +62,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 | Consumer-app Pass tab (reward card front/reverse face display) | Cashu upgrade path spec (LNURL-withdraw → NUT-00), NUT-07 expiry sweep logic |
 | | Two-credential-class architecture: access credentials (bearer + bound) and reward tokens |
 | | Events × Pass × Merchant arc: post-scan entitlement, attendance credential, offer brokering |
+| | Attendance credential blind-issued at gate; per-offer single-use sub-tokens (NUT-29) keep cross-merchant redemptions unlinkable. Commission keyed on offer-contract + merchant + event, never credential secret. |
 | | UK legal exposure log (`pass-legal.md` — to follow) |
 
 **Pass credential classes — governing distinction (do not conflate):**
@@ -152,6 +153,7 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 | **CC-85 (next)** | refueler-io | Branded magic link email, first full sim run |
 | **Pass-0** | refueler-pass | Founding scope session. PASS-MASTER.md v1.0, claude.md v1.0, SESSIONS-pass.md produced. Two-credential-class model locked. Events × Pass × Merchant arc established. |
 | **Pass-0b** | refueler-pass, refueler-io, refueler-share, refueler-legend | Housekeeping: BRIDGE v3.7 (Pass boundary added), SESSIONS-pass.md updated, claude.md updated. BRIDGE committed to all four repos. |
+| **Pass-1** | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0: GDPR map, per-audience pitch, redemption data-flow audit, cross-merchant sub-token fix (P0 spike), credential data model, Fedimint/Madeira mechanics. claude.md v1.2, SESSIONS-pass updated. |
 
 ---
 
@@ -164,6 +166,9 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 - Test portrait layout on physical tablet; visit Apple Store (iPad 10.9" primary target)
 - football-data.org API key held by Rajesh — ready for Events intelligence layer session
 - **[Pass]** Solicitor briefing brief to draft before appointment — touting law, refunds vs unlinkability, AML on primary sale (bundle with ecosystem lawyer session)
+- **[Pass]** New P0 spike: cross-merchant redemption unlinkability — per-offer single-use sub-tokens (NUT-29) — before any v2 build begins.
+- **[Pass]** New P1 spike: issuance timing-correlation resistance.
+- **[Pass]** New solicitor P1: GDPR controllership mapping — purchase record controller, credential outside personal-data perimeter, singling-out in organiser's hands.
 
 ---
 
