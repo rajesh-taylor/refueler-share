@@ -1,6 +1,6 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.6 | **Created:** 28 July 2026 | **Updated:** CC-84 · 13 Aug 2026
-> Lives in `refueler-share/` (root), `refueler-io/docs/`, and `refueler-legend/` (root). Committed to each at every block close.
+> **Version:** 3.7 | **Created:** 28 July 2026 | **Updated:** Pass-0b · 13 Aug 2026
+> Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), and `refueler-pass/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
 
@@ -14,7 +14,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 **North star (internal only):** *Come for privacy, stay for Bitcoin.*
 
-**Local paths:** Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/` · Share: `/Users/rajeshtaylor/Documents/refueler-share/` · Legend: `/Users/rajeshtaylor/Documents/refueler-legend/` · NumoPay fork: `/Users/rajeshtaylor/Documents/refueler.io/terminals/numo-fork/`
+**Local paths:** Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/` · Share: `/Users/rajeshtaylor/Documents/refueler-share/` · Legend: `/Users/rajeshtaylor/Documents/refueler-legend/` · NumoPay fork: `/Users/rajeshtaylor/Documents/refueler.io/terminals/numo-fork/` · Pass: `/Users/rajeshtaylor/Documents/refueler-pass/`
 
 **GitHub:** `github.com/rajesh-taylor`
 
@@ -35,7 +35,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 ## Repo boundary rule
 
-> **If a browser requests it at `refueler.io`, it lives in `refueler-io`. Worker infrastructure and backend logic live in `refueler-share` or `refueler-legend`.**
+> **If a browser requests it at `refueler.io`, it lives in `refueler-io`. Worker infrastructure and backend logic live in `refueler-share` or `refueler-legend`. Pass product logic and the credential engine live in `refueler-pass`.**
 
 ### Share boundary
 | `refueler-io` | `refueler-share` |
@@ -57,8 +57,18 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 | `refueler-io` | `refueler-pass` |
 |---|---|
 | Pass shell at `refueler.io/pass/` (when live) | All Pass product logic, ticketing backend, credential engine |
-| Pass nav integration | Pass-A/B planning docs, Pass MASTER.md |
-| Pass Wallet card UI (app Pass tab — consumer-facing) | Varops logic, token state management, Cashu upgrade path |
+| Pass nav integration | `PASS-MASTER.md`, `claude.md`, `SESSIONS-pass.md` — planning corpus |
+| Pass Wallet card UI (app Pass tab — consumer-facing) | Cashu NUT implementation direction, varops logic, token state management |
+| Consumer-app Pass tab (reward card front/reverse face display) | Cashu upgrade path spec (LNURL-withdraw → NUT-00), NUT-07 expiry sweep logic |
+| | Two-credential-class architecture: access credentials (bearer + bound) and reward tokens |
+| | Events × Pass × Merchant arc: post-scan entitlement, attendance credential, offer brokering |
+| | UK legal exposure log (`pass-legal.md` — to follow) |
+
+**Pass credential classes — governing distinction (do not conflate):**
+- **Access credential** — non-monetary, closed-loop, no melt path. Bearer (transferable ticket, NUT-00) or bound (non-transferable access card, NUT-11 P2PK). Lives in `refueler-pass`.
+- **Reward token** — monetary, spendable sats. LNURL-withdraw (v1) → Cashu NUT-00 (v2, post-mint). Card UI lives in `refueler-io` consumer app Pass tab; token logic lives in `refueler-pass`.
+
+**Pass version gating:** v1 on Block 8. v2 on `refueler-mint` live + Events session + Pass-A. v2 is scoped correctly, not imminent.
 
 ### NumoPay fork boundary (new — CC-83)
 | `refueler-io` | `numo-fork` |
@@ -140,6 +150,8 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 | CC-83b | refueler-io, Supabase | Production code: migrations, nav HTML/CSS/JS |
 | **CC-84** | refueler-io, Supabase | Portrait layout (S-16), walk-in overlay, New Order bar, cc84_walkin_schema migration, steakhouse coords. Commit d0defcc. |
 | **CC-85 (next)** | refueler-io | Branded magic link email, first full sim run |
+| **Pass-0** | refueler-pass | Founding scope session. PASS-MASTER.md v1.0, claude.md v1.0, SESSIONS-pass.md produced. Two-credential-class model locked. Events × Pass × Merchant arc established. |
+| **Pass-0b** | refueler-pass, refueler-io, refueler-share, refueler-legend | Housekeeping: BRIDGE v3.7 (Pass boundary added), SESSIONS-pass.md updated, claude.md updated. BRIDGE committed to all four repos. |
 
 ---
 
@@ -151,6 +163,7 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 - Send Mapbox coordinate accuracy email (drafted CC-84, in drafts)
 - Test portrait layout on physical tablet; visit Apple Store (iPad 10.9" primary target)
 - football-data.org API key held by Rajesh — ready for Events intelligence layer session
+- **[Pass]** Solicitor briefing brief to draft before appointment — touting law, refunds vs unlinkability, AML on primary sale (bundle with ecosystem lawyer session)
 
 ---
 
