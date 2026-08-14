@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 3.8 | **Created:** 28 July 2026 | **Updated:** Pass-1b · 13 Aug 2026
+> **Version:** 3.9 | **Created:** 28 July 2026 | **Updated:** CC-85 · 14 Aug 2026
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), and `refueler-pass/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -150,7 +150,8 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 | CC-83 | refueler-io (design only) | Terminal nav/UI design locked — no schema changes |
 | CC-83b | refueler-io, Supabase | Production code: migrations, nav HTML/CSS/JS |
 | **CC-84** | refueler-io, Supabase | Portrait layout (S-16), walk-in overlay, New Order bar, cc84_walkin_schema migration, steakhouse coords. Commit d0defcc. |
-| **CC-85 (next)** | refueler-io | Branded magic link email, first full sim run |
+| **CC-85** | refueler-io | Branded magic link email, first full sim run. Commits 17ecb40, 306a587. |
+| **Onboarding-A (next)** | refueler-io | Merchant onboarding flow + printed handover document. Opus uncounted. |
 | **Pass-0** | refueler-pass | Founding scope session. PASS-MASTER.md v1.0, claude.md v1.0, SESSIONS-pass.md produced. Two-credential-class model locked. Events × Pass × Merchant arc established. |
 | **Pass-0b** | refueler-pass, refueler-io, refueler-share, refueler-legend | Housekeeping: BRIDGE v3.7 (Pass boundary added), SESSIONS-pass.md updated, claude.md updated. BRIDGE committed to all four repos. |
 | **Pass-1** | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0: GDPR map, per-audience pitch, redemption data-flow audit, cross-merchant sub-token fix (P0 spike), credential data model, Fedimint/Madeira mechanics. claude.md v1.2, SESSIONS-pass updated. |
@@ -161,6 +162,7 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 
 - Push `refueler-app` dev branch: fix PAT placeholder in remote URL, push dev branch
 - Disconnect `share.refueler.io` custom domain from Cloudflare Pages, delete/disable project
+- Upgrade Supabase to Pro when first real merchant goes live — realtime order polling will push egress beyond free tier limit
 - Upgrade Cloudflare Workers to Paid ($5/month) before production volume
 - Send Mapbox coordinate accuracy email (drafted CC-84, in drafts)
 - Test portrait layout on physical tablet; visit Apple Store (iPad 10.9" primary target)
