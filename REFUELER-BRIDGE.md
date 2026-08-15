@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 4.0 | **Created:** 28 July 2026 | **Updated:** Onboarding-A · 15 Aug 2026
+> **Version:** 4.1 | **Created:** 28 July 2026 | **Updated:** Design-A · 2026-08-15
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), and `refueler-pass/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -42,43 +42,32 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 |---|---|
 | All Nunjucks templates at `refueler.io/share/*` | Cloudflare Worker (`worker/src/index.js`), `wrangler.toml` |
 | `share-nav.njk`, `share-footer.njk`, `share.js`, `blake3/` | BLAKE3 source + build tooling |
-| Admin dashboard pages `src/share/admin/` | Admin Worker endpoints, `Share-Master-Context.md`, `share-sessions.md` |
-| Notes articles at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning, load on demand) |
+| Admin dashboard pages `src/share/admin/` | Admin Worker endpoints |
+| Notes articles at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning) |
 
 ### Legend boundary
 | `refueler-io` | `refueler-legend` |
 |---|---|
 | Legend Eleventy shell at `refueler.io/legend/` | Node infrastructure, FROST key management |
-| `legend.css` (layout only) | `MASTER.md`, `legend-node-plan.md`, `legend-economics.md`, `legend-incident-protocol.md` |
-| Legend wordmark + theme pill wiring | `legend-scope.md`, `legend-design-spec.md`, `legend-ux-language.md`, `legend-enterprise-pricing.md` |
-| Articles 14/15/16 when published | PIR sharding layer, Tor API, Silent Payments scanner code, CryptoRoadmap files |
+| `legend.css` (layout only) | `MASTER.md`, `legend-node-plan.md`, `legend-economics.md` |
+| Legend wordmark + theme pill wiring | `legend-scope.md`, `legend-design-spec.md`, `legend-enterprise-pricing.md` |
 
 ### Pass boundary
 | `refueler-io` | `refueler-pass` |
 |---|---|
 | Pass shell at `refueler.io/pass/` (when live) | All Pass product logic, ticketing backend, credential engine |
-| Pass nav integration | `PASS-MASTER.md`, `claude.md`, `SESSIONS-pass.md` — planning corpus |
-| Pass Wallet card UI (app Pass tab — consumer-facing) | Cashu NUT implementation direction, varops logic, token state management |
-| Consumer-app Pass tab (reward card front/reverse face display) | Cashu upgrade path spec (LNURL-withdraw → NUT-00), NUT-07 expiry sweep logic |
-| | Two-credential-class architecture: access credentials (bearer + bound) and reward tokens |
-| | Events × Pass × Merchant arc: post-scan entitlement, attendance credential, offer brokering |
-| | Attendance credential blind-issued at gate; per-offer single-use sub-tokens (NUT-29) keep cross-merchant redemptions unlinkable. Commission keyed on offer-contract + merchant + event, never credential secret. |
-| | UK legal exposure log (`pass-legal.md` — to follow) |
+| Pass nav integration | `PASS-MASTER.md`, `claude.md`, `SESSIONS-pass.md` |
+| Pass Wallet card UI (app Pass tab) | Cashu NUT implementation, varops logic, token state management |
 
-**Pass credential classes — governing distinction (do not conflate):**
-- **Access credential** — non-monetary, closed-loop, no melt path. Bearer (transferable ticket, NUT-00) or bound (non-transferable access card, NUT-11 P2PK). Lives in `refueler-pass`.
-- **Reward token** — monetary, spendable sats. LNURL-withdraw (v1) → Cashu NUT-00 (v2, post-mint). Card UI lives in `refueler-io` consumer app Pass tab; token logic lives in `refueler-pass`.
+**Pass credential classes:**
+- **Access credential** — non-monetary, closed-loop, no melt path. Bearer (NUT-00) or bound (NUT-11 P2PK).
+- **Reward token** — monetary, spendable sats. LNURL-withdraw (v1) → Cashu NUT-00 (v2, post-mint).
 
-**Pass version gating:** v1 on Block 8. v2 on `refueler-mint` live + Events session + Pass-A. v2 is scoped correctly, not imminent.
-
-### NumoPay fork boundary (new — CC-83)
+### NumoPay fork boundary
 | `refueler-io` | `numo-fork` |
 |---|---|
 | Merchant terminal receives orders from NumoPay via Supabase | In-house order entry, payment processing, menu management |
 | Supabase shared schema — `orders`, `merchant_orders`, `venue_partners` | Android app code, NumoPay-specific UI |
-| Darwin intelligence (horizon strip) — terminal only | Floor/waiter UI — phone only |
-
-**Cross-repo session log rule:** Any session touching both repos gets one cross-reference line in each log.
 
 ---
 
@@ -88,23 +77,6 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 **All DDL via `apply_migration` only. `execute_sql` read-only. RLS on every table — no exceptions.**
 
 **Pending migration (Onboarding-A):** `venue_partners` additions — `lightning_address TEXT`, `onchain_address TEXT`, `silent_payment_address TEXT`, `mapbox_place_id TEXT`. Next counted Sonnet session.
-
-### Schema state (post-CC-82, pre-CC-83b)
-Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders` · `stamp_programmes` · `merchant_billing`
-
-**Pending CC-83b migrations:**
-- Drop `partners_public_read` policy (security — `qual: true` exposed entire table publicly)
-- Add `venue_partners.logo_url TEXT`
-- Add `venue_partners.pin_bg_url TEXT`
-- Add `venue_partners.stamp_feature_enabled BOOLEAN DEFAULT false`
-- Add `orders.commission_status TEXT`
-- Add `orders.reward_status TEXT`
-- Delete orphan `merchant_users` row (venue_id NULL, role independent_owner)
-
-### RLS policy state
-- `venue_partners`: `merchant_select_own_venue` covers merchant/franchise_branch/independent_owner. `franchise_hq_select_own_group_venues` covers franchise HQ. `admin_full_access_venue_partners` covers admin. `partners_public_read` (DROP in CC-83b — security fix).
-- `merchant_orders`: merchant/independent_owner reads own venue only.
-- `orders`: RLS enabled.
 
 ---
 
@@ -123,20 +95,39 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 
 ### Nav
 - Default (no logo): Refueler wordmark (Satoshi 700, 16px, `#E4E2DC`) · divider · "MERCHANT TERMINAL" (IBM Plex Mono, 12px, `#C8C9CB`)
-- Logo state: 32×32px square logo · divider · "MERCHANT TERMINAL"
 - Right: QUEUE·OPS·OWNER merged pill (42px, OWNER gold tint) · separator · PAPER·CARBON pill
 
 ### Horizon strip
 - Always dark `#1A1A1A` · 64px height
 - Station name: IBM Plex Mono 15px `#E4E2DC` · ETA: gold · counts: `#A8A4A0` uniform
-- Urgency via background tint only (no gold on numbers)
 
 ### Order tiles
-- `[ID] · [items]` single line · status badge right only · larger text and badge boxes
+- `[ID] · [items]` single line · status badge right only
 - PENDING gold · IN PREP blue `#7899D4` · READY green `#3DCA7A`
 
 ### Portrait layout (CC-84)
-- Option 2: sidebar stacks above main as horizontal-scroll card strip. CSS-only.
+- Option A: sidebar collapses to horizontal-scroll card strip above main. CSS-only.
+
+---
+
+## Merchant handover documents — locked Design-A
+
+**Files committed f0157ef to `refueler-io/docs/`:**
+- `merchant-onboarding-v1.html` — User Guide, 6 A4 pages, print-ready standalone
+- `merchant-venue-keys-v1.html` — Venue Keys card, 1 A4 page, print-ready standalone
+
+**Key rules:**
+- Two separate files. Each prints independently as its own PDF.
+- Gold on section h2 dividers and warn-banner left-border only.
+- All sensitive values (Owner PIN, wallet addresses, Staff PIN) handwritten at handover — never typed.
+- Open in Chrome for cleanest PDF output.
+- Docs ↔ UI sync rule active: confirm currency at every block close touching terminal UI.
+- User Guide expected to grow to 20+ pages with Lightning order flow, screenshots (post TDP-B), and walk-in detail iterations.
+
+**Future Owner tab integration (queued post Sim-Close):**
+- Two downloadable document tiles in Owner tab
+- Amber dot: new version available. Green dot: current version downloaded.
+- Venue Keys printable independently (owner PIN or wallet address change without reprinting full guide)
 
 ---
 
@@ -149,48 +140,46 @@ Key tables: `venue_partners` · `merchant_users` · `orders` · `merchant_orders
 | CC-69 | refueler-io, refueler-app, Supabase | Consumer app ↔ terminal connection |
 | CC-81 | refueler-io, Supabase | Franchise dashboard |
 | CC-82 | refueler-io, Supabase | Block 5 pre-work, test env, E2E |
-| CC-83 | refueler-io (design only) | Terminal nav/UI design locked — no schema changes |
+| CC-83 | refueler-io (design only) | Terminal nav/UI design locked |
 | CC-83b | refueler-io, Supabase | Production code: migrations, nav HTML/CSS/JS |
-| **CC-84** | refueler-io, Supabase | Portrait layout (S-16), walk-in overlay, New Order bar, cc84_walkin_schema migration, steakhouse coords. Commit d0defcc. |
-| **CC-85** | refueler-io | Branded magic link email, first full sim run. Commits 17ecb40, 306a587. |
-| **Onboarding-A** | refueler-io | Merchant onboarding flow + handover doc copy v3. Stages 0–7. TDP track. Schema additions logged. ✅ Closed. |
-| **Design-A (next)** | refueler-io | Merchant handover document — layout + styled HTML. Opus uncounted. |
-| **Pass-0** | refueler-pass | Founding scope session. PASS-MASTER.md v1.0, claude.md v1.0, SESSIONS-pass.md produced. Two-credential-class model locked. Events × Pass × Merchant arc established. |
-| **Pass-0b** | refueler-pass, refueler-io, refueler-share, refueler-legend | Housekeeping: BRIDGE v3.7 (Pass boundary added), SESSIONS-pass.md updated, claude.md updated. BRIDGE committed to all four repos. |
-| **Pass-1** | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0: GDPR map, per-audience pitch, redemption data-flow audit, cross-merchant sub-token fix (P0 spike), credential data model, Fedimint/Madeira mechanics. claude.md v1.2, SESSIONS-pass updated. |
+| CC-84 | refueler-io, Supabase | Portrait layout, walk-in overlay, New Order bar. Commit d0defcc. |
+| CC-85 | refueler-io | Magic link email, first full sim run. Commits 17ecb40, 306a587. |
+| Onboarding-A | refueler-io | Merchant onboarding flow + handover copy v3. ✅ Closed. |
+| **Design-A** | refueler-io | Two merchant handover docs. Commit f0157ef. ✅ Closed. |
+| Pass-0 | refueler-pass | Founding scope. Two-credential-class model locked. |
+| Pass-0b | refueler-pass, refueler-io, refueler-share, refueler-legend | BRIDGE v3.7. |
+| Pass-1 | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0. |
 
 ---
 
 ## Active action items (Rajesh)
 
-- Push `refueler-app` dev branch: fix PAT placeholder in remote URL, push dev branch
-- Disconnect `share.refueler.io` custom domain from Cloudflare Pages, delete/disable project
-- Upgrade Supabase to Pro when first real merchant goes live — realtime order polling will push egress beyond free tier limit
+- Push `refueler-app` dev branch
+- Disconnect `share.refueler.io` from Cloudflare Pages
+- Upgrade Supabase to Pro when first real merchant goes live
 - Upgrade Cloudflare Workers to Paid ($5/month) before production volume
 - Send Mapbox coordinate accuracy email (drafted CC-84, in drafts)
 - Test portrait layout on physical tablet; visit Apple Store (iPad 10.9" primary target)
 - football-data.org API key held by Rajesh — ready for Events intelligence layer session
-- **[Pass]** Solicitor briefing brief to draft before appointment — touting law, refunds vs unlinkability, AML on primary sale (bundle with ecosystem lawyer session)
-- **[Pass]** New P0 spike: cross-merchant redemption unlinkability — per-offer single-use sub-tokens (NUT-29) — before any v2 build begins.
-- **[Pass]** New P1 spike: issuance timing-correlation resistance.
-- **[Pass]** New solicitor P1: GDPR controllership mapping — purchase record controller, credential outside personal-data perimeter, singling-out in organiser's hands.
-- **[Merchant terminal]** S-23 promoted to High: Queue view sign-out button — next Sonnet session, pre-go-live
-- **[Merchant terminal]** S-24 added: apple-touch-icon + favicon for tablet home screen bookmark — go-live prep
-- **[Merchant terminal]** Schema migration pending: lightning_address, onchain_address, silent_payment_address, mapbox_place_id on venue_partners
-- **[Merchant terminal]** 21-sat test payment to merchant Lightning address required at onboarding pre-flight
-- **[All products]** Privacy page update queued: sections 7, 8, 10 + merchant section + Legend free-tier paragraph
-- **[All products]** Docs ↔ UI sync rule active: at every block close touching merchant terminal, confirm handover doc currency
-- **[Planning]** TDP-A/B/C track established: Opus uncounted, after Sim-Close, before Menu Management v1
+- **[Pass]** Solicitor briefing brief to draft before appointment
+- **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29) before v2 build
+- **[Pass]** P1 spike: issuance timing-correlation resistance
+- **[Pass]** Solicitor P1: GDPR controllership mapping
+- **[Merchant terminal]** S-23: Queue view sign-out button — High, next Sonnet session
+- **[Merchant terminal]** S-24: apple-touch-icon + favicon — Medium, go-live prep
+- **[Merchant terminal]** Schema migration pending: 4 columns on venue_partners (Onboarding-A)
+- **[Merchant terminal]** 21-sat test payment at onboarding pre-flight
+- **[All products]** Privacy page update queued
+- **[All products]** Docs ↔ UI sync rule active from Design-A
+- **[Planning]** TDP-A/B/C track: Opus uncounted, after Sim-Close, before Menu Management v1
 
 ---
 
-## NumoPay fork — context (new CC-83)
+## NumoPay fork — context
 
-**Base:** `cashubtc/Numo` v1.8 — Lightning/Cashu, menu download, webhooks, Minibits wallet tested by Rajesh.
-**Fork:** `rajesh-taylor/numo-fork` v1.6 — clean, no changes. Local only.
-**Timing:** NumoPay-A planning session after Block 5 sim-close.
-**BitChat research:** Bluetooth mesh sync for offline resilience — log for NumoPay-A.
-**Competitive angle:** No dedicated hardware vs Square KDS (£599+ hardware + subscription). Tablet they already own. Family-run business positioning.
+**Base:** `cashubtc/Numo` v1.8. **Fork:** `rajesh-taylor/numo-fork` v1.6 — clean, no changes.
+**Timing:** NumoPay-A after Block 5 sim-close.
+**Competitive angle:** No dedicated hardware vs Square KDS. Tablet they already own.
 
 ---
 
