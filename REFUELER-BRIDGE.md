@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 4.1 | **Created:** 28 July 2026 | **Updated:** Design-A · 2026-08-15
+> **Version:** 4.2 | **Created:** 28 July 2026 | **Updated:** Block-5 Close · 2026-08-16
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), and `refueler-pass/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -76,7 +76,11 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 **Project:** `tihgvdokeofnjxjkenmm`
 **All DDL via `apply_migration` only. `execute_sql` read-only. RLS on every table — no exceptions.**
 
-**Pending migration (Onboarding-A):** `venue_partners` additions — `lightning_address TEXT`, `onchain_address TEXT`, `silent_payment_address TEXT`, `mapbox_place_id TEXT`. Next counted Sonnet session.
+**Pending migration (next Sonnet session — highest priority):** `venue_partners` additions:
+- `lightning_address TEXT`
+- `onchain_address TEXT`
+- `silent_payment_address TEXT`
+- `mapbox_place_id TEXT`
 
 ---
 
@@ -100,6 +104,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 ### Horizon strip
 - Always dark `#1A1A1A` · 64px height
 - Station name: IBM Plex Mono 15px `#E4E2DC` · ETA: gold · counts: `#A8A4A0` uniform
+- "DARWIN · LIVE" label hidden by default — strip height and ETA are the implicit liveness signal
 
 ### Order tiles
 - `[ID] · [items]` single line · status badge right only
@@ -107,6 +112,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 ### Portrait layout (CC-84)
 - Option A: sidebar collapses to horizontal-scroll card strip above main. CSS-only.
+- `@media (orientation: portrait), (max-width: 820px)`
 
 ---
 
@@ -115,19 +121,45 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 **Files committed f0157ef to `refueler-io/docs/`:**
 - `merchant-onboarding-v1.html` — User Guide, 6 A4 pages, print-ready standalone
 - `merchant-venue-keys-v1.html` — Venue Keys card, 1 A4 page, print-ready standalone
+- `merchant-onboarding-process-v1.html` — Internal process doc (to produce — Stage 1 sim deliverable)
 
 **Key rules:**
-- Two separate files. Each prints independently as its own PDF.
+- Standalone HTML files. Each prints independently as its own PDF.
 - Gold on section h2 dividers and warn-banner left-border only.
 - All sensitive values (Owner PIN, wallet addresses, Staff PIN) handwritten at handover — never typed.
 - Open in Chrome for cleanest PDF output.
+- Docs will iterate. Do not print full runs until design is stable.
 - Docs ↔ UI sync rule active: confirm currency at every block close touching terminal UI.
-- User Guide expected to grow to 20+ pages with Lightning order flow, screenshots (post TDP-B), and walk-in detail iterations.
 
 **Future Owner tab integration (queued post Sim-Close):**
-- Two downloadable document tiles in Owner tab
-- Amber dot: new version available. Green dot: current version downloaded.
-- Venue Keys printable independently (owner PIN or wallet address change without reprinting full guide)
+- Two downloadable document tiles in Owner tab.
+- Amber dot: new version available. Green: current version downloaded.
+
+---
+
+## Block 5 — status (Block-5 Close · 2026-08-16)
+
+**Closed as: capability complete. No go-live date.**
+
+London merchants are experienced operators with expensive overheads (business rates, utilities). They will not give time to a startup unless the product is polished. Gaps in design, UX, payments depth, and menu management are too significant to gloss over. Foundational work comes first.
+
+**Sim-Close stages (ratified Block-5 Close):**
+- Stage 1: Internal onboarding process doc — to produce.
+- Stage 2: Operational sim — PASSED (browser). iPad check non-blocking.
+- Stage 3: Payment sim — not yet run. Standalone Sonnet session, gated on schema migration.
+- Stage 4: Physical handover — non-blocking. Print when stable.
+
+**Permanently closed snags:** S-12 (`car_park_occupancy` — strip from FEEDS array on next `rail-signal-poll` touch) · S-14 (Costa label — fix on next `rail-signal-poll` touch).
+
+---
+
+## Share — platform notes (logged Block-5 Close · 2026-08-16)
+
+**Pay-per-use API (planning — pre-AD-2):**
+A metered pay-per-use Share API is scoped ahead of AD-2. Initial v1 segments: **professional photographers** (deliver large shoots to clients who needn't hold an account) and **legal** (transfer survives sender closing laptop; recipient needn't be sophisticated — the two-axis category, AP-7). Staging: v1 metered API for these segments → v2 broaden → v3 white-label option (partner-branded Share). **Recipient flywheel:** every anonymous recipient is a latent sender — the download page is a growth asset, not a dead end. Full plan in a dedicated Share API planning session (queue after foundational terminal work, before AD-2).
+
+**Safari upload ceiling (constraint):**
+Safari imposes an effective ~1.5 GB real-world ceiling on the current in-memory upload path, well below the advertised 4 GB free-tier figure. **Fix:** chunked streaming encryption (encrypt-and-upload per chunk rather than whole-file in memory) lifts the ceiling toward the true tier limit. **Copy implication:** do not headline large-file capability on Safari; the "4 GB free" claim must not imply a 4 GB Safari upload works today. Honesty-scope rule applies — reconcile tier figure with Safari reality in any Share marketing copy.
 
 ---
 
@@ -135,7 +167,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 | Session | Repos touched | Notes |
 |---|---|---|
-| CSS-4 through CSS-7b | refueler-io | CSS rationalisation track |
+| CSS-4 through CSS-7b | refueler-io | CSS rationalisation track — complete |
 | CC-66 | refueler-io, Supabase | Schema hardening |
 | CC-69 | refueler-io, refueler-app, Supabase | Consumer app ↔ terminal connection |
 | CC-81 | refueler-io, Supabase | Franchise dashboard |
@@ -145,7 +177,8 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 | CC-84 | refueler-io, Supabase | Portrait layout, walk-in overlay, New Order bar. Commit d0defcc. |
 | CC-85 | refueler-io | Magic link email, first full sim run. Commits 17ecb40, 306a587. |
 | Onboarding-A | refueler-io | Merchant onboarding flow + handover copy v3. ✅ Closed. |
-| **Design-A** | refueler-io | Two merchant handover docs. Commit f0157ef. ✅ Closed. |
+| Design-A | refueler-io | Two merchant handover docs. Commit f0157ef. ✅ Closed. |
+| **Block-5 Close** | refueler-io | Block 5 review. Go-live pressure removed. Sim stages ratified. BRIDGE v4.2. ✅ Closed. |
 | Pass-0 | refueler-pass | Founding scope. Two-credential-class model locked. |
 | Pass-0b | refueler-pass, refueler-io, refueler-share, refueler-legend | BRIDGE v3.7. |
 | Pass-1 | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0. |
@@ -159,26 +192,25 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 - Upgrade Supabase to Pro when first real merchant goes live
 - Upgrade Cloudflare Workers to Paid ($5/month) before production volume
 - Send Mapbox coordinate accuracy email (drafted CC-84, in drafts)
-- Test portrait layout on physical tablet; visit Apple Store (iPad 10.9" primary target)
+- Visit Apple Store — iPad 10.9″ portrait layout check (non-blocking)
+- Provide Lightning address for Raj's Steakhouse for payment sim (Stage 3)
 - football-data.org API key held by Rajesh — ready for Events intelligence layer session
 - **[Pass]** Solicitor briefing brief to draft before appointment
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29) before v2 build
 - **[Pass]** P1 spike: issuance timing-correlation resistance
 - **[Pass]** Solicitor P1: GDPR controllership mapping
-- **[Merchant terminal]** S-23: Queue view sign-out button — High, next Sonnet session
-- **[Merchant terminal]** S-24: apple-touch-icon + favicon — Medium, go-live prep
-- **[Merchant terminal]** Schema migration pending: 4 columns on venue_partners (Onboarding-A)
-- **[Merchant terminal]** 21-sat test payment at onboarding pre-flight
+- **[Merchant terminal]** S-23 + S-24: bundle into one Sonnet session — next after schema migration
+- **[Merchant terminal]** Schema migration: 4 cols on `venue_partners` — next counted session
 - **[All products]** Privacy page update queued
 - **[All products]** Docs ↔ UI sync rule active from Design-A
-- **[Planning]** TDP-A/B/C track: Opus uncounted, after Sim-Close, before Menu Management v1
+- **[Planning]** TDP-A/B/C: after Stage 3 sim passes, before Menu Management v1
 
 ---
 
 ## NumoPay fork — context
 
 **Base:** `cashubtc/Numo` v1.8. **Fork:** `rajesh-taylor/numo-fork` v1.6 — clean, no changes.
-**Timing:** NumoPay-A after Block 5 sim-close.
+**Timing:** NumoPay-A after TDP-C.
 **Competitive angle:** No dedicated hardware vs Square KDS. Tablet they already own.
 
 ---
