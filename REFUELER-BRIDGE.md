@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 4.2 | **Created:** 28 July 2026 | **Updated:** Block-5 Close · 2026-08-16
+> **Version:** 4.3 | **Created:** 28 July 2026 | **Updated:** Sim-Close · 2026-08-17
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), and `refueler-pass/` (root). Committed to each at every block close.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -76,12 +76,6 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 **Project:** `tihgvdokeofnjxjkenmm`
 **All DDL via `apply_migration` only. `execute_sql` read-only. RLS on every table — no exceptions.**
 
-**Pending migration (next Sonnet session — highest priority):** `venue_partners` additions:
-- `lightning_address TEXT`
-- `onchain_address TEXT`
-- `silent_payment_address TEXT`
-- `mapbox_place_id TEXT`
-
 ---
 
 ## Design system — canonical tokens
@@ -92,6 +86,15 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 **Fonts:** Satoshi (headings) · DM Sans (UI) · IBM Plex Mono (data) · Source Serif 4 (editorial)
 **Theme persistence:** `rs-theme` cookie, `.refueler.io`, 30-day rolling. Never localStorage.
 **Abolished:** `#F5820A` orange · `backdrop-filter` · `localStorage` theme · `rfTheme` · `--accent-action`
+
+---
+
+## Incident response — locked Sim-Close
+
+**Protocol:** `INCIDENT-PROTOCOL.md` in `refueler-io/docs/`. Ecosystem-wide. Version 1.0, 2026-08-17.
+**Relationship to `legend-incident-protocol.md`:** INCIDENT-PROTOCOL.md is the ecosystem parent. `legend-incident-protocol.md` governs Legend-specific matters (FROST, canary, DKG, node seizure). On ecosystem-wide matters (channels, severity tiers, holding statements), INCIDENT-PROTOCOL.md governs.
+**Internal channel:** Signal (moves to self-hosted SimpleX when staff are onboarded).
+**Core rule:** Internal → contain → public. Never announce on the channel attackers are watching.
 
 ---
 
@@ -118,10 +121,11 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 ## Merchant handover documents — locked Design-A
 
-**Files committed f0157ef to `refueler-io/docs/`:**
-- `merchant-onboarding-v1.html` — User Guide, 6 A4 pages, print-ready standalone
-- `merchant-venue-keys-v1.html` — Venue Keys card, 1 A4 page, print-ready standalone
-- `merchant-onboarding-process-v1.html` — Internal process doc (to produce — Stage 1 sim deliverable)
+**Files committed to `refueler-io/docs/`:**
+- `merchant-onboarding-v1.html` — User Guide, 6 A4 pages, print-ready standalone (commit `f0157ef`)
+- `merchant-venue-keys-v1.html` — Venue Keys card, 1 A4 page, print-ready standalone (commit `f0157ef`)
+- `merchant-onboarding-process-v1.html` — Internal process doc (commit `a5cc342`)
+- `INCIDENT-PROTOCOL.md` — Ecosystem-wide incident response (Sim-Close, 2026-08-17)
 
 **Key rules:**
 - Standalone HTML files. Each prints independently as its own PDF.
@@ -131,25 +135,18 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 - Docs will iterate. Do not print full runs until design is stable.
 - Docs ↔ UI sync rule active: confirm currency at every block close touching terminal UI.
 
-**Future Owner tab integration (queued post Sim-Close):**
-- Two downloadable document tiles in Owner tab.
-- Amber dot: new version available. Green: current version downloaded.
-
 ---
 
-## Block 5 — status (Block-5 Close · 2026-08-16)
+## Sim-Close — DECLARED COMPLETE (2026-08-17)
 
-**Closed as: capability complete. No go-live date.**
+All four stages confirmed. Pre-merchant gate list:
+- **G-1** (hard blocker): merchant settlement wiring — `create-order` must invoice to `venue_partners.lightning_address`. Named TDP-B gate item.
+- **G-2** (hard blocker): Menu Management v1 — queued after TDP-B.
+- **G-3**: iPad physical check — before first real merchant.
+- **G-4**: Hardening-A — slotted immediately post-Sim-Close.
+- **G-5**: S-26 FK — fold into Hardening-A.
 
-London merchants are experienced operators with expensive overheads (business rates, utilities). They will not give time to a startup unless the product is polished. Gaps in design, UX, payments depth, and menu management are too significant to gloss over. Foundational work comes first.
-
-**Sim-Close stages (ratified Block-5 Close):**
-- Stage 1: Internal onboarding process doc — to produce.
-- Stage 2: Operational sim — PASSED (browser). iPad check non-blocking.
-- Stage 3: Payment sim — not yet run. Standalone Sonnet session, gated on schema migration.
-- Stage 4: Physical handover — non-blocking. Print when stable.
-
-**Permanently closed snags:** S-12 (`car_park_occupancy` — strip from FEEDS array on next `rail-signal-poll` touch) · S-14 (Costa label — fix on next `rail-signal-poll` touch).
+Three-wallet sim setup: WoS (merchant) · Blink (Refueler treasury) · Minibits (customer).
 
 ---
 
@@ -159,7 +156,7 @@ London merchants are experienced operators with expensive overheads (business ra
 A metered pay-per-use Share API is scoped ahead of AD-2. Initial v1 segments: **professional photographers** (deliver large shoots to clients who needn't hold an account) and **legal** (transfer survives sender closing laptop; recipient needn't be sophisticated — the two-axis category, AP-7). Staging: v1 metered API for these segments → v2 broaden → v3 white-label option (partner-branded Share). **Recipient flywheel:** every anonymous recipient is a latent sender — the download page is a growth asset, not a dead end. Full plan in a dedicated Share API planning session (queue after foundational terminal work, before AD-2).
 
 **Safari upload ceiling (constraint):**
-Safari imposes an effective ~1.5 GB real-world ceiling on the current in-memory upload path, well below the advertised 4 GB free-tier figure. **Fix:** chunked streaming encryption (encrypt-and-upload per chunk rather than whole-file in memory) lifts the ceiling toward the true tier limit. **Copy implication:** do not headline large-file capability on Safari; the "4 GB free" claim must not imply a 4 GB Safari upload works today. Honesty-scope rule applies — reconcile tier figure with Safari reality in any Share marketing copy.
+Safari imposes an effective ~1.5 GB real-world ceiling on the current in-memory upload path, well below the advertised 4 GB free-tier figure. **Fix:** chunked streaming encryption (encrypt-and-upload per chunk rather than whole-file in memory) lifts the ceiling toward the true tier limit. **Copy implication:** do not headline large-file capability on Safari; the "4 GB free" claim must not imply a 4 GB Safari upload works today.
 
 ---
 
@@ -179,6 +176,8 @@ Safari imposes an effective ~1.5 GB real-world ceiling on the current in-memory 
 | Onboarding-A | refueler-io | Merchant onboarding flow + handover copy v3. ✅ Closed. |
 | Design-A | refueler-io | Two merchant handover docs. Commit f0157ef. ✅ Closed. |
 | **Block-5 Close** | refueler-io | Block 5 review. Go-live pressure removed. Sim stages ratified. BRIDGE v4.2. ✅ Closed. |
+| **CC-92** | refueler-io, Supabase | Stage 3 payment sim PASSED. Migration cc92_steakhouse_activate_lightning_address. ✅ Closed. |
+| **Sim-Close** | refueler-io | Formal sign-off. INCIDENT-PROTOCOL.md. BRIDGE v4.3. ✅ Closed. |
 | Pass-0 | refueler-pass | Founding scope. Two-credential-class model locked. |
 | Pass-0b | refueler-pass, refueler-io, refueler-share, refueler-legend | BRIDGE v3.7. |
 | Pass-1 | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0. |
@@ -187,23 +186,20 @@ Safari imposes an effective ~1.5 GB real-world ceiling on the current in-memory 
 
 ## Active action items (Rajesh)
 
-- Push `refueler-app` dev branch
+- Push `refueler-app` dev branch ← CA-1 prerequisite
 - Disconnect `share.refueler.io` from Cloudflare Pages
+- Commit `INCIDENT-PROTOCOL.md` to `refueler-io/docs/` and push BRIDGE v4.3 to `refueler-share`, `refueler-legend`, `refueler-pass`
 - Upgrade Supabase to Pro when first real merchant goes live
 - Upgrade Cloudflare Workers to Paid ($5/month) before production volume
 - Send Mapbox coordinate accuracy email (drafted CC-84, in drafts)
-- Visit Apple Store — iPad 10.9″ portrait layout check (non-blocking)
-- Provide Lightning address for Raj's Steakhouse for payment sim (Stage 3)
+- Visit Apple Store — iPad 10.9″ portrait layout check (G-3, before first real merchant)
+- New Anthropic API key → rotate before csuite briefing reuse
 - football-data.org API key held by Rajesh — ready for Events intelligence layer session
 - **[Pass]** Solicitor briefing brief to draft before appointment
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29) before v2 build
 - **[Pass]** P1 spike: issuance timing-correlation resistance
-- **[Pass]** Solicitor P1: GDPR controllership mapping
-- **[Merchant terminal]** S-23 + S-24: bundle into one Sonnet session — next after schema migration
-- **[Merchant terminal]** Schema migration: 4 cols on `venue_partners` — next counted session
 - **[All products]** Privacy page update queued
 - **[All products]** Docs ↔ UI sync rule active from Design-A
-- **[Planning]** TDP-A/B/C: after Stage 3 sim passes, before Menu Management v1
 
 ---
 
