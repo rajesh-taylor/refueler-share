@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 4.9 | **Created:** 28 July 2026 | **Updated:** CC-103 planning · 2026-08-20
+> **Version:** 5.0 | **Created:** 28 July 2026 | **Updated:** Multi-[n] · 2026-08-22
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -195,8 +195,8 @@ Pre-merchant gate list:
 - **G-1** ✅ CLEARED CC-97 — LNURL-pay, `create-order` v10.
 - **G-2** (hard blocker): Menu Management v1. After TDP-C.
 - **G-3**: iPad physical check. Before first real merchant.
-- **G-4**: ✅ Hardening-A — cleared CC-94.
-- **G-5**: ✅ S-26 FK — cleared CC-94.
+- **G-4** ✅ Hardening-A — cleared CC-94.
+- **G-5** ✅ S-26 FK — cleared CC-94.
 
 ---
 
@@ -227,6 +227,166 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 
 ---
 
+## Share × Legend — distress integration (locked Multi-[n] · 22 Aug 2026)
+
+**The use case:** A distressed Bitcoin user generates a Chain Trace Report on Legend
+(Merkle-verified PDF: every address, movement, hop, legal-standard timestamp, block
+height verification). That document is sensitive. Emailing it passes it through servers
+subject to subpoena, data breach, and IT monitoring. Share is the correct and only
+appropriate transmission channel.
+
+**Why this is the clearest real-world Share use case yet articulated:**
+Every other Share use case is somewhat abstract — "accountants, solicitors, GDPR."
+This one is visceral. A distressed Bitcoiner at 3am, funds potentially swept, trying
+to send sensitive chain evidence to their lawyer without leaving a trail. The vendor
+breach guarantee (Share's server never holds keys; breach exposes nothing useful) maps
+directly onto the threat model of a user who has already suffered one compromise.
+
+**Integration model (v2):**
+- "Send privately" button appears alongside "Download PDF" on Chain Trace Report screen
+- Share upload happens in background; user never navigates away from Legend
+- Unique encrypted link generated; decryption key never leaves the user's device
+- Link can be sent via any channel (WhatsApp, SMS, email) safely — plaintext never
+  touches those servers
+- Recipient (solicitor, trustee, law enforcement liaison) clicks link, file decrypts
+  in their browser; no Share account required for recipient
+- Link expires 72 hours by default
+
+**Plain English copy (locked):**
+> "Your report contains sensitive information — every address and movement we traced.
+> Sending it by email means it passes through servers you don't control.
+>
+> Send privately instead: we encrypt it so only your recipient can open it.
+> Not even we can read it once it's sent. The link expires in 72 hours.
+>
+> Copy the link below and send it however you like — text, email, Signal."
+
+**Solicitor/GDPR angle (B2B pitch inside the B2C moment):**
+Share protects the professional's indemnity liability, not just the user's privacy.
+A solicitor receiving an unencrypted PDF of a client's full Bitcoin address history
+via Gmail has a GDPR and professional indemnity exposure. Share removes that exposure
+without requiring any technical knowledge from either party.
+
+**Article cross-reference:** Article 24 is simultaneously the strongest Legend article
+and the strongest Share article not yet written. Coordinate publication.
+
+---
+
+## Pass × Legend — address watch notification layer (locked Multi-[n] · 22 Aug 2026)
+
+**The use case:** A user registers an address watch on Legend. They need to be alerted
+if the address moves — potentially with only minutes to act before funds are swept.
+Email requires storing an address. Nostr requires a running client. Pass is already
+on their phone and already holds Cashu credentials daily.
+
+**Integration model (v2):**
+- Legend issues a Cashu bearer watch credential (same blind architecture as query
+  credentials) when a user registers an address watch
+- Credential stored in Pass — no email address stored, no Nostr client required
+- When watched address moves, Legend marks the credential as triggered
+- User sees quiet alert in Pass during normal daily use (tickets, stamps, offers):
+  *"Your watched address has activity. Open Legend now."*
+- No address and no amount in the notification body — signal only
+
+**Layered by user sophistication:**
+- Non-technical user: Pass notification sufficient — already in the app, one tap to Legend
+- Technical Bitcoiner: Nostr DM as additional parallel layer
+- Fallback for all users: Cashu polling token — check on demand, blinded so Legend
+  cannot link watch registration to the poll, works from any browser
+
+**Privacy advantage over email:**
+Pass notifications do not appear in corporate IT security logs. No signal to any
+monitoring infrastructure that a Bitcoin address is being watched. This matters
+especially for professional users (solicitors, family office staff) operating on
+monitored networks.
+
+**Why this fits Pass's mission exactly:**
+This is Pass doing what it was designed to do — daily credential interactions requiring
+no Bitcoin knowledge, building Cashu familiarity at scale, plugging directly into
+Legend as a notification and presentation layer. The use case writes directly from
+the Pass top-of-funnel definition in this file.
+
+**Pass credential class for address watch:** Access credential variant — non-monetary,
+closed-loop, no melt path, triggered state replaces presented state. New credential
+subtype to be defined in Pass planning session.
+
+---
+
+## Recovery Coordination Layer — v3 candidate (locked Multi-[n] · 22 Aug 2026)
+
+**What it is:** A FROST-based private coordination mechanism for mass-compromise events
+(exchange collapse, hardware wallet supply chain attack, RNG vulnerability) where
+multiple victims need to assert collective claims without revealing individual holdings
+to each other, to Legend, or to the public filing record.
+
+**Flagged as genuinely novel** — nothing comparable exists in the Bitcoin ecosystem.
+Hoseki and similar tools provide individual proof-of-ownership. No tool provides
+threshold-signed collective claim coordination with sealed individual components.
+
+**The problem it solves — the Mt. Gox precedent:**
+Large-scale Bitcoin theft produces hundreds or thousands of victims with identical
+forensic needs: chain trace, legal documentation, collective claim filing. Individual
+filings in insolvency proceedings are public documents — name, amount, and identity
+attached. Mt. Gox creditors spent a decade filing spreadsheets. Individually-identified
+creditors became targets for scammers and social engineering. A collective filing
+mechanism that keeps individual amounts sealed while proving the aggregate claim to
+a trustee or court would have changed their situation materially.
+
+**The mechanism:**
+- Each victim generates a FROST key share independently on their own device
+- No victim holds any other victim's share at any point
+- Elected representatives (threshold k of n) co-sign a collective claim document
+- Document states collective total; individual Merkle proofs are sealed components —
+  verifiable by trustee/court against the chain, not visible in the public filing
+- Legend produces each victim's individual Merkle-verified chain trace receipt
+- No Legend node sees the complete picture — coordination is structurally trustless
+- Share transmits each victim's sealed component to the coordination point privately
+
+**The dead drop analogy (internal framing):**
+Each agent deposits their intelligence package separately, in separate locations. The
+handler assembles the composite picture. No agent knows what any other agent deposited.
+The composite is presented to the minister. If one agent is compromised, the others
+are not exposed — and the composite remains valid if the threshold was met.
+
+**Sovereign-scale extension — the El Salvador model:**
+At current Bitcoin price trajectories, a national Bitcoin reserve loss is a fiscal
+event with geopolitical consequences: IMF/World Bank re-engagement, loss of
+Bitcoin-native resident community confidence, political consequences for the Bitcoin
+legal tender framework. El Salvador's declared purchase programme (~1 BTC/day as of
+2026) makes this scenario material rather than theoretical.
+
+Legend's Recovery Coordination Layer is the protocol a national Bitcoin office should
+have in place *before* they need it — not as a reactive tool but as a pre-adopted
+standard of fiscal prudence. "Legend-compliant recovery protocols" as a standard a
+national Bitcoin office adopts proactively is a fundamentally different product
+conversation from post-compromise recovery tooling.
+
+A Bitcoin treasury that does not have Legend-compatible recovery protocols in place
+is operating below the standard of care. This framing — proactive standard, not
+reactive tool — puts Legend in the same conversation as custody standards, not just
+explorer tools. UC-9 Opus session to develop this fully.
+
+**Scope boundary (what Legend provides vs what it points to):**
+- Legend provides: chain trace, Merkle receipts, FROST threshold infrastructure,
+  Share-based private transmission of sealed components
+- Legend does not provide: legal advice, trustee liaison, filing service, diplomatic
+  or intergovernmental coordination
+- IMF and World Bank have no framework for Bitcoin reserve loss — Legend is not a
+  policy institution; it provides the cryptographic and documentation layer only
+
+**Version assignment:**
+- v1: Distress Mode — plain-language address query, immediate answer, no friction
+- v2: Chain Trace Report — Merkle-verified PDF, Share integration for private transmission
+- v2: Address Watch — Cashu credential, Pass notification layer, Nostr parallel
+- v3: Recovery Coordination Layer — FROST collective claim, sealed individual components,
+  sovereign-scale architecture
+- Dependency: FROST DKG ceremony implementation (scheduled post-node-provider confirmation)
+
+**UC-9 Opus session:** Required before any build planning on this layer. Session prompt
+in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
+
+---
+
 ## Session references — cross-repo
 
 | Session | Repos touched | Notes |
@@ -251,6 +411,7 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 | **CC-103 planning** | refueler-legend | Legend post-B9 scope: Haiku helper, estate report contextual metrics, non-bitcoiner audience, Sparrow. Logged. |
 | Pass-0 | refueler-pass | Founding scope. Two-credential-class model locked. |
 | Pass-1 | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0. |
+| **Multi-[n]** | refueler-legend, refueler-share, refueler-pass, refueler-io | Share×Legend distress integration locked. Pass×Legend address watch locked. Recovery Coordination Layer v3 candidate. Article 24 scoped. UC-9 session prompt produced. BRIDGE v5.0. |
 
 ---
 
@@ -259,7 +420,7 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant)
 - **Open Blink ops wallet ("Refueler Ops")** ← second BTC wallet in Blink mobile app
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns
-- **Push BRIDGE v4.9** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
+- **Push BRIDGE v5.0** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
 - Add test `onchain_address` to Raj's Steakhouse in Supabase dashboard
 - Push `refueler-app` dev branch ← CA-1 prerequisite
 - Disconnect `share.refueler.io` from Cloudflare Pages
@@ -270,9 +431,11 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 - Football-data.org API key held by Rajesh — ready for Events intelligence layer session
 - Commission rate planning conversation before first real merchant
 - **[Legend]** Legend planning session — family estate planning, miniscript/multisig, Silent Payments, Payjoin, CoinJoin — for those who have used privacy tools AND those who haven't. Sparrow Wallet integration path. Scoped post-B9.
+- **[Legend]** UC-9 Opus session — Recovery Coordination Layer + sovereign Bitcoin exposure scenario (El Salvador model). Session prompt in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
 - **[Pass]** Solicitor briefing brief to draft before appointment
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29) before v2 build
 - **[Pass]** P1 spike: issuance timing-correlation resistance
+- **[Pass]** Define address watch credential subtype — Access credential variant, non-monetary, triggered state. Dedicate to Pass planning session.
 - **[All products]** Privacy page update queued
 - **[All products]** Docs ↔ UI sync rule active from Design-A
 
