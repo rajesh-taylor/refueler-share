@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 5.0 | **Created:** 28 July 2026 | **Updated:** Multi-[n] · 2026-08-22
+> **Version:** 5.1 | **Created:** 28 July 2026 | **Updated:** AD-HOC · 2026-08-27
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -227,6 +227,125 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 
 ---
 
+## Share — Silent Inbox (locked AD-HOC · 27 Aug 2026)
+
+**Product name locked:** Silent Inbox.
+**Tagline:** "A permanent, private link where anyone can send you files — without either of you leaving a trace."
+
+**What it is:** A static, permanent inbox address that allows any sender to deliver encrypted files to the inbox holder without either party needing an account, and without Refueler being able to link senders to recipients or to each other.
+
+**Tier placement:**
+- Production Max — entry point for the full Silent Inbox feature set.
+- Creative Premium — lighter version: smaller storage cap, shorter TTL per transfer.
+- Free tier — no Silent Inbox.
+
+**Mechanics:**
+- Inbox ID is an opaque random string in KV — it is an accounting unit, not an identity. No email, no name, no account attached.
+- Byte counter per inbox ID enforced in KV before credential issuance — sender gets 402 if cap is reached.
+- Pause/vacation mode: KV flag `inbox_paused_{inbox_id}` — when set, credential issuance returns 503 with user-facing copy, sender informed to try again later.
+- Address rotation: inbox holder generates a new inbox ID; old ID remains active for 24-hour grace period, then KV entry expires. Sender who visited the link before rotation still completes their upload. Sender who visits after expiry receives a clean "this link is no longer active" response.
+- Per-transfer TTL enforced via R2 lifecycle rules scoped to the inbox key prefix — files auto-delete at TTL regardless of whether they were downloaded.
+
+**Dashboard for inbox holder (Production Max):**
+QR code · copy link · pause toggle · rotate button · storage bar (bytes used / cap) · transfer list showing: size, timestamp, expiry countdown, download status. No sender names. No file names. No sender IP. Nothing that links two transfers to the same sender.
+
+**Stripe vs Lightning tier split (locked AD-HOC · 27 Aug 2026):**
+- Lightning path gets Silent Inbox. Stripe path does not.
+- Framing: architectural honesty, not a restriction. The Stripe path collects name and card details — Silent Inbox cannot make its privacy promise when the account has an identity attached.
+- Upgrade page copy locked: *"Both paths unlock the same transfer capacity. Lightning doesn't collect your identity — which means some account features aren't available, and some privacy features are."*
+- Payment comparison table columns: Name / Email / Record / Refund / Privacy — Stripe vs Lightning.
+- Zero-sat invoice concern resolved: Lightning users pay real sat amount for tier purchase. No zero-sat invoices anywhere in the flow.
+
+**BOLT12-inspired static offer as the underlying primitive (locked AD-HOC · 27 Aug 2026):**
+The Silent Inbox is architecturally the Share implementation of a BOLT12-style static offer address. Strip the sats from the BOLT12 offer ceremony and what remains is a reusable, privacy-preserving, authenticated request channel where neither party reveals network identity and each interaction is unlinkable.
+
+Implementation decision locked — **Option A:** borrow BOLT12 cryptography, not the Lightning network. Cloudflare Worker acts as blinded relay over HTTPS; secp256k1 blinded paths. Buildable on existing Cloudflare + Worker infrastructure. No Lightning node required for this feature. No zero-sat invoice UX problem for users. Option B (real BOLT12 zero-amount invoices, requires B9 node) noted as architecturally cleaner but gated on node provisioning and introduces user-facing complexity that is not justified for Share's professional audience.
+
+**Journalist use case (canonical):** Journalist publishes one QR or link. Any source sends documents indefinitely. Each upload is unlinkable to every other. No correlation between senders. Journalist's network identity never revealed. This is the cleanest public articulation of the two-axis category definition applied to a real workflow.
+
+**Network privacy:** Mullvad VPN recommendation covers Share's threat model without requiring onion routing infrastructure. Cloudflare's global edge + Mullvad handles the network layer. No Share-operated onion routing required.
+
+**Pass standing invitation credentials (related primitive):**
+The same BOLT12-inspired static offer mechanism supports Pass standing invitation credentials — a venue publishes a standing pass offer; authorised holders (enforced by Nutroot threshold leaf, see below) contact it periodically and receive a fresh single-use admission credential for that event instance. Combine with Nutroot `after` leaf for time-window enforcement. Member list committed cryptographically, not in a database.
+
+---
+
+## Share × Lightning — B9 node infrastructure (locked AD-HOC · 27 Aug 2026)
+
+**Hetzner node selected:** CAX21 (€5.77/mo, 8GB RAM, 80GB NVMe).
+**Software:** LND + Neutrino mode. Not pruned bitcoind — Neutrino syncs in 4–8 hours, pruned bitcoind takes days and requires more storage.
+**Co-located services on Share node:** LND instance + SimpleX SMP server + Tor hidden service.
+**Tor latency:** not a concern — the node handles signalling only, not file transfer. File bytes travel Cloudflare edge; only Lightning payment signals touch the node.
+
+**Instance separation rule (locked):**
+Share Lightning node and Legend Lightning node must run on separate Hetzner instances. A single fatal error — kernel panic, disk failure, misconfiguration — must not take both products' payment rails offline simultaneously.
+- Share node: CAX21, B9 scope.
+- Legend node: separate CAX21, provisioned when Legend build begins (post-B9).
+- SimpleX SMP server co-located with Share node only. Its failure is lower severity than the payment rail and does not justify a separate instance.
+
+**Upgrade trigger for Share node:** when Lightning payment volume requires dedicated resources, move to CX32 or larger. Decision at that point whether SimpleX migrates or stays.
+
+**Blink account for B7:** Separate Blink account for Share (`rt+share@rajeshtaylor.com`), API key `refueler-share-b7` with READ + RECEIVE scopes. This is the B7 payment backend — the Hetzner node is B9 scope. Do not conflate.
+
+---
+
+## Cashu protocol — NUT-00 v3 and NUT-10 v3 Nutroot secrets (AD-HOC · 27 Aug 2026)
+
+**Source:** Cashu dev call 36, 27 Aug 2026. Both items are draft PRs — neither merged. Author: robwoodgate. Reviewer: calle. Monitor `cashubtc/nuts` repo.
+
+**NUT-00 v3 — BLS12-381 pairing-based blind signatures (PR #371):**
+Adds a pairing-friendly curve enabling batch verification of multiple blind signatures in a single operation. Useful for Share at scale (bulk credential verification). Assessment: B10+ consideration for Share. Not urgent — existing NUT-00 BDHKE is correct and sufficient through B9.
+
+**NUT-10 v3 — Nutroot secrets (PR #421):**
+Taproot-style spending conditions. A credential's spending condition is a Merkle tree of policy leaves. Key-path spend uses the aggregate key (privacy-preserving by default — observer cannot distinguish a key-path spend from an ordinary credential presentation). Script-path spend reveals only the specific leaf being satisfied, not the full policy tree.
+
+Leaf types:
+- `threshold(k, [pubkeys])` — M-of-N co-signatories required.
+- `after(timestamp)` — credential is unspendable before this time.
+- `hashlock(preimage_hash)` — credential is unspendable without the preimage.
+
+**Assessment for Share:** HIGH priority. The FROST threshold signatures planned for B12 get a proper interoperable Cashu foundation from Nutroot rather than bespoke implementation. B9 whitepaper §Future work should reference Nutroot secrets as the direction — supersedes the NUT-29 framing in current roadmap.
+
+**Assessment for Pass:** VERY HIGH priority. Timelock, hashlock, and M-of-N multisig at the token level — cleaner than rolling bespoke spending conditions per use case. This is the foundation Pass v2 should be built on.
+
+**Supersedes:** NUT-29 framing in B9 whitepaper §Future work. Update all references at B9 planning.
+
+---
+
+## Pass × Nutroot secrets — use case set (locked AD-HOC · 27 Aug 2026)
+
+**Key framing:** "The policy is the credential." Access conditions are cryptographic, not database entries. Cannot be subpoenaed, queried, or breached at the list level. Luma cannot do this — Luma's access control is a row in a database.
+
+**Use cases by leaf type:**
+
+`threshold(k, [pubkeys])`:
+- Event entry with shared custody (anti-touting): ticket valid only when holder + venue co-sign. Prevents resale to parties who wouldn't pass the co-sign check.
+- Corporate ticket allocation: CFO + EA must both present credentials for a block booking to activate.
+- Family/group passes: 2-of-4 household members can claim entry — useful for season tickets.
+- Press accreditation: editor + journalist must co-sign access for press-only areas.
+
+`after(timestamp)`:
+- Early access windows enforced cryptographically — no database flag to flip, no admin override possible.
+- Multi-day festival daily activation: credential unlocks each morning, cannot be used the day before.
+- Refund window embargo: credential is non-transferable until refund window closes (timestamp-gated).
+- Season ticket renewal cliff: credential expires at end of season, renewal issues a new credential.
+- Venue handover: operational credential for staff becomes valid only after a specific handover time.
+
+`hashlock(preimage_hash)`:
+- Proxy pickup: interoperable replacement for bespoke Pass proxy credential. Holder gives preimage to proxy; proxy presents credential + preimage. Original holder's anonymity preserved.
+- Conditional staff access: production manager holds preimage, releases it on day-of-event to unlock backstage credentials.
+- Merchandise redemption on purchase proof: preimage is embedded in purchase confirmation; present at merch desk to unlock credential.
+- Collaborative gifting: multiple people contribute to a gift; preimage released when funding threshold met.
+
+**Combinations assessed as most novel:**
+- FROST threshold + Nutroot threshold leaf: private members events where no individual holds a complete key. The member list is a FROST key set; admission requires a threshold of key-share holders to co-sign. No list in a database. No admin with override access.
+- Timelock + hashlock: conference talk access — speaker releases preimage at the start of their talk. Attendees with the credential + preimage get access for that slot only.
+- Threshold + timelock: board meeting quorum gate — credential requires 3-of-5 signing keys AND is only valid after the scheduled meeting time. Combines identity threshold with time enforcement.
+
+**Priority framing:** FROST combinations and "the policy is the credential" are the headline differentiation versus Luma and every existing ticketing platform. This is the Pass v2 thesis.
+
+---
+
 ## Share × Legend — distress integration (locked Multi-[n] · 22 Aug 2026)
 
 **The use case:** A distressed Bitcoin user generates a Chain Trace Report on Legend
@@ -412,6 +531,7 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 | Pass-0 | refueler-pass | Founding scope. Two-credential-class model locked. |
 | Pass-1 | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0. |
 | **Multi-[n]** | refueler-legend, refueler-share, refueler-pass, refueler-io | Share×Legend distress integration locked. Pass×Legend address watch locked. Recovery Coordination Layer v3 candidate. Article 24 scoped. UC-9 session prompt produced. BRIDGE v5.0. |
+| **AD-HOC · 27 Aug 2026** | refueler-share, refueler-pass | Silent Inbox product name + full spec locked. Stripe vs Lightning tier split locked. Hetzner CAX21 node selected (LND + Neutrino + SimpleX SMP + Tor). Instance separation rule locked. NUT-00 v3 + NUT-10 v3 Nutroot secrets logged from Cashu dev call 36. Pass × Nutroot use case set locked. BOLT12-inspired static offer as Silent Inbox primitive locked (Option A). BRIDGE v5.1. |
 
 ---
 
@@ -420,7 +540,7 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant)
 - **Open Blink ops wallet ("Refueler Ops")** ← second BTC wallet in Blink mobile app
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns
-- **Push BRIDGE v5.0** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
+- **Push BRIDGE v5.1** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
 - Add test `onchain_address` to Raj's Steakhouse in Supabase dashboard
 - Push `refueler-app` dev branch ← CA-1 prerequisite
 - Disconnect `share.refueler.io` from Cloudflare Pages
