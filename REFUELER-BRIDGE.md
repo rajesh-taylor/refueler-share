@@ -227,17 +227,17 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 
 ---
 
-## Share — Silent Inbox (locked AD-HOC · 27 Aug 2026)
+## Share — Silent Drop [name under review] (locked AD-HOC · 27 Aug 2026)
 
-**Product name locked:** Silent Inbox.
+**Product name locked:** Silent Drop.
 **Tagline:** "A permanent, private link where anyone can send you files — without either of you leaving a trace."
 
 **What it is:** A static, permanent inbox address that allows any sender to deliver encrypted files to the inbox holder without either party needing an account, and without Refueler being able to link senders to recipients or to each other.
 
 **Tier placement:**
-- Production Max — entry point for the full Silent Inbox feature set.
+- Production Max — entry point for the full Silent Drop feature set.
 - Creative Premium — lighter version: smaller storage cap, shorter TTL per transfer.
-- Free tier — no Silent Inbox.
+- Free tier — no Silent drop.
 
 **Mechanics:**
 - Inbox ID is an opaque random string in KV — it is an accounting unit, not an identity. No email, no name, no account attached.
@@ -250,14 +250,14 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 QR code · copy link · pause toggle · rotate button · storage bar (bytes used / cap) · transfer list showing: size, timestamp, expiry countdown, download status. No sender names. No file names. No sender IP. Nothing that links two transfers to the same sender.
 
 **Stripe vs Lightning tier split (locked AD-HOC · 27 Aug 2026):**
-- Lightning path gets Silent Inbox. Stripe path does not.
-- Framing: architectural honesty, not a restriction. The Stripe path collects name and card details — Silent Inbox cannot make its privacy promise when the account has an identity attached.
+- Lightning path gets Silent Drop. Stripe path does not.
+- Framing: architectural honesty, not a restriction. The Stripe path collects name and card details — Silent Drop cannot make its privacy promise when the account has an identity attached.
 - Upgrade page copy locked: *"Both paths unlock the same transfer capacity. Lightning doesn't collect your identity — which means some account features aren't available, and some privacy features are."*
 - Payment comparison table columns: Name / Email / Record / Refund / Privacy — Stripe vs Lightning.
 - Zero-sat invoice concern resolved: Lightning users pay real sat amount for tier purchase. No zero-sat invoices anywhere in the flow.
 
 **BOLT12-inspired static offer as the underlying primitive (locked AD-HOC · 27 Aug 2026):**
-The Silent Inbox is architecturally the Share implementation of a BOLT12-style static offer address. Strip the sats from the BOLT12 offer ceremony and what remains is a reusable, privacy-preserving, authenticated request channel where neither party reveals network identity and each interaction is unlinkable.
+The Silent Drop is architecturally the Share implementation of a BOLT12-style static offer address. Strip the sats from the BOLT12 offer ceremony and what remains is a reusable, privacy-preserving, authenticated request channel where neither party reveals network identity and each interaction is unlinkable.
 
 Implementation decision locked — **Option A:** borrow BOLT12 cryptography, not the Lightning network. Cloudflare Worker acts as blinded relay over HTTPS; secp256k1 blinded paths. Buildable on existing Cloudflare + Worker infrastructure. No Lightning node required for this feature. No zero-sat invoice UX problem for users. Option B (real BOLT12 zero-amount invoices, requires B9 node) noted as architecturally cleaner but gated on node provisioning and introduces user-facing complexity that is not justified for Share's professional audience.
 
@@ -267,6 +267,17 @@ Implementation decision locked — **Option A:** borrow BOLT12 cryptography, not
 
 **Pass standing invitation credentials (related primitive):**
 The same BOLT12-inspired static offer mechanism supports Pass standing invitation credentials — a venue publishes a standing pass offer; authorised holders (enforced by Nutroot threshold leaf, see below) contact it periodically and receive a fresh single-use admission credential for that event instance. Combine with Nutroot `after` leaf for time-window enforcement. Member list committed cryptographically, not in a database.
+
+- Name under review: "Silent Drop" is the candidate. Do not lock until copy is live. No Stripe objects until name is final.
+- Feature is Production Max only — no Creative Premium lite version. The boundary is qualitative: send-focused tier vs. standing-receive tier.
+- Tier model is now two-dimensional: Tier = capacity; Rail = privacy/feature profile. - Lightning-only features are those requiring the no-identity property. Rule applies to all future features, not just this one.
+- Recovery cliff is a feature: "Your inbox exists only where you keep it. Refueler has nothing to recover because we never had it."
+- KV unit economics: negligible (~$0.00053/user/month at 30 transfers). Not a constraint.
+- Shared page for journalist/source-protection copy — not a dedicated landing page.
+- Two tidy-up sessions to sequence post-Opus-2: one for tier naming/copy, one for Stripe objects.
+
+## Competitive intelligence
+- The gap Silent Drop closes is named the correlation problem (not the discovery problem): can a recipient maintain a permanent public receive-point such that no two transfers — same or different senders — can be linked to each other or to the recipient? The two-axis category definition remains unchanged and primary. Silent Drop is its sharpest illustration, not a third pillar.
 
 ---
 
