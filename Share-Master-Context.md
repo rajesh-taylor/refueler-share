@@ -25,13 +25,13 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 | Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | Blink BOLT11 (B7, Share-specific account) → LNbits on Hetzner CAX21 (B9, Blink extension as funding source) |
+| Payments (sats) | Blink BOLT11 (B7, shared account — BLINK_SHARE_API_KEY) → LNbits on Hetzner CAX21 (B9, Blink extension as funding source) |
 
 ---
 
 ## Lightning infrastructure — B7 plan
 
-**Account structure:** Separate Blink account for Share. Email `rt+share@rajeshtaylor.com`. API key `refueler-share-b7` — READ + RECEIVE scopes only. Wallet ID queried via `me { defaultAccount { wallets { id walletCurrency } } }`.
+**Account structure:** Shared Blink account (refueler.io POS + Share). API key refueler-share-b7— READ + RECEIVE scopes only. Worker secrets useBLINK_SHARE_API_KEYandBLINK_SHARE_WALLET_IDto avoid collision with POS bindingBLINK_API_KEY. BTC wallet ID: fd2357fe-24ec-4173-8441-fc0f05722e9a. Callback endpoint registered: https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. Full separation to LNbits on Hetzner CAX21 deferred to B9.`
 
 **Callback endpoint:** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. No signing secret — Blink does not sign payloads. Verification via KV payment hash lookup. Blink fires twice per payment — Worker deduplicates via `settled: true` KV flag.
 
