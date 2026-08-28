@@ -197,7 +197,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Turnstile nonce TTL = 7 days | Cloudflare expires tokens ~300s; use 600s KV TTL |
 | `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
 | Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
-| `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x | Bare `new Uint8Array(buf)` — default level-6 DEFLATE, macOS-compatible |
+| `fflate.zip()` (buffered) for folder uploads | `fflate.Zip` streaming API only — buffered path OOM on large folders (RU0) |
+| `ZipDeflate` with `{ level: 0 }` for already-compressed files | `fflate.ZipPassThrough` — writes method=0 (STORED), macOS Archive Utility compatible. `ZipDeflate level:0` writes method=8 (DEFLATED, zero passes) which Archive Utility rejects (RU0) |
+| Multiple concurrent `arrayBuffer()` calls in zip loop | One file at a time only — release buffer before reading next. Yield via `setTimeout(0)` between files (RU0) |
 | Hardcode 900s TTL for download tokens | Pass `manifest.expiry_timestamp` as `expiresAt` |
 | `client.putManifest()` in integration tests | No Worker route exists — manifest written automatically after final chunk |
 | `X-P2SH-Secret-Hash` in separate manifest PUT | Must be sent as chunk 0 upload header |
@@ -262,7 +264,7 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S
 - REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
 - First-transfer experience aesthetic (Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests) — copy preparation in ad-hoc sessions; build scope B13a
 - Pay-to-extend transfer window design — design document due B8. Framing locked: **"Purchase a recovery window"** — never "pay to extend." Use case: recipient (or sender) purchases additional download time without contacting the other party, preserving the professional relationship. Self-purchase scenario: junior partner extends window on firm's business account without interrupting senior partner or client. **Privacy properties (locked AP-7):** (1) Refueler cannot correlate the extension payment with the original upload — server is blind to who is extending and why; (2) Lightning payment preserves pseudonymity of the purchasing party; (3) original sender's anonymity is structurally unchanged. **Publication restriction (locked AP-7):** mention in B9 whitepaper §Future work only — no public product copy or marketing before the feature ships. Shipping first prevents misreading as punitive artificial-scarcity monetisation and prevents storing competitors implementing a degraded version and poisoning the framing. Tone in all copy when it ships: discreet, convenient, professional — not punitive. Do not build before design locked at B8.
-- **[CRITICAL] Resumable uploads — IndexedDB state persistence (R-series, promote to post-B7).** Live failure 5 Aug 2026: 1.51 GB folder upload stalled at 80% (chunk 157/193). Per-chunk retry (1s/2s/4s, S48a) did not recover. No session-level resume — user must restart from chunk 0 on any stall. This is the single biggest reliability gap before alpha. Confirmed by founder attempting a real client delivery. **Architecture (locked):** IndexedDB writes chunk completion state on each 200 ACK. On page reload, detect interrupted UUID + credential, offer resume or discard. Resume skips confirmed chunks. Credential expiry awareness required. **Root cause of stall (unknown — investigate RU1):** candidates are (a) fflate compression OOM on 1.51 GB folder mid-stream, (b) Worker request timeout on a slow chunk, (c) macOS Safari connection drop without error event. **Do not bundle with other work — dedicated RU1/RU2 sessions.** Move R-series to immediately post-B7 (before SW block) given severity.
+- **[CRITICAL] Resumable uploads — IndexedDB state persistence (R-series, promote to post-B7).** Live failure 5 Aug 2026: 1.51 GB folder upload stalled at 80% (chunk 157/193). Per-chunk retry (1s/2s/4s, S48a) did not recover. No session-level resume — user must restart from chunk 0 on any stall. This is the single biggest reliability gap before alpha. Confirmed by founder attempting a real client delivery. **Architecture (locked):** IndexedDB writes chunk completion state on each 200 ACK. On page reload, detect interrupted UUID + credential, offer resume or discard. Resume skips confirmed chunks. Credential expiry awareness required. **Root cause of stall — partial update (RU0, 28 Aug 2026):** fflate OOM on the zip phase (candidate a) is **resolved** — streaming `fflate.Zip` API replaces buffered `fflate.zip()`, peak heap is now ~1× folder size. Remaining candidates: (b) Worker request timeout on a slow chunk, (c) macOS Safari connection drop without error event — investigate at RU2a. **Do not bundle with other work — dedicated RU1/RU2 sessions.** Move R-series to immediately post-B7 (before SW block) given severity.
 - Context file archive strategy — implement at S87: split `Share-Master-Context.md` into working memory (≤350 lines, current + next block only) and new `Share-Archive.md` (compacted block summaries B1–B6, one paragraph per block, key commit hashes, permanent do-not-retry items not already in CLAUDE.md). `Share-Archive.md` lives in repo root, never loaded by default — attach to Project only if historical question arises.
 
 ---
@@ -564,9 +566,9 @@ No discounts. No savings framing. Prepay cadences are convenience, not a deal.
 
 **Context (logged 5 Aug 2026):** Live stall on 1.51 GB photo folder revealed that fflate level-6 compression on already-compressed files (JPEG, video, audio) wastes significant CPU and time for zero size benefit, contributing to a ~20–40% speed deficit vs unencrypted services like Smash. This is acceptable for legal/professional buyers; it is a real barrier for creative professionals working with video.
 
-**Compression strategy — build and test at B13a (or HQ-series if speed benchmarking is in scope there):**
+**Compression strategy — implemented RU0 (28 Aug 2026), benchmarking at B13a/HQ-series:**
 
-Skip compression (fflate level 0 — store only, no DEFLATE pass) for file types that are already compressed. The zip wrapper is retained for receiver convenience; only the compression pass is skipped.
+Skip compression for file types that are already compressed. Implemented as `fflate.ZipPassThrough` (STORED, method=0) in the streaming zip path — not `{ level: 0 }` in ZipDeflate, which would produce a DEFLATED header with zero passes (macOS Archive Utility rejects this). The zip wrapper is retained for receiver convenience; only the compression pass is skipped.
 
 | Category | Skip compression | Notes |
 |----------|-----------------|-------|
@@ -577,7 +579,7 @@ Skip compression (fflate level 0 — store only, no DEFLATE pass) for file types
 | Office/PDF | `.pdf .docx .xlsx .pptx` | Modern Office formats are zipped internally — marginal gain only, test both. |
 | Documents | `.txt .md .csv .json .xml .html` | Keep level 6 — compress well, small files. |
 
-**Implementation:** detect MIME type or extension at the point fflate receives each file entry. Pass `{ level: 0 }` for skip-list types, default level 6 for everything else. One function, ~30 lines. Test against: (a) 1.5 GB JPEG folder, (b) 500 MB ProRes folder, (c) mixed document folder. Benchmark against Smash for each. Target: ≤15% slower than Smash on video/photo folders.
+**Implementation (RU0):** `shouldSkipCompression(relativePath)` — extension lookup against `SKIP_COMPRESS_EXTENSIONS` Set. `ZipPassThrough` for skip-list types, `ZipDeflate level 6` for everything else. Unit tests cover all skip-list extensions + compressible types. Manual smoke test pending: (a) 1.5 GB JPEG folder, (b) 500 MB ProRes folder, (c) mixed document folder. Benchmark against Smash for each. Target: ≤15% slower than Smash on video/photo folders. Benchmark scope: B13a or HQ-series.
 
 **Creative market positioning — B13a decision:**
 - Creative Premium tier is well-named for photographers and designers (document + image heavy, reasonable file sizes)

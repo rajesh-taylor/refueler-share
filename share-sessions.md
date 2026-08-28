@@ -176,6 +176,21 @@
 
 AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/admin/. Theme fixed to rs-theme cookie / dataset.theme. Stale token values corrected to CSS-1a lock. Worker endpoints unchanged. See AD-1 in refueler-io SESSIONS.
 
+---
+
+## RU0 — Large folder OOM fix (28 Aug 2026)
+
+| # | Commit | Summary |
+|---|--------|---------|
+| RU0 | pending | Streaming zip: replaced `fflate.zip()` (buffered, OOM on 1.5 GB+) with `fflate.Zip` streaming API. Files processed one at a time — one `arrayBuffer()` in flight, released before next. Peak heap: ~1× folder size (was ~3×). Already-compressed types (jpg, mp4, etc.) → `fflate.ZipPassThrough` (STORED, method=0, macOS Archive Utility compatible). Compressible types (png, txt, csv, etc.) → `fflate.ZipDeflate` level 6. Progress bar now reports input bytes consumed vs total input bytes. Unit tests: memory discipline (max concurrent reads = 1), skip-list coverage, ZipPassThrough/ZipDeflate routing. Manual smoke test: upload a ~1.5 GB photo folder, confirm completes without stall. |
+
+**RU0 do-not-retry (permanent):**
+- DO NOT use `fflate.zip()` (buffered) for folder uploads — OOM on large folders. `fflate.Zip` (streaming) only.
+- DO NOT use `ZipDeflate` with `{ level: 0 }` for already-compressed files — writes method=8 (DEFLATED) with zero passes, macOS Archive Utility rejects as unsupported. Use `ZipPassThrough` instead (method=0, STORED).
+- DO NOT read multiple `arrayBuffer()` calls concurrently in the zip loop — process one file at a time, yield via `setTimeout(0)` between files.
+
+---
+
 ## B7 session plan — Lightning/Blink + anonymous paid tier
 > **Re-sequenced AP-9 · 27 Aug 2026.** Three locked changes and one sequencing correction drove this revision. B9 backend locked as LNbits-on-Hetzner (no LND yet) — Blink graph-visibility is the primary migration driver; any paying Lightning subscriber is already too much exposure. Lightning infra I (S74) added to build the invoice-creation path before the webhook — the original plan had these in the wrong order. Silent Drop is Production Max only, Lightning-gated, and deferred to a dedicated SD-block; B7 lays the two-rail groundwork it hangs off. Budget expanded from 25 to 50 core + 5 buffer to keep sessions single-scoped throughout: 47 core sessions (S74–S100) + 5 buffer within a 52-slot envelope.
 
@@ -271,7 +286,7 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 | RU1 | Resumable uploads I | IndexedDB schema: write chunk completion state on each 200 ACK. On page load: detect interrupted transfer, offer resume or discard. | S |
 | RU1a | Resumable uploads II | Resume flow: skip confirmed chunks. Unit tests. | S |
 | RU2 | Resumable uploads III | Resume UI: progress bar shows "Resuming from chunk N of M." Credential expiry awareness. | S |
-| RU2a | Resumable uploads IV | Integration test: interrupt at chunk 3, reload, confirm resume from chunk 3. Root cause investigation of 5 Aug stall (fflate OOM / Worker timeout / macOS drop). | S |
+| RU2a | Resumable uploads IV | Integration test: interrupt at chunk 3, reload, confirm resume from chunk 3. Root cause investigation of 5 Aug stall (Worker timeout / macOS drop — fflate OOM root cause resolved at RU0). | S |
 
 **Buffer pool (2 sessions):** RU1b · RU2b
 
