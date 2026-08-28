@@ -14,12 +14,18 @@ preview_bucket_name = "refueler-share-dev"
 # TURNSTILE_SECRET_KEY — Cloudflare Turnstile secret key
 # SUPABASE_URL         — https://<project>.supabase.co
 # SUPABASE_SERVICE_KEY — service_role JWT (spent_tokens write)
+# BLINK_API_KEY        — Blink Share account API key (READ + RECEIVE scopes)
+# BLINK_WALLET_ID      — Blink Share account GBP wallet ID
 
 [vars]
 ENVIRONMENT = "production"
-LIGHTNING_BACKEND = "blink"
-BLINK_WALLET_ID   = ""
-BLINK_API_KEY     = ""
+LIGHTNING_BACKEND          = "blink"
+BLINK_WALLET_ID            = ""
+BLINK_API_KEY              = ""
+PRICE_CREATIVE_MONTHLY_GBP = "12"
+PRICE_CREATIVE_YEARLY_GBP  = "144"
+PRICE_MAX_MONTHLY_GBP      = "24"
+PRICE_MAX_YEARLY_GBP       = "288"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)

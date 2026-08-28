@@ -5,6 +5,8 @@ import { getManifest, putManifest, createManifest, isExpired, isInGracePeriod, i
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
+import { createInvoice, getInvoiceStatus } from './lightning.js';
+import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -243,6 +245,21 @@ export default {
 
       if (request.method === 'POST' && path === '/webhook/stripe') {
         return timed('webhook_stripe', () => handleStripeWebhook(request, env));
+      }
+
+      if (request.method === 'POST' && path === '/subscription/lightning') {
+        const deps = { verifyTurnstileToken, createInvoice, checkRateLimit, getClientIp, rateLimitResponse, logEvent, corsHeaders };
+        return timed('lightning_create', () => handleLightningCreate(request, env, deps).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'GET' && path === '/subscription/lightning/status') {
+        const deps = { getInvoiceStatus, checkRateLimit, getClientIp, rateLimitResponse, logEvent, corsHeaders };
+        return timed('lightning_status', () => handleLightningStatus(request, env, deps).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'POST' && path === '/webhook/lightning') {
+        const deps = { issueBlindSignature, logEvent };
+        return timed('lightning_webhook', () => handleLightningWebhook(request, env, deps));
       }
 
       if (request.method === 'POST' && path === '/subscription/checkout') {
