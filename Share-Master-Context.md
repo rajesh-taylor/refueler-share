@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.4 | **Last updated:** S73a · 5 Aug 2026
+> **Version:** 5.5 | **Last updated:** AP-9 · 27 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -25,7 +25,7 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 | Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | Blink BOLT11 primary (Share-specific account) → LNbits Tier 2 (B9) |
+| Payments (sats) | Blink BOLT11 (B7, Share-specific account) → LNbits on Hetzner CAX21 (B9, Blink extension as funding source) |
 
 ---
 
@@ -45,21 +45,29 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 7. Credential written to KV keyed by `paymentHash` — 10 min TTL. Browser memory only. No Supabase row.
 8. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`.
 
-**Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var (default: `blink`). LNbits slots in via env var swap + new secret.
+**Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var (default: `blink`). LNbits slots in via env var swap + new secret at B9.
 
-**Migration trigger to LNbits (Tier 2):** 2 of 3: >100 paid Lightning accounts · >£2k/mo Lightning volume · Blink reliability <99.5%.
+**Blink graph-visibility risk (locked AP-9):** Blink can see all incoming sats to the Share wallet — payment amounts, timing, volume. Even a single Production Max Lightning subscriber is more exposure than acceptable long-term. This is the primary driver for migrating to self-hosted LNbits at B9. The `LIGHTNING_BACKEND` env var swap is the clean seam — no Worker code changes required at migration.
 
-**Fallbacks:** KV flag `lightning_available: true/false/blink`. Fallback 1 (LNbits down): revert to Blink, 4h target. Fallback 2 (both down): Lightning hidden on upgrade page, Stripe fiat fully operational. Both via dashboard toggle, no code deploy.
+**Migration trigger to LNbits:** first Production Max Lightning subscriber OR >£500/mo Lightning volume — whichever comes first.
+
+**Fallbacks:** KV flag `lightning_available: true/false`. Fallback 1 (LNbits down in B9+): revert to Blink via env var, 4h target. Fallback 2 (both down): Lightning hidden on upgrade page via `lightning_available: false` KV flag, Stripe fiat fully operational. Both via dashboard toggle, no code deploy.
 
 **Privacy model:** Stripe payer = name/email/card visible to Refueler. Lightning payer = payment hash + amount + tier only. Blink internal correlation documented on upgrade page. DO NOT claim "anonymous" for Lightning. Honest claim: "Pseudonymous."
 
-**Payment privacy table:** `src/_data/payment_privacy.json`. Three columns: Stripe / Lightning (Blink) / PayNym (coming soon). Also appears verbatim in B9 whitepaper §Privacy model.
+**Payment privacy table:** `src/_data/payment_privacy.json`. Five columns: Name / Email / Record / Refund / Privacy — Stripe vs Lightning. PayNym "coming soon." Also appears verbatim in B9 whitepaper §Privacy model.
 
-**Own node (B9 scope):** Hetzner CX22, separate from personal + refueler.io nodes. Graph isolation. Stub dashboard cards (routing fee income, channel liquidity health) greyed until B9.
+**B9 infrastructure (locked AP-9):** Hetzner CAX21 (€5.77/mo, 8GB RAM, 80GB NVMe). Software: **LNbits** (Blink extension as funding source) + SimpleX SMP server + Tor hidden service. LND is NOT provisioned at B9 — LNbits-on-Hetzner is the target stack.
 
-**LNURL-withdraw (B9 scope):** Cashu credential encoded as LNURL-withdraw. Gift use case: sender purchases capacity, forwards link to recipient. Wallet redeems. Refueler never knows who used it. NUT-20 binding potential. World-first for file transfer.
+**Provisioning discipline (locked AP-9):** The Hetzner instance goes online, syncs, installs LNbits, passes a full test suite, and then B9 build begins using it actively from day one. No dark provisioning. No idle instances. The B9 runbook produced at S85/S85a documents the full setup and is the operational reference.
 
-**LNbits fork (B9 scope):** Strip consumer UI, apply Paper/Carbon tokens, add webhook signing (HMAC-SHA256). B9 planning session required before touching repo.
+**LND trigger condition:** When Lightning payment volume requires graph privacy or routing fee income that LNbits-on-Blink cannot provide — confirm at B10 planning. LND is a future upgrade, not a B9 requirement.
+
+**Hetzner failure mode:** If the CAX21 goes down, Lightning payments fail. Recovery: set `lightning_available: false` via dashboard toggle (Stripe stays operational); reprovision LNbits on a new instance following the B9 runbook; restore env var. Estimated recovery: ~2 hours with documented runbook. R2, Supabase, and all issued credentials are unaffected — Hetzner hosts the payment rail only. A full contingency Opus session (failure modes + multi-provider strategy) is flagged as a B9 prerequisite before the instance goes live.
+
+**Instance separation rule (locked BRIDGE v5.1):** Share Lightning node and Legend Lightning node must run on separate Hetzner instances. A single fatal error must not take both products' payment rails offline simultaneously.
+
+**LNURL-withdraw (B9 scope):** Cashu credential encoded as LNURL-withdraw. Gift use case: sender purchases capacity, forwards link to recipient. Wallet redeems. Refueler never knows who used it. NUT-20 binding potential.
 
 **Dashboard cards — Lightning (B7):** Confirmation latency p95 LIVE. Webhook delivery rate / signature failures / routing fee income / channel liquidity health — STUB greyed (B9).
 
@@ -212,7 +220,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B7 in progress — S73a complete. S74 next (Lightning infra I-a).**
+**B7 in progress — S73a complete. S74 next (Lightning adapter — `worker/src/lightning.js`).**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
@@ -233,18 +241,18 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B1–B4 ✓ | S1–S42e | Foundation through security hardening |
 | B5 ✓ | S43–S52 | Design full pass |
 | B6 ✓ | S53–S72a | Testing infrastructure + folder upload |
-| B7 | S73–S87+ | Lightning/Blink + anonymous paid tier — 25 core + 5 buffer |
+| B7 | S73–S100 | Lightning/Blink + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer (re-sequenced AP-9) |
 | R-series | RU1–RU2+ | **Resumable uploads — promoted post-B7** (live stall failure 5 Aug, 1.51 GB at 80%) |
 | SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer · runs post-R-series |
 | HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning — 2 core + 2 buffer · runs post-R-series |
 | B8 | TBD | NUT-11 Mode 2 keypair auth (renumbered post-SW) |
-| B9 | TBD | LNbits fork + node + LNURL-withdraw + whitepaper + staging + incident response plan |
+| B9 | TBD | Hetzner CAX21 provisioning (LNbits + SimpleX + Tor) + LNURL-withdraw + whitepaper + staging + incident response plan. Contingency Opus session prerequisite before instance goes live. |
 | B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
 | B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
 | B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
 | B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) — includes compression strategy + creative market tier positioning (see B13 notes below) |
 
-Critical chains: S34→S42→S97 (integrity) · S18→S24→S75b (dashboard) · S60→S70→S119 (CI) · S73→S75 (anon paid tier) · S75→S80 (Lightning dashboard cards) · S84→S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · SW9→RU1→RU2 (resumable uploads) · RU2→HQ1→HQ2 (HTTP/3 + BLAKE3 positioning).
+Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S60→S70→S91 (CI Level 2) · S74→S76 (Lightning invoice→credential) · S76→S83 (credential→paid tier live) · S81→S85 (dashboard→LNbits planning) · S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · SW9→RU1→RU2 (resumable uploads) · RU2→HQ1→HQ2 (HTTP/3 + BLAKE3 positioning).
 
 ---
 
@@ -277,13 +285,17 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 2. Generate `refueler-share-b7` API key — READ + RECEIVE scopes only.
 3. Query BTC wallet ID: `curl -s -X POST https://api.blink.sv/graphql -H "X-API-KEY: YOUR_KEY" -H "Content-Type: application/json" -d '{"query":"{ me { defaultAccount { wallets { id walletCurrency } } } }"}' | jq .`
 4. Register callback endpoint: `curl -s -X POST https://api.blink.sv/graphql -H "X-API-KEY: YOUR_KEY" -H "Content-Type: application/json" -d '{"query":"mutation { callbackEndpointAdd(input: { url: \"https://refueler-share.rt-fc4.workers.dev/webhook/lightning\" }) { id } }"}' | jq .`
-5. Note endpoint ID from step 4 — needed at S73 start.
+5. Note endpoint ID from step 4 — needed at S74 start.
 6. Make 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-7. Read LNbits repo README before S84: `https://github.com/lnbits/lnbits`
+7. Before **S85**: read the LNbits repo README (`https://github.com/lnbits/lnbits`) **and** the LNbits Blink extension docs, so the B9 LNbits-on-Hetzner architecture can be confirmed in-session.
+
+**Pre-B7 guards (do not cross during B7):**
+- DO NOT provision the Hetzner CAX21 instance during B7. The instance is B9 scope. Early provisioning buys nothing and splits focus.
+- DO NOT create Stripe objects or lock the "Silent Drop" name during B7. Silent Drop is deferred to the SD-block; S88 is design-only.
 
 ---
 
-## B7 open snags (resolve at S87)
+## B7 open snags (resolve at S93–S95 snag sweep, final pass at S100)
 
 - PayNym column on payment privacy table — "coming soon" placeholder only at B7
 - Own node stub cards (routing fee income, channel liquidity) — greyed until B9

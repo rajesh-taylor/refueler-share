@@ -154,8 +154,9 @@
 | AP-4 | 1 Aug | Security and cryptography strategy session. Argon2id for Enterprise API (client-side KDF, post-B8). ML-KEM shipping order locked (Prod Max + Enterprise first, B10). BIP-39 12-word account creation for enterprise. BIP-85 staff key derivation (B8 planning). FROST threshold signatures (B12, whitepaper §Future work). Silent Payments over PayNym long-term. Nostr keypair dashboard auth (SW/B8). SimpleX Chat for internal + enterprise support comms (B9+). Incident response plan (B9 scope): three severity tiers, pre-written S1 template, tabletop simulation before alpha. Status page incident dashboard: homepage modal, S1/S2/S3 panel with KV-backed `incident_active` key. No social media — refueler.io is the canonical destination. refueler-multi-core: Esplora/Mempool.space fork post-B9. |
 | AP-5 | 1 Aug | Incident response and security breach planning. `docs/incident-response.md` and `docs/security-breach.md` created. B9 build scope confirmed. |
 | AP-6 | 2 Aug | Competitive analysis: DashBeam (dashbeam.net). Synchronous P2P vs asynchronous cloud relay — confirmed different product categories. DashBeam free tier not a threat to professional buyer segment. Resumable upload/download gap confirmed as the one genuine weakness. HTTP/3 + BLAKE3 positioning locked. Pay-to-extend transfer window design deferred to B8 — use case is the recipient extending a lapsed window without contacting sender, preserving professional relationship. First-transfer experience aesthetic locked: Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests via existing sessionStorage infrastructure. R-series and HQ-series post-SW blocks created. |
-| AP-8 | 4 Aug | Nav rewrite + head.njk theme script rewrite across `refueler-share` and `refueler-io`. Share nav links now: Notes, Upgrade, Support, theme pill — App/Editorial/Privacy removed. head.njk theme script: `localStorage`/`rfTheme` replaced with `rs-theme` cookie scoped to `.refueler.io` (30-day, `SameSite=Lax`); `classList` pattern removed; `dataset.theme` only; `window.toggleTheme` global exposed. Cross-domain theme persistence confirmed between `refueler.io` and `share.refueler.io`. Nav architecture locked: main site = ecosystem nav; Share = product nav. Files changed: `src/_includes/nav.njk`, `src/_includes/head.njk`. refueler-io: support page copy genericised, `support@refueler.io` set as primary contact, nav wordmark breadcrumb bug fixed (hardcoded "Legend" default removed). |
 | AP-7 | 2 Aug | AP-6 analysis consolidated and extended. Two-axis category framing locked: "recipient problem" (transfer survives laptop closure / recipient unavailability — P2P fails this) + "compulsion problem" (nothing to hand over — storing services with server-side keys fail this). Refueler Share is the only architecture solving both simultaneously. Two-axis framing is index hero candidate and article 5 spine. Recovery window publication restriction locked: B9 whitepaper §Future work only before shipping — no product copy or marketing. Recovery window privacy properties enumerated (3 properties). Renewal warning banner copy locked: "Your subscription renews on [date]. Your transfers will remain accessible." Article 1 iteration hold cleared — week of 5 Aug now open. Git push hygiene rule added to CLAUDE.md. |
+| AP-8 | 4 Aug | Nav rewrite + head.njk theme script rewrite across `refueler-share` and `refueler-io`. Share nav links now: Notes, Upgrade, Support, theme pill — App/Editorial/Privacy removed. head.njk theme script: `localStorage`/`rfTheme` replaced with `rs-theme` cookie scoped to `.refueler.io` (30-day, `SameSite=Lax`); `classList` pattern removed; `dataset.theme` only; `window.toggleTheme` global exposed. Cross-domain theme persistence confirmed between `refueler.io` and `share.refueler.io`. Nav architecture locked: main site = ecosystem nav; Share = product nav. Files changed: `src/_includes/nav.njk`, `src/_includes/head.njk`. refueler-io: support page copy genericised, `support@refueler.io` set as primary contact, nav wordmark breadcrumb bug fixed (hardcoded "Legend" default removed). |
+| AP-9 | 27 Aug | B7 re-sequence. Lightning infra I (S74) added — invoice-creation before webhook. Silent Drop confirmed Production Max only, no Creative Premium variant. B9 backend locked as LNbits-on-Hetzner CAX21 (no LND yet); Blink graph-risk documented as migration driver. LND deferred to post-B9 trigger condition. §Lightning node corrected CAX21 LND+Neutrino → CAX21 LNbits. B7 session budget expanded 25→50 core + 5 buffer. Provisioning discipline rule added to B9 notes. |
 
 ---
 
@@ -166,43 +167,76 @@
 | S73 | `2a20177` | Dashboard: client errors modal — `client_errors_detail` stored from AE response; `parseUA()` + `escHtml()` helpers added; detail table renders Time · Context · Message · Browser; stub class stripped on open, restored on close. |
 | S73a | `a19778c` | Fix: static Trend/Export section titles were overlapping the injected table. Strip `.modal-sparkline-stub` class on open; hide `.modal-section-title` and CSV button; restore all on `closeModal()`. Both Paper and Carbon confirmed working. |
 
-**B7 snags added (resolve at S87):**
-- Theme toggle absent from modals — minor UX, add to S87 snag sweep
-- `receiver_ab_shown` / `receiver_ab_downloaded` events routed to `/log/error` instead of AE — S47c A/B tracking code calling `reportError()` in error. Investigate in `frontend/share.js` at S87.
+**B7 snags added (resolve at S100):**
+- Theme toggle absent from modals — minor UX, add to S100 snag sweep
+- `receiver_ab_shown` / `receiver_ab_downloaded` events routed to `/log/error` instead of AE — S47c A/B tracking code calling `reportError()` in error. Investigate in `frontend/share.js` at S100.
 
 ---
 
+AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/admin/. Theme fixed to rs-theme cookie / dataset.theme. Stale token values corrected to CSS-1a lock. Worker endpoints unchanged. See AD-1 in refueler-io SESSIONS.
+
 ## B7 session plan — Lightning/Blink + anonymous paid tier
+> **Re-sequenced AP-9 · 27 Aug 2026.** Three locked changes and one sequencing correction drove this revision. B9 backend locked as LNbits-on-Hetzner (no LND yet) — Blink graph-visibility is the primary migration driver; any paying Lightning subscriber is already too much exposure. Lightning infra I (S74) added to build the invoice-creation path before the webhook — the original plan had these in the wrong order. Silent Drop is Production Max only, Lightning-gated, and deferred to a dedicated SD-block; B7 lays the two-rail groundwork it hangs off. Budget expanded from 25 to 50 core + 5 buffer to keep sessions single-scoped throughout: 47 core sessions (S74–S100) + 5 buffer within a 52-slot envelope.
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| S73 ✓ | Dashboard: client errors modal | `client_errors_detail` stored from AE; `parseUA()` + `escHtml()`; detail table with Time · Context · Message · Browser. | M |
+| S73 ✓ | Dashboard: client errors modal | `client_errors_detail` stored from AE; `parseUA()` + `escHtml()`; detail table with Time · Context · Message · Browser. | S |
 | S73a ✓ | Dashboard: client errors modal fix | Strip `.modal-sparkline-stub` on open; hide static section titles + CSV btn; restore on close. Both themes confirmed. | S |
-| S74 | Lightning infra II-a | `POST /webhook/lightning` endpoint. KV payment tracking schema — 25h TTL. | M |
-| S74a | Lightning infra II-b | Dedup logic. `getBlinkInvoiceStatus()` polling fallback. Smoke test full chain. | M |
-| S75 | Credential issuance I-a | On settled webhook: resolve `{ tier, period }`. Issue Cashu credential. | L |
-| S75a | Credential issuance I-b | Write credential to KV keyed by `paymentHash` (10 min TTL). `GET /subscription/lightning/credential` poll endpoint. | L |
-| S75b | Credential issuance I-c | Tier cap wiring for Lightning credentials. Error states. Smoke test full chain. | L |
-| S76 | Frontend Lightning flow I-a | `src/upgrade.njk`: Lightning tier cards enabled. `POST /subscription/lightning` wired. Paper/Carbon tokens. | M |
-| S76a | Frontend Lightning flow I-b | QR display. BOLT11 copy button. Rate display. Polling for credential on payment hash. | M |
-| S77 | Frontend Lightning flow II-a | Credential receipt → browser memory. Upload flow unlocks paid tier cap on credential receipt. | M |
-| S77a | Frontend Lightning flow II-b | Error states: expired invoice, already-redeemed, payment timeout. Full frontend smoke test. | M |
-| S78 | GBP/sats pricing display | Blink `btcPrice` query wired. Rate stored in KV. Displayed on frontend. | S |
-| S79 | Payment privacy table I | `src/_data/payment_privacy.json`. Stripe and Lightning columns populated. PayNym: "Coming soon." | S |
-| S79a | Payment privacy table II | Eleventy partial renders JSON. Collapsible section on upgrade page. Paper/Carbon tokens. | S |
-| S80 | Dashboard Lightning cards I-a | Lightning section. Confirmation latency p95 LIVE. AE logging for latency datapoint. | M |
-| S80a | Dashboard Lightning cards I-b | Four stub cards (greyed, "available at B9" tooltip). | M |
-| S81 | KV Lightning admin toggle | `lightning_available` flag. `POST /admin/status` extended. Graceful degradation copy. | S |
-| S82 | Paid tier activation I-a | Re-enable Creative Premium + Production Max. Stripe path smoke test. | M |
-| S82a | Paid tier activation I-b | Lightning path smoke test. Both payment paths confirmed live. | M |
-| S83 | B7 security audit I-a | Full security review Lightning flow: expiry, KV races, credential farming, double-issuance. | M |
-| S83a | B7 security audit I-b | Webhook replay attack surface. Findings fixed. Marketing claim rulings updated. | M |
-| S84 | LNbits planning I | Read lnbits repo. Keep/strip/brand decisions. Extension shortlist. Webhook signing spec. No code. | S |
-| S85 | LNbits planning II | Skinning scope. LNURL-withdraw gift architecture design. NUT-20 binding spec. No code. | S |
-| S86 | LNURL-withdraw gift architecture | Design document. Wallet compatibility matrix. Gift flow UX spec. B9 scope locked. | S |
-| S87 | B7 close | Snag sweep. Context files updated. §Lightning infrastructure finalised. B8 brief. | S |
+| S74 | Lightning adapter | `worker/src/lightning.js` — `createInvoice()` / `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var (default: `blink`). Unit tests. This is the B9→LNbits migration seam. | S |
+| S74a | Invoice creation I | `POST /subscription/lightning` handler: Blink `btcPrice` query → live GBP/sats rate. | S |
+| S74b | Invoice creation II | `lnInvoiceCreate` mutation → BOLT11 string + payment hash returned. KV write: `{ paymentHash, tier, period, created_at, expires_at, settled: false }`, 25h TTL. | S |
+| S74c | Invoice creation III | Unit tests for invoice creation + KV schema. Smoke test `POST /subscription/lightning` end-to-end against wrangler dev. | S |
+| S75 | Webhook endpoint I | `POST /webhook/lightning` handler scaffold. Route registered. KV payment hash lookup — reject unknown hashes with 404. | S |
+| S75a | Webhook endpoint II | Settled-flag dedup (`settled: true` KV write). Blink fires twice per payment — confirm dedup suppresses second callback correctly. | S |
+| S75b | Webhook endpoint III | `getInvoiceStatus()` polling fallback via Blink GraphQL. Smoke: simulate missed callback, confirm polling recovers. | S |
+| S75c | Webhook endpoint IV | Full integration test: create invoice → simulate Blink callback → confirm KV settled flag + no duplicate processing. | S |
+| S76 | Credential issuance I | On settled webhook: extract `{ tier, period }` from KV. Call NUT-00 BDHKE issuer — real blind signature, not a stub. | S |
+| S76a | Credential issuance II | Write issued credential to KV keyed by `paymentHash`. TTL: 10 minutes. | S |
+| S76b | Credential issuance III | `GET /subscription/lightning/credential?hash={paymentHash}` poll endpoint. Returns 202 while pending, 200 + credential when ready, 410 if expired. | S |
+| S76c | Credential issuance IV | Tier-cap enforcement for Lightning credentials (same KV byte-counter path as Stripe). Error states: cap exceeded, hash unknown, already claimed. | S |
+| S76d | Credential issuance V | Unit tests for the full credential issuance path. Smoke test: pay → callback → poll → credential received. | S |
+| S77 | Upgrade page rail split I | `src/upgrade.njk`: two-rail structure introduced. Lightning section scaffold alongside Stripe section. No live cards yet — structure and copy only. Locked copy: *"Both paths unlock the same transfer capacity. Lightning doesn't collect your identity — which means some account features aren't available, and some privacy features are."* | S |
+| S77a | Upgrade page rail split II | Lightning tier cards (Creative Premium + Production Max) wired to `POST /subscription/lightning`. Paper/Carbon tokens. Rate display placeholder. | S |
+| S77b | Upgrade page rail split III | Stripe tier cards re-enabled. Both rails visible simultaneously. Visual parity check Paper + Carbon. | S |
+| S78 | Frontend Lightning flow I | QR code display on invoice creation. BOLT11 copy button. Invoice expiry countdown. | S |
+| S78a | Frontend Lightning flow II | Live GBP/sats rate displayed on Lightning tier cards. Rate refreshes on card open. | S |
+| S78b | Frontend Lightning flow III | Frontend polls `GET /subscription/lightning/credential` on payment hash. Spinner → success state on 200. | S |
+| S78c | Frontend Lightning flow IV | Credential receipt → browser memory (same pattern as Stripe credential). Upload flow unlocks paid tier cap on receipt. | S |
+| S79 | Frontend Lightning flow V | Error states: expired invoice (410 on poll), already-redeemed credential, payment timeout (25h KV expiry hit). User copy for each state. | S |
+| S79a | Frontend Lightning flow VI | Full frontend smoke test: pay invoice on testnet → credential received → upload unlocked. Both Paper and Carbon themes confirmed. | S |
+| S80 | Payment privacy table I | `src/_data/payment_privacy.json`. Five columns: Name / Email / Record / Refund / Privacy. Stripe vs Lightning populated. PayNym: "Coming soon." | S |
+| S80a | Payment privacy table II | Eleventy partial renders JSON as comparison table. Paper/Carbon tokens. | S |
+| S80b | Payment privacy table III | Collapsible section wired into upgrade page below both rail sections. Smoke test both themes. | S |
+| S81 | Dashboard Lightning cards I | Lightning section scaffold in admin dashboard. Confirmation latency p95 card — LIVE. AE datapoint written at webhook settlement. | S |
+| S81a | Dashboard Lightning cards II | Four stub cards greyed with "available at B9" tooltip: webhook delivery rate, signature failures, routing fee income, channel liquidity health. | S |
+| S81b | Dashboard Lightning cards III | Lightning section design pass. Paper/Carbon parity. Unit tests for latency AE write. | S |
+| S82 | KV Lightning admin toggle | `lightning_available` KV flag. `POST /admin/status` extended to accept it. Dashboard toggle UI. | S |
+| S82a | Graceful degradation | When `lightning_available: false` — Lightning hidden on upgrade page, Stripe fully operational. User-facing copy. Smoke test both states. | S |
+| S83 | Renewal warning banner | 7-day pre-expiry banner for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Copy: *"Your subscription renews on [date]. Your transfers will remain accessible."* | S |
+| S83a | Paid tier activation I | Re-enable Creative Premium + Production Max. Stripe path full smoke test against live Stripe. | S |
+| S83b | Paid tier activation II | Lightning path full smoke test against live Blink. Both rails confirmed live end-to-end. | S |
+| S84 | B7 security audit I | Lightning invoice creation: expiry enforcement, KV race conditions on concurrent invoice creation for same tier. | S |
+| S84a | B7 security audit II | Credential farming: can an attacker poll `/subscription/lightning/credential` with guessed payment hashes? Entropy audit. Fix if required. | S |
+| S84b | B7 security audit III | Webhook replay: can a settled callback be replayed to issue a second credential? KV dedup verified under test. | S |
+| S84c | B7 security audit IV | Double-issuance: concurrent callbacks for same payment hash. Fix and regression test. | S |
+| S84d | B7 security audit V | Findings consolidated. Marketing claim rulings updated. Any fixes committed. | S |
+| S85 | Hetzner + LNbits planning I | **No code. No server provisioned yet.** Decision session: LNbits-on-Hetzner CAX21 architecture confirmed. `lightning.js` swap checklist vs Blink. LNbits Blink extension config. Webhook signing spec (HMAC-SHA256 — what Blink lacks). SimpleX SMP co-location plan. Tor hidden service config. Runbook structure for B9 build. | S |
+| S85a | Hetzner + LNbits planning II | **No code. No server provisioned yet.** Failure mode analysis: what happens if the Hetzner instance goes down? KV `lightning_available` toggle as kill switch. Recovery time estimate with documented runbook. Contingency Opus session flagged: full failure-mode + multi-provider strategy session before B9 build. | S |
+| S86 | LNURL-withdraw gift architecture | **No code.** Design document: gift flow, wallet compatibility matrix, UX spec, NUT-20 binding potential. B9 scope confirmed. | S |
+| S87 | LNbits skinning scope | **No code.** Keep/strip/brand decisions for LNbits UI. Extension shortlist. Paper/Carbon token mapping to LNbits CSS. B9 build scope output. | S |
+| S88 | Silent Drop design session | **No code. No Stripe objects. Name not locked.** Confirm Option A blinded-relay design against the live Worker architecture. Enumerate the rail-gating hooks B7 has established. Produce the SD-block session plan. Journalist use case copy draft. | S |
+| S89 | Tidy-up I — tier naming + copy | Names/copy audit across all pages now both rails are live. No Stripe objects. | S |
+| S90 | Tidy-up II — Stripe objects | Stripe product/price object alignment with locked tier model. Only after S89 copy is confirmed. | S |
+| S91 | CI Level 2 I | Integration suite in GitHub Actions. Wrangler dev --local in CI. Lightning mock for webhook tests. | S |
+| S91a | CI Level 2 II | Lightning mock coverage: invoice creation, callback, credential poll. All passing in CI. | S |
+| S92 | Notes article 6 prep | *"Paying anonymously for file transfer"* — article structure, copy draft, publish dependency: Lightning rail live. No code. | S |
+| S93 | B7 snag sweep I | Theme toggle in modals. `receiver_ab_shown`/`receiver_ab_downloaded` A/B event routing fix (`frontend/share.js`). | S |
+| S94 | B7 snag sweep II | Manifest-field minimalism audit (M-02 Blossom benchmark). UUID/fragment entropy pre-audit. `TIER_EXPIRY_SECONDS.free` stale value check. | S |
+| S95 | B7 snag sweep III | Any remaining snags from S93–S94. Status tile for admin dashboard. Stripe webhook TESTING.md additions. | S |
+| S96 | Context file maintenance | `Share-Master-Context.md` split → working memory (≤350 lines) + `Share-Archive.md` (B1–B6 compacted). Both files to target line counts. | S |
+| S100 | B7 close | Final snag sweep. Both context files confirmed at target. §Lightning infrastructure section finalised. Critical-chain table renumbered. B8 brief written. SW block brief confirmed. | S |
 
-**Buffer pool (5 sessions):** S75c · S76b · S83b · S84a · S87a
+**Buffer pool (5 sessions):** S74d · S76e · S84e · S85b · S100a
 
 ---
 
@@ -211,19 +245,21 @@
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
 | SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. Smoke: `GET /status` via wl hostname. | S |
-| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. | M |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rotation with 24h grace. | M |
+| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. | S |
+| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. | S |
+| SW2b | API auth III | Rotation with 24h grace. Unit tests. | S |
 | SW3 | Badge + /wl/config | `GET /wl/config` by Host header. Fail-safe `badge: true`. Badge component Paper/Carbon. | S |
-| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. | M |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. Daily cron retry. | M |
-| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. | M |
-| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. | M |
+| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. | S |
+| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. | S |
+| SW4b | Webhooks III | Daily cron retry of dead-letter items. | S |
+| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. | S |
+| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. | S |
 | SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. | S |
 | SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. Built once, generated per client. | S |
-| SW8 | Daily cron | Hostname health checks → AE. Dead-letter webhook retry. `[triggers]` in wrangler.toml. | S |
+| SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. | S |
 | SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. | S |
 
-**Buffer pool (2 sessions):** SW2b · SW5b
+**Buffer pool (2 sessions):** SW2c · SW5b
 
 ---
 
@@ -231,8 +267,10 @@
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| RU1 | Resumable uploads I | IndexedDB schema: write chunk completion state on each 200 ACK. On page load: detect interrupted transfer, offer resume or discard. Resume flow: skip confirmed chunks. Unit tests same session. | M |
-| RU2 | Resumable uploads II | Resume UI: progress bar shows "Resuming from chunk N of M." Credential expiry awareness. Integration test: interrupt at chunk 3, reload, confirm resume from chunk 3. | M |
+| RU1 | Resumable uploads I | IndexedDB schema: write chunk completion state on each 200 ACK. On page load: detect interrupted transfer, offer resume or discard. | S |
+| RU1a | Resumable uploads II | Resume flow: skip confirmed chunks. Unit tests. | S |
+| RU2 | Resumable uploads III | Resume UI: progress bar shows "Resuming from chunk N of M." Credential expiry awareness. | S |
+| RU2a | Resumable uploads IV | Integration test: interrupt at chunk 3, reload, confirm resume from chunk 3. Root cause investigation of 5 Aug stall (fflate OOM / Worker timeout / macOS drop). | S |
 
 **Buffer pool (2 sessions):** RU1b · RU2b
 
@@ -242,7 +280,7 @@
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
-| HQ1 | HTTP/3 verification + AE instrumentation | Confirm HTTP/3 active. Add `Alt-Svc` logging to AE. Add chunk upload latency datapoint. Draft canonical copy string. Wire to upgrade page and index page. | M |
+| HQ1 | HTTP/3 verification + AE instrumentation | Confirm HTTP/3 active. Add `Alt-Svc` logging to AE. Add chunk upload latency datapoint. Draft canonical copy string. Wire to upgrade page and index page. | S |
 | HQ2 | Competitive positioning copy + /notes/ hook | Write the technical distinction cleanly. Ensure consistency across index, upgrade, and notes articles. No overclaiming — "server-side chunk integrity" not "end-to-end file integrity." | S |
 
 **Buffer pool (2 sessions):** HQ1b · HQ2b
