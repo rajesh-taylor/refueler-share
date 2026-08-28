@@ -165,7 +165,7 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S73 | `2a20177` | Dashboard: client errors modal — `client_errors_detail` stored from AE response; `parseUA()` + `escHtml()` helpers added; detail table renders Time · Context · Message · Browser; stub class stripped on open, restored on close. |
+| S73 | 4c95cf6 | Pre-B7 Blink checklist: BLINK_SHARE_API_KEY + BLINK_SHARE_WALLET_ID set, callback endpoint confirmed, Share-Master-Context updated re shared Blink account. |
 | S73a | `a19778c` | Fix: static Trend/Export section titles were overlapping the injected table. Strip `.modal-sparkline-stub` class on open; hide `.modal-section-title` and CSV button; restore all on `closeModal()`. Both Paper and Carbon confirmed working. |
 
 **B7 snags added (resolve at S100):**
