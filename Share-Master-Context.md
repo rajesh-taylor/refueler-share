@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.5 | **Last updated:** AP-9 · 27 Aug 2026
+> **Version:** 5.6 | **Last updated:** AP-9a · 28 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -182,6 +182,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; Turnstile nonce binding; anonymous transfer (no account, free tier).
 - 🔒 Blocked: full Merkle tree verification; NUT-11 Mode 2; "audit-certified"; ML-KEM; any "end-to-end file integrity" without the server-side-chunks-only qualifier.
 - 📅 Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle · B10 → ML-KEM.
+- 🔒 **Journalist/source-protection hero copy blocked** until all three gates are passed: (1) Silent Drop shipped, (2) blinded-relay crypto reviewed, (3) network-layer scope stated honestly (VPN caveat, not full anonymity). Until then: journalist inbox stays in planning docs, whitepaper, and article drafts only — never live hero copy. Same discipline as "audit-certified." (Locked Opus-1 · 27 Aug 2026)
 
 ---
 
@@ -215,6 +216,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Cloudflare Queues / Durable Objects / D1 for webhooks | `ctx.waitUntil` + KV dead-letter only |
 | Sub-keys per API user (Business tier) | One keypair per commercial relationship + `transfer_ref` attribution |
 | Never edit `frontend/upgrade.html` directly | Eleventy overwrites it from `src/upgrade.njk` on every build |
+| DO NOT add email field or Supabase row to the Lightning credential path | This invariant is load-bearing for Silent Drop — the inbox's no-identity promise depends on the Lightning path never creating an identity record. Lock it now so nothing later "helpfully" adds one. (Locked Opus-1 · 27 Aug 2026) |
 
 ---
 
@@ -583,6 +585,20 @@ Skip compression (fflate level 0 — store only, no DEFLATE pass) for file types
 - The privacy story for video is strong: unreleased footage, NDA'd productions, talent contracts, music not yet announced — all genuine use cases
 - **Market sequencing (locked 5 Aug 2026):** lawyers and professionals first; creatives second; general consumer never. Do not optimise marketing for creatives until legal/professional channel is proven.
 - **Speed honesty:** do not claim parity with Smash or WeTransfer. Honest framing: "Faster than email. Slower than services that can read your files. That's the trade."
+
+---
+
+## Internal framing — what Share is (Opus-1 · 27 Aug 2026)
+
+*(Canonical statement for CLAUDE.md and planning sessions. Not marketing copy.)*
+
+Refueler Share is anonymous, encrypted, asynchronous file transfer whose architecture solves two problems no competitor solves at once: the **recipient problem** — a transfer survives either party going offline — and the **compulsion problem** — there is nothing to hand over, because the server only ever holds encrypted noise and never held a key or an identity. **Silent Drop is the sharpest expression of that architecture, not a new pillar of it**: point the same blind-signature, client-encrypted, server-blind machinery at a standing inbound channel and a recipient can publish one permanent link that any sender can use — no account, no software, no Bitcoin knowledge — while Refueler can link no sender to the recipient, to another sender, or to another transfer. This is why only one side ever needs to be sophisticated.
+
+Tiers resolve on two independent dimensions: **capacity** (Free → Creative Premium → Production Max → Business → Enterprise) and **payment rail** (Stripe, which carries identity and so supports refunds and recovery; Lightning, which carries none and so unlocks the identity-free features Silent Drop depends on). The architectural direction is **"the policy is the credential"** — access and custody conditions expressed cryptographically via NUT-10 Nutroot secrets and FROST, rather than enforced by a server that could be compelled — which is simply the compulsion axis followed to its conclusion.
+
+The gap Silent Drop closes is the **correlation problem**: can a recipient maintain a permanent, publicly-shareable way to receive files from an open and unknown set of senders, such that the recipient's identity is never bound to the address, senders need no account and reveal nothing, and no two transfers — same sender or different — can be linked to each other or to the recipient? Every existing mechanism fails a clause. Silent Drop does not.
+
+*"Faster than email. Slower than services that can read your files. And the only one where the inbox is as blind as the server."*
 
 ---
 
