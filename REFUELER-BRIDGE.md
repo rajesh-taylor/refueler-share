@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 5.1 | **Created:** 28 July 2026 | **Updated:** AD-HOC · 2026-08-27
+> **Version:** 5.2 | **Created:** 28 July 2026 | **Updated:** S73 · 2026-08-28
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -120,7 +120,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 **Lightning address change flow (live CC-98):**
 - Owner PIN re-auth → overlay → save via `update-lightning-address` v1 Edge Function.
 - Function verifies Owner PIN server-side (bcrypt), validates LNURL reachability (fail-closed, 5s timeout), writes via service_role, post-write verifies (rule 4j).
-- After any address change: AM or Rajesh sends 21 sats from Blink ops wallet to confirm receipt. Logged in crypto ops ledger.
+- After any address change: AM or Rajesh sends 21 sats from ops wallet to confirm receipt. Logged in crypto ops ledger.
 - Rate limit: 5 attempts / 5 minutes per user (in-memory).
 
 **Stamps:**
@@ -155,15 +155,36 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 ---
 
-## Ops wallet — locked CC-98
+## Lightning provider — CRITICAL (S73 · 28 Aug 2026)
 
-**Blink ops wallet ("Refueler Ops"):** Second BTC wallet under same Blink account, separate from treasury (`fd2357fe`). Used exclusively for onboarding test payments, Lightning address confirmation (21-sat sends), and support call testing. Top-ups logged as business expense in Refueler Crypto Ops Ledger (sats + GBP equivalent at time of transfer).
+**Blink custodial accounts discontinued in UK by August 31 2026.** Blink has ended custodial service in the UK region due to regulation. The Blink API is unavailable after migration to non-custodial. This affects ALL Refueler projects:
 
-**AM access model (current):** Rajesh holds wallet. AM requests top-up; Rajesh transfers internally (Blink → Blink, instant, no fee). AM never uses personal wallet for Refueler business.
+| Project | Impact |
+|---|---|
+| Share (B7) | `BLINK_SHARE_API_KEY` + `BLINK_SHARE_WALLET_ID` set in Worker but provider dead post-Aug-31 |
+| refueler.io POS + merchant terminal | LNURL-pay flow via `venue_partners.lightning_address` unaffected (merchant's own wallet), but Refueler ops sats wallet is affected |
+| Relay / Refill | Any Blink-dependent payment flows affected |
 
-**Long-term (Staff Management v1):** Separate Blink account for AM, small dedicated balance, funded by internal transfer. Ops wallet balance monitoring via dev console (add wallet ID to `blink-balance` EF) when volume justifies it.
+**Current state:** 31 sats dust remain in Blink BTC wallet (`fd2357fe-24ec-4173-8441-fc0f05722e9a`). All other sats withdrawn to Minibits. Do not migrate to non-custodial — API dies immediately on migration. Account will be auto-inactivated Aug 31 regardless.
 
-**Single-provider risk:** Both wallets affected if Blink is down. Accepted for pre-merchant phase. Review at Block 8 planning when reward payouts are live in anger.
+**Decision required before B7 code starts.** Pre-Opus-2 comparison session to evaluate:
+1. **LNbits on Hetzner CAX21** — Rajesh's preference. Most control. Already B9 plan, just moved earlier. Self-hosted, no third-party API dependency. Requires server provisioning before B7.
+2. **Voltage** — managed Lightning node. API-friendly. No self-hosting. Third-party dependency.
+3. **Strike API** — UK-available. BOLT11 invoice creation. Centralised.
+
+**LIGHTNING_BACKEND env var abstraction** already designed in Share Worker — provider swap requires no Worker code changes, only new secrets and env var value.
+
+**Ops wallet note:** Remove all references to "Blink ops wallet" from onboarding docs and merchant handover materials before first real merchant. Replace with chosen provider equivalent.
+
+---
+
+## Ops wallet — locked CC-98 [PROVIDER PENDING — see Lightning provider section above]
+
+~~**Blink ops wallet ("Refueler Ops"):**~~ Second BTC wallet for Refueler ops — separate from treasury. Used exclusively for onboarding test payments, Lightning address confirmation (21-sat sends), and support call testing. Top-ups logged as business expense in Refueler Crypto Ops Ledger (sats + GBP equivalent at time of transfer). **Provider to be confirmed post-pre-Opus-2 session.**
+
+**AM access model (current):** Rajesh holds wallet. AM requests top-up; Rajesh transfers internally. AM never uses personal wallet for Refueler business.
+
+**Long-term (Staff Management v1):** Separate account for AM, small dedicated balance, funded by internal transfer.
 
 ---
 
@@ -182,7 +203,7 @@ Files in `refueler-io/docs/`: `merchant-onboarding-v1.html`, `merchant-venue-key
 **Docs ↔ UI sync rule (active):** confirm currency at every block close touching terminal UI.
 
 **September User Guide update (flagged CC-98):**
-- Add Lightning address change section: after any change, AM sends 21-sat confirmation from Blink ops wallet. Log in crypto ops ledger.
+- Add Lightning address change section: after any change, AM sends 21-sat confirmation from ops wallet. Log in crypto ops ledger.
 - Add anti-phishing panel: "Refueler will never send a link you didn't request."
 - On-chain address changes are support-only (`[R]`).
 - AM onboarding checklist: log 21-sat confirmation send in onboarding expense record.
@@ -237,7 +258,7 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 **Tier placement:**
 - Production Max — entry point for the full Silent Drop feature set.
 - Creative Premium — lighter version: smaller storage cap, shorter TTL per transfer.
-- Free tier — no Silent drop.
+- Free tier — no Silent Drop.
 
 **Mechanics:**
 - Inbox ID is an opaque random string in KV — it is an accounting unit, not an identity. No email, no name, no account attached.
@@ -270,7 +291,8 @@ The same BOLT12-inspired static offer mechanism supports Pass standing invitatio
 
 - Name under review: "Silent Drop" is the candidate. Do not lock until copy is live. No Stripe objects until name is final.
 - Feature is Production Max only — no Creative Premium lite version. The boundary is qualitative: send-focused tier vs. standing-receive tier.
-- Tier model is now two-dimensional: Tier = capacity; Rail = privacy/feature profile. - Lightning-only features are those requiring the no-identity property. Rule applies to all future features, not just this one.
+- Tier model is now two-dimensional: Tier = capacity; Rail = privacy/feature profile.
+- Lightning-only features are those requiring the no-identity property. Rule applies to all future features, not just this one.
 - Recovery cliff is a feature: "Your inbox exists only where you keep it. Refueler has nothing to recover because we never had it."
 - KV unit economics: negligible (~$0.00053/user/month at 30 transfers). Not a constraint.
 - Shared page for journalist/source-protection copy — not a dedicated landing page.
@@ -296,7 +318,7 @@ Share Lightning node and Legend Lightning node must run on separate Hetzner inst
 
 **Upgrade trigger for Share node:** when Lightning payment volume requires dedicated resources, move to CX32 or larger. Decision at that point whether SimpleX migrates or stays.
 
-**Blink account for B7:** Separate Blink account for Share (`rt+share@rajeshtaylor.com`), API key `refueler-share-b7` with READ + RECEIVE scopes. This is the B7 payment backend — the Hetzner node is B9 scope. Do not conflate.
+**B7 Lightning provider:** Blink was the planned B7 provider — now defunct (UK custodial discontinued Aug 31 2026). Replacement to be confirmed in pre-Opus-2 session. See Lightning provider section above.
 
 ---
 
@@ -543,15 +565,17 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 | Pass-1 | refueler-pass | Bitcoin Events × Pass × Merchant. PASS-MASTER.md v2.0. |
 | **Multi-[n]** | refueler-legend, refueler-share, refueler-pass, refueler-io | Share×Legend distress integration locked. Pass×Legend address watch locked. Recovery Coordination Layer v3 candidate. Article 24 scoped. UC-9 session prompt produced. BRIDGE v5.0. |
 | **AD-HOC · 27 Aug 2026** | refueler-share, refueler-pass | Silent Inbox product name + full spec locked. Stripe vs Lightning tier split locked. Hetzner CAX21 node selected (LND + Neutrino + SimpleX SMP + Tor). Instance separation rule locked. NUT-00 v3 + NUT-10 v3 Nutroot secrets logged from Cashu dev call 36. Pass × Nutroot use case set locked. BOLT12-inspired static offer as Silent Inbox primitive locked (Option A). BRIDGE v5.1. |
+| **S73 · 28 Aug 2026** | refueler-share | Pre-B7 Blink checklist complete. `BLINK_SHARE_API_KEY` + `BLINK_SHARE_WALLET_ID` set. Callback endpoint confirmed. CRITICAL: Blink discontinuing custodial accounts in UK by Aug 31 2026 — API unavailable post-migration. Affects ALL Refueler projects. Lightning provider replacement decision required before B7 code starts. Pre-Opus-2 comparison session queued. BRIDGE v5.2. |
 
 ---
 
 ## Active action items (Rajesh)
 
+- **URGENT: Lightning provider replacement** ← Blink custodial discontinued UK Aug 31. Affects Share (B7), refueler.io POS, Relay, Refill. Pre-Opus-2 comparison session: LNbits on Hetzner CAX21 vs Voltage vs Strike API. Decision must be locked before B7 code starts.
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant)
-- **Open Blink ops wallet ("Refueler Ops")** ← second BTC wallet in Blink mobile app
+- **Create Refueler Crypto Ops Wallet** ← replacement for Blink ops wallet, provider TBC post-pre-Opus-2
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns
-- **Push BRIDGE v5.1** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
+- **Push BRIDGE v5.2** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
 - Add test `onchain_address` to Raj's Steakhouse in Supabase dashboard
 - Push `refueler-app` dev branch ← CA-1 prerequisite
 - Disconnect `share.refueler.io` from Cloudflare Pages
@@ -569,6 +593,7 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 - **[Pass]** Define address watch credential subtype — Access credential variant, non-monetary, triggered state. Dedicate to Pass planning session.
 - **[All products]** Privacy page update queued
 - **[All products]** Docs ↔ UI sync rule active from Design-A
+- **[All products]** Remove all Blink ops wallet references from merchant handover docs before first real merchant — replace with confirmed replacement provider
 
 ---
 
