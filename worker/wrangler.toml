@@ -17,6 +17,9 @@ preview_bucket_name = "refueler-share-dev"
 
 [vars]
 ENVIRONMENT = "production"
+LIGHTNING_BACKEND = "blink"
+BLINK_WALLET_ID   = ""
+BLINK_API_KEY     = ""
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
