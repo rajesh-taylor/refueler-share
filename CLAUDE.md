@@ -1,7 +1,7 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.6 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** AP-7 ad-hoc · 2 Aug 2026
+> **Version:** 1.7 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** pre-Opus-2 · 28 Aug 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
-> For platform-wide context (brand, Supabase, Blink, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
+> For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
 ---
 
@@ -25,7 +25,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 | Chunk indexing & verification | BLAKE3 | Internal only — content addressing, integrity checks |
 | Anonymous authentication | Cashu blind signatures | Access tokens, payment gate |
 | Storage | Cloudflare R2 | Egress-free object store |
-| Payment | Blink BOLT11 — Share-specific account (B7) → LNbits Tier 2 (B9) | Upload capacity settled via Lightning |
+| Payment | LNbits on Hetzner CAX21 (B7+, all Refueler projects) | Upload capacity settled via Lightning |
 
 **These two layers must never be conflated.** BLAKE3 is not the auth layer. Cashu is not the hashing layer.
 
@@ -33,7 +33,10 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 
 ## Locked decisions
 
-- No custodial wallet. Payment settled externally via Blink (primary) or LNbits (Tier 2, see Lightning ops plan in Share-Master-Context.md).
+- **Lightning provider: LNbits on Hetzner CAX21. Locked pre-Opus-2 · 28 Aug 2026.** Applies to all Refueler projects (Share, refueler.io POS, Relay, Refill). Blink discontinued custodial accounts UK Aug 31 2026 — dead as a provider. Voltage eliminated (US company, invoice metadata visible to third party, incompatible with compulsion-resistance framing). Strike eliminated (custodial, FCA-dependent). No other candidates.
+- **Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026 (AI-assisted infrastructure probing). Blockstream Swaps exists as a potential replacement but is irrelevant to this stack: liquidation destination is a Silent Payments address, which receives on-chain BTC directly. No swap service is required in the liquidation path.
+- **Node bootstrap is B7 pre-work, not B9.** Timeline: 3–4 weeks deliberate pace including Opus planning sessions. Pre-server work available immediately (see Share-Master-Context.md §B7 notes). No dark provisioning — instance goes live only when runbook is ready and test suite passes.
+- No custodial wallet. Payment settled via self-hosted LNbits.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
 - Content-Type header is validated against a denylist of execution-capable types at the upload boundary. The Worker cannot verify payload content — the header check reflects declared intent only. The MIME type is never stored.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
@@ -51,6 +54,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - Badge links to `share.refueler.io`, not `refueler.io`.
 - Business tier = invoiced. No Stripe subscription price object for Business — invoice template only, managed manually in Stripe dashboard, off-repo.
 - `X-Email` header dropped from upload path entirely — snag resolves by removal.
+- Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
 
 **BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
 Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
@@ -74,7 +78,7 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**B6 ✓ complete (S72a). B7 next — S73 opens. Pre-B7 checklist must be done before S73 starts.**
+**B6 ✓ complete (S72a). B7 in progress — S73/S73a complete. Opus-2 session next (roadmap resequence + node bootstrap planning).**
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
@@ -112,7 +116,7 @@ This is not optional.
 - §B-n snag list: remove fully resolved items. Carried items only.
 - Target: under 350 lines at all times.
 
-**Applies to:** S72 (B6) · S87 (B7) · SW9 (SW) · then B8, B9, B10, B11, B12 close sessions
+**Applies to:** S87 (B7) · SW9 (SW) · then B8, B9, B10, B11, B12 close sessions
 (renumber after B7 close — check Share-Master-Context.md §Roadmap for current numbers).
 Also apply at any session where either file exceeds its target line count mid-block.
 

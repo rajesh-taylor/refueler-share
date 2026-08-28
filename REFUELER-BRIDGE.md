@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 5.2 | **Created:** 28 July 2026 | **Updated:** S73 · 2026-08-28
+> **Version:** 5.3 | **Created:** 28 July 2026 | **Updated:** pre-Opus-2 · 2026-08-28
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -566,16 +566,19 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 | **Multi-[n]** | refueler-legend, refueler-share, refueler-pass, refueler-io | Share×Legend distress integration locked. Pass×Legend address watch locked. Recovery Coordination Layer v3 candidate. Article 24 scoped. UC-9 session prompt produced. BRIDGE v5.0. |
 | **AD-HOC · 27 Aug 2026** | refueler-share, refueler-pass | Silent Inbox product name + full spec locked. Stripe vs Lightning tier split locked. Hetzner CAX21 node selected (LND + Neutrino + SimpleX SMP + Tor). Instance separation rule locked. NUT-00 v3 + NUT-10 v3 Nutroot secrets logged from Cashu dev call 36. Pass × Nutroot use case set locked. BOLT12-inspired static offer as Silent Inbox primitive locked (Option A). BRIDGE v5.1. |
 | **S73 · 28 Aug 2026** | refueler-share | Pre-B7 Blink checklist complete. `BLINK_SHARE_API_KEY` + `BLINK_SHARE_WALLET_ID` set. Callback endpoint confirmed. CRITICAL: Blink discontinuing custodial accounts in UK by Aug 31 2026 — API unavailable post-migration. Affects ALL Refueler projects. Lightning provider replacement decision required before B7 code starts. Pre-Opus-2 comparison session queued. BRIDGE v5.2. |
+| **pre-Opus-2 · 28 Aug 2026** | all repos | Lightning provider locked: **LNbits on Hetzner CAX21** for all Refueler projects. Strike eliminated (custodial). Voltage eliminated (US company, invoice metadata exposure). Memory audit: 6 stale entries removed. **Boltz submarine swaps dead** (suspended Aug 3 2026 — AI-assisted infrastructure exploits). Blockstream Swaps exists but irrelevant: Silent Payments on-chain is the liquidation model, no swap service required. Node bootstrap is new B7 pre-work (3–4 weeks, Opus planning session S73b). Pre-server work scoped (LNbits repo study, extension audit, API confirmation, runbook design). BRIDGE v5.3. |
 
 ---
 
 ## Active action items (Rajesh)
 
-- **URGENT: Lightning provider replacement** ← Blink custodial discontinued UK Aug 31. Affects Share (B7), refueler.io POS, Relay, Refill. Pre-Opus-2 comparison session: LNbits on Hetzner CAX21 vs Voltage vs Strike API. Decision must be locked before B7 code starts.
+- **[Lightning — ALL projects] LNbits on Hetzner CAX21 LOCKED.** Blink dead. Voltage/Strike eliminated. Node bootstrap is B7 pre-work. Begin pre-server work immediately (LNbits repo study, extension audit). Opus planning session S73b designs the runbook before server provisioning.
+- **[All products] Remove all Blink references** from merchant handover docs, Worker secrets, and any config files across all repos. Replace `BLINK_API_KEY` / `BLINK_SHARE_API_KEY` with `LNBITS_URL` / `LNBITS_API_KEY`.
+- **[All products] Boltz submarine swaps dead** (Aug 3 2026). Remove any Boltz liquidation references from operational docs. Liquidation model: channel close or loop-out to Silent Payments address — no swap service required.
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant)
-- **Create Refueler Crypto Ops Wallet** ← replacement for Blink ops wallet, provider TBC post-pre-Opus-2
+- **Create Refueler Crypto Ops Wallet** ← LNbits wallet on Hetzner node (replaces Blink ops wallet)
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns
-- **Push BRIDGE v5.2** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
+- **Push BRIDGE v5.3** to `numo-fork/` root, `refueler-share/`, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/`
 - Add test `onchain_address` to Raj's Steakhouse in Supabase dashboard
 - Push `refueler-app` dev branch ← CA-1 prerequisite
 - Disconnect `share.refueler.io` from Cloudflare Pages

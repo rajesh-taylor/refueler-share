@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.6 | **Last updated:** AP-9a · 28 Aug 2026
+> **Version:** 5.7 | **Last updated:** pre-Opus-2 · 28 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -25,45 +25,38 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 | Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | Blink BOLT11 (B7, shared account — BLINK_SHARE_API_KEY) → LNbits on Hetzner CAX21 (B9, Blink extension as funding source) |
+| Payments (sats) | LNbits on Hetzner CAX21 (B7+, all Refueler projects — LNBITS_API_KEY / LNBITS_URL) |
 
 ---
 
 ## Lightning infrastructure — B7 plan
 
-**Account structure:** Shared Blink account (refueler.io POS + Share). API key refueler-share-b7— READ + RECEIVE scopes only. Worker secrets useBLINK_SHARE_API_KEYandBLINK_SHARE_WALLET_IDto avoid collision with POS bindingBLINK_API_KEY. BTC wallet ID: fd2357fe-24ec-4173-8441-fc0f05722e9a. Callback endpoint registered: https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. Full separation to LNbits on Hetzner CAX21 deferred to B9.`
+**Provider: LNbits on Hetzner CAX21. Locked pre-Opus-2 · 28 Aug 2026.** Applies to all Refueler projects. Blink dead (UK custodial discontinued Aug 31 2026). Voltage eliminated (US company, invoice metadata exposure). Strike eliminated (custodial, FCA-dependent). No other candidates considered.
 
-**Callback endpoint:** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. No signing secret — Blink does not sign payloads. Verification via KV payment hash lookup. Blink fires twice per payment — Worker deduplicates via `settled: true` KV flag.
+**Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Blockstream Swaps exists as a community replacement but is architecturally irrelevant: the liquidation destination is a Silent Payments address receiving on-chain BTC directly — no swap service required.
+
+**Hetzner CAX21:** €5.77/mo · 8GB RAM · 80GB NVMe. Software stack: **LNbits** (REST API, primary payment layer) + SimpleX SMP server + Tor hidden service. LND is a future upgrade — not a B7 or B9 requirement. Confirm at B10 planning when volume warrants graph privacy or routing fee income.
+
+**Node bootstrap timeline:** 3–4 weeks deliberate pace. Includes Opus planning sessions to design the setup guide as a sequenced non-technical runbook (S73b or equivalent). Pre-server work available now (see §B7 notes below). No dark provisioning — instance goes live only when runbook is complete and test suite passes.
+
+**Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var routes to LNbits REST. Worker secrets: `LNBITS_URL` + `LNBITS_API_KEY`. No Blink secrets required or set — remove any Blink Worker secret references.
 
 **Lightning payment flow (B7 — BOLT11 invoice model):**
 1. Frontend → `POST /subscription/lightning` with `{ tier, period }`
-2. Worker queries Blink `btcPrice` → live GBP/sats rate
-3. Worker calls `lnInvoiceCreate` → BOLT11 + payment hash
-4. Worker writes `{ paymentHash, tier, period, created_at, expires_at, settled: false }` to KV — 25h TTL
-5. Frontend displays QR + BOLT11 copy. User pays from any Lightning wallet.
-6. Blink fires callback → Worker verifies hash, issues Cashu credential, marks `settled: true`
-7. Credential written to KV keyed by `paymentHash` — 10 min TTL. Browser memory only. No Supabase row.
-8. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`.
+2. Worker calls LNbits `POST /api/v1/payments` → BOLT11 + payment hash
+3. Worker writes `{ paymentHash, tier, period, created_at, expires_at, settled: false }` to KV — 25h TTL
+4. Frontend displays QR + BOLT11 copy. User pays from any Lightning wallet.
+5. LNbits fires webhook callback → Worker verifies hash via KV lookup, issues Cashu credential, marks `settled: true`
+6. Credential written to KV keyed by `paymentHash` — 10 min TTL. Browser memory only. No Supabase row.
+7. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`.
 
-**Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var (default: `blink`). LNbits slots in via env var swap + new secret at B9.
+**Webhook:** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. LNbits webhook signing (HMAC) enabled — Worker verifies signature. Deduplication via `settled: true` KV flag.
 
-**Blink graph-visibility risk (locked AP-9):** Blink can see all incoming sats to the Share wallet — payment amounts, timing, volume. Even a single Production Max Lightning subscriber is more exposure than acceptable long-term. This is the primary driver for migrating to self-hosted LNbits at B9. The `LIGHTNING_BACKEND` env var swap is the clean seam — no Worker code changes required at migration.
+**Fallbacks:** KV flag `lightning_available: true/false`. If Hetzner goes down: set `lightning_available: false` via dashboard toggle → Stripe fully operational → reprovision following B7 runbook → restore env var. Estimated recovery: ~2 hours with documented runbook. R2, Supabase, and all issued credentials are unaffected — Hetzner hosts the payment rail only.
 
-**Migration trigger to LNbits:** first Production Max Lightning subscriber OR >£500/mo Lightning volume — whichever comes first.
-
-**Fallbacks:** KV flag `lightning_available: true/false`. Fallback 1 (LNbits down in B9+): revert to Blink via env var, 4h target. Fallback 2 (both down): Lightning hidden on upgrade page via `lightning_available: false` KV flag, Stripe fiat fully operational. Both via dashboard toggle, no code deploy.
-
-**Privacy model:** Stripe payer = name/email/card visible to Refueler. Lightning payer = payment hash + amount + tier only. Blink internal correlation documented on upgrade page. DO NOT claim "anonymous" for Lightning. Honest claim: "Pseudonymous."
+**Privacy model:** Stripe payer = name/email/card visible to Refueler. Lightning payer = payment hash + amount + tier only — no identity at any layer. DO NOT claim "anonymous" for Lightning. Honest claim: "Pseudonymous." No third-party provider holds invoice metadata.
 
 **Payment privacy table:** `src/_data/payment_privacy.json`. Five columns: Name / Email / Record / Refund / Privacy — Stripe vs Lightning. PayNym "coming soon." Also appears verbatim in B9 whitepaper §Privacy model.
-
-**B9 infrastructure (locked AP-9):** Hetzner CAX21 (€5.77/mo, 8GB RAM, 80GB NVMe). Software: **LNbits** (Blink extension as funding source) + SimpleX SMP server + Tor hidden service. LND is NOT provisioned at B9 — LNbits-on-Hetzner is the target stack.
-
-**Provisioning discipline (locked AP-9):** The Hetzner instance goes online, syncs, installs LNbits, passes a full test suite, and then B9 build begins using it actively from day one. No dark provisioning. No idle instances. The B9 runbook produced at S85/S85a documents the full setup and is the operational reference.
-
-**LND trigger condition:** When Lightning payment volume requires graph privacy or routing fee income that LNbits-on-Blink cannot provide — confirm at B10 planning. LND is a future upgrade, not a B9 requirement.
-
-**Hetzner failure mode:** If the CAX21 goes down, Lightning payments fail. Recovery: set `lightning_available: false` via dashboard toggle (Stripe stays operational); reprovision LNbits on a new instance following the B9 runbook; restore env var. Estimated recovery: ~2 hours with documented runbook. R2, Supabase, and all issued credentials are unaffected — Hetzner hosts the payment rail only. A full contingency Opus session (failure modes + multi-provider strategy) is flagged as a B9 prerequisite before the instance goes live.
 
 **Instance separation rule (locked BRIDGE v5.1):** Share Lightning node and Legend Lightning node must run on separate Hetzner instances. A single fatal error must not take both products' payment rails offline simultaneously.
 
@@ -222,7 +215,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**B7 in progress — S73a complete. S74 next (Lightning adapter — `worker/src/lightning.js`).**
+**B7 in progress — S73/S73a complete. S73b next (Opus-2: roadmap resequence + node bootstrap runbook planning). Lightning provider locked: LNbits on Hetzner CAX21.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
@@ -243,12 +236,12 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B1–B4 ✓ | S1–S42e | Foundation through security hardening |
 | B5 ✓ | S43–S52 | Design full pass |
 | B6 ✓ | S53–S72a | Testing infrastructure + folder upload |
-| B7 | S73–S100 | Lightning/Blink + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer (re-sequenced AP-9) |
+| B7 | S73–S100 | Lightning/LNbits + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer. Node bootstrap is B7 pre-work (S73b Opus session + Hetzner provisioning). |
 | R-series | RU1–RU2+ | **Resumable uploads — promoted post-B7** (live stall failure 5 Aug, 1.51 GB at 80%) |
 | SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer · runs post-R-series |
 | HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning — 2 core + 2 buffer · runs post-R-series |
 | B8 | TBD | NUT-11 Mode 2 keypair auth (renumbered post-SW) |
-| B9 | TBD | Hetzner CAX21 provisioning (LNbits + SimpleX + Tor) + LNURL-withdraw + whitepaper + staging + incident response plan. Contingency Opus session prerequisite before instance goes live. |
+| B9 | TBD | LNURL-withdraw + security whitepaper + staging environment + incident response plan. Hetzner node already live from B7 pre-work. |
 | B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
 | B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
 | B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
@@ -282,18 +275,25 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 
 **Difficulty scaling rule:** S = 1 session. M = 2. L = 3. Split early rather than overrun.
 
-**Rajesh pre-B7 checklist:**
-1. Create Share Blink account (non-UK connection — Mullvad or VPN). Email `rt+share@rajeshtaylor.com`.
-2. Generate `refueler-share-b7` API key — READ + RECEIVE scopes only.
-3. Query BTC wallet ID: `curl -s -X POST https://api.blink.sv/graphql -H "X-API-KEY: YOUR_KEY" -H "Content-Type: application/json" -d '{"query":"{ me { defaultAccount { wallets { id walletCurrency } } } }"}' | jq .`
-4. Register callback endpoint: `curl -s -X POST https://api.blink.sv/graphql -H "X-API-KEY: YOUR_KEY" -H "Content-Type: application/json" -d '{"query":"mutation { callbackEndpointAdd(input: { url: \"https://refueler-share.rt-fc4.workers.dev/webhook/lightning\" }) { id } }"}' | jq .`
-5. Note endpoint ID from step 4 — needed at S74 start.
-6. Make 2 GB test file: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-7. Before **S85**: read the LNbits repo README (`https://github.com/lnbits/lnbits`) **and** the LNbits Blink extension docs, so the B9 LNbits-on-Hetzner architecture can be confirmed in-session.
+**Rajesh pre-B7 checklist — node bootstrap (3–4 weeks, deliberate pace):**
 
-**Pre-B7 guards (do not cross during B7):**
-- DO NOT provision the Hetzner CAX21 instance during B7. The instance is B9 scope. Early provisioning buys nothing and splits focus.
+*Pre-server work (no Hetzner instance needed — do this now):*
+1. Read LNbits repo README: `https://github.com/lnbits/lnbits` — understand what extensions exist, which to keep, which to strip.
+2. Identify extensions to disable (everything not needed for Share: shop, boltcards, tpos, etc). LNbits is modular — unused extensions are attack surface and startup weight.
+3. Read LNbits REST API docs (`/docs` endpoint when running) — confirm `POST /api/v1/payments` (create invoice) and `GET /api/v1/payments/{payment_hash}` (check status) are the only two endpoints Share needs.
+4. Read LNbits webhook docs — confirm HMAC signing method for callback verification.
+5. Opus planning session (S73b): design node bootstrap as sequenced non-technical runbook. Topics: Hetzner account + SSH key, Ubuntu config, LNbits install, Tor hidden service, wallet creation, API key scoping, webhook registration, test invoice end-to-end, backup strategy (channel state + LNbits DB), failure modes + recovery time, instance monitoring.
+6. Make 2 GB test file for load testing post-bootstrap: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
+
+*Server work (after runbook is written and Opus session complete):*
+7. Provision Hetzner CAX21, follow runbook step by step.
+8. Confirm test invoice round-trip before touching any B7 code.
+9. Set Worker secrets: `LNBITS_URL` + `LNBITS_API_KEY` via `npx wrangler secret put`.
+
+**Pre-B7 guards:**
 - DO NOT create Stripe objects or lock the "Silent Drop" name during B7. Silent Drop is deferred to the SD-block; S88 is design-only.
+- DO NOT provision Hetzner until after S73b runbook Opus session — no dark provisioning.
+- DO NOT add a Supabase row or email field to the Lightning credential path. This invariant is load-bearing for Silent Drop. (Also in do-not-retry ledger.)
 
 ---
 
@@ -477,7 +477,7 @@ This two-axis framing is the category definition and the spine of article 5's fo
 | POST | `/subscription/portal` | — | Customer Portal session |
 | GET | `/subscription/credential` | — | Re-issue credential on demand (Stripe path) |
 | POST | `/subscription/lightning` | — | Create BOLT11 invoice for tier purchase (B7) |
-| POST | `/webhook/lightning` | — | Blink payment callback → credential issuance (B7) |
+| POST | `/webhook/lightning` | — | LNbits payment callback → credential issuance (B7) |
 | GET | `/subscription/lightning/credential` | — | Poll for issued credential by paymentHash (B7) |
 | POST | `/log/error` | — | Client error → AE (20/60s rate limited) |
 | GET | `/wl/config` | — | Badge config by Host header, Cache-Control max-age=3600 (SW3) |
