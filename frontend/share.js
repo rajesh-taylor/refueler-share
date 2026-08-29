@@ -384,123 +384,43 @@ async function readDirectoryEntry(dirEntry, pathPrefix, depth) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Compression skip list — file extensions that are already compressed.
-//
-// For these types we use fflate.ZipPassThrough → STORED entry (method=0 in
-// the zip local file header). This is what macOS Archive Utility expects for
-// uncompressed entries — NOT level:0 in ZipDeflate, which writes method=8
-// (DEFLATED) with zero compression passes and causes Archive Utility to
-// complain about "unsupported format". ZipPassThrough is correct here.
-//
-// Everything else uses ZipDeflate at level 6 (fflate default).
+// Zip [{relativePath, file}] using fflate, then hand blob to handleFileSelection
 // ─────────────────────────────────────────────────────────────────────────────
-const SKIP_COMPRESS_EXTENSIONS = new Set([
-  // Video — all are compressed codecs; raw formats (.r3d, .braw, .ari) are proprietary compressed
-  'mov', 'mp4', 'mxf', 'r3d', 'braw', 'ari', 'mkv', 'avi', 'wmv', 'webm', 'm4v', 'mpg', 'mpeg',
-  // Audio — FLAC is lossless but still compressed internally
-  'mp3', 'aac', 'm4a', 'ogg', 'flac', 'opus', 'wma',
-  // Images — compressed formats only; PNG + TIFF are kept at level 6
-  'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif',
-  // Archives
-  'zip', 'gz', 'bz2', 'xz', '7z', 'rar',
-  // Modern Office + PDF — zipped internally
-  'pdf', 'docx', 'xlsx', 'pptx',
-]);
+const FOLDER_MEM_WARN_BYTES = 500 * 1024 * 1024; // 500 MB
 
-function shouldSkipCompression(relativePath) {
-  const ext = relativePath.split('.').pop().toLowerCase();
-  return SKIP_COMPRESS_EXTENSIONS.has(ext);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Zip [{relativePath, file}] using fflate streaming API (fflate.Zip).
-//
-// RU0 fix — replaces the buffered fflate.zip() call that caused OOM on large
-// folders (1.5 GB photo folder → ~3 GB peak heap with old approach).
-//
-// New approach:
-// - fflate.Zip (streaming encoder) collects compressed output chunks into an
-//   array of Uint8Arrays. Final Blob is constructed from that array.
-// - Files are processed one at a time: arrayBuffer() → fed to fflate → buffer
-//   released before the next file is read. Peak in-flight: one raw file +
-//   compressed output chunks. No second full-size allocation.
-// - Already-compressed types → fflate.ZipPassThrough (STORED, method=0).
-//   Correct for macOS Archive Utility. See comment on SKIP_COMPRESS_EXTENSIONS.
-// - Everything else → fflate.ZipDeflate at level 6.
-// - Progress: reported as input bytes consumed vs total input bytes.
-//   More honest than file count for mixed-size folders.
-// ─────────────────────────────────────────────────────────────────────────────
 async function zipAndSelect(entries, folderName) {
   const zipName    = `${folderName}.zip`;
   const totalFiles = entries.length;
-  const totalInputBytes = entries.reduce((acc, e) => acc + (e.file ? e.file.size || 0 : 0), 0);
 
-  showZipStage('Compressing', 0, `0 B of ${formatBytes(totalInputBytes)}`);
+  // Memory pressure warning — computed before reading anything into RAM.
+  const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
+  if (totalBytes > FOLDER_MEM_WARN_BYTES) {
+    setDropMsg(`Large folder (${formatBytes(totalBytes)}) — compression may use significant memory and take a while.`);
+  }
 
-  // Output chunks accumulator — grows as fflate emits compressed data.
-  // This IS the zip file in memory, so its size ≈ compressed output.
-  // For already-compressed inputs (level 0/STORED), output ≈ input — same
-  // total bytes, just accumulated here rather than a second full allocation.
-  const outputChunks = [];
+  showZipStage('Compressing', 0, `0 / ${totalFiles} files`);
 
+  // Read all files into memory as Uint8Arrays.
+  // fflate.zip() accepts { "path": Uint8Array } — no streaming API for full zip.
+  const fileMap = {};
+  for (let i = 0; i < entries.length; i++) {
+    const { relativePath, file } = entries[i];
+    const buf = await file.arrayBuffer();
+    fileMap[relativePath] = new Uint8Array(buf);
+    // Bare Uint8Array → fflate default (level 6 DEFLATE) — produces unambiguous DEFLATE entries.
+    // level:0 is a fflate footgun: writes DEFLATED method with zero compression, which macOS
+    // Archive Utility rejects as "unsupported format". Compatibility wins over CPU saving.
+
+    const pct = Math.round(((i + 1) / totalFiles) * 85); // read phase = 0–85%
+    showZipStage('Compressing', pct, `${i + 1} / ${totalFiles} files`);
+  }
+
+  // fflate.zip() — async, callback-based
   const zipBlob = await new Promise((resolve, reject) => {
-    // fflate.Zip — streaming zip encoder.
-    // The ondata callback fires each time fflate emits a compressed chunk.
-    const zip = new fflate.Zip((err, chunk, final) => {
+    fflate.zip(fileMap, (err, data) => {
       if (err) { reject(err); return; }
-      outputChunks.push(chunk);
-      if (final) {
-        resolve(new Blob(outputChunks, { type: 'application/zip' }));
-      }
+      resolve(new Blob([data], { type: 'application/zip' }));
     });
-
-    // Process entries sequentially — one arrayBuffer() in flight at a time.
-    // Each file is read, compressed (or stored), and released before the next.
-    let bytesProcessed = 0;
-
-    (async () => {
-      try {
-        for (let i = 0; i < entries.length; i++) {
-          const { relativePath, file } = entries[i];
-
-          // Read one file into memory. Released at the end of this iteration.
-          const buf = await file.arrayBuffer();
-          const data = new Uint8Array(buf);
-
-          if (shouldSkipCompression(relativePath)) {
-            // ZipPassThrough → STORED entry (method=0).
-            // macOS Archive Utility compatible. No DEFLATE pass — zero CPU cost.
-            const entry = new fflate.ZipPassThrough(relativePath);
-            zip.add(entry);
-            entry.push(data, true); // true = last chunk for this file
-          } else {
-            // ZipDeflate → DEFLATED entry (method=8), level 6.
-            // fflate default. Compresses well for text, PNG, TIFF, CSV, JSON.
-            const entry = new fflate.ZipDeflate(relativePath, { level: 6 });
-            zip.add(entry);
-            entry.push(data, true);
-          }
-
-          // Update progress by input bytes consumed (more honest than file count).
-          bytesProcessed += file.size || 0;
-          const pct = totalInputBytes > 0
-            ? Math.min(Math.round((bytesProcessed / totalInputBytes) * 100), 99)
-            : Math.round(((i + 1) / totalFiles) * 99);
-          showZipStage('Compressing', pct, `${formatBytes(bytesProcessed)} of ${formatBytes(totalInputBytes)}`);
-
-          // Yield to the event loop between files — keeps the UI responsive
-          // and avoids blocking the main thread for multi-second stretches
-          // on large folders. Small cost; large UX benefit.
-          await new Promise(r => setTimeout(r, 0));
-        }
-
-        // Signal to fflate that all files have been added.
-        // This triggers the final ondata callback with final=true.
-        zip.end();
-      } catch (e) {
-        reject(e);
-      }
-    })();
   }).catch(err => {
     reportError('folder_zip', err.message || 'fflate error', folderName.slice(0, 100));
     setDropMsg('Compression failed. Try again or zip the folder manually first.');
@@ -820,8 +740,8 @@ async function enterDownloadMode({ uuid, key, iv }) {
 
   // ── A/B USP variant (S47c) ───────────────────────────────────────────────
   const USP_VARIANTS = {
-    A: `Reading your files is not technically possible for us.\nThe key never leaves your browser. The server stores encrypted noise.\nFiles delete themselves. No account. No trace. No data to sell.`,
-    B: `This link expires and deletes itself — no trace remains.\nNo account. No email. No history.\nYour data. Not ours.`,
+    A: `No account. No email. No history. Files encrypted before they reach our servers — we only see encrypted noise, by design. Your data. Not ours.`,
+    B: `This link expires and deletes itself — no trace remains. No account. No email. No history. Your data. Not ours.`,
   };
   let uspVariant;
   try {
@@ -836,20 +756,6 @@ async function enterDownloadMode({ uuid, key, iv }) {
   uspText.textContent = USP_VARIANTS[uspVariant];
   uspBlock.classList.remove('hidden');
   logReceiverEvent('receiver_ab_shown', uspVariant);
-
-  // ── Capability warning on receiver card if FSAA unavailable ─────────────
-  const WARN_AMBER_BYTES = 300 * 1024 * 1024;
-  const WARN_RED_BYTES   = 1024 * 1024 * 1024;
-  const hasFSAA = typeof showSaveFilePicker !== 'undefined';
-  const totalBytes = meta.total_bytes || 0;
-
-  if (!hasFSAA && totalBytes > WARN_AMBER_BYTES) {
-    const isRed = totalBytes > WARN_RED_BYTES;
-    dlCompatWarn.className = `dl-compat-warn ${isRed ? 'red' : 'amber'}`;
-    dlCompatWarn.innerHTML = `<strong>Streaming downloads aren't supported in this browser</strong> — this transfer may be slow or fail for large files. Chrome gives the best experience.`;
-    dlCompatWarn.offsetHeight; // eslint-disable-line no-unused-expressions
-    dlCompatWarn.classList.add('visible');
-  }
 
   // ── Wire Download button ─────────────────────────────────────────────────
   rcDownloadBtn.addEventListener('click', async () => {
