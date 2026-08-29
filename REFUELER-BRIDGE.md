@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 5.3 | **Created:** 28 July 2026 | **Updated:** pre-Opus-2 · 2026-08-28
+> **Version:** 5.4 | **Created:** 28 July 2026 | **Updated:** Opus-2 · 2026-08-29
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -10,7 +10,7 @@
 
 Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (solo founder, London). Operating within UK jurisdictional law. Not a fintech product. Not a loyalty app.
 
-**Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant terminal (Fenchurch St line cafés and restaurants — tablet, counter/kitchen, landscape) · **Relay** (`io.refueler.merchant`, formerly NumoPay fork — in-venue order entry, Android phone, floor/waiter staff, portrait) · Refueler Pass (Lightning-native ticketing and venue access — own repo + Claude project) · **Refill** (consumer app, React Native, Blink Lightning — commuter pre-orders + Legend + Pass)
+**Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant terminal (Fenchurch St line cafés and restaurants — tablet, counter/kitchen, landscape) · **Relay** (`io.refueler.merchant`, formerly NumoPay fork — in-venue order entry, Android phone, floor/waiter staff, portrait) · Refueler Pass (Lightning-native ticketing and venue access — own repo + Claude project) · **Refill** (consumer app, React Native, LNbits Lightning — commuter pre-orders + Legend + Pass)
 
 **Product names locked CC-103:** Floor staff Android app = Relay ("Relay by Refueler"). Consumer app = Refill. Both names tie to the Refueler ecosystem without requiring explanation.
 
@@ -155,7 +155,9 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 ---
 
-## Lightning provider — CRITICAL (S73 · 28 Aug 2026)
+## Lightning provider — RESOLVED (Opus-2 · 29 Aug 2026)
+
+> **RESOLVED:** provider locked to **LNbits-on-Hetzner (phoenixd-backed)** for all Refueler projects. Node bootstrap = NB-series pre-B7. The Blink-death record below is retained as history, not an open decision.
 
 **Blink custodial accounts discontinued in UK by August 31 2026.** Blink has ended custodial service in the UK region due to regulation. The Blink API is unavailable after migration to non-custodial. This affects ALL Refueler projects:
 
@@ -255,9 +257,9 @@ Esplora-compatible endpoint → one URL paste for Sparrow users. Distribution ch
 
 **What it is:** A static, permanent inbox address that allows any sender to deliver encrypted files to the inbox holder without either party needing an account, and without Refueler being able to link senders to recipients or to each other.
 
-**Tier placement:**
-- Production Max — entry point for the full Silent Drop feature set.
-- Creative Premium — lighter version: smaller storage cap, shorter TTL per transfer.
+**Tier placement (corrected Opus-2 — Production Max only):**
+- Production Max — the Silent Drop tier. Lightning-only.
+- Creative Premium — **no** Silent Drop (no "lite" version; the boundary is qualitative: send-focused tier vs standing-receive tier). *(Removed the earlier stale "lighter version" line — it contradicted the Production-Max-only lock below.)*
 - Free tier — no Silent Drop.
 
 **Mechanics:**
@@ -282,6 +284,8 @@ The Silent Drop is architecturally the Share implementation of a BOLT12-style st
 
 Implementation decision locked — **Option A:** borrow BOLT12 cryptography, not the Lightning network. Cloudflare Worker acts as blinded relay over HTTPS; secp256k1 blinded paths. Buildable on existing Cloudflare + Worker infrastructure. No Lightning node required for this feature. No zero-sat invoice UX problem for users. Option B (real BOLT12 zero-amount invoices, requires B9 node) noted as architecturally cleaner but gated on node provisioning and introduces user-facing complexity that is not justified for Share's professional audience.
 
+**Note (confirmed Opus-2):** phoenixd natively supports BOLT12 offers (as does Phoenix Wallet). This means native Lightning-layer BOLT12 receive is available on our stack without LND — a useful future option distinct from Option A. BOLT12 blinded paths protect against *external* payer/sniffer correlation; they do not hide destination from ACINQ (the LSP). ACINQ sees aggregate receives; individual payer identity remains private from them. This is our disclosed-processor position, unchanged. SP-native send/receive is a separate B9+ story requiring a full node (see §Liquidation).
+
 **Journalist use case (canonical):** Journalist publishes one QR or link. Any source sends documents indefinitely. Each upload is unlinkable to every other. No correlation between senders. Journalist's network identity never revealed. This is the cleanest public articulation of the two-axis category definition applied to a real workflow.
 
 **Network privacy:** Mullvad VPN recommendation covers Share's threat model without requiring onion routing infrastructure. Cloudflare's global edge + Mullvad handles the network layer. No Share-operated onion routing required.
@@ -296,29 +300,30 @@ The same BOLT12-inspired static offer mechanism supports Pass standing invitatio
 - Recovery cliff is a feature: "Your inbox exists only where you keep it. Refueler has nothing to recover because we never had it."
 - KV unit economics: negligible (~$0.00053/user/month at 30 transfers). Not a constraint.
 - Shared page for journalist/source-protection copy — not a dedicated landing page.
-- Two tidy-up sessions to sequence post-Opus-2: one for tier naming/copy, one for Stripe objects.
+- **SD-block placement (locked Opus-2):** `NB → B7 → SYNC → RU1/RU2 → HQ → SD-block → SW`. SD-feature ships pre-B9; journalist hero copy gated until B9 (blinded-relay review + VPN scoping). Incident-response tabletop must complete before SD-block launch (first self-serve customer).
+- **Two tidy-up sessions (locked Opus-2, stay at B7-close, pre-SD):** S89 = tier naming + "Silent Drop" name lock (no Stripe objects); S90 = Stripe **price objects for Stripe-rail tiers only** — SD/Lightning-only tier gets **no** Stripe object (would attach identity). S89 strictly precedes S90.
 
 ## Competitive intelligence
 - The gap Silent Drop closes is named the correlation problem (not the discovery problem): can a recipient maintain a permanent public receive-point such that no two transfers — same or different senders — can be linked to each other or to the recipient? The two-axis category definition remains unchanged and primary. Silent Drop is its sharpest illustration, not a third pillar.
 
 ---
 
-## Share × Lightning — B9 node infrastructure (locked AD-HOC · 27 Aug 2026)
+## Share × Lightning — node infrastructure (locked Opus-2 · 29 Aug 2026 — pulled forward to B7 pre-work)
 
-**Hetzner node selected:** CAX21 (€5.77/mo, 8GB RAM, 80GB NVMe).
-**Software:** LND + Neutrino mode. Not pruned bitcoind — Neutrino syncs in 4–8 hours, pruned bitcoind takes days and requires more storage.
-**Co-located services on Share node:** LND instance + SimpleX SMP server + Tor hidden service.
-**Tor latency:** not a concern — the node handles signalling only, not file transfer. File bytes travel Cloudflare edge; only Lightning payment signals touch the node.
+**Hetzner node:** CAX21 (€5.77/mo, 8GB RAM, 80GB NVMe).
+**Software (corrected Opus-2 — supersedes "LND + Neutrino"):** **phoenixd (ACINQ)** as the Lightning node and LNbits funding source (no bitcoind/no full node — this is what keeps CAX21 viable) + **LNbits** (REST + per-product wallets) + **cloudflared** tunnel (Worker→LNbits, no inbound ports) + **Tor** (one daemon, per-service .onion). LND is **deferred**, trigger-gated (see below).
+**Tor latency:** not a concern — the node handles payment signalling only; file bytes travel the Cloudflare edge.
+**Liquidation:** phoenixd **splice-out** to on-chain → **standard bech32 address in Sparrow Wallet**. phoenixd cannot send to BIP-352 Silent Payments addresses (no Bitcoin node). SP-native capability deferred to LND-trigger migration. Not loop-out — that reintroduces a third-party correlator.
 
-**Instance separation rule (locked):**
-Share Lightning node and Legend Lightning node must run on separate Hetzner instances. A single fatal error — kernel panic, disk failure, misconfiguration — must not take both products' payment rails offline simultaneously.
-- Share node: CAX21, B9 scope.
-- Legend node: separate CAX21, provisioned when Legend build begins (post-B9).
-- SimpleX SMP server co-located with Share node only. Its failure is lower severity than the payment rail and does not justify a separate instance.
+**Instance topology (confirmed Opus-2):**
+- **Instance A — Share + Pass** (CAX21): phoenixd + LNbits (Share/Pass/Ops wallets) + cloudflared + Tor. Provisioned at NB-series, pre-B7. The only box needed to open B7.
+- **Instance B — Legend** (separate CAX21): post-B9, when Legend build begins. Share and Legend rails must never share a failure domain.
+- **Instance C — SimpleX SMP** (own box, B9): **moved off the funds instance** (supersedes "co-located with Share node"). A public messaging relay is a larger inbound attack surface; the payment node stays the leanest, least-exposed box. Not needed until B9, so costs nothing now.
+- **Tor scope:** per-service hidden services (distinct .onion each), never one shared onion.
 
-**Upgrade trigger for Share node:** when Lightning payment volume requires dedicated resources, move to CX32 or larger. Decision at that point whether SimpleX migrates or stays.
+**Phoenixd → LND trigger (locked Opus-2):** migrate to LND only when EITHER (1) sustained ≥ £10k/mo Lightning receipts for 3 months AND a named operator is committed to channel ops; OR (2) ACINQ discontinues/changes phoenixd terms (the Blink lesson: provider-dependence forces the move, not cost). Routing-fee income ≈ £0 on a receive leaf — not a reason to switch. Full cost model in Share-Master-Context.md §Phoenixd → LND trigger.
 
-**B7 Lightning provider:** Blink was the planned B7 provider — now defunct (UK custodial discontinued Aug 31 2026). Replacement to be confirmed in pre-Opus-2 session. See Lightning provider section above.
+**B7 Lightning provider:** LNbits-on-Hetzner (phoenixd-backed), locked pre-Opus-2. Node bootstrap is the NB-series pre-B7 block. Blink dead. See Lightning provider section above.
 
 ---
 
@@ -567,6 +572,7 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 | **AD-HOC · 27 Aug 2026** | refueler-share, refueler-pass | Silent Inbox product name + full spec locked. Stripe vs Lightning tier split locked. Hetzner CAX21 node selected (LND + Neutrino + SimpleX SMP + Tor). Instance separation rule locked. NUT-00 v3 + NUT-10 v3 Nutroot secrets logged from Cashu dev call 36. Pass × Nutroot use case set locked. BOLT12-inspired static offer as Silent Inbox primitive locked (Option A). BRIDGE v5.1. |
 | **S73 · 28 Aug 2026** | refueler-share | Pre-B7 Blink checklist complete. `BLINK_SHARE_API_KEY` + `BLINK_SHARE_WALLET_ID` set. Callback endpoint confirmed. CRITICAL: Blink discontinuing custodial accounts in UK by Aug 31 2026 — API unavailable post-migration. Affects ALL Refueler projects. Lightning provider replacement decision required before B7 code starts. Pre-Opus-2 comparison session queued. BRIDGE v5.2. |
 | **pre-Opus-2 · 28 Aug 2026** | all repos | Lightning provider locked: **LNbits on Hetzner CAX21** for all Refueler projects. Strike eliminated (custodial). Voltage eliminated (US company, invoice metadata exposure). Memory audit: 6 stale entries removed. **Boltz submarine swaps dead** (suspended Aug 3 2026 — AI-assisted infrastructure exploits). Blockstream Swaps exists but irrelevant: Silent Payments on-chain is the liquidation model, no swap service required. Node bootstrap is new B7 pre-work (3–4 weeks, Opus planning session S73b). Pre-server work scoped (LNbits repo study, extension audit, API confirmation, runbook design). BRIDGE v5.3. |
+| **Opus-2 · 29 Aug 2026** | refueler-share (+ all repos on next push) | B7 resequenced for LNbits/**phoenixd** (funding source). **NB-series** node bootstrap = pre-B7, gates all B7 code. S74–S76 rewritten for LNbits REST; webhook corrected (unsigned callback → authenticated GET re-verify). **Instance topology confirmed:** Share+Pass = Instance A; SimpleX → own Instance C (B9); Legend → Instance B (post-B9); Tor per-service onions; cloudflared for Worker→LNbits. **Phoenixd→LND trigger locked** (≥£10k/mo × 3mo + named operator, OR ACINQ provider event). **SD-block** placed post-HQ, pre-SW; SD-feature pre-B9, journalist copy gated to B9. S89/S90 tidy-up confirmed at B7-close. **SYNC-1** dual-repo asset fix locked before frontend work. Corrected: LND+Neutrino → phoenixd+LNbits; Silent Drop CP-"lite" contradiction removed (Production Max only). Blink cleanup checklist produced (execute at first B7 build session). BRIDGE v5.4. |
 
 ---
 
@@ -574,7 +580,7 @@ in SESSIONS.md. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.
 
 - **[Lightning — ALL projects] LNbits on Hetzner CAX21 LOCKED.** Blink dead. Voltage/Strike eliminated. Node bootstrap is B7 pre-work. Begin pre-server work immediately (LNbits repo study, extension audit). Opus planning session S73b designs the runbook before server provisioning.
 - **[All products] Remove all Blink references** from merchant handover docs, Worker secrets, and any config files across all repos. Replace `BLINK_API_KEY` / `BLINK_SHARE_API_KEY` with `LNBITS_URL` / `LNBITS_API_KEY`.
-- **[All products] Boltz submarine swaps dead** (Aug 3 2026). Remove any Boltz liquidation references from operational docs. Liquidation model: channel close or loop-out to Silent Payments address — no swap service required.
+- **[All products] Boltz submarine swaps dead** (Aug 3 2026). Blockstream Swaps irrelevant — we are not doing a swap. Liquidation model (confirmed Opus-2): **phoenixd splice-out** to on-chain, destination = **standard bech32 address in Sparrow Wallet** (self-custodied). phoenixd cannot send to BIP-352 Silent Payments addresses (no Bitcoin node for scanning). SP-native receive/send is a B9+ capability and a secondary benefit of the LND-migration trigger. No loop-out (reintroduces a third-party correlator). No channel close (expensive, disruptive). Sparrow is SP-capable for outgoing sends from the sweep wallet if needed.
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant)
 - **Create Refueler Crypto Ops Wallet** ← LNbits wallet on Hetzner node (replaces Blink ops wallet)
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns

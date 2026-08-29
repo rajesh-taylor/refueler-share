@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.7 | **Last updated:** pre-Opus-2 · 28 Aug 2026
+> **Version:** 5.8 | **Last updated:** Opus-2 · 29 Aug 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -33,11 +33,21 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 
 **Provider: LNbits on Hetzner CAX21. Locked pre-Opus-2 · 28 Aug 2026.** Applies to all Refueler projects. Blink dead (UK custodial discontinued Aug 31 2026). Voltage eliminated (US company, invoice metadata exposure). Strike eliminated (custodial, FCA-dependent). No other candidates considered.
 
-**Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Blockstream Swaps exists as a community replacement but is architecturally irrelevant: the liquidation destination is a Silent Payments address receiving on-chain BTC directly — no swap service required.
+**Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Blockstream Swaps irrelevant to our liquidation model — we are not doing a swap.
 
-**Hetzner CAX21:** €5.77/mo · 8GB RAM · 80GB NVMe. Software stack: **LNbits** (REST API, primary payment layer) + SimpleX SMP server + Tor hidden service. LND is a future upgrade — not a B7 or B9 requirement. Confirm at B10 planning when volume warrants graph privacy or routing fee income.
+**Hetzner CAX21 — Share+Pass instance (locked Opus-2):** €5.77/mo · 8GB RAM · 80GB NVMe. Software stack:
+- **phoenixd (ACINQ)** — the Lightning node. Funding source for LNbits. No full node required (no bitcoind, no 700GB volume) — this is what keeps CAX21 viable.
+- **LNbits** — REST API + wallet layer on top of phoenixd. Wallet-per-product, each with its own API key: Share, Pass, Ops.
+- **cloudflared (Cloudflare Tunnel)** — the Worker→LNbits data path. No inbound ports opened; origin IP hidden; LNbits reachable only through Cloudflare. Replaces the "clearnet endpoint + IP allowlist" idea.
+- **Tor** — one daemon, per-service hidden services (separate .onion each) for LNbits admin access and phoenixd transport. Not the Worker→LNbits data path (that is cloudflared).
 
-**Node bootstrap timeline:** 3–4 weeks deliberate pace. Includes Opus planning sessions to design the setup guide as a sequenced non-technical runbook (S73b or equivalent). Pre-server work available now (see §B7 notes below). No dark provisioning — instance goes live only when runbook is complete and test suite passes.
+**Not on this box:** bitcoind/LND (deferred — see trigger below) · SimpleX SMP (own instance, B9 — moved off the funds box for attack-surface isolation) · block-explorer / multi-core (post-B9). At provisioning time this is **one** instance; SimpleX and Legend get their own boxes when they arrive.
+
+**LND is a deferred upgrade, not a B7/B9 requirement.** phoenixd is the default indefinitely. See §Phoenixd → LND trigger (locked Opus-2) below.
+
+**Liquidation (confirmed Opus-2):** phoenixd **splice-out** to on-chain — sends from the channel without closing it. Not channel-close (expensive, disruptive), not loop-out (reintroduces a third-party correlator). **phoenixd cannot send to a BIP-352 Silent Payments address** — SP-send requires a Bitcoin node for scanning, which phoenixd does not have. Confirmed liquidation path: **splice-out → standard bech32 address in Sparrow Wallet** (self-custodied). Sparrow is SP-capable for outgoing sends from that wallet if needed later. The privacy concern on *incoming* liquidation sweeps is counterparty correlation, not address format — since the sweep is self-initiated to your own wallet, no third party is exposed. **SP-native receive** (unique output per sender to a static address) is a B9+ capability requiring a full node — add as a secondary LND-migration benefit alongside cost. No open item: Sparrow approach resolves this. Threshold: sweep when balance exceeds a comfortable ops reserve (set at NB-4 runbook).
+
+**Node bootstrap timeline:** 3–4 weeks deliberate pace, run as the **NB-series** pre-B7 block (see §B7 notes). Opus session designs the runbook first; no dark provisioning — instance goes live only when the runbook is complete and the test-invoice round-trip passes.
 
 **Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var routes to LNbits REST. Worker secrets: `LNBITS_URL` + `LNBITS_API_KEY`. No Blink secrets required or set — remove any Blink Worker secret references.
 
@@ -46,11 +56,11 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 2. Worker calls LNbits `POST /api/v1/payments` → BOLT11 + payment hash
 3. Worker writes `{ paymentHash, tier, period, created_at, expires_at, settled: false }` to KV — 25h TTL
 4. Frontend displays QR + BOLT11 copy. User pays from any Lightning wallet.
-5. LNbits fires webhook callback → Worker verifies hash via KV lookup, issues Cashu credential, marks `settled: true`
+5. LNbits fires webhook callback → Worker looks up hash in KV → **re-verifies via authenticated `GET /api/v1/payments/{hash}` (`paid: true`)** → issues Cashu credential → marks `settled: true`. (Same GET is the polling fallback if the callback is missed.)
 6. Credential written to KV keyed by `paymentHash` — 10 min TTL. Browser memory only. No Supabase row.
 7. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`.
 
-**Webhook:** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. LNbits webhook signing (HMAC) enabled — Worker verifies signature. Deduplication via `settled: true` KV flag.
+**Webhook (corrected Opus-2):** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. LNbits fires a per-invoice `webhook` callback on settlement. **LNbits core does NOT HMAC-sign this callback** — do not build signature verification against a signature that isn't there. Instead the callback is treated as a *notification only*: on receipt the Worker re-verifies the payment by an authenticated `GET /api/v1/payments/{payment_hash}` to LNbits (checks `paid: true`) before issuing any credential. This matches the locked API principle — webhooks are notification, never control flow. Deduplication + idempotency via `settled: true` KV flag; the GET re-verify makes duplicate callbacks harmless.
 
 **Fallbacks:** KV flag `lightning_available: true/false`. If Hetzner goes down: set `lightning_available: false` via dashboard toggle → Stripe fully operational → reprovision following B7 runbook → restore env var. Estimated recovery: ~2 hours with documented runbook. R2, Supabase, and all issued credentials are unaffected — Hetzner hosts the payment rail only.
 
@@ -58,11 +68,40 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 
 **Payment privacy table:** `src/_data/payment_privacy.json`. Five columns: Name / Email / Record / Refund / Privacy — Stripe vs Lightning. PayNym "coming soon." Also appears verbatim in B9 whitepaper §Privacy model.
 
-**Instance separation rule (locked BRIDGE v5.1):** Share Lightning node and Legend Lightning node must run on separate Hetzner instances. A single fatal error must not take both products' payment rails offline simultaneously.
+**Instance topology (confirmed Opus-2):**
+- **Instance A — Share + Pass** (CAX21): phoenixd + LNbits (Share/Pass/Ops wallets) + cloudflared + Tor. Provisioned at NB-series. This is the only box needed to open B7.
+- **Instance B — Legend** (separate CAX21): provisioned when Legend build begins, post-B9. A single fatal error must never take both Share and Legend payment rails down.
+- **Instance C — SimpleX SMP** (own box, B9): moved off the funds instance. Rationale — a public-facing messaging relay is a larger inbound attack surface; the payment node holds value and must stay the leanest, least-exposed box. Supersedes the earlier "SimpleX co-located with Share node" note. Its own failure is low-severity and it is not needed until B9, so this costs nothing at provisioning.
+- **Tor scope:** one daemon per instance, **per-service** hidden services (a distinct .onion per service — never one shared onion, which would couple services and leak co-location).
+- Share+Pass co-location is safe because isolation is enforced *within* LNbits by per-product wallets/API keys, and phoenixd sweeps to on-chain regularly so hot balance stays low.
 
 **LNURL-withdraw (B9 scope):** Cashu credential encoded as LNURL-withdraw. Gift use case: sender purchases capacity, forwards link to recipient. Wallet redeems. Refueler never knows who used it. NUT-20 binding potential.
 
-**Dashboard cards — Lightning (B7):** Confirmation latency p95 LIVE. Webhook delivery rate / signature failures / routing fee income / channel liquidity health — STUB greyed (B9).
+**Dashboard cards — Lightning (B7):** Confirmation latency p95 LIVE. Webhook delivery rate / callback re-verify failures / channel liquidity health — STUB greyed (B9). (Dropped "signature failures" and "routing fee income" cards — no webhook signature to fail; no routing income on a phoenixd leaf node.)
+
+---
+
+## Phoenixd → LND trigger (locked Opus-2 · 29 Aug 2026)
+
+**phoenixd is the default indefinitely.** LND is only adopted when one of two triggers fires — not "when volume warrants it."
+
+**Cost model** (monthly; assumptions: inbound-only receipts, blended ~£15/payment, phoenixd liquidity ≈ 1% of volume — *verify against current ACINQ schedule, small-payment floor can push it higher* — splice-out liquidation ~£9/mo; LND needs chain access → bitcoind → bigger box/volume ≈ **+£35/mo** infra over phoenixd; LND also carries channel-ops labour a non-coder founder does not have):
+
+| Monthly receipts | phoenixd all-in | LND infra (+ops) | Verdict |
+|---|---|---|---|
+| £500 | ~£14, ~0 ops | ~£44 + ops | phoenixd wins decisively |
+| £2,000 | ~£29, ~0 ops | ~£44 + ops | phoenixd still wins |
+| £10,000 | ~£109, ~0 ops | ~£44 + ops | LND infra ~£65/mo cheaper — but only real if ops is covered |
+
+Pure-infra crossover is ~£3,500/mo (0.01·V = £35). It is set higher because below £10k the saving cannot cover even a modest ops burden for a non-coder founder — switching there is a false economy.
+
+**Honesty flags:** routing-fee income is ~£0 on a receive-focused leaf node — it is **not** a reason to run LND. Graph-privacy gain is partial: phoenixd means ACINQ (a single LSP) sees the node's aggregate *receive* activity, but never payer identity (payers are anonymous), and ACINQ is already a *disclosed processor* under the honest-metadata posture — so the privacy urgency is lower than it first looks.
+
+**LOCKED TRIGGER — migrate to LND when EITHER:**
+1. **Scale:** sustained **≥ £10,000/mo Lightning receipts for 3 consecutive months** AND a named operator (Rajesh with runbook confidence, or a paid contractor) is committed to channel ops; OR
+2. **Resilience:** ACINQ discontinues phoenixd or materially changes LSP terms → migrate regardless of volume, contractor-assisted. *(This is the Blink lesson encoded as a rule: provider-dependence, not cost, forces the move.)*
+
+**Secondary benefit of LND migration:** LND + full Bitcoin node unlocks **BIP-352 Silent Payments native send/receive** — a static on-chain address that generates a unique UTXO per sender (no address reuse, no pre-interaction). phoenixd cannot do SP-send (no Bitcoin node for scanning). Current liquidation path: splice-out → standard bech32 in Sparrow Wallet. SP-native is a B9+ story, not a blocker on any current session.
 
 ---
 
@@ -238,18 +277,23 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | B1–B4 ✓ | S1–S42e | Foundation through security hardening |
 | B5 ✓ | S43–S52 | Design full pass |
 | B6 ✓ | S53–S72a | Testing infrastructure + folder upload |
-| B7 | S73–S100 | Lightning/LNbits + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer. Node bootstrap is B7 pre-work (S73b Opus session + Hetzner provisioning). |
-| R-series | RU1–RU2+ | **Resumable uploads — promoted post-B7** (live stall failure 5 Aug, 1.51 GB at 80%) |
-| SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer · runs post-R-series |
-| HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning — 2 core + 2 buffer · runs post-R-series |
-| B8 | TBD | NUT-11 Mode 2 keypair auth (renumbered post-SW) |
-| B9 | TBD | LNURL-withdraw + security whitepaper + staging environment + incident response plan. Hetzner node already live from B7 pre-work. |
+| **NB-series** (pre-B7) | NB-1…NB-4 | **Node bootstrap** — phoenixd + LNbits + cloudflared + Tor on Instance A. Runbook-first (Opus), then provision, then test-invoice round-trip. Gates all B7 code. |
+| B7 | S74–S100 | Lightning/LNbits (phoenixd-backed) + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer. |
+| **SYNC** (post-B7) | SYNC-1 | **Dual-repo asset sync fix.** Blocks ALL frontend sessions — must land before RU1 (which edits `share.js`). See §Dual-repo asset sync. |
+| R-series | RU1–RU2+ | Resumable uploads — IndexedDB resume (RU0 done). Closes the one DashBeam gap. |
+| HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning. Pairs with R-series to complete the DashBeam-gap response. |
+| **SD-block** | SD1–SD-n | **Silent Drop** — Production Max, Lightning-only standing-receive inbox. Feature ships here; journalist hero copy stays gated until B9. See §SD-block placement. |
+| SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer. After SD (self-serve SD revenue funds the solicitor engagement that gates SW/Business). |
+| B8 | TBD | NUT-11 Mode 2 keypair auth. |
+| B9 | TBD | LNURL-withdraw + security whitepaper + Merkle + staging env + incident response + **blinded-relay crypto review (unlocks SD journalist copy)**. *(Node line removed — provisioned at NB-series pre-B7.)* |
 | B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
 | B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
 | B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
-| B13 | post-B12 | Go-to-market (brand, partnerships, non-traditional markets) — includes compression strategy + creative market tier positioning (see B13 notes below) |
+| B13 | post-B12 | Go-to-market — includes compression strategy + creative tier positioning (see B13 notes below) |
 
-Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S60→S70→S91 (CI Level 2) · S74→S76 (Lightning invoice→credential) · S76→S83 (credential→paid tier live) · S81→S85 (dashboard→LNbits planning) · S85→B9-Lightning (LNbits planning chain) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · SW9→RU1→RU2 (resumable uploads) · RU2→HQ1→HQ2 (HTTP/3 + BLAKE3 positioning).
+**Locked sequence (Opus-2):** NB → **B7** → SYNC → RU1/RU2 → HQ → **SD-block** → SW → B8 → B9 → B10+.
+
+Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S60→S70→S91 (CI Level 2) · S74→S76 (Lightning invoice→credential) · S76→S83 (credential→paid tier live) · NB-1→NB-4→S74 (node live gates Lightning code) · S81→NB-4 (dashboard Lightning cards need live node) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · **SYNC-1→RU1** (sync fix gates frontend) · RU2→HQ1→HQ2 (DashBeam-gap response) · SD-feature→B9-blinded-relay→SD-journalist-copy (positioning gate).
 
 ---
 
@@ -277,25 +321,26 @@ lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skip
 
 **Difficulty scaling rule:** S = 1 session. M = 2. L = 3. Split early rather than overrun.
 
-**Rajesh pre-B7 checklist — node bootstrap (3–4 weeks, deliberate pace):**
+**NB-series — node bootstrap (pre-B7, 3–4 weeks, deliberate pace).** Runs as its own block *before* any B7 code. Full step-by-step runbook is written in NB-1; the phases below are its table of contents.
 
-*Pre-server work (no Hetzner instance needed — do this now):*
-1. Read LNbits repo README: `https://github.com/lnbits/lnbits` — understand what extensions exist, which to keep, which to strip.
-2. Identify extensions to disable (everything not needed for Share: shop, boltcards, tpos, etc). LNbits is modular — unused extensions are attack surface and startup weight.
-3. Read LNbits REST API docs (`/docs` endpoint when running) — confirm `POST /api/v1/payments` (create invoice) and `GET /api/v1/payments/{payment_hash}` (check status) are the only two endpoints Share needs.
-4. Read LNbits webhook docs — confirm HMAC signing method for callback verification.
-5. Opus planning session (S73b): design node bootstrap as sequenced non-technical runbook. Topics: Hetzner account + SSH key, Ubuntu config, LNbits install, Tor hidden service, wallet creation, API key scoping, webhook registration, test invoice end-to-end, backup strategy (channel state + LNbits DB), failure modes + recovery time, instance monitoring.
-6. Make 2 GB test file for load testing post-bootstrap: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
+*Pre-server reading (no Hetzner instance needed — do now):*
+1. Read phoenixd docs: `https://github.com/ACINQ/phoenixd` — it is the Lightning node and LNbits' funding source. Note the 12-word seed, the HTTP API, and splice-out for on-chain liquidation.
+2. Read LNbits repo README: `https://github.com/lnbits/lnbits` — modular; strip every extension Share doesn't need (shop, boltcards, tpos…) — unused extensions are attack surface.
+3. Confirm the only two LNbits endpoints Share needs: `POST /api/v1/payments` (create invoice) and `GET /api/v1/payments/{payment_hash}` (check `paid`).
+4. **LNbits core does not HMAC-sign the per-invoice `webhook` callback.** The trust boundary is authenticated re-verification via the GET in step 3 — design for that, not for a signature. (Corrected Opus-2.)
+5. Make a 2 GB test file for post-bootstrap load testing: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
 
-*Server work (after runbook is written and Opus session complete):*
-7. Provision Hetzner CAX21, follow runbook step by step.
-8. Confirm test invoice round-trip before touching any B7 code.
-9. Set Worker secrets: `LNBITS_URL` + `LNBITS_API_KEY` via `npx wrangler secret put`.
+*NB session phases (Opus for NB-1; the rest are guided runbook execution):*
+- **NB-1 (Opus, no code):** write the runbook. Phases: Hetzner account + SSH key + OS hardening (ufw default-deny, fail2ban, SSH-keys-only, unattended-upgrades) → **phoenixd** install + seed backup → **LNbits** install pointed at phoenixd, extensions stripped, per-product wallets (Share/Pass/Ops) each with own API key → **cloudflared** tunnel for the Worker→LNbits path (no inbound ports) → **Tor** one daemon, per-service .onion for LNbits admin + phoenixd transport → backup routine (phoenixd seed + LNbits DB, encrypted, off-box) → lightweight monitoring (uptime, disk, node balance) → failure modes + recovery time.
+- **NB-2:** provision Instance A, execute the runbook. Configure Sparrow Wallet as the splice-out destination (standard bech32 — SP-send not supported by phoenixd; see §Lightning infrastructure §Liquidation).
+- **NB-3:** end-to-end test — create invoice via LNbits REST, pay from a wallet, confirm callback + GET re-verify, confirm splice-out liquidation.
+- **NB-4:** set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY` (`npx wrangler secret put …`). Node declared live. B7 code may now start.
 
 **Pre-B7 guards:**
-- DO NOT create Stripe objects or lock the "Silent Drop" name during B7. Silent Drop is deferred to the SD-block; S88 is design-only.
-- DO NOT provision Hetzner until after S73b runbook Opus session — no dark provisioning.
-- DO NOT add a Supabase row or email field to the Lightning credential path. This invariant is load-bearing for Silent Drop. (Also in do-not-retry ledger.)
+- DO NOT create Stripe objects or lock the "Silent Drop" name during B7. Both are deferred (naming → S89, Stripe objects → S90; SD build → SD-block).
+- DO NOT provision Hetzner until NB-1 runbook is written — no dark provisioning.
+- DO NOT add a Supabase row or email field to the Lightning credential path. Load-bearing for Silent Drop. (Also in do-not-retry ledger.)
+- DO NOT build a phoenixd/LND funding swap now — phoenixd is the locked default; LND is trigger-gated (see §Phoenixd → LND trigger).
 
 ---
 
@@ -352,9 +397,10 @@ Key architectural point: R2 breach exposes ciphertext only (key never held). Sup
 triggers UK GDPR Article 33 (72hr ICO notification). Free tier: no personal data held, no
 notification obligation, positive architectural narrative. Run tabletop simulation
 (scenario documented in `docs/incident-response.md` §8) before first customer.
+**⚠️ Resequence consequence (Opus-2):** "first customer" is now the first **Silent Drop self-serve Lightning customer** — which lands at the SD-block, *before* B9. The tabletop-before-first-customer hard constraint therefore gates the **SD-block launch**, not B9. Pull the tabletop forward accordingly. (The "before first *enterprise* client" items — Supabase-breach-impact doc, solicitor engagement — remain gates on SW/Business, which is post-SD.)
 
 **SimpleX Chat:**
-- Self-hosted SMP server on Hetzner alongside Lightning node (B9+).
+- Self-hosted SMP server on **its own Hetzner instance (Instance C), NOT co-located with the payment node** (B9+). Attack-surface isolation of the funds box — supersedes the earlier "alongside Lightning node" plan.
 - Internal Share team comms on infrastructure we control.
 - Enterprise clients: dedicated SimpleX group per client as private support/incident channel.
 - API too immature for dashboard embedding — revisit post-B12.
@@ -383,7 +429,28 @@ notification obligation, positive architectural narrative. Run tabletop simulati
 **refueler-multi-core (blockchain scanning):**
 - Fork Esplora (Blockstream, MIT) or Mempool.space (MIT) for Bitcoin blockchain scanning.
 - Use case: Silent Payments scanning for Enterprise clients; internal infrastructure for Share's own on-chain payment rails.
-- Prerequisite: Lightning node live at B9. Do not start before B9 operational.
+- Prerequisite: still **post-B9**. (The Lightning node is live from NB-series, but multi-core is a separate fork gated on B9 whitepaper/blinded-relay work, not on node availability.)
+
+---
+
+## SD-block placement + tidy-up sessions (locked Opus-2 · 29 Aug 2026)
+
+**Where SD sits:** after HQ, before SW. `NB → B7 → SYNC → RU1/RU2 → HQ → SD-block → SW`.
+
+**Why SD before SW:**
+- SD is the *immediate product expression* of the B7 Lightning anonymous rail — build it while that rail is warm in context.
+- SD is **self-serve** Lightning revenue with **no solicitor gate**. SW/Business is invoiced and is hard-gated on solicitor engagement before the first client — so SW revenue cannot land instantly regardless. Ship SD, earn, use it to fund the solicitor engagement that unblocks SW.
+- SD does **not** violate the "legal/professional first" market lock: the *feature* (a no-identity standing inbox) serves lawyers/accountants receiving from anonymous senders just as well as journalists. Only the **journalist hero copy** is deferred.
+
+**Feature vs positioning split:**
+- **SD-feature** (standing-receive inbox, recovery-cliff framing, Production Max Lightning-only) — ships at SD-block, pre-B9.
+- **SD journalist/source-protection hero copy** — stays gated until B9: blinded-relay crypto reviewed + VPN scope stated honestly. (Blinded relay = Option A, CF Worker over HTTPS — buildable, but the *positioning* waits for the review.)
+
+**Tabletop gate:** the incident-response tabletop (hard constraint before first customer) gates **SD-block launch**, since the first self-serve customer arrives here. See §B9 scope additions.
+
+**Two tidy-up sessions (confirmed at B7-close, pre-SD — they stay put):**
+- **S89 — tier naming + copy.** Locks tier names and the "Silent Drop" name before any SD copy is written. No Stripe objects.
+- **S90 — Stripe objects.** Aligns Stripe **price objects for the Stripe-rail tiers only**. ⚠️ Silent Drop / the Lightning-only tier gets **no Stripe object** — creating one would attach identity and break the no-identity promise. Naming (S89) strictly precedes Stripe (S90).
 
 ---
 
@@ -418,6 +485,23 @@ notification obligation, positive architectural narrative. Run tabletop simulati
 - `incident_active` — `{ severity, declared_at, updated_at, summary, actions, next_update }` · null = no active incident (B9)
 
 **Webhook spec (locked AP-3a):** 4 events: `credential.issued`, `transfer.completed`, `quota.threshold`, `quota.exhausted`. Signing: `X-Refueler-Signature: t={unix},v1={hex}` — HMAC-SHA256 over `{t}.{raw_body}`. Replay window ±300s.
+
+---
+
+## Dual-repo asset sync (locked Opus-2 · 29 Aug 2026) — BLOCKS ALL FRONTEND SESSIONS
+
+**Problem:** `share.js` / `share.css` are dual-homed — canonical source in `refueler-share/frontend/`, deployed copy in `refueler-io/src/share/assets/`. The **live site is served by the `refueler-io` Pages project**, so any change must physically exist in `refueler-io` at build time. Miss the copy → live site silently stale. Current workaround: a `sync-share` shell alias.
+
+**Why the clever options fail here:**
+- **Symlink** — dies in CI. Cloudflare Pages checks out `refueler-io` alone; the symlink target (`refueler-share/`) isn't present in that build → broken.
+- **Git submodule** — a footgun for a non-coder (detached HEAD, `submodule update` foot-shooting). Rejected.
+- **Monorepo migration** — rewrites deploy config + Pages projects + history. Massive risk for two files. Rejected now; revisit only if shared-asset surface grows.
+
+**LOCKED decision — two stages:**
+1. **SYNC-1 (do now, before RU1):** promote the alias to a committed, guarded script `bin/sync-share.sh` in `refueler-share` that (a) copies `frontend/share.{js,css}` → `refueler-io/src/share/assets/`, (b) diff-verifies the copy, (c) `commit && push` **both** repos in one run, (d) refuses to half-complete. Stamp a `/* GENERATED — source: refueler-share/frontend — do not edit */` header into the copied files. Single source of truth = `refueler-share/frontend/`. One command, cannot be forgotten. **First job of SYNC-1: map which Pages project actually serves each live path** (`share.refueler.io` vs `refueler.io/share/…`) — the confusion itself is the risk.
+2. **Medium term (only if surface grows > 2 files):** `refueler-io` consumes the assets as a versioned git dependency fetched at build (`npm install`), removing the committed copy entirely.
+
+**Audit (part of SYNC-1):** grep all six repos for duplicated asset filenames to catch any *other* accidental dual-homing. Distinguish **intentional** duplication (`REFUELER-BRIDGE.md` is deliberately copied to all repos) from **accidental** (`share.js`). Likely suspects: shared theme-toggle JS, `head.njk`, font files, design tokens.
 
 ---
 
