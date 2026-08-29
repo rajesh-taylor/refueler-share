@@ -14,8 +14,10 @@
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
+<!-- Tokens — single source for all Share pages -->
+<link rel="stylesheet" href="/share-tokens.css" />
 
-<link rel="stylesheet" href="/share-tokens.css">
+
 <link rel="stylesheet" href="/share.css">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 
@@ -24,11 +26,11 @@
 <script>
   (function () {
     function getCookie(name) {
-      var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
-      return m ? decodeURIComponent(m[1]) : null;
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
     }
     function setCookie(name, value) {
-      var expires = new Date(Date.now() + 30 * 864e5).toUTCString();
+      var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
       document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; domain=.refueler.io; SameSite=Lax';
     }
     function applyTheme(theme) {
@@ -42,14 +44,16 @@
         if (pill) pill.textContent = 'Paper / Carbon';
       }
     }
-    window.toggleTheme = function () {
+    function toggleTheme() {
       var current = getCookie('rs-theme') || 'paper';
       var next = current === 'paper' ? 'carbon' : 'paper';
       setCookie('rs-theme', next);
       applyTheme(next);
-    };
+      
+    }
+    window.toggleTheme = toggleTheme;
     applyTheme(getCookie('rs-theme') || 'paper');
-  }());
+  })();
 </script>
 
 <!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
@@ -161,7 +165,7 @@ function showMaintenanceModal(status) {
 })();
 </script>
 
-
+<!-- tokens: share-tokens.css via head.njk — no inline styles here -->
 
 </head>
 
@@ -175,10 +179,9 @@ function showMaintenanceModal(status) {
       <span class="wordmark-section">Share</span>
     </a>
     <nav class="site-nav">
-      <a href="https://refueler.io/">App</a>
-      <a href="https://refueler.io/editorial/">Editorial</a>
-      <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="https://refueler.io/notes/">Notes</a>
       <a href="/upgrade.html">Upgrade</a>
+      <a href="https://refueler.io/support/">Support</a>
       <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
     </nav>
   </div>
@@ -315,7 +318,7 @@ function showMaintenanceModal(status) {
         <span class="rc-passphrase-badge">🔐 Password protected</span>
       </div>
       <button class="btn btn-primary" id="rc-download-btn">Download</button>
-      <div class="dl-compat-warn" id="dl-compat-warn" role="alert" aria-live="polite"></div>
+
       <div id="usp-block" class="hidden"><p class="usp-text" id="usp-text"></p></div>
     </div>
 
@@ -343,7 +346,7 @@ function showMaintenanceModal(status) {
     </div>
 
     <!-- Post-download sign-off (colophon) -->
-    <div class="hidden" id="dl-signoff"><p class="dl-signoff-secondary">Part of the Refueler ecosystem &middot; Your data. Your rules. &middot; <a href="https://refueler.io" style="color:inherit;text-decoration:none">refueler.io</a></p></div>
+    <div class="hidden" id="dl-signoff"><p class="dl-signoff-secondary"><a href="https://refueler.io" style="color:inherit;text-decoration:none">REFUELER.IO</a></p></div>
 
     <!-- Drop zone multi-file rejection message -->
     <div class="hidden" id="drop-multi-msg" role="alert"></div>
