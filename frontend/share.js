@@ -738,24 +738,9 @@ async function enterDownloadMode({ uuid, key, iv }) {
 
   receiverCard.style.display = 'flex';
 
-  // ── A/B USP variant (S47c) ───────────────────────────────────────────────
-  const USP_VARIANTS = {
-    A: `No account. No email. No history. Files encrypted before they reach our servers — we only see encrypted noise, by design. Your data. Not ours.`,
-    B: `This link expires and deletes itself — no trace remains. No account. No email. No history. Your data. Not ours.`,
-  };
-  let uspVariant;
-  try {
-    uspVariant = sessionStorage.getItem('rs-usp-variant');
-    if (!uspVariant) {
-      uspVariant = Math.random() > 0.5 ? 'B' : 'A';
-      sessionStorage.setItem('rs-usp-variant', uspVariant);
-    }
-  } catch {
-    uspVariant = Math.random() > 0.5 ? 'B' : 'A';
-  }
-  uspText.textContent = USP_VARIANTS[uspVariant];
+  // ── USP copy — Variant B locked (A/B test retired, B won) ─────────────────
+  uspText.textContent = 'No account. No email. No history. Your data. Not ours.';
   uspBlock.classList.remove('hidden');
-  logReceiverEvent('receiver_ab_shown', uspVariant);
 
   // ── Wire Download button ─────────────────────────────────────────────────
   rcDownloadBtn.addEventListener('click', async () => {
