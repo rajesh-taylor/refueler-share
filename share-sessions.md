@@ -165,7 +165,7 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S73 | 4c95cf6 | Pre-B7 Blink checklist: BLINK_SHARE_API_KEY + BLINK_SHARE_WALLET_ID set, callback endpoint confirmed, Share-Master-Context updated re shared Blink account. |
+| S73 | 4c95cf6 | ~~Pre-B7 Blink checklist: BLINK_SHARE_API_KEY + BLINK_SHARE_WALLET_ID set, callback endpoint confirmed.~~ **SUPERSEDED Opus-2 — Blink dead. Secrets to be deleted at first B7 build session (see Blink cleanup checklist). Replaced by NB-series + LNbits.** |
 | S73a | `a19778c` | Fix: static Trend/Export section titles were overlapping the injected table. Strip `.modal-sparkline-stub` class on open; hide `.modal-section-title` and CSV button; restore all on `closeModal()`. Both Paper and Carbon confirmed working. |
 
 **B7 snags added (resolve at S100):**
@@ -182,7 +182,7 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 
 | # | Commit | Summary |
 |---|--------|---------|
-| RU0 | pending | Streaming zip: replaced `fflate.zip()` (buffered, OOM on 1.5 GB+) with `fflate.Zip` streaming API. Files processed one at a time — one `arrayBuffer()` in flight, released before next. Peak heap: ~1× folder size (was ~3×). Already-compressed types (jpg, mp4, etc.) → `fflate.ZipPassThrough` (STORED, method=0, macOS Archive Utility compatible). Compressible types (png, txt, csv, etc.) → `fflate.ZipDeflate` level 6. Progress bar now reports input bytes consumed vs total input bytes. Unit tests: memory discipline (max concurrent reads = 1), skip-list coverage, ZipPassThrough/ZipDeflate routing. Manual smoke test: upload a ~1.5 GB photo folder, confirm completes without stall. |
+| RU0 ✓ | `49915f2`→`4b223b1` | Streaming zip: replaced `fflate.zip()` (buffered, OOM on 1.5 GB+) with `fflate.Zip` streaming API. Files processed one at a time — one `arrayBuffer()` in flight, released before next. Peak heap: ~1× folder size (was ~3×). Already-compressed types (jpg, mp4, etc.) → `fflate.ZipPassThrough` (STORED, method=0, macOS Archive Utility compatible). Compressible types (png, txt, csv, etc.) → `fflate.ZipDeflate` level 6. Progress bar reports input bytes consumed vs total. Unit tests: memory discipline (max concurrent reads = 1), skip-list coverage, ZipPassThrough/ZipDeflate routing. **Smoke test PASSED: 1.72 GB JPEG folder completed without crash.** Remaining RU1 root-cause candidates: (b) Worker request timeout on slow chunk, (c) macOS Safari silent connection drop. |
 
 **RU0 do-not-retry (permanent):**
 - DO NOT use `fflate.zip()` (buffered) for folder uploads — OOM on large folders. `fflate.Zip` (streaming) only.
@@ -191,21 +191,36 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 
 ---
 
-## B7 session plan — Lightning/Blink + anonymous paid tier
-> **Re-sequenced AP-9 · 27 Aug 2026.** Three locked changes and one sequencing correction drove this revision. B9 backend locked as LNbits-on-Hetzner (no LND yet) — Blink graph-visibility is the primary migration driver; any paying Lightning subscriber is already too much exposure. Lightning infra I (S74) added to build the invoice-creation path before the webhook — the original plan had these in the wrong order. Silent Drop is Production Max only, Lightning-gated, and deferred to a dedicated SD-block; B7 lays the two-rail groundwork it hangs off. Budget expanded from 25 to 50 core + 5 buffer to keep sessions single-scoped throughout: 47 core sessions (S74–S100) + 5 buffer within a 52-slot envelope.
+## NB-series — node bootstrap (pre-B7, gates all B7 code)
+> Locked Opus-2 · 29 Aug 2026. phoenixd + LNbits + cloudflared + Tor on Instance A (Share+Pass). Runbook-first; no dark provisioning. Full phase detail in Share-Master-Context.md §B7 notes.
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| NB-1 | Node runbook (Opus, no code) | Write the sequenced non-technical runbook: OS hardening → phoenixd + seed backup → LNbits (extensions stripped, per-product wallets Share/Pass/Ops) → cloudflared tunnel (Worker→LNbits, no inbound ports) → Tor per-service .onion (LNbits admin + phoenixd transport) → backup + monitoring → failure modes/recovery. | L |
+| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. ⚠️ Verify phoenixd → BIP-352 Silent Payments on-chain send here; if unsupported, log the sweep workaround. | — |
+| NB-3 | End-to-end test | LNbits `POST /api/v1/payments` → pay from wallet → callback → `GET /api/v1/payments/{hash}` re-verify → splice-out liquidation. | — |
+| NB-4 | Node live | Set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY`. Declare node live. **B7 code may now start.** | S |
+
+*Note: NB-2/NB-3 are guided runbook execution by Rajesh, not code sessions — logged for the record.*
+
+---
+
+## B7 session plan — Lightning/LNbits + anonymous paid tier
+> **Re-sequenced Opus-2 · 29 Aug 2026.** LNbits-on-Hetzner locked, phoenixd as funding source. Node bootstrap pulled out into the **NB-series** pre-B7 block (below) — no B7 code starts until NB-4 declares the node live. S74–S76 rewritten for the **LNbits REST API** (`POST /api/v1/payments`, `GET /api/v1/payments/{hash}`) — all Blink GraphQL gone. Webhook model corrected: LNbits core does **not** HMAC-sign callbacks, so the Worker re-verifies each callback via the authenticated GET before issuing a credential. S85/S85a (old "Hetzner+LNbits planning") folded into NB-1 and repurposed. R-series/HQ/SD/SW resequenced (see foot of file). **SYNC-1 dual-repo fix inserted before RU1.**
+> **Superseded — AP-9 · 27 Aug 2026.** Three locked changes and one sequencing correction drove this revision. B9 backend locked as LNbits-on-Hetzner (no LND yet) — Blink graph-visibility is the primary migration driver; any paying Lightning subscriber is already too much exposure. Lightning infra I (S74) added to build the invoice-creation path before the webhook — the original plan had these in the wrong order. Silent Drop is Production Max only, Lightning-gated, and deferred to a dedicated SD-block; B7 lays the two-rail groundwork it hangs off. Budget expanded from 25 to 50 core + 5 buffer to keep sessions single-scoped throughout: 47 core sessions (S74–S100) + 5 buffer within a 52-slot envelope.
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
 | S73 ✓ | Dashboard: client errors modal | `client_errors_detail` stored from AE; `parseUA()` + `escHtml()`; detail table with Time · Context · Message · Browser. | S |
 | S73a ✓ | Dashboard: client errors modal fix | Strip `.modal-sparkline-stub` on open; hide static section titles + CSV btn; restore on close. Both themes confirmed. | S |
-| S74 | Lightning adapter | `worker/src/lightning.js` — `createInvoice()` / `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var (default: `blink`). Unit tests. This is the B9→LNbits migration seam. | S |
-| S74a | Invoice creation I | `POST /subscription/lightning` handler: Blink `btcPrice` query → live GBP/sats rate. | S |
-| S74b | Invoice creation II | `lnInvoiceCreate` mutation → BOLT11 string + payment hash returned. KV write: `{ paymentHash, tier, period, created_at, expires_at, settled: false }`, 25h TTL. | S |
+| S74 | Lightning adapter | `worker/src/lightning.js` — `createInvoice()` / `getInvoiceStatus()` over **LNbits REST**. `LIGHTNING_BACKEND` env var (default: `lnbits`). Auth header `X-Api-Key: {LNBITS_API_KEY}` (Share invoice/read key), base `LNBITS_URL`. Abstraction retained so a future LND swap is env-only. Unit tests. | S |
+| S74a | Invoice creation I | `POST /subscription/lightning` handler: derive the sats amount. LNbits creates the invoice **denominated in GBP** (`amount` + `unit: "GBP"`, fiat tracking enabled on the instance) so LNbits owns the conversion at creation — no separate Blink `btcPrice` oracle. Frontend shows the sats/GBP it was quoted. | S |
+| S74b | Invoice creation II | `POST /api/v1/payments` `{ out: false, amount, unit, memo, webhook }` → returns `payment_hash` + `payment_request` (BOLT11). Pass the Worker callback URL as the per-invoice `webhook`. KV write: `{ paymentHash, tier, period, created_at, expires_at, settled: false }`, 25h TTL. | S |
 | S74c | Invoice creation III | Unit tests for invoice creation + KV schema. Smoke test `POST /subscription/lightning` end-to-end against wrangler dev. | S |
-| S75 | Webhook endpoint I | `POST /webhook/lightning` handler scaffold. Route registered. KV payment hash lookup — reject unknown hashes with 404. | S |
-| S75a | Webhook endpoint II | Settled-flag dedup (`settled: true` KV write). Blink fires twice per payment — confirm dedup suppresses second callback correctly. | S |
-| S75b | Webhook endpoint III | `getInvoiceStatus()` polling fallback via Blink GraphQL. Smoke: simulate missed callback, confirm polling recovers. | S |
-| S75c | Webhook endpoint IV | Full integration test: create invoice → simulate Blink callback → confirm KV settled flag + no duplicate processing. | S |
+| S75 | Webhook endpoint I | `POST /webhook/lightning` handler scaffold. Route registered. KV payment-hash lookup — reject unknown hashes with 404. **Callback is a notification only** — no secret to verify, so do not trust its body. | S |
+| S75a | Webhook endpoint II | **Re-verify before acting:** on callback, call `getInvoiceStatus()` → `GET /api/v1/payments/{hash}` (`X-Api-Key`), require `paid: true`, only then proceed. Settled-flag dedup (`settled: true` KV write). LNbits may retry the callback — GET re-verify + dedup make duplicates harmless. | S |
+| S75b | Webhook endpoint III | Polling fallback is the *same* `GET /api/v1/payments/{hash}`. Smoke: drop the callback entirely, confirm the poll path settles the credential. | S |
+| S75c | Webhook endpoint IV | Full integration test: create invoice → simulate LNbits callback → GET re-verify → confirm KV settled flag + credential issued exactly once under duplicate callbacks. | S |
 | S76 | Credential issuance I | On settled webhook: extract `{ tier, period }` from KV. Call NUT-00 BDHKE issuer — real blind signature, not a stub. | S |
 | S76a | Credential issuance II | Write issued credential to KV keyed by `paymentHash`. TTL: 10 minutes. | S |
 | S76b | Credential issuance III | `GET /subscription/lightning/credential?hash={paymentHash}` poll endpoint. Returns 202 while pending, 200 + credential when ready, 410 if expired. | S |
@@ -230,14 +245,14 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 | S82a | Graceful degradation | When `lightning_available: false` — Lightning hidden on upgrade page, Stripe fully operational. User-facing copy. Smoke test both states. | S |
 | S83 | Renewal warning banner | 7-day pre-expiry banner for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Copy: *"Your subscription renews on [date]. Your transfers will remain accessible."* | S |
 | S83a | Paid tier activation I | Re-enable Creative Premium + Production Max. Stripe path full smoke test against live Stripe. | S |
-| S83b | Paid tier activation II | Lightning path full smoke test against live Blink. Both rails confirmed live end-to-end. | S |
+| S83b | Paid tier activation II | Lightning path full smoke test against **live LNbits (self-hosted, node from NB-series)**. Both rails confirmed live end-to-end. | S |
 | S84 | B7 security audit I | Lightning invoice creation: expiry enforcement, KV race conditions on concurrent invoice creation for same tier. | S |
 | S84a | B7 security audit II | Credential farming: can an attacker poll `/subscription/lightning/credential` with guessed payment hashes? Entropy audit. Fix if required. | S |
 | S84b | B7 security audit III | Webhook replay: can a settled callback be replayed to issue a second credential? KV dedup verified under test. | S |
 | S84c | B7 security audit IV | Double-issuance: concurrent callbacks for same payment hash. Fix and regression test. | S |
 | S84d | B7 security audit V | Findings consolidated. Marketing claim rulings updated. Any fixes committed. | S |
-| S85 | Hetzner + LNbits planning I | **No code. No server provisioned yet.** Decision session: LNbits-on-Hetzner CAX21 architecture confirmed. `lightning.js` swap checklist vs Blink. LNbits Blink extension config. Webhook signing spec (HMAC-SHA256 — what Blink lacks). SimpleX SMP co-location plan. Tor hidden service config. Runbook structure for B9 build. | S |
-| S85a | Hetzner + LNbits planning II | **No code. No server provisioned yet.** Failure mode analysis: what happens if the Hetzner instance goes down? KV `lightning_available` toggle as kill switch. Recovery time estimate with documented runbook. Contingency Opus session flagged: full failure-mode + multi-provider strategy session before B9 build. | S |
+| S85 | LNbits ops verification | *(Repurposed Opus-2 — old "Hetzner+LNbits planning I" folded into NB-1.)* Post-node-live sanity pass: confirm per-product wallet API keys scoped correctly, unused extensions stripped, cloudflared tunnel healthy, Tor onions resolving, monitoring alerts firing on a forced balance/uptime blip. | S |
+| ~~S85a~~ | *(freed → buffer)* | Old "Hetzner+LNbits planning II" folded into NB-1 (failure modes) and S82/S82a (`lightning_available` kill switch). Slot returns to buffer pool. | — |
 | S86 | LNURL-withdraw gift architecture | **No code.** Design document: gift flow, wallet compatibility matrix, UX spec, NUT-20 binding potential. B9 scope confirmed. | S |
 | S87 | LNbits skinning scope | **No code.** Keep/strip/brand decisions for LNbits UI. Extension shortlist. Paper/Carbon token mapping to LNbits CSS. B9 build scope output. | S |
 | S88 | Silent Drop design session | **No code. No Stripe objects. Name not locked.** Confirm Option A blinded-relay design against the live Worker architecture. Enumerate the rail-gating hooks B7 has established. Produce the SD-block session plan. Journalist use case copy draft. | S |
@@ -256,7 +271,8 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 
 ---
 
-## SW block session plan — white-label + API build (post-B7)
+## SW block session plan — white-label + API build (post-SD-block)
+> Resequenced Opus-2: SW now runs **after** SD-block. Rationale in Share-Master-Context.md §SD-block placement (self-serve SD revenue funds the solicitor engagement that gates SW/Business).
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
@@ -279,7 +295,17 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 
 ---
 
-## R-series — Resumable uploads (post-SW)
+## SYNC-1 — Dual-repo asset sync fix (post-B7, BEFORE RU1)
+> Locked Opus-2. Blocks all frontend sessions. RU1 edits `share.js`, which is dual-homed — the sync fix must land first. Full decision in Share-Master-Context.md §Dual-repo asset sync.
+
+| Session | Label | Scope | Size |
+|---------|-------|-------|------|
+| SYNC-1 | Single source of truth for shared frontend assets | First: map which Pages project serves each live path. Then: `bin/sync-share.sh` committed guarded script (copy → diff-verify → commit+push both repos → refuse half-complete), `GENERATED` header stamped into copies. Audit all six repos for other accidental dual-homing. | M |
+
+---
+
+## R-series — Resumable uploads (post-SYNC-1, before SW)
+> Resequenced Opus-2: R-series runs immediately after SYNC-1 — no longer post-SW. RU0 complete (streaming zip, 1.72 GB smoke passed). Closes the one confirmed DashBeam gap.
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
@@ -292,7 +318,7 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 
 ---
 
-## HQ-series — HTTP/3 + BLAKE3 integrity positioning (post-R-series)
+## HQ-series — HTTP/3 + BLAKE3 integrity positioning (post-R-series, before SD-block)
 
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
@@ -300,5 +326,24 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 | HQ2 | Competitive positioning copy + /notes/ hook | Write the technical distinction cleanly. Ensure consistency across index, upgrade, and notes articles. No overclaiming — "server-side chunk integrity" not "end-to-end file integrity." | S |
 
 **Buffer pool (2 sessions):** HQ1b · HQ2b
+
+---
+
+## SD-block — Silent Drop (post-HQ, before SW)
+> Session plan is **produced at S88** (design session, within B7). Placeholder here for sequencing. Scope: Production Max, Lightning-only standing-receive inbox (opaque KV inbox ID, byte-counter cap, pause/rotate, per-transfer TTL, holder dashboard). **SD-feature ships here; journalist hero copy stays gated until B9** (blinded-relay review + VPN scoping). **Incident-response tabletop must complete before SD-block launch** (first self-serve customer).
+
+---
+
+## Locked block sequence (Opus-2 · 29 Aug 2026)
+
+`NB → B7 → SYNC-1 → RU1/RU2 → HQ → SD-block → SW → B8 → B9 → B10+`
+
+---
+
+## Opus-2 · 29 Aug 2026 — planning session (uncounted)
+
+B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created (pre-B7, gates all B7 code). S74–S76 rewritten for LNbits REST; webhook model corrected (unsigned callback → authenticated GET re-verify). S85/S85a folded into NB-1 (S85 repurposed as ops verification, S85a → buffer). Phoenixd→LND trigger locked (≥£10k/mo × 3 months + named operator, OR ACINQ provider event). Instance topology confirmed (Share+Pass on Instance A; SimpleX → own Instance C at B9; Legend → Instance B post-B9; Tor per-service onions). SD-block placed post-HQ, pre-SW. SYNC-1 dual-repo fix inserted before RU1. R-series moved ahead of SW. Blink cleanup checklist produced (execute at first B7 build session). No code. Context files updated at close.
+
+Ad-hoc 30 Aug — zipAndSelect root cause: fflate.zip() loads all files into RAM simultaneously; fatal at 3.72 GB. RU0 streaming path only fires for pre-made zip drops (isZip line 712). Fix absorbed into RU1 Part A. Safari failure at chunk 82 was ERR_NAME_NOT_RESOLVED — transient DNS, not a code bug.
 
 *"Nothing stops this train."*
