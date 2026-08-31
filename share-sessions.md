@@ -301,6 +301,25 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 | Session | Label | Scope | Size |
 |---------|-------|-------|------|
 | SYNC-1 | Single source of truth for shared frontend assets | First: map which Pages project serves each live path. Then: `bin/sync-share.sh` committed guarded script (copy → diff-verify → commit+push both repos → refuse half-complete), `GENERATED` header stamped into copies. Audit all six repos for other accidental dual-homing. | M |
+## SYNC-1 — Dual-repo asset sync fix (31 Aug 2026)
+
+**Commits:** `refueler-share` `2d26587` · `refueler.io` `706fe65` + `ae6f9e1`
+
+**Outcome:**
+- Canonical confirmed: `refueler-share/frontend/`. Mirror: `refueler.io/src/share/assets/`.
+- `share.js`, `share.css`, `share-tokens.css`, `status.css`, `fflate.min.js`, `qr-creator.min.js`, `blake3/` synced and verified.
+- `share-tokens.css` was the only live divergence (mirror had newer header — overwritten from canonical).
+- GENERATED header stamped into all mirror text files.
+- `bin/sync-share.sh` committed to `refueler-share` — guarded sync script (copy → diff verify → commit+push both repos; aborts on any failure).
+- Embedded git repos (`refueler-app`, `terminals/numo-fork`) cleaned from `refueler.io` (were accidentally staged by `git add -A`).
+- Audit: zero dual-homing found in `darwin-bridge`, `ecash-lab`, `legend`, `mint`, `pass`.
+- `plans.css` confirmed io-only, excluded from sync manifest.
+- REFUELER-BRIDGE.md updated to v5.6. Share boundary table updated with dual-repo sync rule.
+- **Pre-condition for RU1 now met.** RU1 is next.
+
+**Do-not-retry:**
+- DO NOT edit files in `refueler.io/src/share/assets/` directly — they carry a GENERATED header for a reason.
+- Always run `bin/sync-share.sh` after editing any shared asset in `refueler-share/frontend/`.
 
 ---
 
