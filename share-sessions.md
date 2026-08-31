@@ -191,6 +191,24 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 
 ---
 
+## RU1 — Resumable uploads I (31 Aug 2026)
+
+| # | Commit | Summary |
+|---|--------|---------|
+| RU1 ✓ | `ae78b81`→`48ed213` | Part A: `zipAndSelect()` rewired to `fflate.Zip` streaming encoder. `SKIP_COMPRESS_EXTENSIONS` Set + `shouldSkipCompression()`. `ZipPassThrough` (STORED, method=0) for video/audio/jpg/pdf/zip; `ZipDeflate` level 6 for compressible types. Progress bar reports bytes consumed / total bytes. Part B: IndexedDB schema live — `idbOpen()`, `writeChunkState()` (fires on every 200 ACK), `readResumeState()`, `clearResumeState()` (fires on completion). `checkResumeState()` on page load with 8-day stale guard. Resume card HTML added to `index.njk` (gold "Interrupted" tag, filename + pct detail, Resume + Discard buttons). Discard wired. Resume = placeholder for RU1a. |
+
+**RU1 smoke test results (31 Aug 2026, Safari, 40 Mbps upload):**
+- Compression: 3.72 GB JPEG folder compressed via streaming path. Bytes progress bar showed correctly. ✓
+- Stall: upload stalled at chunk 331/476 (71%) — Safari silent connection drop, no error event, fetch() hung indefinitely, per-chunk retry never triggered. Consistent with candidate (c) from RU0.
+- Resume card: did NOT appear after browser refresh. IDB state unknown — not checked in DevTools before reload. Investigate at RU1a.
+- Share URL confirmed: `refueler.io/share/` — **not** `share.refueler.io` (stale subdomain reference purged from memory).
+
+**RU1 carry-forward snags (resolve at RU1a):**
+- Compression 85%→100% appears frozen — fflate writing zip central directory after loop. Fix: push bar to 95% + label "Finalising archive…" before `zipper.end()`. Two-line change in `zipAndSelect()`.
+- Resume card absent after Safari stall — diagnose IDB state in DevTools before reload at RU1a. If record missing: stall is mid-fetch before 200 ACK, need `Promise.race()` timeout wrapper so per-chunk retry fires on Safari hang.
+
+---
+
 ## NB-series — node bootstrap (pre-B7, gates all B7 code)
 > Locked Opus-2 · 29 Aug 2026. phoenixd + LNbits + cloudflared + Tor on Instance A (Share+Pass). Runbook-first; no dark provisioning. Full phase detail in Share-Master-Context.md §B7 notes.
 
