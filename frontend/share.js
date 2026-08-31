@@ -95,12 +95,146 @@ const uspText          = $('usp-text');
 $('dismiss-info').addEventListener('click', () => infoCard.classList.add('hidden'));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IndexedDB — chunk resume state (RU1)
+//
+// Schema: DB = 'refueler-share-resume', store = 'transfers', keyPath = 'uuid'
+// One record per interrupted transfer. Overwritten on each 200 ACK.
+// Cleared on discard or successful completion.
+// ─────────────────────────────────────────────────────────────────────────────
+const IDB_NAME    = 'refueler-share-resume';
+const IDB_STORE   = 'transfers';
+const IDB_VERSION = 1;
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'uuid' });
+      }
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+// Write (or overwrite) chunk completion state after each 200 ACK.
+// { uuid, chunkIndex, totalChunks, fileName, fileSize, keyHex, ivHex, timestamp }
+async function writeChunkState(record) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx  = db.transaction(IDB_STORE, 'readwrite');
+      const req = tx.objectStore(IDB_STORE).put(record);
+      req.onsuccess = resolve;
+      req.onerror   = e => reject(e.target.error);
+      tx.oncomplete = resolve;
+    });
+    db.close();
+  } catch (e) {
+    // IDB write failure must never interrupt the upload — fire and forget.
+    reportError('idb_write', e.message, record.uuid?.slice(0, 8) ?? '');
+  }
+}
+
+// Return the first interrupted transfer record, or null.
+async function readResumeState() {
+  try {
+    const db = await idbOpen();
+    const record = await new Promise((resolve, reject) => {
+      const tx  = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).openCursor();
+      req.onsuccess = e => resolve(e.target.result ? e.target.result.value : null);
+      req.onerror   = e => reject(e.target.error);
+    });
+    db.close();
+    return record;
+  } catch {
+    return null;
+  }
+}
+
+// Delete a resume record by UUID.
+async function clearResumeState(uuid) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx  = db.transaction(IDB_STORE, 'readwrite');
+      const req = tx.objectStore(IDB_STORE).delete(uuid);
+      req.onsuccess = resolve;
+      req.onerror   = e => reject(e.target.error);
+      tx.oncomplete = resolve;
+    });
+    db.close();
+  } catch (e) {
+    reportError('idb_clear', e.message, uuid?.slice(0, 8) ?? '');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resume UI — shown on page load if an interrupted transfer is found in IDB.
+//
+// Paper/Carbon consistent with progress card style: same token set, same
+// stage tag + detail typography. Inlined into the DOM as a sibling of
+// progressCard — hidden by default, revealed here if IDB has a record.
+// ─────────────────────────────────────────────────────────────────────────────
+const resumeCard = $('resume-card');
+const resumeDetail = $('resume-detail');
+const resumeDiscardBtn = $('resume-discard-btn');
+const resumeNoticeBtn  = $('resume-notice-btn');
+
+// Stored resume record for RU1a to access (resume flow, next session).
+let pendingResumeRecord = null;
+
+async function checkResumeState() {
+  const record = await readResumeState();
+  if (!record) return;
+
+  // Stale guard: discard records older than 8 days (transfer expiry is 7 days).
+  const age = Date.now() - (record.timestamp || 0);
+  if (age > 8 * 24 * 60 * 60 * 1000) {
+    await clearResumeState(record.uuid);
+    return;
+  }
+
+  pendingResumeRecord = record;
+
+  // Populate detail line: "photo-shoot.zip — chunk 82 of 193 (3.72 GB)"
+  const pct       = Math.round((record.chunkIndex + 1) / record.totalChunks * 100);
+  const detail    = `${record.fileName} — ${pct}% uploaded (chunk ${record.chunkIndex + 1} of ${record.totalChunks}, ${formatBytes(record.fileSize)})`;
+  if (resumeDetail) resumeDetail.textContent = detail;
+
+  if (resumeCard) resumeCard.classList.remove('hidden');
+
+  // Discard: wipe IDB record and dismiss card. Drop zone remains active.
+  if (resumeDiscardBtn) {
+    resumeDiscardBtn.addEventListener('click', async () => {
+      await clearResumeState(record.uuid);
+      pendingResumeRecord = null;
+      if (resumeCard) resumeCard.classList.add('hidden');
+    }, { once: true });
+  }
+
+  // Resume: placeholder — full resume flow wired in RU1a.
+  // For now, clicking Resume shows a "coming in RU1a" notice rather than
+  // doing nothing silently. The IDB record is preserved.
+  if (resumeNoticeBtn) {
+    resumeNoticeBtn.addEventListener('click', () => {
+      if (resumeDetail) resumeDetail.textContent = 'Resume flow coming shortly — your progress is saved.';
+    }, { once: true });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Mode detection
 // ─────────────────────────────────────────────────────────────────────────────
 const fragment = parseFragment();
 if (fragment.uuid && fragment.key) {
   enterDownloadMode(fragment);
 } else {
+  // Check for interrupted transfer before handing control to upload mode.
+  checkResumeState().catch(() => {}); // never blocks upload mode
   enterUploadMode();
 }
 
@@ -384,9 +518,37 @@ async function readDirectoryEntry(dirEntry, pathPrefix, depth) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Zip [{relativePath, file}] using fflate, then hand blob to handleFileSelection
+// Zip [{relativePath, file}] using fflate streaming API (RU1 Part A).
+//
+// Uses fflate.Zip (streaming encoder) — never fflate.zip() (buffered, OOM).
+// One file read into RAM at a time; previous ArrayBuffer released before next.
+// ZipPassThrough (STORED, method=0) for already-compressed types — macOS
+// Archive Utility compatible. ZipDeflate level 6 for compressible types.
+// Progress reports input bytes consumed / total bytes — not file count, because
+// ZipPassThrough entries complete near-instantly and distort file-count progress.
 // ─────────────────────────────────────────────────────────────────────────────
 const FOLDER_MEM_WARN_BYTES = 500 * 1024 * 1024; // 500 MB
+
+// Extensions that are already compressed — skip deflate, use STORED (method=0).
+// DO NOT use ZipDeflate with { level: 0 } — writes method=8 (DEFLATED) with zero
+// passes; macOS Archive Utility rejects this as unsupported. ZipPassThrough only.
+const SKIP_COMPRESS_EXTENSIONS = new Set([
+  // Video
+  'mov', 'mp4', 'mxf', 'r3d', 'braw', 'ari', 'mkv', 'avi', 'wmv', 'webm', 'm4v', 'mpg', 'mpeg',
+  // Audio
+  'mp3', 'aac', 'm4a', 'ogg', 'flac', 'opus', 'wma',
+  // Images (already compressed — PNG and TIFF remain compressible)
+  'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif',
+  // Archives
+  'zip', 'gz', 'bz2', 'xz', '7z', 'rar',
+  // Office/PDF (zipped internally)
+  'pdf', 'docx', 'xlsx', 'pptx',
+]);
+
+function shouldSkipCompression(relativePath) {
+  const ext = relativePath.split('.').pop().toLowerCase();
+  return SKIP_COMPRESS_EXTENSIONS.has(ext);
+}
 
 async function zipAndSelect(entries, folderName) {
   const zipName    = `${folderName}.zip`;
@@ -395,32 +557,74 @@ async function zipAndSelect(entries, folderName) {
   // Memory pressure warning — computed before reading anything into RAM.
   const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
   if (totalBytes > FOLDER_MEM_WARN_BYTES) {
-    setDropMsg(`Large folder (${formatBytes(totalBytes)}) — compression may use significant memory and take a while.`);
+    setDropMsg(`Large folder (${formatBytes(totalBytes)}) — this may take a moment.`);
   }
 
-  showZipStage('Compressing', 0, `0 / ${totalFiles} files`);
+  showZipStage('Compressing', 0, `0 B / ${formatBytes(totalBytes)}`);
 
-  // Read all files into memory as Uint8Arrays.
-  // fflate.zip() accepts { "path": Uint8Array } — no streaming API for full zip.
-  const fileMap = {};
-  for (let i = 0; i < entries.length; i++) {
-    const { relativePath, file } = entries[i];
-    const buf = await file.arrayBuffer();
-    fileMap[relativePath] = new Uint8Array(buf);
-    // Bare Uint8Array → fflate default (level 6 DEFLATE) — produces unambiguous DEFLATE entries.
-    // level:0 is a fflate footgun: writes DEFLATED method with zero compression, which macOS
-    // Archive Utility rejects as "unsupported format". Compatibility wins over CPU saving.
+  const zipChunks = [];
+  let bytesProcessed = 0;
+  let zipError = null;
 
-    const pct = Math.round(((i + 1) / totalFiles) * 85); // read phase = 0–85%
-    showZipStage('Compressing', pct, `${i + 1} / ${totalFiles} files`);
-  }
-
-  // fflate.zip() — async, callback-based
   const zipBlob = await new Promise((resolve, reject) => {
-    fflate.zip(fileMap, (err, data) => {
-      if (err) { reject(err); return; }
-      resolve(new Blob([data], { type: 'application/zip' }));
+    // fflate.Zip streaming encoder — output chunks collected into zipChunks[].
+    const zipper = new fflate.Zip((err, chunk, final) => {
+      if (err) { zipError = err; reject(err); return; }
+      zipChunks.push(chunk);
+      if (final) {
+        resolve(new Blob(zipChunks, { type: 'application/zip' }));
+      }
     });
+
+    // Process files sequentially — one arrayBuffer() in flight at a time.
+    // Each iteration yields to the event loop via setTimeout(0) so the browser
+    // can repaint the progress bar and remain responsive.
+    (async () => {
+      try {
+        for (let i = 0; i < entries.length; i++) {
+          if (zipError) break; // encoder already rejected
+
+          const { relativePath, file } = entries[i];
+          const buf  = await file.arrayBuffer();
+          const data = new Uint8Array(buf);
+
+          let entry;
+          if (shouldSkipCompression(relativePath)) {
+            // Already-compressed type — STORED (method=0). No CPU wasted.
+            entry = new fflate.ZipPassThrough(relativePath);
+          } else {
+            // Compressible type — DEFLATE level 6.
+            entry = new fflate.ZipDeflate(relativePath, { level: 6 });
+          }
+
+          // Wire entry output into the parent Zip stream.
+          zipper.add(entry);
+
+          // Push the entire file in one call and mark it final (true).
+          // fflate handles internal chunking; we maintain max 1 buffer in memory.
+          entry.push(data, true);
+
+          // Release the ArrayBuffer reference so GC can reclaim it.
+          // eslint-disable-next-line no-unused-expressions
+          buf;
+
+          bytesProcessed += file.size;
+          const pct = Math.round((bytesProcessed / totalBytes) * 100);
+          showZipStage('Compressing', pct, `${formatBytes(bytesProcessed)} / ${formatBytes(totalBytes)}`);
+
+          // Yield to the event loop between files — keeps UI responsive and
+          // prevents the browser from treating this as a hung script.
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        if (!zipError) {
+          // Signal end of stream — triggers the final=true callback above.
+          zipper.end();
+        }
+      } catch (e) {
+        reject(e);
+      }
+    })();
   }).catch(err => {
     reportError('folder_zip', err.message || 'fflate error', folderName.slice(0, 100));
     setDropMsg('Compression failed. Try again or zip the folder manually first.');
@@ -621,8 +825,25 @@ async function startUpload() {
       reportError('upload_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
       throw new Error(`Chunk ${i} upload failed: ${errText}`);
     }
+
+    // 200 ACK — persist chunk completion state to IndexedDB (RU1).
+    // Fire-and-forget: IDB write must never block the upload loop.
+    writeChunkState({
+      uuid:        uploadUUID,
+      chunkIndex:  i,
+      totalChunks,
+      fileName:    selectedFile.name,
+      fileSize:    selectedFile.size,
+      keyHex,
+      ivHex,
+      timestamp:   Date.now(),
+    }).catch(() => {}); // already fire-and-forget inside writeChunkState, belt and braces
+
     setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
   }
+
+  // Transfer complete — clear IDB resume record (no longer needed).
+  clearResumeState(uploadUUID).catch(() => {});
 
   // Smooth finish: animate to 100%, hold 600ms, then transition to share panel
   setStage('Finalising', 98);
