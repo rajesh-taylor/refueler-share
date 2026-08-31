@@ -14,6 +14,9 @@
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
+<!-- Tokens — single source for all Share pages -->
+<link rel="stylesheet" href="/share-tokens.css" />
+
 
 <link rel="stylesheet" href="/upgrade.css">
 <script src="https://js.stripe.com/v3/"></script>
@@ -21,28 +24,36 @@
 
 <!-- Theme: applied before first paint to avoid flash -->
 <script>
-  const THEME_KEY = 'rfTheme';
-  function applyTheme(theme) {
-    const root = document.documentElement;
-    const pill = document.getElementById('themePill');
-    if (theme === 'carbon') {
-      root.classList.add('carbon-mode');
-      root.setAttribute('data-theme', 'carbon');
-      if (pill) pill.textContent = 'Carbon / Paper';
-    } else {
-      root.classList.remove('carbon-mode');
-      root.removeAttribute('data-theme');
-      if (pill) pill.textContent = 'Paper / Carbon';
+  (function () {
+    function getCookie(name) {
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
     }
-  }
-  function toggleTheme() {
-    const current = localStorage.getItem(THEME_KEY) || 'paper';
-    const next = current === 'paper' ? 'carbon' : 'paper';
-    localStorage.setItem(THEME_KEY, next);
-    applyTheme(next);
-    if (typeof remountStripeForTheme === 'function') remountStripeForTheme();
-  }
-  (function () { applyTheme(localStorage.getItem(THEME_KEY) || 'paper'); })();
+    function setCookie(name, value) {
+      var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; domain=.refueler.io; SameSite=Lax';
+    }
+    function applyTheme(theme) {
+      var root = document.documentElement;
+      var pill = document.getElementById('themePill');
+      if (theme === 'carbon') {
+        root.setAttribute('data-theme', 'carbon');
+        if (pill) pill.textContent = 'Carbon / Paper';
+      } else {
+        root.removeAttribute('data-theme');
+        if (pill) pill.textContent = 'Paper / Carbon';
+      }
+    }
+    function toggleTheme() {
+      var current = getCookie('rs-theme') || 'paper';
+      var next = current === 'paper' ? 'carbon' : 'paper';
+      setCookie('rs-theme', next);
+      applyTheme(next);
+      if (typeof remountStripeForTheme === 'function') remountStripeForTheme();
+    }
+    window.toggleTheme = toggleTheme;
+    applyTheme(getCookie('rs-theme') || 'paper');
+  })();
 </script>
 
 <!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
@@ -111,418 +122,7 @@
 })();
 </script>
 
-<!-- ── Theme: read cookie → localStorage → system pref, apply before paint ── -->
-<!-- Must run synchronously before <style> to avoid flash of wrong theme.     -->
-<script>
-(function () {
-  function getCookie(name) {
-    var m = document.cookie.match('(?:^|;)\\s*' + name + '=([^;]*)');
-    return m ? decodeURIComponent(m[1]) : null;
-  }
-  function getLs(key) { try { return localStorage.getItem(key); } catch { return null; } }
-  var saved = getCookie('rs-theme') || getLs('theme')
-    || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'carbon' : 'paper');
-  if (saved === 'carbon') {
-    document.documentElement.classList.add('carbon-mode');
-    document.documentElement.dataset.theme = 'carbon';
-  }
-})();
-</script>
-
-<!-- ── Theme cookie write — delegated, fires on theme-pill click on any page ── -->
-<script>
-document.addEventListener('click', function (e) {
-  if (!e.target.closest('.theme-pill')) return;
-  // Small delay so nav.njk's own handler (which toggles the class) runs first
-  setTimeout(function () {
-    var isDark = document.documentElement.classList.contains('carbon-mode');
-    var val = isDark ? 'carbon' : 'paper';
-    // Belt-and-braces: write both cookie and localStorage
-    document.cookie = 'rs-theme=' + val + '; domain=.refueler.io; path=/; max-age=31536000; SameSite=Lax';
-    try { localStorage.setItem('theme', val); } catch {}
-    // Keep data-theme in sync for surfaces that read it (dashboard, QR, Turnstile)
-    document.documentElement.dataset.theme = val;
-  }, 0);
-});
-</script>
-
-<!-- ── Lightning availability flag (S71) ─────────────────────────────────
-     Reads lightning_available from /status and hides the Lightning tab
-     when the KV flag is set to "false". Fail-open: on any error the tab
-     remains visible. Runs async — no paint block.
-────────────────────────────────────────────────────────────────────── -->
-<script>
-(function () {
-  const WORKER_URL = 'https://refueler-share.rt-fc4.workers.dev';
-  async function applyLightningFlag() {
-    try {
-      const res  = await fetch(WORKER_URL + '/status', { cache: 'no-store' });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (String(data.lightning_available) !== 'false') return;
-      // Hide the Lightning tab button
-      const tabBtn = document.querySelector('.pay-tab[onclick*="lightning"]');
-      if (tabBtn) tabBtn.style.display = 'none';
-      // Hide the Lightning tab pane
-      const tabPane = document.getElementById('tab-lightning');
-      if (tabPane) tabPane.style.display = 'none';
-      // If Lightning tab was active (shouldn't be, it's "coming soon"), switch to card
-      if (tabPane && tabPane.classList.contains('active')) {
-        tabPane.classList.remove('active');
-        const cardPane = document.getElementById('tab-card');
-        if (cardPane) cardPane.classList.add('active');
-        const cardTab = document.querySelector('.pay-tab[onclick*="card"]');
-        if (cardTab) cardTab.classList.add('active');
-      }
-    } catch { /* fail-open */ }
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', applyLightningFlag);
-  } else {
-    applyLightningFlag();
-  }
-})();
-</script>
-
-<style>
-  /* ── Brand tokens — canonical match to refueler.io ─────────────── */
-  :root {
-    --carbon:          #1A1A1A;
-    --paper:           #F5F0E8;
-    --gold:            #C8A96E;
-    --gold-dim:        #9E8050;
-
-    /* Paper mode (default) */
-    --bg:              var(--paper);
-    --fg:              var(--carbon);
-    --fg-muted:        #5A5550;
-    --fg-subtle:       #9A9590;
-    --border:          rgba(26,26,26,0.12);
-    --nav-bg:          rgba(245,240,232,0.88);
-    --card-bg:         rgba(26,26,26,0.04);
-    --card-border:     rgba(26,26,26,0.08);
-    --input-bg:        #FFFFFF;
-    --input-border:    rgba(26,26,26,0.18);
-    --drop-border:     rgba(26,26,26,0.20);
-    --drop-hover-bg:   rgba(26,26,26,0.03);
-    --tag-bg:          rgba(26,26,26,0.07);
-    --link-box-bg:     rgba(26,26,26,0.05);
-
-    --radius:          6px;
-    --mono:            'IBM Plex Mono', monospace;
-    --sans:            'DM Sans', sans-serif;
-    --display:         'Satoshi', 'DM Sans', sans-serif;
-    --heading:         'Satoshi', 'DM Sans', sans-serif;
-    --serif:           'Source Serif 4', Georgia, serif;
-
-    /* ── Token aliases — DESIGN-TOKENS.md canonical names ─────── */
-    /* Allows page CSS to use --accent, --text-primary etc.        */
-    --accent:          var(--gold);
-    --inset-rule:      var(--border);   /* Paper: transparent-ish rule; Carbon: gold */
-    --text-primary:    var(--fg);
-    --text-secondary:  var(--fg-muted);
-    --border-mid:      rgba(26,26,26,0.22);
-    --surface:         rgba(26,26,26,0.04);
-  }
-
-  /* Carbon override — canonical match to refueler.io */
-  html.carbon-mode {
-    --bg:              var(--carbon);
-    --fg:              var(--paper);
-    --fg-muted:        #B0AAA2;
-    --fg-subtle:       #6A6560;
-    --border:          rgba(245,240,232,0.10);
-    --nav-bg:          rgba(26,26,26,0.90);
-    --card-bg:         rgba(245,240,232,0.04);
-    --card-border:     rgba(245,240,232,0.08);
-    --input-bg:        #252525;
-    --input-border:    rgba(245,240,232,0.18);
-    --drop-border:     rgba(245,240,232,0.22);
-    --drop-hover-bg:   rgba(245,240,232,0.03);
-    --tag-bg:          rgba(245,240,232,0.08);
-    --link-box-bg:     rgba(245,240,232,0.05);
-
-    /* ── Carbon token aliases ─────────────────────────────────── */
-    --inset-rule:      var(--gold);     /* Gold rule lines in Carbon */
-    --text-primary:    var(--fg);
-    --text-secondary:  var(--fg-muted);
-    --border-mid:      rgba(245,240,232,0.22);
-    --surface:         rgba(245,240,232,0.04);
-  }
-
-  /* ── Reset ─────────────────────────────────────────────────────── */
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html, body {
-    min-height: 100%;
-    background-color: var(--bg);
-    color: var(--fg);
-    font-family: var(--sans);
-    font-size: 15px;
-    line-height: 1.6;
-    font-weight: 300;
-    -webkit-font-smoothing: antialiased;
-    transition: background-color 0.35s ease, color 0.25s ease;
-  }
-
-  /* ── Site header — canonical spec from refueler.io ──────────────── */
-  .site-header {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--nav-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--inset-rule);
-    padding: 0 clamp(1.25rem, 4vw, 3rem);
-    transition: background 0.35s ease, border-color 0.25s ease;
-  }
-  .header-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .wordmark {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 0.875rem;
-    letter-spacing: 0.06em;
-    color: var(--fg);
-    text-decoration: none;
-    white-space: nowrap;
-    text-transform: none;
-  }
-  .wordmark-divider {
-    font-weight: 300;
-    opacity: 0.3;
-    margin: 0 0.5rem;
-  }
-  .wordmark-section {
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    opacity: 0.55;
-    text-transform: none;
-  }
-  .site-nav {
-    display: flex;
-    align-items: center;
-    gap: 2rem;
-  }
-  .site-nav a {
-    font-family: var(--display);
-    font-size: 0.7rem;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--fg-muted);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .site-nav a:hover { color: var(--fg); }
-  .site-nav a.active { color: var(--fg); }
-  /* Theme pill — border only, no fill, no gold on any state */
-  .theme-pill {
-    font-family: var(--display);
-    font-size: 0.65rem;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 0.35rem 0.85rem;
-    background: transparent;
-    color: var(--fg-muted);
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-    white-space: nowrap;
-    user-select: none;
-  }
-  .theme-pill:hover {
-    border-color: var(--fg-muted);
-    color: var(--fg);
-  }
-
-  /* ── Shared components ────────────────────────────────────────────── */
-  .card {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius);
-    padding: 24px;
-  }
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-family: var(--sans);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.03em;
-    padding: 10px 20px;
-    transition: opacity 0.2s, background 0.2s;
-  }
-  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .btn-primary { background: var(--fg); color: var(--bg); }
-  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
-  .btn-ghost {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--fg-muted);
-  }
-  .btn-ghost:hover:not(:disabled) { border-color: var(--fg-muted); color: var(--fg); }
-  .btn-full { width: 100%; }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field label {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--fg-subtle);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  input[type="text"],
-  input[type="password"],
-  input[type="email"] {
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: var(--radius);
-    color: var(--fg);
-    font-family: var(--mono);
-    font-size: 13px;
-    padding: 10px 14px;
-    width: 100%;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-  input[type="text"]:focus,
-  input[type="password"]:focus,
-  input[type="email"]:focus { border-color: var(--fg-muted); }
-  .tag {
-    display: inline-block;
-    background: var(--tag-bg);
-    color: var(--fg);
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 3px;
-    letter-spacing: 0.03em;
-  }
-
-  /* ── Utility ─────────────────────────────────────────────────────── */
-  .muted      { color: var(--fg-muted); }
-  .subtle     { color: var(--fg-subtle); }
-  .mono       { font-family: var(--mono); }
-  .small      { font-size: 12px; }
-  .cap-warn   { color: #D97706; font-size: 13px; line-height: 1.5; }
-  .success-txt{ color: #27AE60; }
-  .danger-txt { color: #C0392B; }
-  .hidden     { display: none !important; }
-  .flex-row   { display: flex; align-items: center; gap: 10px; }
-  .mt4        { margin-top: 4px; }
-  .mt8        { margin-top: 8px; }
-  .mt12       { margin-top: 12px; }
-  .mt16       { margin-top: 16px; }
-
-  /* ── Site footer ─────────────────────────────────────────────────── */
-  .site-footer {
-    border-top: 1px solid var(--inset-rule);
-    padding: 20px clamp(1.25rem, 4vw, 3rem);
-    margin-top: auto;
-  }
-  .footer-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .footer-note {
-    font-size: 0.65rem;
-    letter-spacing: 0.06em;
-    color: var(--fg-subtle);
-    font-family: var(--display);
-  }
-  .footer-links { display: flex; gap: 1.5rem; }
-  .footer-links a {
-    font-family: var(--display);
-    font-size: 0.65rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fg-subtle);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .footer-links a:hover { color: var(--fg); }
-
-  /* ── Responsive ──────────────────────────────────────────────────── */
-  @media (max-width: 600px) {
-    .shell { padding: 32px 16px 60px; }
-    .site-nav { gap: 1.25rem; }
-    .site-nav a:not(:last-of-type) { display: none; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .progress-bar, .btn, .slider, .slider::before,
-    html, body { transition: none; }
-  }
-    /* ── Maintenance / status banner ────────────────────────────────────────── */
-  .status-banner {
-    position: sticky;
-    top: 56px;                         /* sits below the nav */
-    z-index: 90;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 20px;
-    font-size: 13px;
-    line-height: 1.4;
-    border-bottom: 1px solid transparent;
-    animation: banner-in 0.25s ease;
-  }
-  @keyframes banner-in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .status-banner[data-state="maintenance"] {
-    background: color-mix(in srgb, #C8A951 12%, var(--bg));
-    border-color: color-mix(in srgb, #C8A951 30%, transparent);
-    color: var(--fg);
-  }
-  .status-banner[data-state="degraded"] {
-    background: color-mix(in srgb, #C0392B 10%, var(--bg));
-    border-color: color-mix(in srgb, #C0392B 25%, transparent);
-    color: var(--fg);
-  }
-  .status-banner-icon { flex-shrink: 0; font-size: 15px; }
-  .status-banner-text { flex: 1; }
-  .status-banner-link {
-    color: inherit;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    white-space: nowrap;
-  }
-  .status-banner-link:hover { opacity: 0.75; }
-  .status-banner-dismiss {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--fg-subtle);
-    font-size: 14px;
-    line-height: 1;
-    padding: 0;
-    flex-shrink: 0;
-  }
-  .status-banner-dismiss:hover { color: var(--fg); }
-  .status-banner.hidden { display: none; }
-
-</style>
+<!-- tokens: share-tokens.css via head.njk — no inline styles here -->
 
 </head>
 <body>
@@ -530,16 +130,15 @@ document.addEventListener('click', function (e) {
 
 <header class="site-header">
   <div class="header-inner">
-    <a href="https://refueler.io/" class="wordmark">
+    <a href="/" class="wordmark">
       Refueler
       <span class="wordmark-divider">/</span>
       <span class="wordmark-section">Share</span>
     </a>
     <nav class="site-nav">
-      <a href="https://refueler.io/">App</a>
-      <a href="https://refueler.io/editorial/">Editorial</a>
-      <a href="https://refueler.io/privacy/">Privacy</a>
+      <a href="https://refueler.io/notes/">Notes</a>
       <a href="/upgrade.html" class="active">Upgrade</a>
+      <a href="https://refueler.io/support/">Support</a>
       <button class="theme-pill" id="themePill" onclick="toggleTheme()">Paper / Carbon</button>
     </nav>
   </div>
@@ -725,11 +324,11 @@ const STRIPE_PK  = 'pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q';
 const PRICE_IDS = {
   creative: {
     monthly: 'price_1Ts7lsGlctwiB9U3hdtgChU2',
-    yearly:  'price_1TyzKIGlctwiB9U3Dn71fGbA',
+    yearly:  'price_1Ts7sqGlctwiB9U3YRloCFfi',
   },
   max: {
     monthly: 'price_1Ts7vIGlctwiB9U3kb3NCLue',
-    yearly:  'price_1TyzNaGlctwiB9U3T8uV4UIW',
+    yearly:  'price_1Ts7xIGlctwiB9U3JyZB8Kwj',
   },
 };
 
@@ -976,7 +575,7 @@ function showManageSection(email, tierName) {
 
 // ── Stripe appearance — theme-aware ────────────────────────────
 function stripeAppearance() {
-  const isDark = document.documentElement.classList.contains('carbon-mode');
+const isDark = document.documentElement.dataset.theme === 'carbon';
   return {
     theme: isDark ? 'night' : 'stripe',
     variables: {

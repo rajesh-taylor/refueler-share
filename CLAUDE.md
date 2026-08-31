@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.7 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** pre-Opus-2 · 28 Aug 2026
+> **Version:** 1.8 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Opus-2 · 29 Aug 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -78,7 +78,8 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**B6 ✓ complete (S72a). B7 in progress — S73/S73a complete. Opus-2 session next (roadmap resequence + node bootstrap planning).**
+**B6 ✓ complete (S72a). B7 in progress — S73/S73a complete. Opus-2 ✓ (29 Aug — resequenced for LNbits/phoenixd).**
+**Next: NB-series** (node bootstrap, pre-B7, gates all B7 code) — starts with NB-1 (Opus, runbook). Locked block sequence: `NB → B7 → SYNC-1 → RU1/RU2 → HQ → SD-block → SW → B8 → B9 → B10+`. See Share-Master-Context.md §Roadmap + §Phoenixd → LND trigger + §SD-block placement + §Dual-repo asset sync.
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
