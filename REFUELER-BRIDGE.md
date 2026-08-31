@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 5.8 | **Created:** 28 July 2026 | **Updated:** AP-ARCH · 2026-08-31
+> **Version:** 5.9 | **Created:** 28 July 2026 | **Updated:** Opus-3 · 2026-08-31
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -304,7 +304,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 - Football-data.org API key held by Rajesh — ready for Events intelligence layer session.
 - Commission rate planning conversation before first real merchant.
 - **[Legend]** UC-9 Opus session — Recovery Coordination Layer. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
-- **[All products]** Opus session — multiple Cashu mint naming convention. If Share (Port Authority), Pass credential mint, and Legend watch credential mint are all separate issuers, resolve governance/naming before B9. Westminster geography reserved for this conversation.
+- **[All products] Opus-3a — Liberty mint reconciliation.** Share mint = **Royal Mint** (locked Opus-3). Still open: Pass's issuer name (Westminster) and Legend's issuer name (Guildhall a candidate), plus confirming the Silent Ceremony. Resolve before B9.
 - **[Pass]** Solicitor briefing brief to draft before appointment.
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29 → Nutroot) before v2 build.
 - **[All products]** Remove all Blink ops wallet references from merchant handover docs before first real merchant.
@@ -330,15 +330,20 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 |---|---|---|
 | **Silent Drop** | The transfer mechanism — the act and the link. Untouchable. | Everyone |
 | **Lighthouse** | The permanent Silent Drop intake URL — always on, guides senders in without revealing the recipient | Everyone |
-| **Port Authority** | The Cashu mint — issues credentials, governs movement, observes events, holds no cargo content. Renamed from "mint" in product-facing contexts. | Product / whitepaper |
-| **Royal Mint** | The Cashu blind-signature issuance layer specifically | Whitepaper / docs only |
+| **Royal Mint** | Share's Cashu mint — issues credentials, governs movement, observes events, holds no cargo content. The Royal Mint operated inside the Tower walls for ~500 years; the pun lands at the technical level (a Cashu *mint*). Signal-only / no melt path stated separately in properties. | Product / whitepaper |
+| **Port Authority** | The admission-control layer at the upload boundary — Content-Type denylist + rate-limiting gate. Every transfer passes it, as every vessel passed the Port of London Authority to enter the Pool. An authority that controls what enters, not an issuer. | Docs / internal |
 | **Quay** | A named individual intake point issued to a specific client or sender. Quay/Key double-meaning: a bitcoiner reads one, a consultant reads the other. | Professional users |
 | **Harbourmaster** | The admin dashboard — the account holder who controls their drops, views the receipt ledger, manages Quays | Everyone |
 | **Cargo** | The encrypted file bundle in transit. Used in API event names (`cargo_received`), webhook payloads, and developer docs. Not used in patient-facing or professional UI copy — use "documents" there. | Docs / API / webhooks |
 | **Locke** | The credential-as-key mechanism — presented to access Harbourmaster. Locke/Lock double-meaning. Named in whitepaper and docs; not necessarily surfaced to end users. | Whitepaper / docs |
 | **Raven** | The warrant canary system — replaces "canary" across all products. Ravens signal safety by presence, not by dying. Absence = compromise signal. Architecturally more accurate than the canary metaphor. | Whitepaper / docs / public |
-| **Tower of London** | Brand geography home of Legend — the block explorer as ledger, the Tower as the place where the kingdom's records were kept. Ravens live at the Tower. | Legend product |
+| **Tower of London** | Brand geography home of **Share**. Every locked Share term has a real address here: Royal Mint (inside the walls 500 years), Port of London Authority (Tower Hill), the harbour lexicon (Pool of London), Tower Bridge, the Ravens, and the Warder's nightly Ceremony of the Keys. The tightest product-to-place fit of the three. | Share product |
 | **Tower Bridge** | Tier differentiator visual metaphor — the bridge raises for large vessels (Production Max / Business). Free tier passes under. Creative Premium navigates the Thames with skill. Not a UI label; lives in design language and copy tone. | Design / copy |
+| **Westminster** | Brand geography home of **Pass**. The Palace of Westminster *passes* laws — permits, who may do what and when. Rotation ceremony: Black Rod (State Opening). | Pass product |
+| **Guildhall** | Brand geography home of **Legend** — the City's record-house (Guildhall Library, London's civic archive). "Consult the record" is what a block explorer is. Paired with St Paul's landmarks nearby. Rotation ceremony: Silent Ceremony *(candidate — confirm Opus-3a)*. | Legend product |
+| **Whispering Gallery** | Metadata-leak metaphor (Legend, St Paul's). A whisper you believe private travels the whole dome and is heard on the far side — exactly what querying a public block explorer does to a "private" lookup. Pairs with Temple of Mithras. Powers Legend Article 14. | Professional / whitepaper |
+| **Triforium / Trinity Library** | The deep ledger / records archive (Legend, St Paul's) — the hidden 1709 library. The historical chain data you consult. | Whitepaper / docs |
+| **Floating staircase** | Merkle tree / parent-hash structure (Legend, St Paul's geometric staircase) — each step self-supporting on the one below. **Whitepaper and closed-door presentation only — too technical for client copy.** | Whitepaper / presentation |
 
 ### Retired terms (do not use)
 - **Drop Berth** — ward incident form. Retired.
@@ -350,18 +355,25 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 ### Product vocabulary hierarchy
 
 ```
-Refueler Share
+Refueler Share  ·  home: Tower of London
   └── Silent Drop (the mechanism)
         └── Lighthouse (the permanent intake link)
         └── Quay (named per-client intake point)
         └── Harbourmaster (admin dashboard + receipt ledger)
-              └── Port Authority (Cashu mint — governs movement)
-              └── Royal Mint (blind signature layer)
+              └── Royal Mint (Share's Cashu mint — issues credentials, governs movement)
+              └── Port Authority (admission-control layer — denylist + rate-limit gate)
               └── Locke (credential-as-key for Harbourmaster access)
+              └── Warder · Ceremony of the Keys (keyset rotation)
+              └── Raven (Share's warrant canary — native to the Tower)
 
-Refueler Legend
-  └── Tower of London (brand geography)
-        └── Raven (warrant canary system)
+Refueler Pass  ·  home: Westminster
+  └── Black Rod (keyset rotation — State Opening)
+        └── Raven (Pass's warrant canary)
+
+Refueler Legend  ·  home: City of London (Guildhall + St Paul's)
+  └── Whispering Gallery (metadata-leak) · Triforium (deep ledger) · Floating staircase (Merkle)
+        └── Silent Ceremony (keyset rotation — candidate, confirm Opus-3a)
+        └── Raven (Legend's warrant canary — 5–6 mirrors)
 ```
 
 ### Resolved — AP-ARCH · 31 Aug 2026
@@ -383,7 +395,7 @@ Three separate mints. Three independent seeds. No shared mint, no shared keyset 
 | Developer / API (Business tier) | Webhook to their own endpoint — they handle notification |
 
 **Notification triggers (two distinct events):**
-- **Cargo arrived** — credential presented at upload completion. Port Authority observes this event. Fires immediately. Relevant for single-drop users expecting one important delivery.
+- **Cargo arrived** — credential presented at upload completion. The Royal Mint observes this event. Fires immediately. Relevant for single-drop users expecting one important delivery.
 - **Cargo retrieved** — Harbourmaster has opened and downloaded the cargo. Fires on first retrieval. Relevant for multi-Quay Harbourmasters who need to know a specific client has delivered, or confirm a recipient has collected.
 
 ### Harbourmaster authentication (two paths, matching payment rails)
@@ -438,17 +450,21 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 
 **The three Liberties:**
 
-| Liberty | Product | Credential type | Monetary? | Named authority |
+The model is now **literal, not metaphorical**: three real self-governing jurisdictions of London, west to east along the Thames. **Westminster makes the rules (Pass) → the City keeps the record (Legend) → the Tower moves the cargo across the water (Share).**
+
+| Liberty (home) | Product | Credential type | Monetary? | Mint / issuer |
 |---|---|---|---|---|
-| Port Authority | Share | Upload credentials, Harbourmaster Lockes | No — capability tokens only, no melt path | Port Authority |
-| Guildhall | Pass | Access credentials + reward tokens (spendable sats) | Mixed — reward tokens have live melt path | Guildhall |
-| Tower of London | Legend | Address watch credentials | No — signal-only, no melt path | TBD — Opus-3 |
+| Tower of London | Share | Upload credentials, Harbourmaster Lockes | No — capability tokens only, no melt path | **Royal Mint** (locked Opus-3) |
+| Westminster | Pass | Access credentials + reward tokens (spendable sats) | Mixed — reward tokens have live melt path | TBD — Opus-3a |
+| City of London (Guildhall + St Paul's) | Legend | Address watch credentials | No — signal-only, no melt path | TBD — Opus-3a (Guildhall a candidate) |
 
 **Why three, not one mint with three keysets:** a shared mint is a shared failure domain, a shared compulsion surface, and a shared database that *can* correlate events across products — capability that must not exist, not merely capability that will not be used. The melt-hygiene argument is equally firm: Pass reward tokens carry a live Lightning melt path; Share and Legend credentials must never melt; the same process must not hold both properties. Separate mints remove the ability, not merely the intention.
 
-**Server topology:** two CAX21 instances initially. Instance A (Share + Pass) runs Port Authority and Guildhall as separate processes, separate databases, separate ports. Instance B (Legend, post-B9) runs the Tower of London mint. Third CAX21 provisions only when Legend builds. Review topology at sustained Lightning volume triggering the LND condition.
+**Server topology:** two CAX21 instances initially. Instance A (Share + Pass) runs the Royal Mint (Share) and Pass's mint (name TBD Opus-3a) as separate processes, separate databases, separate ports. Instance B (Legend, post-B9) runs Legend's mint (name TBD Opus-3a). Third CAX21 provisions only when Legend builds. Review topology at sustained Lightning volume triggering the LND condition.
 
-**Open for Opus-3:** Legend's mint named authority. Candidates: Bank of England (independent within the system, cannot be audited by the Treasury — maps to non-monetary credential issuer under Tower brand geography), Royal Exchange (Gresham's first purpose-built commerce centre; Gresham's law; credential integrity as the product). Warder retired as mint name — a Warder guards, does not issue. Tower of London remains Legend's brand geography regardless of mint name resolution.
+**RESOLVED (Opus-3):** the geography reshuffle. Share takes the Tower and the **Royal Mint** (locked). Pass takes Westminster. Legend takes the City (Guildhall + St Paul's). Bank of England retired to whitepaper foil; Royal Exchange parked as a future fiat/other-crypto on-ramp; Temple left unowned as the neutral Templar / Cashu origin. Warder un-retired as the actor performing Share's Ceremony of the Keys.
+
+**Open for Opus-3a (Liberty mint reconciliation):** the mint/issuer *names* for Pass (Westminster) and Legend (City). Guildhall is a candidate for Legend's issuer but its historical meaning is *granting the freedom of the City* (access-flavoured) rather than *keeping the record* — resolve before B9. Silent Ceremony as Legend's rotation name to be confirmed here too.
 
 **International scale note (held, not locked):** the three Liberties model scales to the three city-states of power — London (finance), Washington (military), Vatican (religion). Available the moment Refueler operates across jurisdictions. Whitepaper future work section may gesture at this without committing.
 
@@ -464,28 +480,36 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Pass | Legal standing: as above, Pass-scoped | 2–3 mirrors |
 | Legend | Legal standing: as above, Legend-scoped | 5–6 mirrors (distributed explorer architecture) |
 
-**What Ravens are not:** Ravens are not service health indicators. Mint availability, server uptime, and infrastructure status live on `refueler.io/status/` as plain language — "Port Authority: operational." Green/amber/red. No Raven metaphor. No shared vocabulary with the warrant canary system. A mint outage on a Tuesday must not read as a legal event.
+**What Ravens are not:** Ravens are not service health indicators. Mint availability, server uptime, and infrastructure status live on `refueler.io/status/` as plain language — "Royal Mint: operational." Green/amber/red. No Raven metaphor. No shared vocabulary with the warrant canary system. A mint outage on a Tuesday must not read as a legal event.
 
 **Raven governance rule:** absence of a Raven signals legal compulsion. Absence of a status indicator signals infrastructure. These two signals must never share vocabulary, never share a display surface, never be ambiguous to a user of any Refueler product.
 
 ---
 
-## Ceremony of the Keys (locked AP-ARCH · 31 Aug 2026)
+## Keyset rotation ceremonies (locked AP-ARCH · 31 Aug 2026; per-Liberty split Opus-3 · 31 Aug 2026)
 
-**Primary meaning: keyset rotation.** When a Liberty rotates its active keyset — generating new keypairs, publishing the new keyset, retiring the old — this is the Ceremony of the Keys. Announced in advance. Consequential for outstanding credentials. Periodic and predictable.
+**Meaning: keyset rotation.** When a Liberty rotates its active keyset — generating new keypairs, publishing the new keyset, retiring the old — it performs its rotation ceremony. Announced in advance. Consequential for outstanding credentials. Periodic and predictable. **Never a login flow.**
 
-The real Ceremony of the Keys has been performed nightly at the Tower for over 700 years, interrupted twice. That continuity and weight is appropriate for the keyset rotation event — it changes what is valid. It is not appropriate for a daily login flow.
+Each Liberty now has its own named rite, native to its home — a real historical rotation ceremony involving doors, keys, and secrecy:
 
-**Usage by context:**
+| Liberty | Rotation ceremony | Historical basis |
+|---|---|---|
+| Share (Tower) | **Ceremony of the Keys**, performed by the **Warder** | Nightly at the Tower for 700+ years, interrupted twice. Weight appropriate for an event that changes what is valid. |
+| Pass (Westminster) | **Black Rod** | The State Opening — Black Rod's door is slammed and reopened, a rotation rite in itself. |
+| Legend (City) | **Silent Ceremony** *(candidate — confirm Opus-3a)* | The near-wordless annual handover of the office of Lord Mayor. "The keyset changes hands in near silence, announced but not explained." |
+
+**Usage by context (applies to all three):**
 
 | Context | Usage |
 |---|---|
-| Whitepaper / developer docs | "The Ceremony of the Keys — keyset rotation event, announced N days in advance, outstanding credentials remain valid for grace period" |
-| Admin changelog | "Ceremony of the Keys performed — new keyset active, previous keyset retired" |
+| Whitepaper / developer docs | "[Ceremony] — keyset rotation event, announced N days in advance, outstanding credentials remain valid for grace period" |
+| Admin changelog | "[Ceremony] performed — new keyset active, previous keyset retired" |
 | Product UI | Plain language only — "Active keyset updated" |
-| Harbourmaster login | Not referenced. Authentication is plain language. |
+| Login | Never referenced. Authentication is plain-language challenge-response. |
 
-**Harbourmaster login is not the Ceremony.** It is described plainly as challenge-response authentication in docs. The Ceremony is reserved for the mint event.
+**Login is not the Ceremony.** Harbourmaster/user login is described plainly as challenge-response authentication in docs. The ceremony vocabulary is reserved for the mint keyset event only.
+
+**Note:** the Midnight Initiation (Round Church, Temple) is *not* assigned as a rotation ceremony — Temple is unowned. It survives as reserved-geography colour, available if a future product lands at Temple, and as whitepaper flavour for the Cashu-origin story.
 
 ---
 
@@ -493,7 +517,7 @@ The real Ceremony of the Keys has been performed nightly at the Tower for over 7
 
 **Locke is an object (and a person), not a process.** A Locke is the credential-as-object held by the Harbourmaster — it requires unlocking with a key. The Harbourmaster holds the Locke; they supply the key (their private key signature); the door opens. Refueler is not in that transaction after issuance.
 
-**Mechanics:** NUT-11 Mode 2 (P2PK bound credential). The Harbourmaster generates a keypair client-side; private key never leaves the device. The Port Authority issues a Locke bound to the Harbourmaster's pubkey. Authentication = nonce issued by dashboard, signed by device, pubkey verified against authorised set. Nothing reusable crosses the wire.
+**Mechanics:** NUT-11 Mode 2 (P2PK bound credential). The Harbourmaster generates a keypair client-side; private key never leaves the device. The Royal Mint issues a Locke bound to the Harbourmaster's pubkey. Authentication = nonce issued by dashboard, signed by device, pubkey verified against authorised set. Nothing reusable crosses the wire.
 
 **Multi-device:** the Harbourmaster account holds a set of authorised pubkeys. Each device generates its own keypair and receives its own Locke. Add a device: present a valid existing Locke, authorise new pubkey, mint new Locke. Remove: drop pubkey from set.
 
@@ -521,12 +545,19 @@ Four deployment contexts. Terms may appear in multiple columns. Terms in Closed 
 | Harbourmaster | ✓ | ✓ | ✓ | ✓ |
 | Quay | ✓ | ✓ | ✓ | ✓ |
 | Cargo | — | — | ✓ (API/webhooks) | ✓ |
-| Port Authority | — | ✓ | ✓ | ✓ |
-| Guildhall | — | — | ✓ | ✓ |
-| Tower of London | — | ✓ (Legend brand) | ✓ | ✓ |
-| Royal Mint | — | — | ✓ (blind sig layer only) | ✓ |
+| Royal Mint | — | ✓ (Share mint) | ✓ | ✓ |
+| Port Authority | — | — | ✓ (admission-control layer) | ✓ |
+| Tower of London | — | ✓ (Share brand) | ✓ | ✓ |
+| Westminster | — | ✓ (Pass brand) | ✓ | ✓ |
+| Guildhall | — | ✓ (Legend brand) | ✓ | ✓ |
+| Whispering Gallery | — | ✓ (metadata leak) | ✓ | ✓ |
+| Triforium / Trinity Library | — | — | ✓ (deep ledger) | ✓ |
+| Floating staircase | — | — | ✓ (Merkle — WP + presentation only) | ✓ |
 | Locke | — | — | ✓ | ✓ |
-| Ceremony of the Keys | — | — | ✓ | ✓ |
+| Ceremony of the Keys | — | — | ✓ (Share rotation) | ✓ |
+| Black Rod | — | — | ✓ (Pass rotation) | ✓ |
+| Silent Ceremony | — | — | ✓ (Legend rotation — candidate) | ✓ |
+| Warder | — | — | ✓ | ✓ |
 | Raven | — | ✓ (warrant canary ref) | ✓ | ✓ |
 | The three Liberties | — | — | ✓ | ✓ |
 | Temple Bar | — | — | ✓ | ✓ |
@@ -534,11 +565,10 @@ Four deployment contexts. Terms may appear in multiple columns. Terms in Closed 
 | Traitors Gate | — | — | — | ✓ (pitch only) |
 | White Tower | — | — | — | ✓ (held) |
 | Shakespeare's Globe | — | — | — | ✓ (re-credential metaphor, pitch) |
-| St Paul's dome | — | — | ✓ (architecture section) | ✓ |
 | Temple of Mithras | — | — | ✓ (metadata argument) | ✓ |
 | Fleet Street | — | ✓ (editorial voice) | ✓ | ✓ |
-| Bank of England | — | — | ✓ (monetary distinction) | ✓ |
-| Royal Exchange | — | — | — | ✓ (held — Opus-3) |
+| Bank of England | — | — | ✓ (the foil — use with care) | ✓ |
+| Royal Exchange | — | — | — | ✓ (parked — fiat/crypto on-ramp) |
 | Cleopatra's Needle | — | — | — | ✓ (held — attestation monument) |
 | Pall Mall | — | — | — | ✓ (held — Enterprise register) |
 
@@ -558,7 +588,7 @@ The blind signature is the letter. The mint is the Temple treasury. The bearer i
 
 The lineage: Templar letter of credit → Venetian bill of exchange → Chaumian blind signature (1982) → Cashu (2022) → Refueler Share (2026). Anonymous bearer instruments for moving value and information across jurisdictions without carrying the underlying asset. The prior art is 900 years old. The open-source cryptographic implementation on Lightning infrastructure, in a browser, with no account required, is new.
 
-**Use in whitepaper:** §Historical prior art (Templar lineage), §Architecture (St Paul's dome — the hidden structural layer), §Privacy model (Temple of Mithras — the system that leaves almost no record, running underneath financial infrastructure). §Permission model (City sovereignty — the sovereign requires permission to enter the square mile; the Harbourmaster holds equivalent sovereignty over their own Liberty).
+**Use in whitepaper:** §Historical prior art (Templar lineage), §Privacy model (Temple of Mithras — the system that leaves almost no record, running underneath financial infrastructure; paired with the Whispering Gallery as the metadata-leak image). §Permission model (City sovereignty — the sovereign requires permission to enter the square mile; each Harbourmaster holds equivalent sovereignty over their own Liberty). *(St Paul's dome retired as the architecture metaphor — Opus-3.)*
 
 ---
 
@@ -570,8 +600,9 @@ The lineage: Templar letter of credit → Venetian bill of exchange → Chaumian
 | White Tower | Oldest structure, everything built around it, foundational | Foundational primitive — BLAKE3, or R2 storage layer. Held. |
 | Shakespeare's Globe | Burned, faithfully rebuilt, same play same stage | Re-credentialed Pass token — internal mental model, closed-door pitch for credential renewal |
 | Pall Mall | Private members clubs, no sign, introduced by a member, no advertising | Enterprise tier register. Hold until Enterprise naming session. |
-| Royal Exchange | First purpose-built commerce centre, Gresham's law, credential integrity | Legend mint candidate — Opus-3 |
-| Bank of England | Independent within the system, cannot be audited by Treasury | Legend mint candidate — Opus-3 |
+| Temple | Real London liberty, letter-of-credit origin (Templar, c.1150), Temple Bar boundary, Round Church midnight initiation behind locked doors | **Unowned by design.** The spiritual home of Cashu and the neutral Templar prior-art headwater — kept ownerless so the origin story points at all three products, not one. Available for a future product. |
+| Royal Exchange | First purpose-built commerce centre, Gresham's law, closest to the money supply | **Parked** — candidate home for a future fiat / other-crypto on-ramp. Not a mint, not in play now. |
+| Bank of England | Independent within the system, cannot be audited by Treasury, *the* central monetary authority | **The foil / antithesis** — the establishment monetary institution Refueler defines itself against. Whitepaper §monetary distinction only, handled with care (don't antagonise the wrong people). Never a mint. |
 | Somerset House | National records, Revenue, cultural space | Held lightly — revenue association undermines privacy message |
 | Fleet Street | Information channel, Temple Bar to Ludgate Hill, editors decided what ran | Editorial voice — notes articles, the /notes/ pipeline |
 | Traitors Gate | Watergate entrance, prisoners taken silently by river, public excluded | Closed-door only — "the email inbox was always a Traitors Gate." Never product copy. |
@@ -579,23 +610,24 @@ The lineage: Templar letter of credit → Venetian bill of exchange → Chaumian
 
 ---
 
-## Opus-3 session scope (AP-ARCH · 31 Aug 2026)
+## Opus-3 session scope (AP-ARCH · 31 Aug 2026; Item One resolved Opus-3 · 31 Aug 2026)
 
-**What the session is:** operationalising the vocabulary — not generating more of it.
+**What the session was:** operationalising the vocabulary — not generating more of it.
 
-**Agenda:**
+**Item One — Legend mint identity — RESOLVED (Opus-3), via full geographic reshuffle.** Bank of England and Royal Exchange both rejected as the Legend mint; the deeper move was to relocate the products so each sits on the geography that fits it. Locked: **Share → Tower of London + Royal Mint** · **Pass → Westminster + Black Rod** · **Legend → City of London (Guildhall + St Paul's)**. Port Authority repurposed to the admission-control layer. Bank of England → foil; Royal Exchange → parked; Temple → unowned. Three rotation ceremonies split per-Liberty. St Paul's dome metaphor retired; Whispering Gallery / Triforium / floating staircase adopted for Legend. See the reshuffle across §brand vocabulary, §three Liberties, §keyset rotation ceremonies, §vocabulary matrix, §reserved geography.
 
-**One — Legend mint identity.** Resolve the named authority for the Tower of London Liberty. Candidates: Bank of England, Royal Exchange. Warder is retired from this shortlist. Tower of London remains brand geography regardless of outcome.
+**The remaining agenda did not run** — the reshuffle consumed the session. Carried:
 
-**Two — Whitepaper structure.** Section outline, argument flow, what geography goes where. Ingredients locked: Templar lineage, St Paul's dome, Bank of England monetary distinction, City sovereignty framing, Temple of Mithras metadata argument, Raven system, Ceremony of the Keys, the three Liberties constitutional model.
+**Opus-3a — Liberty mint reconciliation.** Pass's mint/issuer name (Westminster). Legend's mint/issuer name (Guildhall a candidate; access-grant vs record-keeping tension). Confirm Silent Ceremony as Legend's rotation name.
 
-**Three — Raven governance document.** One-page internal doc for anyone maintaining the warrant canary system across three products. Separate statements, separate signing, separate display surfaces, no vocabulary overlap with service health.
+**Opus-3b — original Items Two–Four on a clean context:**
+- **Two — Whitepaper structure.** Section outline, argument flow, geography placement. Ingredients: Templar lineage, City sovereignty, Temple of Mithras + Whispering Gallery metadata argument, Bank of England foil (careful), Raven system, the three rotation ceremonies, the three Liberties constitutional model, Triforium/floating-staircase. *(St Paul's dome removed from the ingredient list.)*
+- **Three — Raven governance document.** One-page internal doc across three products.
+- **Four — Rotation-ceremony placement.** Admin changelog template + whitepaper section language, now covering all three ceremonies.
 
-**Four — Ceremony of the Keys final placement.** Confirmed as keyset rotation. Session to produce the admin changelog template and whitepaper section language.
+**What none of these sessions do:** generate vocabulary. Geography is locked. Deployment, structure, and governance only.
 
-**What the session is not:** vocabulary generation. The geography is locked. Deployment, structure, and governance only.
-
-**Files to load:** CLAUDE.md · Share-Master-Context.md · share-sessions.md · BRIDGE v5.8 · notes-articles-list.md
+**Files to load:** CLAUDE.md · Share-Master-Context.md · share-sessions.md · BRIDGE v5.9 · notes-articles-list.md
 
 ---
 
@@ -605,6 +637,7 @@ The lineage: Templar letter of credit → Venetian bill of exchange → Chaumian
 |---|---|---|
 | **AP-BRAND · 31 Aug 2026** | all repos | Brand vocabulary locked. London Thames geography canonical. Silent Drop product decisions locked. Harbourmaster dashboard spec. Merchant-issues-Quays feature named. Notification architecture (no email, ever). Two authentication paths. Dr Chen→Dr Okafor case study locked. Raven replaces canary. Legend under Tower of London. Tower Bridge tier metaphor. Port Authority replaces "mint" in product contexts. Quay/Key and Locke/Lock double-meanings confirmed. Westminster geography reserved for future products. BRIDGE v5.7. |
 | **AP-ARCH · 31 Aug 2026** | all repos | Three Liberties governance model locked. Three independent mints, seeds, Ravens. Port Authority (Share) · Guildhall (Pass) · Tower of London geography (Legend, mint name TBD Opus-3). Raven = warrant canaries only; mint health = status page plain language. Ceremony of the Keys = keyset rotation only. Locke = credential-as-object, P2PK bound, Deed recovery, passkey storage exception. Vocabulary matrix locked (four deployment contexts). Templar prior art argument locked for whitepaper. Reserved geography catalogued. Opus-3 scope defined. BRIDGE v5.8. |
+| **Opus-3 · 31 Aug 2026** | all repos | **Geographic reshuffle — three Liberties made literal, west to east.** Share → Tower of London + **Royal Mint** (mint). Pass → Westminster + Black Rod. Legend → City of London (Guildhall + St Paul's). Port Authority repurposed → admission-control layer (denylist + rate-limit gate). Rotation ceremonies split per-Liberty: Warder/Ceremony of the Keys (Share) · Black Rod (Pass) · Silent Ceremony (Legend, candidate). Legend St Paul's landmarks: Whispering Gallery (metadata leak, w/ Temple of Mithras) · Triforium (deep ledger) · floating staircase (Merkle, WP+presentation only). St Paul's dome metaphor retired. Bank of England → whitepaper foil (use with care). Royal Exchange → parked (fiat/crypto on-ramp). Temple → unowned (Cashu spiritual home / Templar headwater). Status page: "Royal Mint: operational" replaces "Port Authority". Carried: Opus-3a (Pass + Legend mint-issuer names) · Opus-3b (original Items Two–Four). BRIDGE v5.9. |
 
 
 ---
