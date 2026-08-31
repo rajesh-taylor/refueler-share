@@ -228,6 +228,24 @@ function showMaintenanceModal(status) {
       <div class="progress-label mt4" id="zip-detail"></div>
     </div>
 
+    <!-- Resume card (RU1) — shown on page load if an interrupted transfer is found in IndexedDB.
+     Place this immediately AFTER the zip-progress-card div in index.njk.
+     Hidden by default; revealed by checkResumeState() in share.js. -->
+  <div id="resume-card" class="card hidden" style="margin-top: 1rem;">
+  <div class="card-inner" style="padding: 1.25rem 1.5rem;">
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
+      <span class="stage-tag" style="background:var(--gold); color:var(--carbon); font-size:0.7rem; padding:0.2em 0.6em; border-radius:2px; letter-spacing:0.06em; text-transform:uppercase; font-family:var(--mono);">Interrupted</span>
+      <span style="font-family:var(--mono); font-size:0.8rem; color:var(--muted);">Transfer paused</span>
+    </div>
+    <p id="resume-detail" style="font-family:var(--mono); font-size:0.82rem; color:var(--text); margin:0 0 1rem; line-height:1.5;"></p>
+    <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+      <button id="resume-notice-btn" class="btn btn-primary" style="min-width:7rem;">Resume</button>
+      <button id="resume-discard-btn" class="btn btn-ghost" style="min-width:7rem;">Discard</button>
+    </div>
+  </div>
+</div>
+
+
     <!-- Cap warning + upgrade nudge -->
     <div id="cap-warning" class="card hidden">
       <p class="cap-warn">This file is over the 4 GB free limit.</p>
