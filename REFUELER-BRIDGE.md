@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 5.6 | **Created:** 28 July 2026 | **Updated:** SYNC-1 · 2026-08-31
+> **Version:** 5.7 | **Created:** 28 July 2026 | **Updated:** AP-BRAND · 2026-08-31
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -304,6 +304,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 - Football-data.org API key held by Rajesh — ready for Events intelligence layer session.
 - Commission rate planning conversation before first real merchant.
 - **[Legend]** UC-9 Opus session — Recovery Coordination Layer. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
+- **[All products]** Opus session — multiple Cashu mint naming convention. If Share (Port Authority), Pass credential mint, and Legend watch credential mint are all separate issuers, resolve governance/naming before B9. Westminster geography reserved for this conversation.
 - **[Pass]** Solicitor briefing brief to draft before appointment.
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29 → Nutroot) before v2 build.
 - **[All products]** Remove all Blink ops wallet references from merchant handover docs before first real merchant.
@@ -316,6 +317,123 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 **Base:** cashubtc/Numo v1.8. **Fork:** `rajesh-taylor/numo-fork`. Package: `io.refueler.merchant`. Hardening phases 1–3 complete.
 **Build state (CC-103):** BUILD SUCCESSFUL. Commit `54b15de`. Installed on Pixel 9a.
 **Next:** Web-Touch-1 → Icon-B (Relay app icon, Android only). S-numo-v31 (numo_navy refs) pending.
+
+---
+
+## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026)
+
+The Refueler product ecosystem is anchored in London geography — specifically the Thames corridor from the Pool of London eastward. This is not decorative: it reflects where Refueler is built, by a Londoner, and the institutions drawn on (Port of London Authority, Royal Mint, Tower of London, Tower Bridge) performed real historical versions of what these products do. The vocabulary is coherent, earned, and novel in both senses of the word.
+
+### Canonical term map
+
+| Term | Technical reality | Audience |
+|---|---|---|
+| **Silent Drop** | The transfer mechanism — the act and the link. Untouchable. | Everyone |
+| **Lighthouse** | The permanent Silent Drop intake URL — always on, guides senders in without revealing the recipient | Everyone |
+| **Port Authority** | The Cashu mint — issues credentials, governs movement, observes events, holds no cargo content. Renamed from "mint" in product-facing contexts. | Product / whitepaper |
+| **Royal Mint** | The Cashu blind-signature issuance layer specifically | Whitepaper / docs only |
+| **Quay** | A named individual intake point issued to a specific client or sender. Quay/Key double-meaning: a bitcoiner reads one, a consultant reads the other. | Professional users |
+| **Harbourmaster** | The admin dashboard — the account holder who controls their drops, views the receipt ledger, manages Quays | Everyone |
+| **Cargo** | The encrypted file bundle in transit. Used in API event names (`cargo_received`), webhook payloads, and developer docs. Not used in patient-facing or professional UI copy — use "documents" there. | Docs / API / webhooks |
+| **Locke** | The credential-as-key mechanism — presented to access Harbourmaster. Locke/Lock double-meaning. Named in whitepaper and docs; not necessarily surfaced to end users. | Whitepaper / docs |
+| **Raven** | The warrant canary system — replaces "canary" across all products. Ravens signal safety by presence, not by dying. Absence = compromise signal. Architecturally more accurate than the canary metaphor. | Whitepaper / docs / public |
+| **Tower of London** | Brand geography home of Legend — the block explorer as ledger, the Tower as the place where the kingdom's records were kept. Ravens live at the Tower. | Legend product |
+| **Tower Bridge** | Tier differentiator visual metaphor — the bridge raises for large vessels (Production Max / Business). Free tier passes under. Creative Premium navigates the Thames with skill. Not a UI label; lives in design language and copy tone. | Design / copy |
+
+### Retired terms (do not use)
+- **Drop Berth** — ward incident form. Retired.
+- **Pontoon** — card game. Retired.
+- **Port** — too much existing technical meaning (ports, port forwarding). Retired.
+- **Pier** — functionally weaker than Quay. Reserved at most.
+- **Marina** — too recreational for the professional register. Retired.
+
+### Product vocabulary hierarchy
+
+```
+Refueler Share
+  └── Silent Drop (the mechanism)
+        └── Lighthouse (the permanent intake link)
+        └── Quay (named per-client intake point)
+        └── Harbourmaster (admin dashboard + receipt ledger)
+              └── Port Authority (Cashu mint — governs movement)
+              └── Royal Mint (blind signature layer)
+              └── Locke (credential-as-key for Harbourmaster access)
+
+Refueler Legend
+  └── Tower of London (brand geography)
+        └── Raven (warrant canary system)
+```
+
+### Open question for Opus session
+If Refueler has more than one non-monetary Cashu mint (e.g. Pass credential mint, Legend watch credential mint, Silent Drop Port Authority mint), does each mint get its own Port Authority identity or do they share one? The naming convention and governance model need resolving before B9 builds multiple credential issuers. Westminster geography (City of Westminster, Whitehall, Parliament) may provide vocabulary for future products beyond the Thames corridor.
+
+---
+
+## Silent Drop — product decisions (locked AP-BRAND · 31 Aug 2026)
+
+### Notification architecture
+**Email notifications: permanently out.** An email address linked to a Silent Drop intake is a list. No email notification tier exists at any plan level. This is a feature, not a limitation — state it plainly in copy.
+
+**Notification methods by user type:**
+
+| User type | Notification method |
+|---|---|
+| Bitcoin-native / high privacy | SimpleX message from self-hosted SMP relay (Instance C, B9) |
+| Professional / Stripe user | Time-coordinated polling — scheduled check-in agreed with sender out of band |
+| Developer / API (Business tier) | Webhook to their own endpoint — they handle notification |
+
+**Notification triggers (two distinct events):**
+- **Cargo arrived** — credential presented at upload completion. Port Authority observes this event. Fires immediately. Relevant for single-drop users expecting one important delivery.
+- **Cargo retrieved** — Harbourmaster has opened and downloaded the cargo. Fires on first retrieval. Relevant for multi-Quay Harbourmasters who need to know a specific client has delivered, or confirm a recipient has collected.
+
+### Harbourmaster authentication (two paths, matching payment rails)
+- **Lightning subscriber** — Cashu credential *is* the login. Locke credential presented = Harbourmaster access granted. No email, no password, no TOTP. Credential expires and renews with subscription.
+- **Stripe subscriber** — email / password / TOTP. Conventional and appropriate; Stripe has already identified them. TOTP is good practice at this level.
+
+### Landing page ownership
+Refueler owns and controls all Silent Drop landing pages. No exceptions. The Harbourmaster provides: name, practice/organisation name, optional logo or headshot, optional one-line instruction. Refueler controls: layout, typography, design tokens, trust signals, Refueler attribution, "Powered by Refueler Share" link. Same model as Stripe hosted payment pages. Doctors do not get to add award banners.
+
+### Merchant-issues-Quays feature (named, not yet built)
+A Harbourmaster issues named Quays to individual clients — each client gets a dedicated intake point, the Harbourmaster sees which Quay has received cargo without seeing the cargo content. Receipt ledger shows: Quay label, issued date, cargo arrived timestamp, retrieved timestamp, expiry. No sender identity at any row.
+
+**Tier placement:**
+- **Production Max** — up to 10 named Quays. Harbourmaster dashboard. SimpleX or polling notification.
+- **Business / API** — unlimited Quays, programmatic issuance, webhook on cargo events, custom hostname, audit log export.
+
+API differentiators are: programmatic issuance at volume, webhook callbacks, custom hostname (appears on firm's own domain), audit log export. Storage capacity is not the differentiator.
+
+### Harbourmaster receipt ledger
+The dashboard is a receipt ledger first. Each row: Quay label (never sender identity) · cargo arrived · cargo retrieved · expiry · renew prompt. A GP can show this log to the ICO as evidence of a documented, controlled referral intake process. Retention as a product loop: expiring Quays prompt renewal from within the dashboard.
+
+---
+
+## Silent Drop — vertical targeting and case studies (locked AP-BRAND · 31 Aug 2026)
+
+### Primary vertical: healthcare private practice
+**Rationale:** Legal is crowded with well-funded incumbents (Egress, Mimecast, Tresorit enterprise). Healthcare has the same acute pain, worse data hygiene track record, more chaotic procurement, and ISO 27001 is not required for private practice — only for NHS contracts and enterprise procurement. A solo GP or Harley Street consultant makes their own tooling decisions. Every NHS data breach is a free news cycle.
+
+**Target profile:** Private GPs, consultant psychiatrists, clinical psychologists, medical negligence expert witnesses, Harley Street consultants running their own books. Not NHS procurement. Not hospital IT departments.
+
+### Secondary vertical: Bitcoin-native professional
+Family offices, private wealth managers, OTC desk operators, multi-sig keyholders. Warmest immediate audience — already privacy-conscious, technically literate, no procurement committee, will try a £24/month tool on their own card.
+
+**Specific use case — multi-sig key compromise:** A keyholder suspects one of their keys is compromised. During the window between suspicion and rotation, they need to communicate with other keyholders without using any channel that may also be compromised. Email is out. Signal leaves metadata. Silent Drop leaves nothing. Partnership angle: Casa (customer success, not CTO — Lopp would build his own).
+
+**Specific use case — post-cold-wallet attack:** Victim needs to communicate new wallet addresses to family office, accountant, estate solicitor without broadcasting across potentially compromised infrastructure. Silent Drop link held by the family office. Client uses it once. No interception surface.
+
+### Canonical case study (locked AP-BRAND · 31 Aug 2026)
+**Dr Sarah Chen → Dr James Okafor.** GP (Marylebone private practice) refers a patient with complex psychiatric presentation to a consultant psychiatrist (Harley Street). Referral bundle: full psychiatric history, medication records, safeguarding note, clinical observations. Currently transits email. Should not. Dr Okafor's Lighthouse link sits in his standard referral instruction email footer. Dr Chen clicks, sees a clean Refueler-controlled landing page (Dr Okafor's name, GMC number, one-line instruction), uploads encrypted. Dr Okafor retrieves from Harbourmaster. Transfer expires after 30 days. No patient consent to third-party tech required (clinician-to-clinician). ICO-defensible. GMC-appropriate. Both parties have audit trail.
+
+**Why this case study:** Two regulated professionals. Genuine legal consequence of breach. Workflow that currently happens badly every day. Maps to every professional-to-professional referral context across healthcare.
+
+---
+
+## Session log addition
+
+| Session | Repos touched | Notes |
+|---|---|---|
+| **AP-BRAND · 31 Aug 2026** | all repos | Brand vocabulary locked. London Thames geography canonical. Silent Drop product decisions locked. Harbourmaster dashboard spec. Merchant-issues-Quays feature named. Notification architecture (no email, ever). Two authentication paths. Dr Chen→Dr Okafor case study locked. Raven replaces canary. Legend under Tower of London. Tower Bridge tier metaphor. Port Authority replaces "mint" in product contexts. Quay/Key and Locke/Lock double-meanings confirmed. Westminster geography reserved for future products. BRIDGE v5.7. |
+
 
 ---
 
