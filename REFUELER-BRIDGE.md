@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 6.1 | **Created:** 28 July 2026 | **Updated:** Opus-3b · 2026-08-31
+> **Version:** 6.2 | **Created:** 28 July 2026 | **Updated:** Opus-3a · 2026-09-01
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -292,6 +292,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 | **AP-ARCH · 31 Aug 2026** | all repos | Three Liberties governance model locked. Three independent mints, seeds, Ravens. Port Authority (Share) · Guildhall (Pass) · Tower of London geography (Legend, mint name TBD Opus-3). Raven = warrant canaries only; mint health = status page plain language. Ceremony of the Keys = keyset rotation only. Locke = credential-as-object, P2PK bound, Deed recovery, passkey storage exception. Vocabulary matrix locked (four deployment contexts). Templar prior art argument locked for whitepaper. Reserved geography catalogued. Opus-3 scope defined. BRIDGE v5.8. |
 | **Opus-3 · 31 Aug 2026** | all repos | **Geographic reshuffle — four Liberties made literal, west to east.** Share → Tower of London + **Royal Mint** (mint). Pass → Westminster + Black Rod. Legend → City of London / Temple (Guildhall + St Paul's). Merchant → Royal Exchange + the Exchange. Port Authority repurposed → admission-control layer (denylist + rate-limit gate). Rotation ceremonies split per-Liberty: Warder/Ceremony of the Keys (Share) · Black Rod (Pass) · Silent Ceremony (Legend, confirmed) · The Proclamation / Common Crier (Merchant). Legend St Paul's landmarks: Whispering Gallery (metadata leak, w/ Temple of Mithras) · Triforium (deep ledger) · floating staircase (Merkle, WP+presentation only). St Paul's dome metaphor retired. Bank of England → whitepaper foil (use with care). Royal Exchange → Merchant home (the Exchange mint). Temple → unowned (Cashu spiritual home / Templar headwater / Legend brand ground). Status page: "Royal Mint: operational" replaces "Port Authority". Constitutional line updated to four stations west-to-east. BRIDGE v5.9. |
 | **Opus-3b · 31 Aug 2026** | all repos | Fourth rotation ceremony named: **The Proclamation** (Royal Exchange / Merchant), read by the Common Crier (optional colour). Platform whitepaper section outline locked — argument flow + geography placement, four Liberties, honest-claims boundary. Raven metaphor (canary→Raven etymology) locked for whitepaper §5. Raven governance extended to four Liberties. Rotation-ceremony admin changelog template + whitepaper §Key lifecycle language locked (four ceremonies). Constitutional line confirmed: Westminster → Temple → Royal Exchange → Tower. VPN recommendation locked (Mullvad named, multi-hop noted). "The pilgrim's society" held as future proper noun. Pass + Merchant vocabulary session flagged as a small Sonnet session (geographic terms for reward tokens / live melt path). BRIDGE v6.1. |
+| **Opus-3a · 1 Sep 2026** | all repos | **Liberty mint reconciliation — both provisional names resolved.** Pass mint: **Jewel Tower** (locked). Jewel Tower held Edward III's Privy Wardrobe (treasure → reward tokens, live melt path) and later housed Weights & Measures standards (standardisation → access credentials). Mixed-melt mint; name holds both functions. Black Rod rotation co-locates at Westminster. Legend mint: **Guildhall** (locked). Chamberlain's Court at Guildhall admits individuals to the Freedom of the City (c.1237, living tradition) — access-grant semantics, no value held, correct for a no-melt mint. Deep ledger / record-keeping function moves explicitly to St Paul's / Triforium. Silent Ceremony rotation co-locates at Guildhall. **Temple Treasury retired completely** — no product use, no ops use. "the Temple treasury" retained as three lowercase words in whitepaper §Historical prior art only; strongest as invisible prose, not a named concept. Melt-hygiene mnemonic: settlement-flavoured names (Jewel Tower, the Exchange) on melt mints; admission-flavoured names (Royal Mint, Guildhall) on no-melt mints. Four Liberties mint column fully locked. BRIDGE v6.2. |
 
 ---
 
@@ -299,7 +300,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 
 - **[Lightning — ALL projects] LNbits on Hetzner CAX21 LOCKED.** Next: NB-2 (provision + phoenixd + Cloudflare Tunnel — refueler-share project).
 - **[All products] Remove all Blink references** from merchant handover docs, Worker secrets, and config files. Replace `BLINK_API_KEY` / `BLINK_SHARE_API_KEY` with `LNBITS_URL` / `LNBITS_API_KEY`. Execute at NB-5 for refueler-io; at B7-S74 for Share Worker.
-- **[Share] Push BRIDGE v6.1** to `numo-fork/` root, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/` — after Opus-3b commit confirmed.
+- **[Share] Push BRIDGE v6.2 to `numo-fork/` root, `refueler-legend/`, `refueler-pass/` root, `refueler-io/docs/` — after Opus-3a commit confirmed.
 - **[Share] Run `bin/sync-share.sh`** after every edit to any shared frontend asset.
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant).
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns (Ops wallet created at NB-3).
@@ -308,7 +309,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 - Rotate Anthropic API key before csuite briefing reuse.
 - Football-data.org API key held by Rajesh — ready for Events intelligence layer session.
 - Commission rate planning conversation before first real merchant.
-- **[All products] Opus-3a — Liberty mint reconciliation.** Pass mint/issuer name (Westminster / Jewel Tower — provisional). Legend mint/issuer name (Temple Treasury — provisional, Guildhall as geographic brand partner). Confirm before B9.
+- **[All products] Opus-3a — Liberty mint reconciliation. COMPLETE · 1 Sep 2026.** Pass mint: Jewel Tower (locked). Legend mint: Guildhall (locked). Temple Treasury retired. See changelog row above. |
 - **[Pass + Merchant] Geographic vocabulary session** — small Sonnet or Opus session to name geographic terms for reward tokens and live melt path in Pass (Westminster) and Merchant (Royal Exchange). No build dependency — but must complete before B9 whitepaper §§12/14 are drafted.
 - **[Pass]** Solicitor briefing brief to draft before appointment.
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29 → Nutroot) before v2 build.
@@ -391,7 +392,7 @@ Refueler Merchant  ·  home: Royal Exchange
         └── Raven (Merchant's warrant canary — 2–3 mirrors)
 ```
 
-### Resolved — AP-ARCH · 31 Aug 2026; Opus-3 · 31 Aug 2026; Opus-3b · 31 Aug 2026
+### Resolved — AP-ARCH · 31 Aug 2026; Opus-3 · 31 Aug 2026; Opus-3b · 31 Aug 2026; Opus-3a · 1 Sep 2026
 Four separate mints. Four independent seeds. No shared mint, no shared keyset across products. See §The four Liberties below.
 
 ---
@@ -456,8 +457,8 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Liberty (home) | Product | Credential type | Monetary? | Mint / issuer |
 |---|---|---|---|---|
 | Tower of London | Share | Upload credentials, Harbourmaster Lockes | No — capability tokens only, no melt path | **Royal Mint** (locked Opus-3) |
-| Westminster | Pass | Access credentials + reward tokens (spendable sats) | Mixed — reward tokens have live melt path | TBD — Opus-3a |
-| Temple (Guildhall + St Paul's) | Legend | Address watch credentials | No — signal-only, no melt path | TBD — Opus-3a (Temple Treasury provisional) |
+| Westminster | Pass | Access credentials + reward tokens (spendable sats) | Mixed — reward tokens have live melt path | **Jewel Tower** (locked Opus-3a) |
+| Temple (Guildhall + St Paul's) | Legend | Address watch credentials | No — signal-only, no melt path | **Guildhall** (locked Opus-3a) — deep ledger at St Paul's/Triforium |
 | Royal Exchange | Merchant | Settlement tokens + venue stamps | Yes — live melt path, venue settlement | **the Exchange** (provisional) |
 
 **Why four, not one mint with four keysets:** a shared mint is a shared failure domain, a shared compulsion surface, and a shared database that *can* correlate events across products. Separate mints remove the ability, not merely the intention. Melt-hygiene axis: Pass and Merchant carry live melt paths; Share and Legend must never melt; the same process must not hold both properties.
