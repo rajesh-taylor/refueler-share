@@ -429,6 +429,14 @@ async function handleAdminStatus(request, env) {
 //
 // Nothing is stored. The binding lives in the commitment itself.
 // Full NUT-20 quote signatures deferred to B8 Rust mint.
+//
+// RU2c: resume path bypasses Turnstile.
+// When body.resume === true, Turnstile verification and nonce binding are
+// skipped. Instead, the Worker verifies a real partial upload exists in R2
+// (HEAD check on chunk 0000) before issuing. This prevents the bypass being
+// used as a free credential farm — you need a real partial upload to resume.
+// Turnstile was already solved when the original upload began; requiring it
+// again after a connection drop is security theatre that breaks the flow.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Canonical expiry windows (seconds) — mirrored in handleUpload.
@@ -458,41 +466,71 @@ async function handleCredentialIssue(request, env) {
     return err(400, 'Invalid JSON');
   }
 
-  const { turnstile_token, blinded_message, tier = 'free' } = body;
-  if (!turnstile_token || !blinded_message) return err(400, 'Missing turnstile_token or blinded_message');
+  const { blinded_message, tier = 'free', resume = false, resume_uuid = null } = body;
+  if (!blinded_message) return err(400, 'Missing blinded_message');
 
-  const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
-  if (!turnstileOk) return err(403, 'Turnstile verification failed');
+  // ── Resume path (RU2c) ───────────────────────────────────────────────────
+  // Turnstile was already solved at the start of the original upload.
+  // Skip Turnstile + nonce entirely. Instead verify a real partial upload
+  // exists in R2 — chunk 0000 must exist, proving this is a legitimate resume
+  // rather than a Turnstile bypass for a new transfer.
+  if (resume === true) {
+    if (!resume_uuid || !UUID_RE.test(resume_uuid)) {
+      return err(400, 'resume_uuid is required and must be a valid UUID');
+    }
+    // HEAD check — chunk 0000 must exist in R2. Does not read the body.
+    let chunkExists = false;
+    try {
+      const obj = await env.BUCKET.head(`${resume_uuid}/0000`);
+      chunkExists = obj !== null;
+    } catch (e) {
+      console.error('R2 head check failed on resume:', e);
+      return err(502, 'Could not verify partial upload');
+    }
+    if (!chunkExists) {
+      logEvent(env, { endpoint: 'credential_issue', tier: 'resume_rejected', status: 403, errorMsg: 'resume_no_partial_upload' });
+      return err(403, 'No partial upload found for this transfer');
+    }
+    // R2 confirmed — fall through to issuance, skipping Turnstile + nonce.
+    logEvent(env, { endpoint: 'credential_issue', tier: tier === 'free' ? 'free' : tier, status: 200, errorMsg: 'resume' });
+  } else {
+    // ── Normal path — Turnstile required ──────────────────────────────────
+    const { turnstile_token } = body;
+    if (!turnstile_token) return err(400, 'Missing turnstile_token or blinded_message');
 
-  // ── Turnstile nonce binding (S42d) ────────────────────────────────────────
-  // One Turnstile solve must produce at most one credential.
-  // Cloudflare expires tokens server-side after ~300s; we extend that to 600s
-  // (10 min) to cover clock skew and replay within the Cloudflare window.
-  // The token is hashed one-way before storage — cannot reverse to identify user.
-  // Key: tt_nonce:{sha256_hex}. Fails open on KV error (privacy over abuse prevention).
-  // 429 on second use of the same Turnstile token within the TTL window.
-  const nonceHash = await (async () => {
-    const bytes = new TextEncoder().encode(turnstile_token);
-    const hash  = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-  })();
-  const nonceKey = `tt_nonce:${nonceHash}`;
-  let nonceSeen = false;
-  try {
-    const existing = await env.STATUS_KV.get(nonceKey);
-    nonceSeen = existing !== null;
-  } catch (e) {
-    // KV read error — fail open. Privacy takes precedence; do not block on infra hiccup.
-    console.error('Turnstile nonce KV read failed, proceeding:', e);
+    const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
+    if (!turnstileOk) return err(403, 'Turnstile verification failed');
+
+    // ── Turnstile nonce binding (S42d) ──────────────────────────────────────
+    // One Turnstile solve must produce at most one credential.
+    // Cloudflare expires tokens server-side after ~300s; we extend that to 600s
+    // (10 min) to cover clock skew and replay within the Cloudflare window.
+    // The token is hashed one-way before storage — cannot reverse to identify user.
+    // Key: tt_nonce:{sha256_hex}. Fails open on KV error (privacy over abuse prevention).
+    // 429 on second use of the same Turnstile token within the TTL window.
+    const nonceHash = await (async () => {
+      const bytes = new TextEncoder().encode(turnstile_token);
+      const hash  = await crypto.subtle.digest('SHA-256', bytes);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    })();
+    const nonceKey = `tt_nonce:${nonceHash}`;
+    let nonceSeen = false;
+    try {
+      const existing = await env.STATUS_KV.get(nonceKey);
+      nonceSeen = existing !== null;
+    } catch (e) {
+      // KV read error — fail open. Privacy takes precedence; do not block on infra hiccup.
+      console.error('Turnstile nonce KV read failed, proceeding:', e);
+    }
+    if (nonceSeen) {
+      logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: 0, errorMsg: 'turnstile_nonce_replay' });
+      return err(429, 'Turnstile token already used');
+    }
+    // Store nonce — fire-and-forget, never block issuance on write failure.
+    env.STATUS_KV.put(nonceKey, '1', { expirationTtl: 600 }).catch(e =>
+      console.error('Turnstile nonce KV write failed:', e)
+    );
   }
-  if (nonceSeen) {
-    logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: 0, errorMsg: 'turnstile_nonce_replay' });
-    return err(429, 'Turnstile token already used');
-  }
-  // Store nonce — fire-and-forget, never block issuance on write failure.
-  env.STATUS_KV.put(nonceKey, '1', { expirationTtl: 600 }).catch(e =>
-    console.error('Turnstile nonce KV write failed:', e)
-  );
 
   // Canonicalise tier — unknown values fall back to free silently.
   const issuedTier      = EXPIRY_WINDOWS[tier] !== undefined ? tier : 'free';
