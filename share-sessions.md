@@ -363,7 +363,8 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 | RU1 | `2d26587` | IndexedDB schema: `idbOpen`, `writeChunkState`, `readResumeState`, `clearResumeState`. Resume card UI with 8-day stale guard. Discard wired. Resume card HTML in `index.njk` after `zip-progress-card` div. |
 | RU1a | `cfd1d5d` | Resume flow: `resumeUpload()` full implementation. File re-select picker. Chunk verification pass. Expiry-awareness (`expiryTimestamp` on IDB record). `fetchWithTimeout` Safari wrapper. `tier` + `expiryTimestamp` added to `writeChunkState` record. |
 | RU2 | `9fce220` | Resume progress strings: "Resuming from chunk N of M — chunk X of M sent" per-chunk detail; "Resuming — uploading from chunk N of M" stage label; "Transfer resumed and complete" on finish. Renewal banner deferred to SW-block (no subscription credential readable on page load for free tier). |
-| RU2a | Resumable uploads IV | Integration test: interrupt at chunk 3, reload, confirm resume from chunk 3. Root cause investigation of 5 Aug stall (Worker timeout / macOS drop — fflate OOM root cause resolved at RU0). | S |
+| RU2a | Resumable uploads IV | IDB write verification: confirmed all five fields (chunkIndex, keyHex, ivHex, tier, expiryTimestamp) present. Resume card confirmed rendering on page load. Root cause of 5 Aug stall (Worker timeout / macOS drop) ruled out — fflate OOM resolved at RU0. Mirror sync gap identified: resume card HTML not present in `refueler-io/src/share/index.njk`. | S |
+| RU2b | `bd48ad8` | Resume card HTML (RU1 block) synced to `refueler-io/src/share/index.njk`. Deployed. Card confirmed rendering on `refueler.io/share/` page load with live IDB record — gold "INTERRUPTED" tag, filename, 83% progress, Resume + Discard buttons visible. Resume click returns "could not validate" — expected, placeholder logic. Closes sync gap. RU2c next: full click-through test. | S |
 
 **Buffer pool (2 sessions):** RU1b · RU2b
 
