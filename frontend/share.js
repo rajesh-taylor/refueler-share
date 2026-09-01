@@ -255,15 +255,6 @@ async function checkResumeState() {
     return;
   }
 
-  // ── Render Turnstile now so the token is ready before the user clicks Resume.
-  // The credential re-issue in resumeUpload() requires a valid Turnstile token —
-  // without this, renderTurnstile() never fires (no file was selected on this load)
-  // and waitForTurnstile() times out, causing the "could not validate" failure.
-  // The hidden Turnstile container is re-used — same widget, same sitekey.
-  const tsWrap = document.getElementById('turnstile-wrap');
-  if (tsWrap) tsWrap.classList.remove('hidden');
-  renderTurnstile();
-
   // ── Resume: wire full resume flow (RU2c).
   if (resumeNoticeBtn) {
     resumeNoticeBtn.addEventListener('click', () => {
@@ -313,18 +304,22 @@ async function resumeUpload(record) {
 
   setStage('Re-credentialling', 8);
 
-  // Re-issue a fresh credential (original credential is not persisted post-reload).
+  // Re-issue a fresh credential for the resumed transfer.
+  // Resume path uses `resume: true` + `resume_uuid` — the Worker verifies a real
+  // partial upload exists in R2 (chunk 0000 head-check) and skips Turnstile.
+  // Turnstile was already solved when the original upload began; requiring it again
+  // after a connection drop is security theatre that just breaks the flow.
   let credential, commitment, issuedTier;
   try {
     const { blindedMsg, blindingFactor } = await generateBlindedCredential();
-    await waitForTurnstile(10000).catch(() => {});
     const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        turnstile_token: turnstileToken || '',
+        resume:        true,
+        resume_uuid:   record.uuid,
         blinded_message: blindedMsg,
-        tier: record.tier || 'free',
+        tier:          record.tier || 'free',
       }),
     });
     if (!issueRes.ok) {
@@ -342,7 +337,6 @@ async function resumeUpload(record) {
     issuedTier   = issueData.issued_tier || record.tier || 'free';
   } catch (e) {
     reportError('resume_credential', e.message, `uuid:${record.uuid.slice(0, 8)}`);
-    // Keep progressCard visible so the error stage label is readable.
     progressCard.classList.remove('hidden');
     setStage('Could not re-validate — please start a new transfer.', 0);
     progressDetail.textContent = '';
@@ -550,7 +544,7 @@ function promptForResumeFile(expectedName, expectedSize) {
     }
 
     // Cancellation: if focus returns to window without a change event, reject.
-    // onFocus is defined before the change listener so both closures share the reference.
+    // onFocus defined before change listener so both closures share the reference.
     let settled = false;
     const onFocus = () => {
       setTimeout(() => {
@@ -932,11 +926,8 @@ async function zipAndSelect(entries, folderName) {
   const zipName    = `${folderName}.zip`;
   const totalFiles = entries.length;
 
-  // Memory pressure warning — computed before reading anything into RAM.
+  // Compute total bytes before reading anything into RAM.
   const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
-  if (totalBytes > FOLDER_MEM_WARN_BYTES) {
-    setDropMsg(`Large folder (${formatBytes(totalBytes)}) — this may take a moment.`);
-  }
 
   showZipStage('Compressing', 0, `0 B / ${formatBytes(totalBytes)}`);
 
