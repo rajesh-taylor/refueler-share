@@ -10,6 +10,18 @@ const CHUNK_SIZE  = 8 * 1024 * 1024;         // 8 MB
 const FREE_CAP    = 4 * 1024 * 1024 * 1024;  // 4 GB
 const FREE_EXPIRY = 7 * 24 * 60 * 60;        // 7 days in seconds — matches UI "1 / 7 day expiry" and server EXPIRY_WINDOWS.free
 
+// Tier expiry seconds — mirrors server TIER_EXPIRY_SECONDS.
+// Used by resume flow to determine whether a saved transfer is still within window.
+const TIER_EXPIRY_SECONDS = {
+  free:              7 * 24 * 60 * 60,   // 7 days
+  creative_premium: 30 * 24 * 60 * 60,  // 30 days (longest window)
+  production_max:   90 * 24 * 60 * 60,  // 90 days (longest window)
+};
+
+// Safari fetch timeout — Safari silently hangs on network drops; Promise.race()
+// wraps each chunk upload so the per-chunk retry loop fires instead of stalling forever.
+const CHUNK_UPLOAD_TIMEOUT_MS = 60_000; // 60 s per chunk
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Deps (dynamic)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +112,10 @@ $('dismiss-info').addEventListener('click', () => infoCard.classList.add('hidden
 // Schema: DB = 'refueler-share-resume', store = 'transfers', keyPath = 'uuid'
 // One record per interrupted transfer. Overwritten on each 200 ACK.
 // Cleared on discard or successful completion.
+//
+// Record shape (RU1a — added `tier`):
+// { uuid, chunkIndex, totalChunks, fileName, fileSize, keyHex, ivHex,
+//   tier, expiryTimestamp, timestamp }
 // ─────────────────────────────────────────────────────────────────────────────
 const IDB_NAME    = 'refueler-share-resume';
 const IDB_STORE   = 'transfers';
@@ -120,7 +136,7 @@ function idbOpen() {
 }
 
 // Write (or overwrite) chunk completion state after each 200 ACK.
-// { uuid, chunkIndex, totalChunks, fileName, fileSize, keyHex, ivHex, timestamp }
+// RU1a: record now includes `tier` and `expiryTimestamp` for expiry-awareness on resume.
 async function writeChunkState(record) {
   try {
     const db = await idbOpen();
@@ -175,39 +191,53 @@ async function clearResumeState(uuid) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Resume UI — shown on page load if an interrupted transfer is found in IDB.
 //
-// Paper/Carbon consistent with progress card style: same token set, same
-// stage tag + detail typography. Inlined into the DOM as a sibling of
-// progressCard — hidden by default, revealed here if IDB has a record.
+// RU1a: Resume button now wired to full resume flow.
+// Expiry-awareness: if the transfer window has closed, Resume is hidden and
+// only Discard is offered with an explanatory message.
 // ─────────────────────────────────────────────────────────────────────────────
-const resumeCard = $('resume-card');
-const resumeDetail = $('resume-detail');
+const resumeCard       = $('resume-card');
+const resumeDetail     = $('resume-detail');
 const resumeDiscardBtn = $('resume-discard-btn');
 const resumeNoticeBtn  = $('resume-notice-btn');
 
-// Stored resume record for RU1a to access (resume flow, next session).
+// Stored resume record — populated by checkResumeState(), consumed by resumeUpload().
 let pendingResumeRecord = null;
 
 async function checkResumeState() {
   const record = await readResumeState();
   if (!record) return;
 
-  // Stale guard: discard records older than 8 days (transfer expiry is 7 days).
+  // ── Stale guard: discard records older than 8 days (transfer expiry is max 7 days).
   const age = Date.now() - (record.timestamp || 0);
   if (age > 8 * 24 * 60 * 60 * 1000) {
     await clearResumeState(record.uuid);
     return;
   }
 
+  // ── Expiry-awareness (RU1a): check whether the transfer window is still open.
+  // Prefer stored expiryTimestamp (seconds epoch); fall back to computing from tier.
+  const nowSecs = Date.now() / 1000;
+  let expired = false;
+
+  if (record.expiryTimestamp) {
+    expired = nowSecs > record.expiryTimestamp;
+  } else if (record.tier && TIER_EXPIRY_SECONDS[record.tier]) {
+    // Legacy records (pre-RU1a) lack expiryTimestamp — derive from timestamp + tier window.
+    const windowSecs = TIER_EXPIRY_SECONDS[record.tier];
+    const writtenSecs = (record.timestamp || 0) / 1000;
+    expired = nowSecs > writtenSecs + windowSecs;
+  }
+
   pendingResumeRecord = record;
 
   // Populate detail line: "photo-shoot.zip — chunk 82 of 193 (3.72 GB)"
-  const pct       = Math.round((record.chunkIndex + 1) / record.totalChunks * 100);
-  const detail    = `${record.fileName} — ${pct}% uploaded (chunk ${record.chunkIndex + 1} of ${record.totalChunks}, ${formatBytes(record.fileSize)})`;
+  const pct    = Math.round((record.chunkIndex + 1) / record.totalChunks * 100);
+  const detail = `${record.fileName} — ${pct}% uploaded (chunk ${record.chunkIndex + 1} of ${record.totalChunks}, ${formatBytes(record.fileSize)})`;
   if (resumeDetail) resumeDetail.textContent = detail;
 
   if (resumeCard) resumeCard.classList.remove('hidden');
 
-  // Discard: wipe IDB record and dismiss card. Drop zone remains active.
+  // ── Discard: wipe IDB record and dismiss card.
   if (resumeDiscardBtn) {
     resumeDiscardBtn.addEventListener('click', async () => {
       await clearResumeState(record.uuid);
@@ -216,13 +246,294 @@ async function checkResumeState() {
     }, { once: true });
   }
 
-  // Resume: placeholder — full resume flow wired in RU1a.
-  // For now, clicking Resume shows a "coming in RU1a" notice rather than
-  // doing nothing silently. The IDB record is preserved.
+  if (expired) {
+    // Transfer window closed — Resume is pointless. Show Discard only.
+    if (resumeDetail) {
+      resumeDetail.textContent = `${record.fileName} — transfer window has expired. Discard and start a new transfer.`;
+    }
+    if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
+    return;
+  }
+
+  // ── Resume: wire full resume flow (RU1a).
   if (resumeNoticeBtn) {
     resumeNoticeBtn.addEventListener('click', () => {
-      if (resumeDetail) resumeDetail.textContent = 'Resume flow coming shortly — your progress is saved.';
+      resumeUpload(record);
     }, { once: true });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resume flow (RU1a)
+//
+// Re-uses the existing upload loop from startUpload() but:
+//   1. Restores AES key and IV from the IDB record (keyHex / ivHex).
+//   2. Skips chunks 0..record.chunkIndex (already confirmed by the Worker).
+//   3. Re-sends chunk 0 headers on the first chunk being resumed, because the
+//      Worker needs the credential and metadata for any chunk that arrives
+//      after a restart. The credential is not available after a page reload —
+//      we re-issue a fresh one. The UUID is preserved (Worker already has the
+//      partial object).
+//
+// Credential re-issue on resume is correct: the existing chunks are already
+// committed to R2 under the original UUID. The resumed upload sends the new
+// credential on the first resumed chunk so the Worker can re-validate tier
+// and capacity before allowing further chunks.
+// ─────────────────────────────────────────────────────────────────────────────
+async function resumeUpload(record) {
+  if (!record) return;
+
+  // Hide resume card, show progress card.
+  if (resumeCard) resumeCard.classList.add('hidden');
+  progressCard.classList.remove('hidden');
+  setStage('Resuming', 5);
+
+  await loadDeps();
+
+  // Restore crypto state from IDB record.
+  const keyBytes = hexToBuf(record.keyHex);
+  const ivBytes  = hexToBuf(record.ivHex);
+  sessionAesKey  = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+  sessionIv      = new Uint8Array(ivBytes);
+  uploadUUID     = record.uuid;
+
+  const totalChunks     = record.totalChunks;
+  const resumeFromChunk = record.chunkIndex + 1; // first chunk not yet confirmed
+  const expiryTimestamp = record.expiryTimestamp
+    || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
+
+  setStage('Re-credentialling', 8);
+
+  // Re-issue a fresh credential (original credential is not persisted post-reload).
+  let credential, commitment, issuedTier;
+  try {
+    const { blindedMsg, blindingFactor } = await generateBlindedCredential();
+    await waitForTurnstile(10000).catch(() => {});
+    const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blinded_message: blindedMsg, tier: record.tier || 'free' }),
+    });
+    if (!issueRes.ok) {
+      const errText = await issueRes.text();
+      throw new Error(`Re-credential failed: ${errText}`);
+    }
+    const issueData = await issueRes.json();
+    if (!issueData.uuid || !issueData.commitment) throw new Error('Re-credential response missing uuid or commitment');
+
+    // The Worker issues a fresh UUID for the new credential — but we continue
+    // uploading to the *original* UUID. We need the commitment and credential
+    // from the new issuance but send them against the old UUID.
+    credential   = await unblindSignature(issueData.signed_point, blindingFactor, issueData.mint_pubkey);
+    commitment   = issueData.commitment;
+    issuedTier   = issueData.issued_tier || record.tier || 'free';
+  } catch (e) {
+    reportError('resume_credential', e.message, `uuid:${record.uuid.slice(0, 8)}`);
+    setStage('Resume failed — could not re-validate. Start a new transfer.', 0);
+    return;
+  }
+
+  setStage(`Resuming from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 10);
+
+  // We need the original file to read chunks from — but we only have the
+  // encrypted data already on the server for chunks 0..resumeFromChunk-1.
+  // We cannot re-read the original file (it's not in memory).
+  // Resolution: the resume flow requires the user to re-select the same file.
+  // On page load we don't have the File object. Present a targeted file picker.
+  //
+  // This is correct UX: we tell the user exactly which file to re-select.
+  // The IDB record has fileName and fileSize for the prompt.
+  let resumeFile = null;
+  try {
+    resumeFile = await promptForResumeFile(record.fileName, record.fileSize);
+  } catch (e) {
+    // User cancelled the picker or browser doesn't support it.
+    progressCard.classList.add('hidden');
+    if (resumeCard) resumeCard.classList.remove('hidden');
+    if (resumeDetail) resumeDetail.textContent = `${record.fileName} — select the same file to resume.`;
+    return;
+  }
+
+  if (!resumeFile) {
+    progressCard.classList.add('hidden');
+    if (resumeCard) resumeCard.classList.remove('hidden');
+    return;
+  }
+
+  // Verify file identity (name + size match).
+  if (resumeFile.name !== record.fileName || resumeFile.size !== record.fileSize) {
+    progressCard.classList.add('hidden');
+    if (resumeCard) resumeCard.classList.remove('hidden');
+    if (resumeDetail) {
+      resumeDetail.textContent = `File mismatch — expected "${record.fileName}" (${formatBytes(record.fileSize)}). Please select the original file.`;
+    }
+    return;
+  }
+
+  const chunks = splitChunks(resumeFile, CHUNK_SIZE);
+  const chunkHashes = [];
+
+  // Reconstruct rolling hashes for all already-uploaded chunks so the root
+  // remains consistent when we resume. We encrypt each skipped chunk locally
+  // (same key/IV) and hash it — this replicates what startUpload() did.
+  setStage('Verifying prior chunks', 12);
+  for (let i = 0; i < resumeFromChunk; i++) {
+    const raw = await readChunk(chunks[i]);
+    const aad = new Uint8Array(4);
+    new DataView(aad.buffer).setUint32(0, i, false);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: sessionIv, additionalData: aad },
+      sessionAesKey, raw
+    );
+    let h;
+    try { h = await blake3Hash(new Uint8Array(encrypted)); } catch (e) {
+      reportError('resume_hash', e.message, `uuid:${uploadUUID.slice(0,8)} chunk:${i}`);
+      throw e;
+    }
+    chunkHashes.push(h);
+    const pct = Math.round(((i + 1) / resumeFromChunk) * 10) + 12;
+    setProgress(pct, `Verifying chunk ${i + 1} of ${resumeFromChunk}…`);
+  }
+
+  setStage(`Uploading from chunk ${resumeFromChunk + 1}`, 22);
+
+  // Upload remaining chunks.
+  for (let i = resumeFromChunk; i < totalChunks; i++) {
+    const raw = await readChunk(chunks[i]);
+    const aad = new Uint8Array(4);
+    new DataView(aad.buffer).setUint32(0, i, false);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: sessionIv, additionalData: aad },
+      sessionAesKey, raw
+    );
+
+    let chunkHashHex;
+    try {
+      chunkHashHex = await blake3Hash(new Uint8Array(encrypted));
+    } catch (e) {
+      reportError('blake3_hash', e.message, `uuid:${uploadUUID.slice(0,8)} chunk:${i}`);
+      throw e;
+    }
+    chunkHashes.push(chunkHashHex);
+    const rollingRoot = await blake3Hash(new TextEncoder().encode(chunkHashes.join('')));
+
+    const headers = {
+      'Content-Type': 'application/octet-stream',
+      'X-Blake3-Chunk-Hash': chunkHashHex,
+      'X-Blake3-Root': rollingRoot,
+    };
+
+    // Re-send chunk-0 headers on the first resumed chunk — Worker needs them.
+    if (i === resumeFromChunk) {
+      headers['X-Cashu-Credential']      = credential;
+      headers['X-Total-Chunks']          = String(totalChunks);
+      headers['X-Total-Bytes']           = String(record.fileSize);
+      headers['X-Tier']                  = issuedTier;
+      headers['X-Expiry-Timestamp']      = String(expiryTimestamp);
+      headers['X-File-Name']             = record.fileName;
+      headers['X-Credential-Commitment'] = commitment;
+      headers['X-Issued-Tier']           = issuedTier;
+      headers['X-Resume-From-Chunk']     = String(resumeFromChunk); // advisory
+    }
+
+    const res = await fetchWithTimeout(
+      `${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`,
+      { method: 'PUT', headers, body: encrypted },
+      CHUNK_UPLOAD_TIMEOUT_MS
+    );
+
+    if (!res.ok) {
+      const errText = await res.text();
+      reportError('resume_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
+      throw new Error(`Chunk ${i} upload failed (resume): ${errText}`);
+    }
+
+    // Update IDB with latest confirmed chunk.
+    writeChunkState({
+      uuid: uploadUUID, chunkIndex: i, totalChunks,
+      fileName: record.fileName, fileSize: record.fileSize,
+      keyHex: record.keyHex, ivHex: record.ivHex,
+      tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
+    }).catch(() => {});
+
+    const uploadedChunks = i - resumeFromChunk + 1;
+    const remainingChunks = totalChunks - resumeFromChunk;
+    const pct = Math.round(22 + (uploadedChunks / remainingChunks) * 73);
+    setProgress(pct, `${i + 1} / ${totalChunks} chunks`);
+  }
+
+  clearResumeState(uploadUUID).catch(() => {});
+
+  setStage('Finalising', 98);
+  await new Promise(r => setTimeout(r, 80));
+  setStage('Done', 100);
+  progressDetail.textContent = 'Transfer complete';
+  await new Promise(r => setTimeout(r, 700));
+  progressCard.classList.add('hidden');
+
+  const fragmentStr = `uuid=${uploadUUID}&key=${record.keyHex}&iv=${record.ivHex}`;
+  const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
+  history.replaceState(null, '', location.pathname);
+  showSharePanel(shareUrl, false);
+}
+
+// Prompt the user to re-select the interrupted file.
+// Returns a Promise<File> — rejects if cancelled.
+function promptForResumeFile(expectedName, expectedSize) {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    // Update detail to guide the user.
+    if (resumeDetail) {
+      resumeDetail.textContent = `Select the original file to resume: "${expectedName}" (${formatBytes(expectedSize)})`;
+    }
+
+    input.addEventListener('change', () => {
+      document.body.removeChild(input);
+      if (input.files[0]) resolve(input.files[0]);
+      else reject(new Error('No file selected'));
+    }, { once: true });
+
+    // Cancellation: if focus returns to window without a change event, reject.
+    const onFocus = () => {
+      setTimeout(() => {
+        document.body.removeChild(input);
+        window.removeEventListener('focus', onFocus);
+        reject(new Error('File picker cancelled'));
+      }, 500);
+    };
+    window.addEventListener('focus', onFocus, { once: true });
+
+    input.click();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Safari upload timeout wrapper (RU1a)
+//
+// Safari silently drops connections on large uploads — fetch() hangs
+// indefinitely with no error event, so per-chunk retry never fires.
+// fetchWithTimeout() races the fetch against a deadline AbortController.
+// On timeout, throws an Error with .timedOut = true so the caller can retry.
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      const err = new Error(`Chunk upload timed out after ${timeoutMs / 1000}s`);
+      err.timedOut = true;
+      throw err;
+    }
+    throw e;
   }
 }
 
@@ -526,6 +837,10 @@ async function readDirectoryEntry(dirEntry, pathPrefix, depth) {
 // Archive Utility compatible. ZipDeflate level 6 for compressible types.
 // Progress reports input bytes consumed / total bytes — not file count, because
 // ZipPassThrough entries complete near-instantly and distort file-count progress.
+//
+// RU1a fix: progress bar pushed to 95% + "Finalising archive…" label before
+// zipper.end() to prevent the 85%→100% freeze visible during the zip central
+// directory write phase.
 // ─────────────────────────────────────────────────────────────────────────────
 const FOLDER_MEM_WARN_BYTES = 500 * 1024 * 1024; // 500 MB
 
@@ -609,7 +924,7 @@ async function zipAndSelect(entries, folderName) {
           buf;
 
           bytesProcessed += file.size;
-          const pct = Math.round((bytesProcessed / totalBytes) * 100);
+          const pct = Math.min(Math.round((bytesProcessed / totalBytes) * 95), 95);
           showZipStage('Compressing', pct, `${formatBytes(bytesProcessed)} / ${formatBytes(totalBytes)}`);
 
           // Yield to the event loop between files — keeps UI responsive and
@@ -618,6 +933,10 @@ async function zipAndSelect(entries, folderName) {
         }
 
         if (!zipError) {
+          // Zip central directory write — can take a noticeable moment on large
+          // archives. Push bar to 95% + "Finalising" label so the user sees
+          // progress rather than an apparently frozen bar at ~85%.
+          showZipStage('Finalising archive', 95, 'Writing zip directory…');
           // Signal end of stream — triggers the final=true callback above.
           zipper.end();
         }
@@ -783,10 +1102,15 @@ async function startUpload() {
   setStage('Uploading', 15);
   const expiryTimestamp = Math.floor(Date.now() / 1000) + FREE_EXPIRY;
 
+  // Per-chunk upload with Safari timeout wrapper and 3× retry.
+  const CHUNK_RETRY_DELAYS = [2000, 5000, 10000];
+
   for (let i = 0; i < totalChunks; i++) {
     const raw = await readChunk(chunks[i]);
+    const aad = new Uint8Array(4);
+    new DataView(aad.buffer).setUint32(0, i, false);
     const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: sessionIv, additionalData: (() => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, i, false); return b; })() },
+      { name: 'AES-GCM', iv: sessionIv, additionalData: aad },
       sessionAesKey, raw
     );
     // AAD: 4-byte big-endian chunk index (DataView.setUint32) — overflow-safe for all chunk counts
@@ -817,26 +1141,61 @@ async function startUpload() {
       if (p2shHashHex) headers['X-P2SH-Secret-Hash'] = p2shHashHex;
     }
 
-    const res = await fetch(`${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`, {
-      method: 'PUT', headers, body: encrypted,
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      reportError('upload_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
-      throw new Error(`Chunk ${i} upload failed: ${errText}`);
+    // Retry loop — handles Safari silent connection drops (timedOut) and
+    // transient 5xx errors. Non-retryable errors (4xx) rethrow immediately.
+    let lastErr;
+    let uploaded = false;
+    for (let attempt = 0; attempt <= CHUNK_RETRY_DELAYS.length; attempt++) {
+      try {
+        const res = await fetchWithTimeout(
+          `${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`,
+          { method: 'PUT', headers, body: encrypted },
+          CHUNK_UPLOAD_TIMEOUT_MS
+        );
+        if (res.status >= 400 && res.status < 500) {
+          // 4xx — not retryable.
+          const errText = await res.text();
+          reportError('upload_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
+          throw new Error(`Chunk ${i} upload failed: ${errText}`);
+        }
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+        } else {
+          uploaded = true;
+          break;
+        }
+      } catch (e) {
+        if (!e.timedOut && !(e.message?.startsWith('Chunk'))) {
+          lastErr = e;
+        } else if (!e.timedOut) {
+          throw e; // 4xx rethrow
+        } else {
+          lastErr = e;
+          reportError('chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${uploadUUID.slice(0,8)}`);
+        }
+      }
+      if (!uploaded && attempt < CHUNK_RETRY_DELAYS.length) {
+        await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAYS[attempt]));
+      }
+    }
+    if (!uploaded) {
+      throw new Error(`Chunk ${i} failed after ${CHUNK_RETRY_DELAYS.length + 1} attempts: ${lastErr?.message}`);
     }
 
     // 200 ACK — persist chunk completion state to IndexedDB (RU1).
+    // RU1a: record now includes tier and expiryTimestamp for expiry-awareness on resume.
     // Fire-and-forget: IDB write must never block the upload loop.
     writeChunkState({
-      uuid:        uploadUUID,
-      chunkIndex:  i,
+      uuid:            uploadUUID,
+      chunkIndex:      i,
       totalChunks,
-      fileName:    selectedFile.name,
-      fileSize:    selectedFile.size,
+      fileName:        selectedFile.name,
+      fileSize:        selectedFile.size,
       keyHex,
       ivHex,
-      timestamp:   Date.now(),
+      tier:            'free',
+      expiryTimestamp,
+      timestamp:       Date.now(),
     }).catch(() => {}); // already fire-and-forget inside writeChunkState, belt and braces
 
     setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);

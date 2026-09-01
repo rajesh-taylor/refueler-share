@@ -92,7 +92,10 @@
   border-radius: 50%;
   transition: left 0.15s, background 0.15s;
 }
-.toggle-switch.on .toggle-knob { left: 19px; background: var(--carbon); }
+/* Active state: knob slides right and uses Paper (#E8E2D8) so it's visible
+   against the gold track in both Carbon and Paper themes.
+   Previously used var(--carbon) which is #1A1A1A — invisible in Carbon mode. */
+.toggle-switch.on .toggle-knob { left: 19px; background: #E8E2D8; }
 
 /* ── Tier cards ──────────────────────────────────────────────── */
 .tiers {
