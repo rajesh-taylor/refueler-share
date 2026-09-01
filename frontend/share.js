@@ -255,7 +255,16 @@ async function checkResumeState() {
     return;
   }
 
-  // ── Resume: wire full resume flow (RU1a).
+  // ── Render Turnstile now so the token is ready before the user clicks Resume.
+  // The credential re-issue in resumeUpload() requires a valid Turnstile token —
+  // without this, renderTurnstile() never fires (no file was selected on this load)
+  // and waitForTurnstile() times out, causing the "could not validate" failure.
+  // The hidden Turnstile container is re-used — same widget, same sitekey.
+  const tsWrap = document.getElementById('turnstile-wrap');
+  if (tsWrap) tsWrap.classList.remove('hidden');
+  renderTurnstile();
+
+  // ── Resume: wire full resume flow (RU2c).
   if (resumeNoticeBtn) {
     resumeNoticeBtn.addEventListener('click', () => {
       resumeUpload(record);
@@ -312,11 +321,15 @@ async function resumeUpload(record) {
     const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blinded_message: blindedMsg, tier: record.tier || 'free' }),
+      body: JSON.stringify({
+        turnstile_token: turnstileToken || '',
+        blinded_message: blindedMsg,
+        tier: record.tier || 'free',
+      }),
     });
     if (!issueRes.ok) {
       const errText = await issueRes.text();
-      throw new Error(`Re-credential failed: ${errText}`);
+      throw new Error(`Re-credential failed (${issueRes.status}): ${errText}`);
     }
     const issueData = await issueRes.json();
     if (!issueData.uuid || !issueData.commitment) throw new Error('Re-credential response missing uuid or commitment');
@@ -329,7 +342,10 @@ async function resumeUpload(record) {
     issuedTier   = issueData.issued_tier || record.tier || 'free';
   } catch (e) {
     reportError('resume_credential', e.message, `uuid:${record.uuid.slice(0, 8)}`);
-    setStage('Resume failed — could not re-validate. Start a new transfer.', 0);
+    // Keep progressCard visible so the error stage label is readable.
+    progressCard.classList.remove('hidden');
+    setStage('Could not re-validate — please start a new transfer.', 0);
+    progressDetail.textContent = '';
     return;
   }
 
@@ -371,6 +387,19 @@ async function resumeUpload(record) {
   }
 
   const chunks = splitChunks(resumeFile, CHUNK_SIZE);
+
+  // Verify chunk count matches the IDB record — a different chunk size would
+  // produce misaligned encrypted blocks and corrupt the transfer on the server.
+  if (chunks.length !== record.totalChunks) {
+    progressCard.classList.add('hidden');
+    if (resumeCard) resumeCard.classList.remove('hidden');
+    if (resumeDetail) {
+      resumeDetail.textContent = `File layout mismatch (expected ${record.totalChunks} chunks, got ${chunks.length}). Start a new transfer.`;
+    }
+    reportError('resume_chunk_count', `expected ${record.totalChunks} got ${chunks.length}`, `uuid:${record.uuid.slice(0,8)}`);
+    return;
+  }
+
   const chunkHashes = [];
 
   // Reconstruct rolling hashes for all already-uploaded chunks so the root
@@ -436,16 +465,45 @@ async function resumeUpload(record) {
       headers['X-Resume-From-Chunk']     = String(resumeFromChunk); // advisory
     }
 
-    const res = await fetchWithTimeout(
-      `${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`,
-      { method: 'PUT', headers, body: encrypted },
-      CHUNK_UPLOAD_TIMEOUT_MS
-    );
-
-    if (!res.ok) {
-      const errText = await res.text();
-      reportError('resume_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
-      throw new Error(`Chunk ${i} upload failed (resume): ${errText}`);
+    // Retry loop — mirrors startUpload(). Handles Safari silent drops (.timedOut)
+    // and transient 5xx. Non-retryable 4xx rethrows immediately.
+    const CHUNK_RETRY_DELAYS = [2000, 5000, 10000];
+    let lastErr;
+    let uploaded = false;
+    for (let attempt = 0; attempt <= CHUNK_RETRY_DELAYS.length; attempt++) {
+      try {
+        const res = await fetchWithTimeout(
+          `${WORKER_URL}/upload/${uploadUUID}/${String(i).padStart(4, '0')}`,
+          { method: 'PUT', headers, body: encrypted },
+          CHUNK_UPLOAD_TIMEOUT_MS
+        );
+        if (res.status >= 400 && res.status < 500) {
+          const errText = await res.text();
+          reportError('resume_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
+          throw new Error(`Chunk ${i} upload failed (resume): ${errText}`);
+        }
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+        } else {
+          uploaded = true;
+          break;
+        }
+      } catch (e) {
+        if (e.timedOut) {
+          lastErr = e;
+          reportError('resume_chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${uploadUUID.slice(0,8)}`);
+        } else if (e.message?.includes('upload failed (resume)')) {
+          throw e; // 4xx — not retryable
+        } else {
+          lastErr = e;
+        }
+      }
+      if (!uploaded && attempt < CHUNK_RETRY_DELAYS.length) {
+        await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAYS[attempt]));
+      }
+    }
+    if (!uploaded) {
+      throw new Error(`Chunk ${i} failed after ${CHUNK_RETRY_DELAYS.length + 1} attempts: ${lastErr?.message}`);
     }
 
     // Update IDB with latest confirmed chunk.
@@ -491,21 +549,26 @@ function promptForResumeFile(expectedName, expectedSize) {
       resumeDetail.textContent = `Select the original file to resume: "${expectedName}" (${formatBytes(expectedSize)})`;
     }
 
-    input.addEventListener('change', () => {
-      document.body.removeChild(input);
-      if (input.files[0]) resolve(input.files[0]);
-      else reject(new Error('No file selected'));
-    }, { once: true });
-
     // Cancellation: if focus returns to window without a change event, reject.
+    // onFocus is defined before the change listener so both closures share the reference.
+    let settled = false;
     const onFocus = () => {
       setTimeout(() => {
-        document.body.removeChild(input);
-        window.removeEventListener('focus', onFocus);
+        if (settled) return; // change event already fired — do nothing
+        settled = true;
+        if (document.body.contains(input)) document.body.removeChild(input);
         reject(new Error('File picker cancelled'));
       }, 500);
     };
     window.addEventListener('focus', onFocus, { once: true });
+
+    input.addEventListener('change', () => {
+      settled = true;
+      window.removeEventListener('focus', onFocus); // stop cancellation firing after a normal pick
+      if (document.body.contains(input)) document.body.removeChild(input);
+      if (input.files[0]) resolve(input.files[0]);
+      else reject(new Error('No file selected'));
+    }, { once: true });
 
     input.click();
   });
