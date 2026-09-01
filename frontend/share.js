@@ -395,7 +395,7 @@ async function resumeUpload(record) {
     setProgress(pct, `Verifying chunk ${i + 1} of ${resumeFromChunk}…`);
   }
 
-  setStage(`Uploading from chunk ${resumeFromChunk + 1}`, 22);
+  setStage(`Resuming — uploading from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 22);
 
   // Upload remaining chunks.
   for (let i = resumeFromChunk; i < totalChunks; i++) {
@@ -456,10 +456,10 @@ async function resumeUpload(record) {
       tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
     }).catch(() => {});
 
-    const uploadedChunks = i - resumeFromChunk + 1;
+    const uploadedChunks  = i - resumeFromChunk + 1;
     const remainingChunks = totalChunks - resumeFromChunk;
     const pct = Math.round(22 + (uploadedChunks / remainingChunks) * 73);
-    setProgress(pct, `${i + 1} / ${totalChunks} chunks`);
+    setProgress(pct, `Resuming from chunk ${resumeFromChunk + 1} of ${totalChunks} — chunk ${i + 1} of ${totalChunks} sent`);
   }
 
   clearResumeState(uploadUUID).catch(() => {});
@@ -467,7 +467,7 @@ async function resumeUpload(record) {
   setStage('Finalising', 98);
   await new Promise(r => setTimeout(r, 80));
   setStage('Done', 100);
-  progressDetail.textContent = 'Transfer complete';
+  progressDetail.textContent = 'Transfer resumed and complete';
   await new Promise(r => setTimeout(r, 700));
   progressCard.classList.add('hidden');
 
