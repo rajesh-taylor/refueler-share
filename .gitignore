@@ -30,3 +30,4 @@ Thumbs.db
 coverage/
 .dev.vars
 .wrangler-test-state/
+refueler-share-financial-model.xlsx
