@@ -208,6 +208,20 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at src/share/adm
 - Resume card absent after Safari stall — diagnose IDB state in DevTools before reload at RU1a. If record missing: stall is mid-fetch before 200 ACK, need `Promise.race()` timeout wrapper so per-chunk retry fires on Safari hang.
 
 ---
+## RU1a — Resumable uploads II (1 Sep 2026)
+
+| # | Commit | Summary |
+|---|--------|---------|
+| RU1a ✓ | `9e255fa` / `f05583f` | Resume flow wired: `resumeUpload()` restores AES key/IV from IDB, re-issues credential (browser memory lost on reload), prompts for original file with name+size identity check, re-hashes confirmed chunks to maintain rolling BLAKE3 root, uploads remaining chunks. Expiry-awareness: `tier` + `expiryTimestamp` added to `writeChunkState()` record; expired transfers show Discard only. `fetchWithTimeout()` wrapper (60s, `AbortController`) fixes Safari silent hang — per-chunk retry (3×, 2s/5s/10s) now fires on timeout. Zip progress capped at 95% during loop + "Finalising archive" label before `zipper.end()`. Toggle knob Carbon fix: `background: #E8E2D8` (Paper literal) on active state — `var(--carbon)` was invisible on gold track. 36/36 tests passing (7 suites, `tests/resume.test.js`). `bin/sync-share.sh` made executable (`chmod +x`). Accidental `refueler-share-financial-model.xlsx` removed from repo (`0b9605b`). |
+
+**RU1a do-not-retry (permanent):**
+- DO NOT use `var(--carbon)` for the active toggle knob — invisible in Carbon mode. Use `#E8E2D8` (Paper literal).
+- DO NOT store IDB records without `tier` and `expiryTimestamp` — required for expiry-awareness on resume.
+- DO NOT use bare `fetch()` for chunk uploads — always `fetchWithTimeout()` with `AbortController`; Safari silently drops connections.
+
+**Snag logged for S93:** Free tier expiry selector (1 day / 7 days) missing from upload options card. Currently hardcodes 7 days. `expiryTimestamp` is already wired end-to-end — needs only a UI control and a one-line change in `startUpload()`.
+
+---
 
 ## NB-series — node bootstrap (pre-B7, gates all B7 code)
 > Locked Opus-2 · 29 Aug 2026. phoenixd + LNbits + cloudflared + Tor on Instance A (Share+Pass). Runbook-first; no dark provisioning. Full phase detail in Share-Master-Context.md §B7 notes.
