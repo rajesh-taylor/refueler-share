@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 6.3 | **Created:** 28 July 2026 | **Updated:** Pass-Vocab-1 · 2026-09-01
+> **Version:** 6.4 | **Created:** 28 July 2026 | **Updated:** Merchant-Vocab-1 · 2026-09-01
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -126,7 +126,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 - After any address change: AM or Rajesh sends 21 sats from ops wallet to confirm receipt. Logged in crypto ops ledger.
 - Rate limit: 5 attempts / 5 minutes per user (in-memory).
 
-**Stamps:** Silent, passive issuance. Trigger: FULFILLED (READY status). `✦` glyph settles on tile. Plumbing-agnostic: same visual for LNURL-withdraw (v1) and Cashu NUT-00 (v2). Stamp metrics: reserved in Owner tab. Not built until Block 8 / post-mint.
+**Stamps:** Silent, passive issuance. Trigger: FULFILLED (READY status). `✦` glyph settles on tile. Plumbing-agnostic: same visual for LNURL-withdraw (v1) and Cashu NUT-00 (v2). Stamp metrics: reserved in Owner tab. Not built until Block 8 / post-mint. The issued instrument is **a Note** (locked Merchant-Vocab-1).
 
 ---
 
@@ -294,6 +294,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 | **Opus-3b · 31 Aug 2026** | all repos | Fourth rotation ceremony named: **The Proclamation** (Royal Exchange / Merchant), read by the Common Crier (optional colour). Platform whitepaper section outline locked — argument flow + geography placement, four Liberties, honest-claims boundary. Raven metaphor (canary→Raven etymology) locked for whitepaper §5. Raven governance extended to four Liberties. Rotation-ceremony admin changelog template + whitepaper §Key lifecycle language locked (four ceremonies). Constitutional line confirmed: Westminster → Temple → Royal Exchange → Tower. VPN recommendation locked (Mullvad named, multi-hop noted). "The pilgrim's society" held as future proper noun. Pass + Merchant vocabulary session flagged as a small Sonnet session (geographic terms for reward tokens / live melt path). BRIDGE v6.1. |
 | **Opus-3a · 1 Sep 2026** | all repos | **Liberty mint reconciliation — both provisional names resolved.** Pass mint: **Jewel Tower** (locked). Jewel Tower held Edward III's Privy Wardrobe (treasure → reward tokens, live melt path) and later housed Weights & Measures standards (standardisation → access credentials). Mixed-melt mint; name holds both functions. Black Rod rotation co-locates at Westminster. Legend mint: **Guildhall** (locked). Chamberlain's Court at Guildhall admits individuals to the Freedom of the City (c.1237, living tradition) — access-grant semantics, no value held, correct for a no-melt mint. Deep ledger / record-keeping function moves explicitly to St Paul's / Triforium. Silent Ceremony rotation co-locates at Guildhall. **Temple Treasury retired completely** — no product use, no ops use. "the Temple treasury" retained as three lowercase words in whitepaper §Historical prior art only; strongest as invisible prose, not a named concept. Melt-hygiene mnemonic: settlement-flavoured names (Jewel Tower, the Exchange) on melt mints; admission-flavoured names (Royal Mint, Guildhall) on no-melt mints. Four Liberties mint column fully locked. BRIDGE v6.2. |
 | **Pass-Vocab-1 · 1 Sep 2026** | all repos | **Pass geographic vocabulary locked — three unnamed things named.** Reward token UI name: **a Pass** (product name, normie-legible, literally correct — the Jewel Tower issues Passes). Live melt path event: **Redemption** (primary: Westminster Abbey coronation ritual — the Lord President redeems the Sword of Offering with newly minted coin, a formal financial act with a named sequence; secondary/backup: HM Treasury gilt redemption — repaying and cancelling a debt instrument, wiping the liability from the balance sheet; both Westminster-rooted, one word). Integrity verification metaphor: **Trial of the Pyx** (locked for whitepaper §BLAKE3 integrity + §Historical prior art + closed-door pitch; internal name for the integrity test suite). Access credential has no new geographic name — plain language in docs; "your Pass" in UI. Vocabulary matrix updated. BRIDGE v6.3. |
+| **Merchant-Vocab-1 · 1 Sep 2026** | all repos | **Merchant geographic vocabulary locked — three unnamed things named.** Reward stamp instrument: **a Note** (normie-legible, pre-Bank-of-England provenance — Royal Exchange merchants issued promissory notes before 1694; EIC scrip noted as whitepaper provenance sentence, not a named term). Live melt path event: **Clearance** ("Your Note has cleared" — the Exchange was where bills were cleared; LCH direct descendant). Venue stamp vs settlement token distinction: no second noun — both are a Note throughout the lifecycle; architecture distinguishes accrual state from cleared state internally. Mint name **the Exchange** locked (was provisional). Constitutional line: Westminster *passes* laws → Temple *keeps the record* → the Exchange *issues Notes* → Notes *clear* at the Exchange → the Tower *moves the cargo*. BRIDGE v6.4. |
 
 ---
 
@@ -309,7 +310,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 - Rotate Anthropic API key before csuite briefing reuse.
 - Football-data.org API key held by Rajesh — ready for Events intelligence layer session.
 - Commission rate planning conversation before first real merchant.
-- **[Pass + Merchant] Geographic vocabulary session — COMPLETE · 1 Sep 2026 (Pass-Vocab-1).** Pass vocabulary locked. Merchant vocabulary (settlement tokens / live melt path at the Exchange) — separate session still required before B9 whitepaper §14.
+- **[Pass + Merchant] Geographic vocabulary — COMPLETE · 1 Sep 2026.** Pass-Vocab-1 + Merchant-Vocab-1 both locked. All four Liberties fully named.
 - **[Pass]** Solicitor briefing brief to draft before appointment.
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29 → Nutroot) before v2 build.
 - **[All products]** Remove all Blink ops wallet references from merchant handover docs before first real merchant.
@@ -326,7 +327,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 
 ---
 
-## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1)
+## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1)
 
 The Refueler product ecosystem is anchored in London geography — specifically the Thames corridor from Westminster eastward to the Pool of London. This is not decorative: it reflects where Refueler is built, by a Londoner, and the institutions drawn on performed real historical versions of what these products do. The vocabulary is coherent, earned, and novel in both senses of the word.
 
@@ -347,14 +348,16 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | **Tower Bridge** | Tier differentiator visual metaphor — the bridge raises for large vessels (Production Max / Business). Free tier passes under. Creative Premium navigates the Thames with skill. Not a UI label; lives in design language and copy tone. | Design / copy |
 | **Westminster** | Brand geography home of **Pass**. The Palace of Westminster *passes* laws — permits, who may do what and when. Rotation ceremony: Black Rod (State Opening). | Pass product |
 | **Temple** | Brand geography home of **Legend** — and the unowned headwater of the Templar prior-art argument (Cashu spiritual home). Legend stands at the origin. The record-keeper on the origin ground. Rotation ceremony: Silent Ceremony. | Legend product / whitepaper |
-| **Royal Exchange** | Brand geography home of **Merchant** — the first purpose-built commercial exchange in England. Where trade is settled, not where cargo moves or rules are made. Mint: the Exchange. Rotation ceremony: The Proclamation. | Merchant product |
+| **Royal Exchange** | Brand geography home of **Merchant** — the first purpose-built commercial exchange in England. Where trade is settled, not where cargo moves or rules are made. Mint: the Exchange (locked). Rotation ceremony: The Proclamation. | Merchant product |
 | **Guildhall** | The City's record-house (Guildhall Library, London's civic archive) — paired with St Paul's as Legend's geographic brand context. "Consult the record." | Legend product / whitepaper |
 | **Whispering Gallery** | Metadata-leak metaphor (Legend, St Paul's). A whisper you believe private travels the whole dome and is heard on the far side — exactly what querying a public block explorer does to a "private" lookup. Pairs with Temple of Mithras. Powers Legend Article 14. | Professional / whitepaper |
 | **Triforium / Trinity Library** | The deep ledger / records archive (Legend, St Paul's) — the hidden 1709 library. The historical chain data you consult. | Whitepaper / docs |
 | **Floating staircase** | Merkle tree / parent-hash structure (Legend, St Paul's geometric staircase) — each step self-supporting on the one below. **Whitepaper and closed-door presentation only — too technical for client copy.** | Whitepaper / presentation |
 | **a Pass** | The reward token (spendable sat ecash) issued by the Jewel Tower. UI name only — the same surface name covers access credentials and reward tokens; the architecture distinguishes them. 95% of users need one word, not two. "The Jewel Tower issued you a Pass." | UI / product |
-| **Redemption** | The live melt path event — the act of presenting a Pass (reward token) and receiving sats. Primary provenance: Westminster Abbey coronation ritual (the Lord President redeems the Sword of Offering from the Dean with newly minted coin — a formal financial act with a named sequence, step 3 of the Coronation Ritual of Redemption). Secondary/backup provenance: HM Treasury gilt redemption (repaying capital, cancelling the instrument, wiping the liability from the balance sheet). Both Westminster-rooted. One word. | Whitepaper / docs / professional copy |
+| **Redemption** | The live melt path event for Pass — the act of presenting a Pass (reward token) and receiving sats. Primary provenance: Westminster Abbey coronation ritual (the Lord President redeems the Sword of Offering from the Dean with newly minted coin — a formal financial act with a named sequence, step 3 of the Coronation Ritual of Redemption). Secondary/backup provenance: HM Treasury gilt redemption (repaying capital, cancelling the instrument, wiping the liability from the balance sheet). Both Westminster-rooted. One word. | Whitepaper / docs / professional copy |
 | **Trial of the Pyx** | The annual judicial ceremony (since 1248) testing Royal Mint coin output for fineness before a High Court judge — held in the Pyx Chamber at Westminster Abbey (prior to 1870), administered by the Worshipful Company of Goldsmiths. Standard plates released only on a warrant from the Chancellor of the Exchequer. Isaac Newton appeared before it in 1696. **Refueler mapping:** BLAKE3 chunk integrity verification — every token issued by the mint is tested against a known standard before being trusted, as every coin from the Royal Mint was tested before being trusted. The mint cannot issue debased coin undetected; the Worker cannot store corrupted data undetected. Same architecture, 800 years apart. **Internal name candidate** for the integrity test suite. | Whitepaper §BLAKE3 integrity + §Historical prior art · closed-door pitch · internal ops |
+| **a Note** | The reward stamp instrument issued by the Exchange — the Merchant equivalent of "a Pass". The Exchange issues Notes; Notes accumulate silently per fulfilled order (`✦` glyph); Notes clear at the Exchange. Pre-Bank-of-England provenance: Royal Exchange merchants issued promissory notes before the Bank existed (1694). The instrument belongs to the Exchange, not the Bank. Whitepaper provenance sentence: "the Exchange issued scrip; the Exchange still does." | UI / product / professional copy / whitepaper |
+| **Clearance** | The live melt path event at the Exchange — the moment a Note is presented and value received. "Your Note has cleared." The Exchange was the venue where bills were cleared — presented, verified, paid. LCH (London Clearing House) is its direct descendant. Completely distinct from Redemption (Pass). | UI / product / professional copy / whitepaper |
 
 ### Retired terms (do not use)
 - **Drop Berth** — ward incident form. Retired.
@@ -363,6 +366,9 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 - **Pier** — functionally weaker than Quay. Reserved at most.
 - **Marina** — too recreational for the professional register. Retired.
 - **Warrant** — considered and rejected as reward token name. In UK register immediately implies arrest warrant. Wrong register for a good night out.
+- **Chit** — considered for Merchant instrument. Rejected: too close to an unprintable word. Retired.
+- **Bill** — considered for Merchant instrument. Rejected: UK register reads Parliament first; Parliament collision with Pass geography. Retired.
+- **Scrip** — considered for Merchant instrument. Strong EIC provenance. Retained as whitepaper provenance sentence only ("the Exchange issued scrip; the Exchange still does") — not a named term in the matrix.
 
 ### Product vocabulary hierarchy
 
@@ -393,13 +399,14 @@ Refueler Legend  ·  home: Temple (Guildhall + St Paul's as brand geography)
 
 Refueler Merchant  ·  home: Royal Exchange
   └── the Exchange (Merchant's Cashu mint — settlement + reward stamps, live melt path)
-  └── [vocabulary session pending — geographic terms for settlement tokens + live melt path]
+        └── a Note (the issued instrument — reward stamp, accrues per fulfilled order)
+        └── Clearance (the live melt event — Note presented, value received, instrument cleared)
         └── The Proclamation (keyset rotation — read by the Common Crier)
         └── Raven (Merchant's warrant canary — 2–3 mirrors)
 ```
 
-### Resolved — AP-ARCH · 31 Aug 2026; Opus-3 · 31 Aug 2026; Opus-3b · 31 Aug 2026; Opus-3a · 1 Sep 2026; Pass-Vocab-1 · 1 Sep 2026
-Four separate mints. Four independent seeds. No shared mint, no shared keyset across products. Pass vocabulary complete. See §The four Liberties below.
+### Resolved — AP-ARCH · 31 Aug 2026; Opus-3 · 31 Aug 2026; Opus-3b · 31 Aug 2026; Opus-3a · 1 Sep 2026; Pass-Vocab-1 · 1 Sep 2026; Merchant-Vocab-1 · 1 Sep 2026
+Four separate mints. Four independent seeds. No shared mint, no shared keyset across products. Pass vocabulary complete. Merchant vocabulary complete. All four Liberties fully named. See §The four Liberties below.
 
 ---
 
@@ -465,7 +472,7 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Tower of London | Share | Upload credentials, Harbourmaster Lockes | No — capability tokens only, no melt path | **Royal Mint** (locked Opus-3) |
 | Westminster | Pass | Access credentials + reward tokens (both surface as "a Pass") | Mixed — reward tokens have live melt path (Redemption) | **Jewel Tower** (locked Opus-3a) |
 | Temple (Guildhall + St Paul's) | Legend | Address watch credentials | No — signal-only, no melt path | **Guildhall** (locked Opus-3a) — deep ledger at St Paul's/Triforium |
-| Royal Exchange | Merchant | Settlement tokens + venue stamps | Yes — live melt path, venue settlement | **the Exchange** (provisional) |
+| Royal Exchange | Merchant | Settlement Notes + venue stamps | Yes — live melt path (Clearance), venue settlement | **the Exchange** (locked Merchant-Vocab-1) |
 
 **Why four, not one mint with four keysets:** a shared mint is a shared failure domain, a shared compulsion surface, and a shared database that *can* correlate events across products. Separate mints remove the ability, not merely the intention. Melt-hygiene axis: Pass and Merchant carry live melt paths; Share and Legend must never melt; the same process must not hold both properties.
 
@@ -530,7 +537,7 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 
 ---
 
-## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 · 1 Sep 2026)
+## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026)
 
 | Term | Website / UI | Professional copy | Whitepaper / docs | Closed door / internal |
 |---|---|---|---|---|
@@ -539,6 +546,8 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Harbourmaster | ✓ | ✓ | ✓ | ✓ |
 | Quay | ✓ | ✓ | ✓ | ✓ |
 | a Pass (reward token / access credential) | ✓ (UI name) | ✓ | ✓ | ✓ |
+| a Note (Merchant reward stamp) | ✓ (UI name) | ✓ | ✓ | ✓ |
+| Clearance (Merchant melt event) | ✓ | ✓ | ✓ | ✓ |
 | Cargo | — | — | ✓ (API/webhooks) | ✓ |
 | Royal Mint | — | ✓ (Share mint) | ✓ | ✓ |
 | Port Authority | — | — | ✓ (admission-control layer) | ✓ |
@@ -547,6 +556,7 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Temple | — | ✓ (Legend brand) | ✓ | ✓ |
 | Guildhall | — | ✓ (Legend geographic context) | ✓ | ✓ |
 | Royal Exchange | — | ✓ (Merchant brand) | ✓ | ✓ |
+| the Exchange | — | ✓ (Merchant mint) | ✓ | ✓ |
 | Whispering Gallery | — | ✓ (metadata leak) | ✓ | ✓ |
 | Triforium / Trinity Library | — | — | ✓ (deep ledger) | ✓ |
 | Floating staircase | — | — | ✓ (Merkle — WP + presentation only) | ✓ |
@@ -573,7 +583,7 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Cleopatra's Needle | — | — | — | ✓ (held — attestation monument) |
 | Pall Mall | — | — | — | ✓ (held — Enterprise register) |
 
-**Rule:** if a term is not in the Website/UI column, it does not appear on `refueler.io` outside of the whitepaper and notes articles. Harbourmaster, Quay, and "a Pass" are the only geography/product terms that have passed the website test.
+**Rule:** if a term is not in the Website/UI column, it does not appear on `refueler.io` outside of the whitepaper and notes articles. Harbourmaster, Quay, "a Pass", "a Note", and "Clearance" are the only geography/product terms that have passed the website test.
 
 ---
 
