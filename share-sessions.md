@@ -362,6 +362,14 @@ Session plan produced at S88. Scope: Production Max, Lightning-only standing-rec
 
 ---
 
+## HQ-series — HTTP/3 + BLAKE3 positioning
+
+| Session | Commit | Summary |
+|---------|--------|---------|
+| HQ1 | `b66d401` | blob4 httpProtocol added to AE schema (upload + credential_issue events). "Hashing password" copy fix. Auth comment updated. Stale zk_verification_note replaced. |
+
+---
+
 ## Locked block sequence (Opus-2 · 29 Aug 2026)
 
 `NB → B7 → SYNC-1 → RU1/RU2 → HQ → SD-block → SW → B8 → B9 → B10+`
