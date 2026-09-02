@@ -40,8 +40,7 @@ async function loadDeps() {
 // ─────────────────────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────────────────────
-let selectedFile       = null;
-let selectedFolderName = null; // set by zipAndSelect(); null for plain file uploads
+let selectedFile   = null;
 let turnstileToken = null;
 let downloadToken  = null;
 let sessionAesKey  = null;
@@ -231,14 +230,9 @@ async function checkResumeState() {
 
   pendingResumeRecord = record;
 
-  // Populate detail line — different copy for file vs folder transfers.
-  const pct = Math.round((record.chunkIndex + 1) / record.totalChunks * 100);
-  let detail;
-  if (record.isFolder && record.folderDisplayName) {
-    detail = `${record.folderDisplayName} — ${pct}% uploaded · select the same folder to continue`;
-  } else {
-    detail = `${record.fileName} — ${pct}% uploaded · select the same file to continue`;
-  }
+  // Populate detail line: "photo-shoot.zip — chunk 82 of 193 (3.72 GB)"
+  const pct    = Math.round((record.chunkIndex + 1) / record.totalChunks * 100);
+  const detail = `${record.fileName} — ${pct}% uploaded (chunk ${record.chunkIndex + 1} of ${record.totalChunks}, ${formatBytes(record.fileSize)})`;
   if (resumeDetail) resumeDetail.textContent = detail;
 
   if (resumeCard) resumeCard.classList.remove('hidden');
@@ -262,10 +256,17 @@ async function checkResumeState() {
   }
 
   // ── Resume: wire full resume flow (RU2c).
+  // NOT { once: true } — resumeUpload() may return early (picker cancel, file mismatch)
+  // and the button must stay live so the user can click again without refreshing.
+  // Guard flag prevents concurrent resume attempts if the user double-clicks.
   if (resumeNoticeBtn) {
-    resumeNoticeBtn.addEventListener('click', () => {
-      resumeUpload(record);
-    }, { once: true });
+    let resumeInFlight = false;
+    resumeNoticeBtn.addEventListener('click', async () => {
+      if (resumeInFlight) return;
+      resumeInFlight = true;
+      await resumeUpload(record);
+      resumeInFlight = false;
+    });
   }
 }
 
@@ -351,11 +352,6 @@ async function resumeUpload(record) {
 
   setStage(`Resuming from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 10);
 
-  // Outer guard: any unhandled throw from the file-identity checks, verification loop,
-  // or chunk upload loop surfaces here. IDB record is deliberately NOT cleared —
-  // the interrupted state is preserved so the user can retry.
-  try {
-
   // We need the original file to read chunks from — but we only have the
   // encrypted data already on the server for chunks 0..resumeFromChunk-1.
   // We cannot re-read the original file (it's not in memory).
@@ -427,9 +423,6 @@ async function resumeUpload(record) {
     chunkHashes.push(h);
     const pct = Math.round(((i + 1) / resumeFromChunk) * 10) + 12;
     setProgress(pct, `Verifying chunk ${i + 1} of ${resumeFromChunk}…`);
-    // Yield every 10 chunks — prevents WASM tight-loop from blocking the main thread
-    // and keeps the browser responsive on large files (otherwise it tabs the page as hung).
-    if ((i + 1) % 10 === 0) await new Promise(r => setTimeout(r, 0));
   }
 
   setStage(`Resuming — uploading from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 22);
@@ -514,20 +507,12 @@ async function resumeUpload(record) {
       throw new Error(`Chunk ${i} failed after ${CHUNK_RETRY_DELAYS.length + 1} attempts: ${lastErr?.message}`);
     }
 
-    // Update IDB with latest confirmed chunk — preserve isFolder/folderDisplayName from original record.
+    // Update IDB with latest confirmed chunk.
     writeChunkState({
-      uuid:              uploadUUID,
-      chunkIndex:        i,
-      totalChunks,
-      fileName:          record.fileName,
-      fileSize:          record.fileSize,
-      keyHex:            record.keyHex,
-      ivHex:             record.ivHex,
-      tier:              record.tier || 'free',
-      expiryTimestamp,
-      timestamp:         Date.now(),
-      isFolder:          record.isFolder || false,
-      folderDisplayName: record.folderDisplayName || null,
+      uuid: uploadUUID, chunkIndex: i, totalChunks,
+      fileName: record.fileName, fileSize: record.fileSize,
+      keyHex: record.keyHex, ivHex: record.ivHex,
+      tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
     }).catch(() => {});
 
     const uploadedChunks  = i - resumeFromChunk + 1;
@@ -549,15 +534,6 @@ async function resumeUpload(record) {
   const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, false);
-
-  } catch (e) {
-    // Unhandled error during verification loop or chunk upload loop.
-    // IDB record intentionally preserved — user can retry.
-    reportError('resume_upload', e.message, `uuid:${record.uuid?.slice(0, 8) ?? ''}`);
-    progressCard.classList.remove('hidden');
-    setStage('Resume failed — your progress is saved. Refresh and try again.', 0);
-    progressDetail.textContent = e.message?.slice(0, 120) || '';
-  }
 }
 
 // Prompt the user to re-select the interrupted file.
@@ -735,8 +711,7 @@ function clearDropMsg() {
 }
 
 function handleFileSelection(file) {
-  selectedFile       = file;
-  selectedFolderName = null; // cleared unless zipAndSelect() set it this session
+  selectedFile = file;
   capWarning.classList.add('hidden');
   optionsCard.classList.add('hidden');
   if (file.size > FREE_CAP) { capWarning.classList.remove('hidden'); return; }
@@ -1046,8 +1021,6 @@ async function zipAndSelect(entries, folderName) {
   // Synthesise a File object — handleFileSelection expects .name, .size, .slice()
   const zipFile = new File([zipBlob], zipName, { type: 'application/zip' });
   handleFileSelection(zipFile);
-  // Set after handleFileSelection (which clears it) — marks this as a folder transfer.
-  selectedFolderName = folderName;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1274,18 +1247,16 @@ async function startUpload() {
     // RU1a: record now includes tier and expiryTimestamp for expiry-awareness on resume.
     // Fire-and-forget: IDB write must never block the upload loop.
     writeChunkState({
-      uuid:              uploadUUID,
-      chunkIndex:        i,
+      uuid:            uploadUUID,
+      chunkIndex:      i,
       totalChunks,
-      fileName:          selectedFile.name,
-      fileSize:          selectedFile.size,
+      fileName:        selectedFile.name,
+      fileSize:        selectedFile.size,
       keyHex,
       ivHex,
-      tier:              'free',
+      tier:            'free',
       expiryTimestamp,
-      timestamp:         Date.now(),
-      isFolder:          !!selectedFolderName,
-      folderDisplayName: selectedFolderName || null,
+      timestamp:       Date.now(),
     }).catch(() => {}); // already fire-and-forget inside writeChunkState, belt and braces
 
     setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
