@@ -1151,7 +1151,7 @@ async function startUpload() {
 
   let p2shHashHex = null;
   if (passphraseToggle.checked && passphraseInput.value.trim()) {
-    setStage('Hashing passphrase', 8);
+    setStage('Hashing password', 8);
     p2shHashHex = await sha256Hex(new TextEncoder().encode(passphraseInput.value.trim()));
     passphraseInput.value = '';
   }

@@ -107,24 +107,29 @@ function corsHeaders(request) {
 // Dataset: share_events (bound as AE in wrangler.toml)
 //
 // Schema (one data point per request):
-//   blobs:   [endpoint, tier, error_message]
+//   blobs:   [endpoint, tier, error_message, http_protocol]
 //   doubles: [latency_ms, status_code, chunk_index, total_chunks, total_bytes]
 //   indexes: [endpoint]   <- enables fast GROUP BY in AE SQL
+//
+// blob4 (http_protocol): 'HTTP/3' | 'HTTP/2' | 'HTTP/1.1' | '' — from request.cf.httpProtocol.
+// Populated on upload and credential_issue events (HQ1). Empty string on all other events.
+// AE SQL: countIf(blob4='HTTP/3')/count() WHERE blob1='upload'
 // ─────────────────────────────────────────────────────────────────────────────
 function logEvent(env, {
   endpoint,
-  tier        = 'free',
-  status      = 200,
-  latency     = 0,
-  chunkIndex  = -1,
-  totalChunks = 0,
-  totalBytes  = 0,
-  errorMsg    = '',
+  tier         = 'free',
+  status       = 200,
+  latency      = 0,
+  chunkIndex   = -1,
+  totalChunks  = 0,
+  totalBytes   = 0,
+  errorMsg     = '',
+  httpProtocol = '',
 }) {
   if (!env.AE) return;
   try {
     env.AE.writeDataPoint({
-      blobs:   [endpoint, tier, errorMsg],
+      blobs:   [endpoint, tier, errorMsg, httpProtocol],
       doubles: [latency, status, chunkIndex, totalChunks, totalBytes],
       indexes: [endpoint],
     });
@@ -179,7 +184,7 @@ export default {
         const cloned = request.clone();
         let credTier = 'free';
         try { const b = await cloned.json(); credTier = b.tier ?? 'free'; } catch {}
-        return timed('credential_issue', () => handleCredentialIssue(request, env).then(r => addCors(r, request)), { tier: credTier });
+        return timed('credential_issue', () => handleCredentialIssue(request, env).then(r => addCors(r, request)), { tier: credTier, httpProtocol: request.cf?.httpProtocol ?? '' });
       }
 
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
@@ -197,14 +202,15 @@ export default {
         const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
         return timed('upload', () => handleUpload(request, env, uploadMatch[1], chunkIndex).then(r => addCors(r, request)), {
           tier, chunkIndex,
-          totalChunks: chunkIndex === 0 ? totalChunks : 0,
-          totalBytes:  chunkIndex === 0 ? totalBytes  : 0,
+          totalChunks:  chunkIndex === 0 ? totalChunks : 0,
+          totalBytes:   chunkIndex === 0 ? totalBytes  : 0,
+          httpProtocol: request.cf?.httpProtocol ?? '',
         });
       }
 
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
-        // Rate limit layer 1: 5 requests / 60s per IP — passphrase brute-force protection
+        // Rate limit layer 1: 5 requests / 60s per IP — password brute-force protection
         const ip   = getClientIp(request);
         const rlIp = await checkRateLimit(env, ip, 'auth', 5, 60);
         if (rlIp.limited) {
@@ -1308,7 +1314,7 @@ async function fetchMetricsData(env) {
       r2_chunk_retrieval_success_rate: null,
       r2_chunk_retrieval_note: "Requires Cloudflare AE SQL API. Query: 1 - (countIf(blob3 != '') / count()) WHERE blob1='download'. Computed in dashboard layer (S22).",
       zk_verification_rate: null,
-      zk_verification_note: "R2 manifests not enumerable in aggregate from Worker. Add has_passphrase as blob4 to upload logEvent call (B4 scope). AE SQL once instrumented: countIf(blob4='true')/count() WHERE blob1='upload' AND doubles[2]=0.",
+      zk_verification_note: "R2 manifests not enumerable in aggregate from Worker. blob4 now logs http_protocol on upload and credential_issue events (HQ1). AE SQL: countIf(blob4='HTTP/3')/count() WHERE blob1='upload'.",
     };
 
   } catch (e) {
