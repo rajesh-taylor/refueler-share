@@ -1,15 +1,6 @@
 # Share-Master-Context — refueler-share
-> **Version:** 5.8 | **Last updated:** Opus-2 · 29 Aug 2026
+> **Version:** 6.0 | **Last updated:** M-session · 2 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
-
----
-
-## What this repo is
-
-`rajesh-taylor/refueler-share` — anonymous, encrypted peer-to-peer file transfer.
-BLAKE3 chunk integrity + Cashu NUT-00 blind signatures as anonymous auth. **Distinct layers — never conflate.**
-
-Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2.0
 
 ---
 
@@ -21,87 +12,11 @@ Local path: `/Users/rajeshtaylor/Documents/refueler-share/` · Licence: Apache 2
 | Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
 | Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens`, `subscribers`, `double_spend_attempts` |
-| Frontend | Eleventy 3.x — `src/` → `frontend/` |
+| Frontend | Eleventy 3.x — `src/` → `frontend/` (canonical `refueler-share/frontend/`, mirror `refueler-io/src/share/assets/`) |
 | Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
-| Payments (sats) | LNbits on Hetzner CAX21 (B7+, all Refueler projects — LNBITS_API_KEY / LNBITS_URL) |
-
----
-
-## Lightning infrastructure — B7 plan
-
-**Provider: LNbits on Hetzner CAX21. Locked pre-Opus-2 · 28 Aug 2026.** Applies to all Refueler projects. Blink dead (UK custodial discontinued Aug 31 2026). Voltage eliminated (US company, invoice metadata exposure). Strike eliminated (custodial, FCA-dependent). No other candidates considered.
-
-**Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Blockstream Swaps irrelevant to our liquidation model — we are not doing a swap.
-
-**Hetzner CAX21 — Share+Pass instance (locked Opus-2):** €5.77/mo · 8GB RAM · 80GB NVMe. Software stack:
-- **phoenixd (ACINQ)** — the Lightning node. Funding source for LNbits. No full node required (no bitcoind, no 700GB volume) — this is what keeps CAX21 viable.
-- **LNbits** — REST API + wallet layer on top of phoenixd. Wallet-per-product, each with its own API key: Share, Pass, Ops.
-- **cloudflared (Cloudflare Tunnel)** — the Worker→LNbits data path. No inbound ports opened; origin IP hidden; LNbits reachable only through Cloudflare. Replaces the "clearnet endpoint + IP allowlist" idea.
-- **Tor** — one daemon, per-service hidden services (separate .onion each) for LNbits admin access and phoenixd transport. Not the Worker→LNbits data path (that is cloudflared).
-
-**Not on this box:** bitcoind/LND (deferred — see trigger below) · SimpleX SMP (own instance, B9 — moved off the funds box for attack-surface isolation) · block-explorer / multi-core (post-B9). At provisioning time this is **one** instance; SimpleX and Legend get their own boxes when they arrive.
-
-**LND is a deferred upgrade, not a B7/B9 requirement.** phoenixd is the default indefinitely. See §Phoenixd → LND trigger (locked Opus-2) below.
-
-**Liquidation (confirmed Opus-2):** phoenixd **splice-out** to on-chain — sends from the channel without closing it. Not channel-close (expensive, disruptive), not loop-out (reintroduces a third-party correlator). **phoenixd cannot send to a BIP-352 Silent Payments address** — SP-send requires a Bitcoin node for scanning, which phoenixd does not have. Confirmed liquidation path: **splice-out → standard bech32 address in Sparrow Wallet** (self-custodied). Sparrow is SP-capable for outgoing sends from that wallet if needed later. The privacy concern on *incoming* liquidation sweeps is counterparty correlation, not address format — since the sweep is self-initiated to your own wallet, no third party is exposed. **SP-native receive** (unique output per sender to a static address) is a B9+ capability requiring a full node — add as a secondary LND-migration benefit alongside cost. No open item: Sparrow approach resolves this. Threshold: sweep when balance exceeds a comfortable ops reserve (set at NB-4 runbook).
-
-**Node bootstrap timeline:** 3–4 weeks deliberate pace, run as the **NB-series** pre-B7 block (see §B7 notes). Opus session designs the runbook first; no dark provisioning — instance goes live only when the runbook is complete and the test-invoice round-trip passes.
-
-**Backend abstraction:** `worker/src/lightning.js` exports `createInvoice()` + `getInvoiceStatus()`. `LIGHTNING_BACKEND` env var routes to LNbits REST. Worker secrets: `LNBITS_URL` + `LNBITS_API_KEY`. No Blink secrets required or set — remove any Blink Worker secret references.
-
-**Lightning payment flow (B7 — BOLT11 invoice model):**
-1. Frontend → `POST /subscription/lightning` with `{ tier, period }`
-2. Worker calls LNbits `POST /api/v1/payments` → BOLT11 + payment hash
-3. Worker writes `{ paymentHash, tier, period, created_at, expires_at, settled: false }` to KV — 25h TTL
-4. Frontend displays QR + BOLT11 copy. User pays from any Lightning wallet.
-5. LNbits fires webhook callback → Worker looks up hash in KV → **re-verifies via authenticated `GET /api/v1/payments/{hash}` (`paid: true`)** → issues Cashu credential → marks `settled: true`. (Same GET is the polling fallback if the callback is missed.)
-6. Credential written to KV keyed by `paymentHash` — 10 min TTL. Browser memory only. No Supabase row.
-7. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`.
-
-**Webhook (corrected Opus-2):** `https://refueler-share.rt-fc4.workers.dev/webhook/lightning`. LNbits fires a per-invoice `webhook` callback on settlement. **LNbits core does NOT HMAC-sign this callback** — do not build signature verification against a signature that isn't there. Instead the callback is treated as a *notification only*: on receipt the Worker re-verifies the payment by an authenticated `GET /api/v1/payments/{payment_hash}` to LNbits (checks `paid: true`) before issuing any credential. This matches the locked API principle — webhooks are notification, never control flow. Deduplication + idempotency via `settled: true` KV flag; the GET re-verify makes duplicate callbacks harmless.
-
-**Fallbacks:** KV flag `lightning_available: true/false`. If Hetzner goes down: set `lightning_available: false` via dashboard toggle → Stripe fully operational → reprovision following B7 runbook → restore env var. Estimated recovery: ~2 hours with documented runbook. R2, Supabase, and all issued credentials are unaffected — Hetzner hosts the payment rail only.
-
-**Privacy model:** Stripe payer = name/email/card visible to Refueler. Lightning payer = payment hash + amount + tier only — no identity at any layer. DO NOT claim "anonymous" for Lightning. Honest claim: "Pseudonymous." No third-party provider holds invoice metadata.
-
-**Payment privacy table:** `src/_data/payment_privacy.json`. Five columns: Name / Email / Record / Refund / Privacy — Stripe vs Lightning. PayNym "coming soon." Also appears verbatim in B9 whitepaper §Privacy model.
-
-**Instance topology (confirmed Opus-2):**
-- **Instance A — Share + Pass** (CAX21): phoenixd + LNbits (Share/Pass/Ops wallets) + cloudflared + Tor. Provisioned at NB-series. This is the only box needed to open B7.
-- **Instance B — Legend** (separate CAX21): provisioned when Legend build begins, post-B9. A single fatal error must never take both Share and Legend payment rails down.
-- **Instance C — SimpleX SMP** (own box, B9): moved off the funds instance. Rationale — a public-facing messaging relay is a larger inbound attack surface; the payment node holds value and must stay the leanest, least-exposed box. Supersedes the earlier "SimpleX co-located with Share node" note. Its own failure is low-severity and it is not needed until B9, so this costs nothing at provisioning.
-- **Tor scope:** one daemon per instance, **per-service** hidden services (a distinct .onion per service — never one shared onion, which would couple services and leak co-location).
-- Share+Pass co-location is safe because isolation is enforced *within* LNbits by per-product wallets/API keys, and phoenixd sweeps to on-chain regularly so hot balance stays low.
-
-**LNURL-withdraw (B9 scope):** Cashu credential encoded as LNURL-withdraw. Gift use case: sender purchases capacity, forwards link to recipient. Wallet redeems. Refueler never knows who used it. NUT-20 binding potential.
-
-**Dashboard cards — Lightning (B7):** Confirmation latency p95 LIVE. Webhook delivery rate / callback re-verify failures / channel liquidity health — STUB greyed (B9). (Dropped "signature failures" and "routing fee income" cards — no webhook signature to fail; no routing income on a phoenixd leaf node.)
-
----
-
-## Phoenixd → LND trigger (locked Opus-2 · 29 Aug 2026)
-
-**phoenixd is the default indefinitely.** LND is only adopted when one of two triggers fires — not "when volume warrants it."
-
-**Cost model** (monthly; assumptions: inbound-only receipts, blended ~£15/payment, phoenixd liquidity ≈ 1% of volume — *verify against current ACINQ schedule, small-payment floor can push it higher* — splice-out liquidation ~£9/mo; LND needs chain access → bitcoind → bigger box/volume ≈ **+£35/mo** infra over phoenixd; LND also carries channel-ops labour a non-coder founder does not have):
-
-| Monthly receipts | phoenixd all-in | LND infra (+ops) | Verdict |
-|---|---|---|---|
-| £500 | ~£14, ~0 ops | ~£44 + ops | phoenixd wins decisively |
-| £2,000 | ~£29, ~0 ops | ~£44 + ops | phoenixd still wins |
-| £10,000 | ~£109, ~0 ops | ~£44 + ops | LND infra ~£65/mo cheaper — but only real if ops is covered |
-
-Pure-infra crossover is ~£3,500/mo (0.01·V = £35). It is set higher because below £10k the saving cannot cover even a modest ops burden for a non-coder founder — switching there is a false economy.
-
-**Honesty flags:** routing-fee income is ~£0 on a receive-focused leaf node — it is **not** a reason to run LND. Graph-privacy gain is partial: phoenixd means ACINQ (a single LSP) sees the node's aggregate *receive* activity, but never payer identity (payers are anonymous), and ACINQ is already a *disclosed processor* under the honest-metadata posture — so the privacy urgency is lower than it first looks.
-
-**LOCKED TRIGGER — migrate to LND when EITHER:**
-1. **Scale:** sustained **≥ £10,000/mo Lightning receipts for 3 consecutive months** AND a named operator (Rajesh with runbook confidence, or a paid contractor) is committed to channel ops; OR
-2. **Resilience:** ACINQ discontinues phoenixd or materially changes LSP terms → migrate regardless of volume, contractor-assisted. *(This is the Blink lesson encoded as a rule: provider-dependence, not cost, forces the move.)*
-
-**Secondary benefit of LND migration:** LND + full Bitcoin node unlocks **BIP-352 Silent Payments native send/receive** — a static on-chain address that generates a unique UTXO per sender (no address reuse, no pre-interaction). phoenixd cannot do SP-send (no Bitcoin node for scanning). Current liquidation path: splice-out → standard bech32 in Sparrow Wallet. SP-native is a B9+ story, not a blocker on any current session.
+| Payments (sats) | LNbits on Hetzner CAX21 (B7+) — `LNBITS_API_KEY` / `LNBITS_URL` |
 
 ---
 
@@ -112,7 +27,7 @@ Project: `tihgvdokeofnjxjkenmm`
 | Table | Key columns | Notes |
 |-------|-------------|-------|
 | `spent_tokens` | `serial TEXT PK`, `melted_at TIMESTAMPTZ` | RLS deny-all |
-| `subscribers` | `stripe_customer_id TEXT PK`, `email`, `tier` (free/creative/max), `status` (active/inactive/cancelled), `current_period_end`, `cancelled_at`, `created_at`, `updated_at` | RLS deny-all · index on email |
+| `subscribers` | `stripe_customer_id TEXT PK`, `email`, `tier`, `status`, `current_period_end`, `cancelled_at` | RLS deny-all · index on email |
 | `double_spend_attempts` | `id BIGSERIAL PK`, `serial`, `uuid`, `attempted_at` | RLS deny-all · fire-and-forget on 409 |
 
 Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Content-Range: 0-0/TOTAL`.
@@ -131,7 +46,7 @@ Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Conten
 | Turnstile | Sitekey `0x4AAAAAAD0N7GlHlCRuWITr` · Managed widget (visible only) |
 
 Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_URL`,
-`SUPABASE_SERVICE_KEY`, `STRIPE_SECRET_KEY` (sk_live_...ZehD, S29),
+`SUPABASE_SERVICE_KEY`, `STRIPE_SECRET_KEY` (sk_live_...ZehD),
 `STRIPE_WEBHOOK_SECRET` (rotated 21 Jul), `ADMIN_KEY`,
 `CF_ACCOUNT_ID` (fc4f3e5aeebe483677d14185daf544f5), `CF_AE_TOKEN` (Account Analytics Read).
 
@@ -140,8 +55,6 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 ## Stripe — live mode
 
 Account: `rt@rajeshtaylor.com` · GBP · Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
-
-No discounts. No yearly savings framing. Price is the price.
 
 | Product | Price ID | Lookup key | Amount |
 |---------|----------|------------|--------|
@@ -152,69 +65,72 @@ No discounts. No yearly savings framing. Price is the price.
 | Production Max 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo |
 | Production Max yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr |
 
-Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi` (Creative £120/yr), `price_1Ts7xIGlctwiB9U3JyZB8Kwj` (Max £240/yr)
+Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi`, `price_1Ts7xIGlctwiB9U3JyZB8Kwj`
+
+Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe` · Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
+Portal: configured · redirect to `https://share.refueler.io/upgrade.html`
+Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 
 Business tier: invoiced manually via Stripe invoice template. No subscription price object. Off-repo.
 
-Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe`
-Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
-Portal: configured · redirect to `https://share.refueler.io/upgrade.html`
-Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+---
+
+## Lightning infrastructure (B7)
+
+**Provider: LNbits on Hetzner CAX21. Locked pre-Opus-2.** Blink dead (UK custodial discontinued Aug 31 2026). Voltage eliminated (US company, invoice metadata). Strike eliminated (custodial).
+
+**Stack on Instance A (Share+Pass):** phoenixd (ACINQ, no bitcoind required) → LNbits (wallets: Share, Pass, Ops) → cloudflared tunnel (Worker→LNbits, no inbound ports) → Tor (per-service .onion for LNbits admin + phoenixd transport).
+
+**Liquidation:** phoenixd splice-out → standard bech32 in Sparrow Wallet. phoenixd cannot send to BIP-352 Silent Payments (no node for scanning). Sweep when balance exceeds ops reserve (set at NB-4).
+
+**Phoenixd → LND trigger (locked):** Migrate when EITHER: (1) ≥£10k/mo Lightning receipts sustained 3 consecutive months AND named operator committed to channel ops; OR (2) ACINQ discontinues/changes phoenixd terms. Not before — switching below £10k is a false economy for a non-coder founder.
+
+**Payment flow (B7):**
+1. Frontend → `POST /subscription/lightning` with `{ tier, period }`
+2. Worker → LNbits `POST /api/v1/payments` → BOLT11 + payment hash
+3. KV write: `{ paymentHash, tier, period, created_at, expires_at, settled: false }` — 25h TTL
+4. Frontend: QR + BOLT11 copy. User pays any Lightning wallet.
+5. LNbits webhook → Worker KV lookup → **authenticated GET re-verify** `paid: true` → Cashu credential → `settled: true`
+6. Credential in KV (10 min TTL) + browser memory only. No Supabase row.
+7. Frontend polls `GET /subscription/lightning/credential?hash={paymentHash}`
+
+**Webhook:** LNbits does NOT HMAC-sign callbacks — treat as notification, re-verify via authenticated GET. Dedup via `settled: true` KV flag.
+
+**Fallback:** `lightning_available` KV flag. Dashboard toggle → Stripe fully operational while re-provisioning.
+
+**Privacy model:** Lightning payer = payment hash + amount + tier only — no identity at any layer. Honest claim: "pseudonymous." DO NOT claim "anonymous."
+
+**DO NOT add a Supabase row or email field to the Lightning credential path** — load-bearing for Silent Drop.
 
 ---
 
 ## Locked architecture decisions
 
 **Crypto layers (never conflate):**
-- BLAKE3 = chunk integrity. Browser: local WASM at `frontend/blake3/`. Worker: `worker/blake3-wasm/` via `blake3_worker.js`. Server verifies every chunk — 400 on mismatch.
+- BLAKE3 = chunk integrity. Browser: `frontend/blake3/`. Worker: `worker/blake3-wasm/` via `blake3_worker.js`. 400 on mismatch.
 - Cashu = anonymous auth (NUT-00/07/11). No monetary usage. No external mint.
-- Passphrase hash = SHA-256 only (`crypto.subtle.digest`). Stored in manifest as `p2sh_secret_hash`. Argon2id KDF replaces this for Enterprise API tier post-B8.
+- Passphrase hash = SHA-256 only. Stored as `p2sh_secret_hash` in manifest.
 - AES-GCM session key lives in URL fragment only — never in requests, never in logs.
-- Upload boundary: `Content-Type` header validated on chunk 0 against denylist of execution-capable MIME types. 415 on missing or denylisted type, logged to AE. MIME type is never stored.
-- AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`. Never `new Uint8Array([i])`.
+- AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`.
 
-**Storage:**
-- R2 binding: `BUCKET`. KV binding: `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`.
-- R2 manifest is authoritative. Supabase is ledger only. No direct R2 URL exposure.
-- `safeGetManifest()` double-read: minor R2 inefficiency, not a security gap.
+**Storage:** R2 binding `BUCKET`. KV binding `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`. `safeGetManifest()` enforces 64 KB ceiling.
 
 **Frontend:**
 - Credentials in browser memory only — never localStorage, never sessionStorage.
-- `frontend/blake3/`, `frontend/fflate.min.js`, `frontend/qr-creator.min.js` — all self-hosted, force-committed via `git add -f`. DO NOT load from cdnjs.
-- Status banner: `sessionStorage` dismiss. Status page `/status.html` — no nav entry.
-- QR library: `qr-creator` (SVG output, self-hosted). DO NOT use `qrcodejs`.
-- Drop zone: single file only. Multiple file drag rejected with explicit message. File inputs outside drop zone hit area, JS-triggered only.
-- Folder upload via client-side zip (fflate, S53–S56). DO NOT implement multi-file manifest.
-- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/share.js`, `frontend/upgrade.css` only (extracted S51).
-- `share.js` must remain `type="module"` — scoped deps, top-level await support.
-- `src/_includes/head.njk` theme script: `localStorage`/`rfTheme` replaced with `rs-theme` cookie scoped to `.refueler.io` (30-day rolling, `SameSite=Lax`). `dataset.theme` attribute only — `[data-theme="carbon"]` CSS selector. `window.toggleTheme` exposed as global for nav pill `onclick`. Cross-domain theme persistence confirmed working (AP-8).
-- `src/_includes/nav.njk` link set (AP-8): Notes (`refueler.io/notes/`), Upgrade (`/upgrade.html`), Support (`refueler.io/support/`), theme pill. App / Editorial / Privacy links removed. Legend deliberately omitted (not fully live). Wordmark stays `REFUELER / SHARE`.
-
-**Stripe:**
-- Direct Subscription + `expand[0]=latest_invoice.payment_intent` → `pi_...` secret for `stripe.elements()`.
-- Paid tier cards greyed out (soft launch). Re-enable only on explicit instruction from Rajesh at B7 close.
+- `frontend/blake3/`, `frontend/fflate.min.js`, `frontend/qr-creator.min.js` — self-hosted, force-committed. DO NOT load from cdnjs.
+- QR library: `qr-creator` (SVG, self-hosted). DO NOT use `qrcodejs`.
+- Folder upload via streaming `fflate.Zip` (S53/RU0). Never `fflate.zip()` (buffered — OOM).
+- `share.js` must remain `type="module"`.
+- Theme: `rs-theme` cookie scoped to `.refueler.io` (30-day, SameSite=Lax). `dataset.theme` attribute only. `window.toggleTheme` global for nav pill.
 
 **Ops:**
-- NUT-07 melt after first chunk write. Supabase failure: log and continue.
-- Turnstile: fail-closed on any error.
-- Rate limits (STATUS_KV): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s · `download` 300/60s. All 429s logged to AE.
-- `/log/error`: always 200, fire-and-forget AE write, UUID truncated to 8 chars, detail max 200 chars.
-- Wrangler 4.113.0. ✓
-- Download bearer token TTL = `manifest.expiry_timestamp`. DO NOT hardcode 900s. (Fixed S58.)
+- Rate limits (STATUS_KV): `credential_issue` 10/60s · `upload` 120/60s · `auth` 5/60s · `log_error` 20/60s · `download` 300/60s.
+- `/log/error`: always 200, fire-and-forget AE write, UUID truncated 8 chars, detail max 200 chars.
+- Wrangler 4.113.0.
 
 **Regulatory (UK):**
 - Share mint issues access credentials only — capability tokens, not monetary instruments. FCA authorisation not required.
-- Cashu in Share = anonymous authentication mechanism, not payment instrument.
-- UK GDPR Article 33: 72hr ICO notification for personal data breaches. Share's architecture minimises exposure — free tier holds no identity data; encrypted noise only at rest.
-
-**Marketing / outreach:**
-- No social media presence. refueler.io is the canonical destination for all outreach. Clients visit the site; Share does not go to them. This is by design and consistent with the product's values.
-
-**Marketing claim rulings (S42e — update again after B8, B9, B10):**
-- ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; Turnstile nonce binding; anonymous transfer (no account, free tier).
-- 🔒 Blocked: full Merkle tree verification; NUT-11 Mode 2; "audit-certified"; ML-KEM; any "end-to-end file integrity" without the server-side-chunks-only qualifier.
-- 📅 Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle · B10 → ML-KEM.
-- 🔒 **Journalist/source-protection hero copy blocked** until all three gates are passed: (1) Silent Drop shipped, (2) blinded-relay crypto reviewed, (3) network-layer scope stated honestly (VPN caveat, not full anonymity). Until then: journalist inbox stays in planning docs, whitepaper, and article drafts only — never live hero copy. Same discipline as "audit-certified." (Locked Opus-1 · 27 Aug 2026)
+- UK GDPR Article 33: 72hr ICO notification for personal data breaches. Free tier: no identity data held.
 
 ---
 
@@ -229,49 +145,41 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | KV counter for double-spend | Supabase table only (race condition) |
 | `await env.AE.writeDataPoint()` | Synchronous, fire-and-forget |
 | Customer Portal without active subscription | Stripe returns `resource_missing` |
-| `await reportError(...)` | `.catch(() => {})` fire-and-forget |
 | `if (rl)` to check rate limit | Use `if (rl.limited)` — `checkRateLimit` returns object |
-| `getManifest()` direct from handlers | Use `safeGetManifest()` — enforces 64KB ceiling |
+| `getManifest()` direct from handlers | Use `safeGetManifest()` — enforces 64 KB ceiling |
 | Generate UUID client-side | Worker generates UUID at `/credential/issue` since S42c |
 | Turnstile nonce TTL = 7 days | Cloudflare expires tokens ~300s; use 600s KV TTL |
-| `classList.contains('carbon-mode')` for theme detection | Use `dataset.theme === 'carbon'` |
-| Omit `{% include "shared-styles.njk" %}` from any Eleventy page | Required on every page |
-| `fflate.zip()` (buffered) for folder uploads | `fflate.Zip` streaming API only — buffered path OOM on large folders (RU0) |
-| `ZipDeflate` with `{ level: 0 }` for already-compressed files | `fflate.ZipPassThrough` — writes method=0 (STORED), macOS Archive Utility compatible. `ZipDeflate level:0` writes method=8 (DEFLATED, zero passes) which Archive Utility rejects (RU0) |
-| Multiple concurrent `arrayBuffer()` calls in zip loop | One file at a time only — release buffer before reading next. Yield via `setTimeout(0)` between files (RU0) |
-| Hardcode 900s TTL for download tokens | Pass `manifest.expiry_timestamp` as `expiresAt` |
-| `client.putManifest()` in integration tests | No Worker route exists — manifest written automatically after final chunk |
-| `X-P2SH-Secret-Hash` in separate manifest PUT | Must be sent as chunk 0 upload header |
-| Dummy blinded message in `issueCredential` test helper | Must do real BDHKE unblinding (`C_ - r*K`) or `verifyCredential` returns 401 |
-| Supabase mock started in test file | Lifecycle owns it — must start before wrangler so URL lands in `.dev.vars` |
+| `fflate.zip()` (buffered) for folder uploads | `fflate.Zip` streaming API only — OOM on large folders |
+| `ZipDeflate` with `{ level: 0 }` for already-compressed files | `fflate.ZipPassThrough` (STORED, method=0) — Archive Utility compatible |
+| Multiple concurrent `arrayBuffer()` calls in zip loop | One file at a time; yield via `setTimeout(0)` |
+| Hardcode 900s TTL for download tokens | Pass `manifest.expiry_timestamp` |
 | `ProjectivePoint.subtract()` in noble v2 | Use `.add(point.negate())` |
-| `localStorage` / `rfTheme` for theme in `head.njk` | `rs-theme` cookie scoped to `.refueler.io`, `dataset.theme` only (AP-8) |
-| `classList.add('carbon-mode')` in theme script | `document.documentElement.dataset.theme = 'carbon'` (AP-8) |
-- Template changes (*.njk) go to `refueler-io/src/share/` directly. CSS/JS go to `refueler-share/frontend/` (canonical) then `bash bin/sync-share.sh`. Never place njk in refueler-share/src/ expecting them on the live site.
-- `share/index.njk` must have `activePage: "share"` (not `""`) for nav conditionals to fire.
-- CSS served at `/share/assets/share.css` not `/share.css` — href in templates must reflect this.
-- sync-share.sh path: `bin/sync-share.sh` (not repo root).
-- Share-specific secondary nav (Plans/Status as a separate band across Share pages) deferred to future session.
+| `localStorage` / `rfTheme` for theme in `head.njk` | `rs-theme` cookie, `dataset.theme` only |
+| `classList.add('carbon-mode')` in theme script | `document.documentElement.dataset.theme = 'carbon'` |
+| Template changes in `refueler-share/src/` | `*.njk` → `refueler-io/src/share/` · CSS/JS → `refueler-share/frontend/` + `bin/sync-share.sh` |
+| Edit files in `refueler.io/src/share/assets/` | GENERATED — edit in `refueler-share/frontend/` then sync |
 | Cloudflare Queues / Durable Objects / D1 for webhooks | `ctx.waitUntil` + KV dead-letter only |
 | Sub-keys per API user (Business tier) | One keypair per commercial relationship + `transfer_ref` attribution |
-| Never edit `frontend/upgrade.html` directly | Eleventy overwrites it from `src/upgrade.njk` on every build |
-| DO NOT add email field or Supabase row to the Lightning credential path | This invariant is load-bearing for Silent Drop — the inbox's no-identity promise depends on the Lightning path never creating an identity record. Lock it now so nothing later "helpfully" adds one. (Locked Opus-1 · 27 Aug 2026) |
-| DO NOT treat HTTP 409 on resume chunk PUT as a generic 4xx error | 409 = transfer already complete (stale R2 object). Clear IDB + show "already completed" message + New Upload CTA. Do not rethrow. (RU2e) |
-| DO NOT require Turnstile on resume credential path | Use `resume: true` + `resume_uuid` + R2 HEAD check on chunk 0000. (RU2c) |
+| Require Turnstile on resume credential path | `resume: true` + `resume_uuid` + R2 HEAD check on chunk 0000 |
+| HTTP 409 on resume chunk PUT as generic 4xx | 409 = transfer already complete — clear IDB + "already completed" message + New Upload CTA |
+| Add email / Supabase row to Lightning credential path | Load-bearing for Silent Drop — invariant, locked |
 
 ---
 
 ## Current state
 
-**B7 in progress — S73/S73a complete. NB-series (node bootstrap) next. Lightning provider locked: LNbits on Hetzner CAX21.**
-**RU-block ✓ complete (RU0 → RU2e). Resume flow end-to-end working. Next block: HQ-series.**
+**B7 in progress — S73/S73a complete. NB-series (node bootstrap) next.**
+**SYNC-1 ✓ · RU-block ✓ (RU0–RU2e) · HQ-series ✓ (HQ1–HQ2)**
+**Next block after NB+B7: SD-block.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
 | B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
-| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6 load tests (all green), CI Level 1, Lightning admin toggle, Stripe webhook security suite. |
-| B7 in progress | `a19778c` | S73/S73a: client errors modal — UA parsing, detail table, provenance note, layout fix. |
-| RU-block ✓ | see RU2e | Full resumable upload flow: streaming zip (RU0) → IDB schema (RU1) → re-credential + file picker + retry (RU1a/RU2c) → 409 detection + encrypted-chunks reassurance note (RU2e). |
+| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6, CI Level 1, Lightning toggle. |
+| B7 in progress | `a19778c` | S73/S73a: client errors modal fix. Node bootstrap (NB-series) is pre-B7 gate. |
+| SYNC-1 ✓ | `2d26587` | `bin/sync-share.sh` committed. Embedded git repos gitignored in refueler-io. |
+| RU-block ✓ | `1e33ebe` | Streaming zip (RU0) → IDB schema (RU1) → re-credential + Safari fix (RU1a) → full resume flow + 409 + reassurance note (RU2–RU2e). |
+| HQ-series ✓ | `9cd2241` | HTTP/3 AE logging. BLAKE3 + HTTP/3 trust band on upgrade page. Plans/Status in nav. |
 
 **Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
 
@@ -279,30 +187,23 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Roadmap
 
-Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint.
-
 | Block | Sessions | Scope |
 |-------|----------|-------|
-| B1–B4 ✓ | S1–S42e | Foundation through security hardening |
-| B5 ✓ | S43–S52 | Design full pass |
-| B6 ✓ | S53–S72a | Testing infrastructure + folder upload |
-| **NB-series** (pre-B7) | NB-1…NB-4 | **Node bootstrap** — phoenixd + LNbits + cloudflared + Tor on Instance A. Runbook-first (Opus), then provision, then test-invoice round-trip. Gates all B7 code. |
+| B1–B6 ✓ | S1–S72a | Foundation through testing infrastructure |
+| **NB-series** (pre-B7) | NB-1…NB-4 | **Node bootstrap** — phoenixd + LNbits + cloudflared + Tor on Instance A. Runbook-first (Opus). Gates all B7 code. |
 | B7 | S74–S100 | Lightning/LNbits (phoenixd-backed) + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer. |
-| **SYNC** (post-B7) | SYNC-1 | **Dual-repo asset sync fix.** Blocks ALL frontend sessions — must land before RU1 (which edits `share.js`). See §Dual-repo asset sync. |
-| R-series ✓ | RU0–RU2e ✓ | Resumable uploads complete. Streaming zip (RU0) · IDB schema (RU1) · re-credential + file picker + Safari timeout (RU1a) · resume flow end-to-end + 409 handling + reassurance note (RU2–RU2e). DashBeam gap closed. |
-| HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning. Pairs with R-series to complete the DashBeam-gap response. |
-| **SD-block** | SD1–SD-n | **Silent Drop** — Production Max, Lightning-only standing-receive inbox. Feature ships here; journalist hero copy stays gated until B9. See §SD-block placement. |
-| SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer. After SD (self-serve SD revenue funds the solicitor engagement that gates SW/Business). |
+| **SD-block** | SD1–SD-n | **Silent Drop** — Production Max, Lightning-only standing-receive inbox. Tidy-up sessions S89/S90 precede. |
+| SW | SW1–SW9 | White-label + API build. After SD (self-serve SD revenue funds solicitor gate on SW/Business). |
 | B8 | TBD | NUT-11 Mode 2 keypair auth. |
-| B9 | TBD | LNURL-withdraw + security whitepaper + Merkle + staging env + incident response + **blinded-relay crypto review (unlocks SD journalist copy)**. *(Node line removed — provisioned at NB-series pre-B7.)* |
-| B10 | TBD | Enterprise + ML-KEM + chaos tests + contract tests |
+| B9 | TBD | LNURL-withdraw + security whitepaper + Merkle + staging + incident response + blinded-relay crypto review (unlocks SD journalist copy). |
+| B10 | TBD | Enterprise + ML-KEM + chaos tests |
 | B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
 | B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
-| B13 | post-B12 | Go-to-market — includes compression strategy + creative tier positioning (see B13 notes below) |
+| B13 | post-B12 | Go-to-market — compression strategy + creative tier positioning |
 
-**Locked sequence (Opus-2):** NB → **B7** → SYNC → RU1/RU2 → HQ → **SD-block** → SW → B8 → B9 → B10+.
+**Locked sequence (Opus-2):** `NB → B7 → SD-block → SW → B8 → B9 → B10+`
 
-Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S60→S70→S91 (CI Level 2) · S74→S76 (Lightning invoice→credential) · S76→S83 (credential→paid tier live) · NB-1→NB-4→S74 (node live gates Lightning code) · S81→NB-4 (dashboard Lightning cards need live node) · SW2→SW4 (API auth → webhooks) · SW3→SW5 (badge → client dashboard) · **SYNC-1→RU1** (sync fix gates frontend) · RU2→HQ1→HQ2 (DashBeam-gap response) · SD-feature→B9-blinded-relay→SD-journalist-copy (positioning gate).
+Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S74→S76 (Lightning invoice→credential) · NB-1→NB-4→S74 (node live gates Lightning code) · SW2→SW4 (API auth→webhooks) · SD-feature→B9-blinded-relay→SD-journalist-copy (positioning gate).
 
 ---
 
@@ -310,235 +211,104 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S
 
 - QR logo centre (Refueler mark in quiet zone) → B11
 - Receiver page nav (shows main domain links) → B13
-- Nav snag (Upgrade link on refueler.io) → B13
-- Status tile for admin dashboard → B7 buffer (S87 sweep)
 - Manifest-field minimalism audit (M-02 Blossom benchmark) → B9 whitepaper prep
-- UUID/fragment token entropy pre-audit (birthday-paradox, Proton INFO-004 precedent) → B9
-- REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
-- First-transfer experience aesthetic (Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests) — copy preparation in ad-hoc sessions; build scope B13a
-- Pay-to-extend transfer window design — design document due B8. Framing locked: **"Purchase a recovery window"** — never "pay to extend." Use case: recipient (or sender) purchases additional download time without contacting the other party, preserving the professional relationship. Self-purchase scenario: junior partner extends window on firm's business account without interrupting senior partner or client. **Privacy properties (locked AP-7):** (1) Refueler cannot correlate the extension payment with the original upload — server is blind to who is extending and why; (2) Lightning payment preserves pseudonymity of the purchasing party; (3) original sender's anonymity is structurally unchanged. **Publication restriction (locked AP-7):** mention in B9 whitepaper §Future work only — no public product copy or marketing before the feature ships. Shipping first prevents misreading as punitive artificial-scarcity monetisation and prevents storing competitors implementing a degraded version and poisoning the framing. Tone in all copy when it ships: discreet, convenient, professional — not punitive. Do not build before design locked at B8.
-[RESOLVED] Resumable uploads — RU-block ✓ complete (RU0–RU2e). End-to-end resume flow working: WiFi-kill → interrupted card → resume → share card. 409 handling (stale R2 object) and encrypted-chunks reassurance note added at RU2e.
-- Context file archive strategy — implement at S87: split `Share-Master-Context.md` into working memory (≤350 lines, current + next block only) and new `Share-Archive.md` (compacted block summaries B1–B6, one paragraph per block, key commit hashes, permanent do-not-retry items not already in CLAUDE.md). `Share-Archive.md` lives in repo root, never loaded by default — attach to Project only if historical question arises.
+- UUID/fragment token entropy pre-audit (birthday-paradox) → B9
+- First-transfer experience aesthetic (Jaeger-LeCoultre restraint, ceremonial link presentation, haptics, A/B tests) — B13a
+- Pay-to-extend / "Purchase a recovery window" — design document due B8. **Publication restriction:** B9 whitepaper §Future work only — no product copy before shipping.
+- Context file archive strategy — implement at S87: split into working memory (≤350L) + `Share-Archive.md`.
+
+---
+
+## B7 open snags (resolve at S93–S95, final pass S100)
+
+- PayNym column on payment privacy table — "coming soon" placeholder only
+- Own node stub cards (routing fee income, channel liquidity) — greyed until B9
+- Renewal warning banner: 7-day pre-expiry, all paid tiers (Stripe + Lightning). SessionStorage-dismiss.
+- Theme toggle absent from modals
+- `receiver_ab_shown` / `receiver_ab_downloaded` events routing to `/log/error` instead of AE
 
 ---
 
 ## B7 notes
 
-**Session numbering convention (B7 onwards):**
-Single-scope sessions use plain numbers (e.g. S78). Sessions that split due to complexity use
-lettered suffixes starting from `a` (e.g. S73, S73a). Plain number is never skipped.
-
-**Difficulty scaling rule:** S = 1 session. M = 2. L = 3. Split early rather than overrun.
-
-**NB-series — node bootstrap (pre-B7, 3–4 weeks, deliberate pace).** Runs as its own block *before* any B7 code. Full step-by-step runbook is written in NB-1; the phases below are its table of contents.
-
-*Pre-server reading (no Hetzner instance needed — do now):*
-1. Read phoenixd docs: `https://github.com/ACINQ/phoenixd` — it is the Lightning node and LNbits' funding source. Note the 12-word seed, the HTTP API, and splice-out for on-chain liquidation.
-2. Read LNbits repo README: `https://github.com/lnbits/lnbits` — modular; strip every extension Share doesn't need (shop, boltcards, tpos…) — unused extensions are attack surface.
-3. Confirm the only two LNbits endpoints Share needs: `POST /api/v1/payments` (create invoice) and `GET /api/v1/payments/{payment_hash}` (check `paid`).
-4. **LNbits core does not HMAC-sign the per-invoice `webhook` callback.** The trust boundary is authenticated re-verification via the GET in step 3 — design for that, not for a signature. (Corrected Opus-2.)
-5. Make a 2 GB test file for post-bootstrap load testing: `dd if=/dev/urandom of=/tmp/testfile.bin bs=1m count=2048`
-
-*NB session phases (Opus for NB-1; the rest are guided runbook execution):*
-- **NB-1 (Opus, no code):** write the runbook. Phases: Hetzner account + SSH key + OS hardening (ufw default-deny, fail2ban, SSH-keys-only, unattended-upgrades) → **phoenixd** install + seed backup → **LNbits** install pointed at phoenixd, extensions stripped, per-product wallets (Share/Pass/Ops) each with own API key → **cloudflared** tunnel for the Worker→LNbits path (no inbound ports) → **Tor** one daemon, per-service .onion for LNbits admin + phoenixd transport → backup routine (phoenixd seed + LNbits DB, encrypted, off-box) → lightweight monitoring (uptime, disk, node balance) → failure modes + recovery time.
-- **NB-2:** provision Instance A, execute the runbook. Configure Sparrow Wallet as the splice-out destination (standard bech32 — SP-send not supported by phoenixd; see §Lightning infrastructure §Liquidation).
-- **NB-3:** end-to-end test — create invoice via LNbits REST, pay from a wallet, confirm callback + GET re-verify, confirm splice-out liquidation.
-- **NB-4:** set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY` (`npx wrangler secret put …`). Node declared live. B7 code may now start.
+**Session numbering (B7+):** single-scope = plain number (S78). Split sessions = lettered suffix (S73, S73a). Plain number never skipped.
 
 **Pre-B7 guards:**
-- DO NOT create Stripe objects or lock the "Silent Drop" name during B7. Both are deferred (naming → S89, Stripe objects → S90; SD build → SD-block).
-- DO NOT provision Hetzner until NB-1 runbook is written — no dark provisioning.
-- DO NOT add a Supabase row or email field to the Lightning credential path. Load-bearing for Silent Drop. (Also in do-not-retry ledger.)
-- DO NOT build a phoenixd/LND funding swap now — phoenixd is the locked default; LND is trigger-gated (see §Phoenixd → LND trigger).
+- DO NOT create Stripe objects or lock "Silent Drop" name — naming S89, Stripe S90, SD build SD-block.
+- DO NOT provision Hetzner until NB-1 runbook is written.
+- DO NOT build a phoenixd/LND funding swap — phoenixd is default; LND is trigger-gated.
 
 ---
 
-## B7 open snags (resolve at S93–S95 snag sweep, final pass at S100)
+## SD-block placement (locked Opus-2)
 
-- PayNym column on payment privacy table — "coming soon" placeholder only at B7
-- Own node stub cards (routing fee income, channel liquidity) — greyed until B9
-- LNbits webhook signing cards (delivery rate, signature failures) — greyed until B9
-- Renewal warning banner: 7-day pre-expiry notice on upgrade page for all paid tiers (Stripe + Lightning). SessionStorage-dismiss. Copy: *"Your subscription renews on [date]. Your transfers will remain accessible."* Build in same session as API credential renewal work.
-- Theme toggle absent from modals — minor UX, add at S87 snag sweep
-- `receiver_ab_shown` / `receiver_ab_downloaded` events routing to `/log/error` instead of AE — S47c A/B tracking code calling `reportError()` in error. Investigate `frontend/share.js` at S87.
+**Where:** after B7, before SW. Tidy-up sessions S89 (tier naming) and S90 (Stripe objects) precede SD build.
 
----
-
-## Post-B8 agenda (locked AP-4)
-
-**Argon2id for Enterprise API passphrase-protected transfers:**
-- Client-side KDF only. WASM bundle ~200KB, one-time page load, not per-chunk.
-- Worker never sees raw passphrase — only the Argon2id-derived 32-byte key.
-- Parameters: `m=65536`, `t=3`, `p=4` (OWASP minimum). ~300ms browser-side, imperceptible to user.
-- Positioned as security feature to enterprise clients, not a caveat.
-- Free tier review only if competitors force the issue.
-- After B8 NUT-11 Mode 2 work is live: propose Argon2id as NUT-11 Mode 1 KDF extension via Cashu GitHub. Would replace SHA-256 in the P2SH secret hash path. Precedent: BIP-38 uses scrypt for the same purpose. Framing: "NUT-11 Mode 1 with optional KDF hardening for high-value secrets."
-
-**ML-KEM (post-quantum key wrapping):**
-- Ship Production Max and Enterprise tiers first. Free tier deferred until paid tier stable.
-- Positioned as progression path — customers buy up into post-quantum security.
-- B10 scope.
-
-**BIP-85 for enterprise user management:**
-- Enterprise admin generates master seed (BIP-39, 12-word phrase, confirmed on account creation).
-- BIP-85 derives child signing keys per staff member from master.
-- Admin can revoke/rotate individual child keys without affecting others.
-- Server only verifies signatures — key hierarchy entirely client-owned.
-- Staff offboarding: rotate child key derivation path, issue new `rfs_live_` against new child public key.
-- Build scope: SW or B8 — confirm at SW close.
-
-**Nostr keypair auth for dashboard (paid + enterprise):**
-- secp256k1 challenge-response. No password, no email loop, no OAuth third-party dependency.
-- Admin signs staff public keys into allowlist. BIP-85 derives staff Nostr keys from master seed.
-- Team usage dashboard: per-user upload history, quota remaining, aggregated from KV.
-- Creatives and Bitcoin-native users will already have Nostr keys.
-- Notes article 12 reframed around this as "API technical integration guide."
-
----
-
-## B9 scope additions (AP-4)
-
-**Incident response plan and breach register:**
-Full playbook in `docs/incident-response.md`. Breach log in `docs/security-breach.md`.
-Both created AP-5. Build scope B9 — implement status page incident dashboard panel, `incident_active`
-KV schema extension, homepage status widget, and tabletop simulation before alpha.
-Key architectural point: R2 breach exposes ciphertext only (key never held). Supabase breach
-triggers UK GDPR Article 33 (72hr ICO notification). Free tier: no personal data held, no
-notification obligation, positive architectural narrative. Run tabletop simulation
-(scenario documented in `docs/incident-response.md` §8) before first customer.
-**⚠️ Resequence consequence (Opus-2):** "first customer" is now the first **Silent Drop self-serve Lightning customer** — which lands at the SD-block, *before* B9. The tabletop-before-first-customer hard constraint therefore gates the **SD-block launch**, not B9. Pull the tabletop forward accordingly. (The "before first *enterprise* client" items — Supabase-breach-impact doc, solicitor engagement — remain gates on SW/Business, which is post-SD.)
-
-**SimpleX Chat:**
-- Self-hosted SMP server on **its own Hetzner instance (Instance C), NOT co-located with the payment node** (B9+). Attack-surface isolation of the funds box — supersedes the earlier "alongside Lightning node" plan.
-- Internal Share team comms on infrastructure we control.
-- Enterprise clients: dedicated SimpleX group per client as private support/incident channel.
-- API too immature for dashboard embedding — revisit post-B12.
-- Position as optional enhanced security channel, not mandatory.
-
----
-
-## Future work (whitepaper §Future work + B12+)
-
-**FROST threshold signatures (B12):**
-- Require M-of-N co-signatories to authorise credential issuance before a transfer can proceed.
-- Use cases: law firm partner sign-off before junior uploads client documents; music masters delivery requiring producer + manager + label co-authorisation; film/VFX delivery requiring director + supervisor sign-off.
-- Framing: cryptographic chain of custody built into the transfer itself — not bolted on via a third-party witness service.
-- Competitive displacement: DocuSign eSignature Business ~£200–£300/user/year. FROST-based approach is architecturally superior — no central attestation to subpoena, breach, or compel.
-- Mention in B9 whitepaper §Future work. Build scope B12.
-
-**Recovery window ("Purchase a recovery window") — also B9 whitepaper §Future work only:**
-- See B6 carried snags for full framing, privacy properties, and publication restriction.
-- Only public mention permitted before shipping: B9 whitepaper §Future work. No product copy, no upgrade page, no marketing.
-
-**Silent Payments (BIP-352) — replaces PayNym/BIP-47:**
-- Static payment address, unique on-chain output per sender. No interaction transaction required.
-- Requires continuous blockchain scanning node — B9 infrastructure dependency.
-- Long-term direction: Silent Payments over PayNym. PayNym column on upgrade page remains placeholder until B9 node is live.
-
-**refueler-multi-core (blockchain scanning):**
-- Fork Esplora (Blockstream, MIT) or Mempool.space (MIT) for Bitcoin blockchain scanning.
-- Use case: Silent Payments scanning for Enterprise clients; internal infrastructure for Share's own on-chain payment rails.
-- Prerequisite: still **post-B9**. (The Lightning node is live from NB-series, but multi-core is a separate fork gated on B9 whitepaper/blinded-relay work, not on node availability.)
-
----
-
-## SD-block placement + tidy-up sessions (locked Opus-2 · 29 Aug 2026)
-
-**Where SD sits:** after HQ, before SW. `NB → B7 → SYNC → RU1/RU2 → HQ → SD-block → SW`.
-
-**Why SD before SW:**
-- SD is the *immediate product expression* of the B7 Lightning anonymous rail — build it while that rail is warm in context.
-- SD is **self-serve** Lightning revenue with **no solicitor gate**. SW/Business is invoiced and is hard-gated on solicitor engagement before the first client — so SW revenue cannot land instantly regardless. Ship SD, earn, use it to fund the solicitor engagement that unblocks SW.
-- SD does **not** violate the "legal/professional first" market lock: the *feature* (a no-identity standing inbox) serves lawyers/accountants receiving from anonymous senders just as well as journalists. Only the **journalist hero copy** is deferred.
+**Why SD before SW:** SD is self-serve Lightning revenue with no solicitor gate. SW/Business is hard-gated on solicitor engagement. Ship SD → earn → fund solicitor → open SW.
 
 **Feature vs positioning split:**
-- **SD-feature** (standing-receive inbox, recovery-cliff framing, Production Max Lightning-only) — ships at SD-block, pre-B9.
-- **SD journalist/source-protection hero copy** — stays gated until B9: blinded-relay crypto reviewed + VPN scope stated honestly. (Blinded relay = Option A, CF Worker over HTTPS — buildable, but the *positioning* waits for the review.)
+- **SD-feature** (standing-receive inbox, recovery-cliff framing, Production Max Lightning-only) — ships at SD-block.
+- **SD journalist/source-protection hero copy** — gated until B9: blinded-relay crypto reviewed + VPN scope stated honestly.
 
-**Tabletop gate:** the incident-response tabletop (hard constraint before first customer) gates **SD-block launch**, since the first self-serve customer arrives here. See §B9 scope additions.
-
-**Two tidy-up sessions (confirmed at B7-close, pre-SD — they stay put):**
-- **S89 — tier naming + copy.** Locks tier names and the "Silent Drop" name before any SD copy is written. No Stripe objects.
-- **S90 — Stripe objects.** Aligns Stripe **price objects for the Stripe-rail tiers only**. ⚠️ Silent Drop / the Lightning-only tier gets **no Stripe object** — creating one would attach identity and break the no-identity promise. Naming (S89) strictly precedes Stripe (S90).
+**Tabletop gate:** incident-response tabletop (hard constraint before first customer) gates SD-block launch. First self-serve customer arrives here — pull tabletop forward from B9.
 
 ---
 
-## SW block notes — white-label + API (locked AP-3a)
+## Marketing / competitive intelligence
 
-**Block principle:** runs immediately after S87 (B7 close). No code before SW1.
+**Anonymity spectrum:** WeTransfer/Smash/SwissTransfer → Tresorit/Proton → Wormhole → **Refueler Share** → OnionShare. DO NOT claim "no competitor offers anonymous payment" — Proton accepts on-chain Bitcoin.
 
-**SW session plan:**
+**Positioning:** "professional-grade anonymity where only one side needs to be sophisticated."
 
-| Session | Label | Scope | Size |
-|---------|-------|-------|------|
-| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. Smoke: `GET /status` via wl hostname. | S |
-| SW2 | API auth I | `worker/src/api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. | M |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rotation with 24h grace. | M |
-| SW3 | Badge + /wl/config | `GET /wl/config` by Host header, fail-safe `badge: true`. Badge component Paper/Carbon. | S |
-| SW4 | Webhooks I | Registration endpoints, `rfs_whsec_` issuance, `wh_config_` KV schema, URL validation. | M |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. Daily cron retry. | M |
-| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. | M |
-| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. | M |
-| SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. | S |
-| SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. Built once, generated per client. | S |
-| SW8 | Daily cron | Hostname health checks → AE. Dead-letter webhook retry. `[triggers]` in wrangler.toml. | S |
-| SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. | S |
+**Two-axis category framing (locked AP-7):** (1) **Recipient problem** — transfer survives either party going offline (synchronous P2P fails by design). (2) **Compulsion problem** — nothing to hand over, never had it (storing services with server-side keys fail by design). Do not name DashBeam in public copy — position by architecture only.
 
-**Buffer:** SW2b (auth overrun), SW5b (dashboard overrun).
-
-**KV key prefixes introduced at SW:**
-- `wl_config_{hostname}` — `{ api_key_id, badge, client_label, status }`
-- `wh_config_{api_key_id}` — array of `{ webhook_id, url, events[], created_at }`
-- `wh_dead_{api_key_id}_{event_id}` — dead-letter payload, 7-day TTL
-- `api_quota_{key_id}` — `{ credentials_remaining, bytes_remaining, period_end }`
-- `incident_active` — `{ severity, declared_at, updated_at, summary, actions, next_update }` · null = no active incident (B9)
-
-**Webhook spec (locked AP-3a):** 4 events: `credential.issued`, `transfer.completed`, `quota.threshold`, `quota.exhausted`. Signing: `X-Refueler-Signature: t={unix},v1={hex}` — HMAC-SHA256 over `{t}.{raw_body}`. Replay window ±300s.
+**Marketing claim rulings (S42e):**
+- ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; anonymous transfer (free tier).
+- 🔒 Blocked: full Merkle tree; NUT-11 Mode 2; "audit-certified"; ML-KEM; "end-to-end file integrity" without qualifier.
+- 🔒 Journalist/source-protection hero copy blocked: gate (1) SD shipped, (2) blinded-relay reviewed, (3) VPN scope stated.
+- Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle · B10 → ML-KEM.
 
 ---
 
-## Dual-repo asset sync (locked Opus-2 · 29 Aug 2026) — BLOCKS ALL FRONTEND SESSIONS
+## API / white-label — locked (AP-2 + AP-3a)
 
-**Problem:** `share.js` / `share.css` are dual-homed — canonical source in `refueler-share/frontend/`, deployed copy in `refueler-io/src/share/assets/`. The **live site is served by the `refueler-io` Pages project**, so any change must physically exist in `refueler-io` at build time. Miss the copy → live site silently stale. Current workaround: a `sync-share` shell alias.
+**Auth:** HMAC-SHA256 over `method + path + timestamp + body_hash`. Three credentials: `rfs_live_` (ID) + `rfs_sign_` (integrity) + `rfs_whsec_` (webhook, Business only).
 
-**Why the clever options fail here:**
-- **Symlink** — dies in CI. Cloudflare Pages checks out `refueler-io` alone; the symlink target (`refueler-share/`) isn't present in that build → broken.
-- **Git submodule** — a footgun for a non-coder (detached HEAD, `submodule update` foot-shooting). Rejected.
-- **Monorepo migration** — rewrites deploy config + Pages projects + history. Massive risk for two files. Rejected now; revisit only if shared-asset surface grows.
+**Credential issuance:** `POST /api/v1/credential/issue`. `transfer_ref` → AE `blob1` only, never Supabase. Quota in KV `api_quota_{key_id}`.
 
-**LOCKED decision — two stages:**
-1. **SYNC-1 (do now, before RU1):** promote the alias to a committed, guarded script `bin/sync-share.sh` in `refueler-share` that (a) copies `frontend/share.{js,css}` → `refueler-io/src/share/assets/`, (b) diff-verifies the copy, (c) `commit && push` **both** repos in one run, (d) refuses to half-complete. Stamp a `/* GENERATED — source: refueler-share/frontend — do not edit */` header into the copied files. Single source of truth = `refueler-share/frontend/`. One command, cannot be forgotten. Share lives at `refueler.io/share/` — not `share.refueler.io` (subdomain retired).
-2. **Medium term (only if surface grows > 2 files):** `refueler-io` consumes the assets as a versioned git dependency fetched at build (`npm install`), removing the committed copy entirely.
+**Five-tier structure:**
 
-**Audit (part of SYNC-1):** grep all six repos for duplicated asset filenames to catch any *other* accidental dual-homing. Distinguish **intentional** duplication (`REFUELER-BRIDGE.md` is deliberately copied to all repos) from **accidental** (`share.js`). Likely suspects: shared theme-toggle JS, `head.njk`, font files, design tokens.
+| Tier | Cap | Expiry | Billing |
+|------|-----|--------|---------|
+| Free | 4 GB | 1 / 7 days | — |
+| Creative Premium | 100 GB | 1 / 7 / 30 days | Monthly / 3-month / yearly |
+| Production Max | 250 GB + API | 1 / 7 / 30 / 90 days | Monthly / 3-month / yearly |
+| Business | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Invoiced (annual minimum) |
+| Enterprise | Custom · 5 TB/mo · Argon2id · BIP-85 | Custom | Annual contract |
+
+No discounts. No yearly savings framing.
 
 ---
 
-## Competitive intelligence — M-series (outside repo)
+## Worker endpoints (summary)
 
-**Key locked findings — do not contradict in any copy:**
-- Anonymity spectrum: WeTransfer/Smash/SwissTransfer → Tresorit/Proton → Wormhole → **Refueler Share** → OnionShare.
-- DO NOT claim "no competitor offers anonymous payment" — Proton accepts on-chain Bitcoin and cash by post.
-- Positioning: "professional-grade anonymity where only one side needs to be sophisticated."
-- Core framing: "the server is blind and so is the till."
-- "Pseudonymous is not unlinkable" — the Berlin line.
+Core consumer paths: `POST /credential/issue` (Turnstile) · `PUT /upload/{uuid}/{chunk}` (Cashu) · `POST /auth/{uuid}` · `GET /download/{uuid}/{chunk}` · `POST /log/error`.
+Admin: `GET|POST /admin/status` · `GET /admin/metrics` · `GET /admin/ae-metrics` · `GET /admin/snapshot`.
+Stripe: `POST /webhook/stripe` · `POST /subscription/checkout` · `GET /subscription/status` · `POST /subscription/portal` · `GET /subscription/credential`.
+Lightning (B7): `POST /subscription/lightning` · `POST /webhook/lightning` · `GET /subscription/lightning/credential`.
+SW: `GET /wl/config` · `POST /api/v1/credential/issue` · `POST /api/v1/keys/rotate` · `GET /api/v1/transfers` · `POST|GET|DELETE /api/v1/webhooks{/id}` · scheduled cron.
 
-**Two-axis category framing (locked AP-7):**
-Refueler Share is the only architecture that solves both of these simultaneously:
-1. **The recipient problem:** the transfer survives the sender closing their laptop; it survives the recipient being on a plane. Every synchronous P2P tool (DashBeam, Wormhole) fails this by design.
-2. **The compulsion problem:** there is nothing to hand over — not because we'd refuse, but because we never had it. Every storing service with server-side keys fails this by design.
+---
 
-This two-axis framing is the category definition and the spine of article 5's four-quadrant table. It is also the strongest candidate for the index page hero. Do not conflate with the one-line positioning ("only one side needs to be sophisticated") — they are complementary, not substitutes.
+## Testing infrastructure
 
-**DashBeam (dashbeam.net) — assessed AP-6, 2 Aug 2026:**
-- Synchronous P2P (both parties must be online simultaneously). QUIC via Iroh framework. Unlimited free tier. Resumable transfers. Open source. No B2B intent. Anonymity = IP-to-IP direct handshakes (both IPs visible to each other and relay).
-- **Not a threat to professional buyer segment.** Asynchronous delivery is a structural advantage.
-- **One genuine gap confirmed:** resumable uploads. Addressed by R-series post-SW.
-- **HTTP/3 positioning:** "Transfers run over HTTP/3 on Cloudflare's global edge network with per-chunk BLAKE3 integrity verification." TLS/QUIC proves the channel; BLAKE3 proves the content. Addressed by HQ-series post-R-series.
-- Do not name DashBeam in any public copy — positioning by architecture, not by competitor name.
+Canonical reference: `TESTING.md` (repo root). Load for any testing session. **212 passing · 0 skipped · 8 suites** (6 unit + 2 integration). k6 load tests all green. CI Level 1 live. Level 2 (integration in CI) — B7–B8 scope.
 
-**OEM positioning paragraph (Berlin, verbatim — locked AP-3a):**
-> "Some companies want to offer encrypted file delivery inside their own product, under their own name — and that's a conversation I'm genuinely happy to have. What you'd be taking on isn't a widget, it's the architecture: blind-signature credentials, client-side encryption, and a server that only ever stores noise — so it can't be compelled to hand over anything it never saw. Your users get transfers even we can't read, and you get to make that promise honestly, because it's structural, not a line in a privacy policy. It's not a tier on a pricing page — every integration is scoped with me directly, because embedding this properly depends on what your product already promises its users. If that's interesting, email support@refueler.io — it comes straight to me — and tell me what you'd want your users to be able to do. I'd rather have that conversation than hand you a feature list."
+---
+
+## /notes/ article pipeline
+
+12 articles planned at `refueler.io/notes/`. Full editorial detail: `notes-articles-list.md`. Articles 1–5: no product dependency (article 1 live). Article 6: unlocks post-B7 Lightning. Articles 8/11/12: post-SW. Article 7 (journalists): Susie (Bitcoin Policy UK) intro first. Key contact: BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback.
 
 ---
 
@@ -548,152 +318,33 @@ This two-axis framing is the category definition and the spine of article 5's fo
 |--------|------|
 | Complete | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
 | Deferred B8 | NUT-11 Mode 2 (keypair challenge-response, Prod Max) |
-| Post-B8 proposal | Argon2id as NUT-11 Mode 1 KDF extension (Cashu GitHub discussion) |
+| Post-B8 | Argon2id as NUT-11 Mode 1 KDF extension |
 | Deferred B10 | ML-KEM key wrapping |
+| Monitor | NUT-10 v3 "Nutroot secrets" PR #421 — HIGH for B12/Pass |
 
 ---
 
-## Worker endpoints
+## Future work + B9 scope
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/status` | public | Operational state from KV |
-| POST | `/admin/status` | X-Admin-Key | Update KV state (inc. lightning_available + incident_active flags) |
-| GET | `/admin/metrics` | X-Admin-Key | Supabase aggregation |
-| GET | `/admin/ae-metrics` | X-Admin-Key | AE SQL proxy |
-| GET | `/admin/snapshot` | X-Admin-Key | 6-field combined snapshot |
-| POST | `/credential/issue` | Turnstile | NUT-00 blind sig (consumer path) |
-| PUT | `/upload/{uuid}/{chunk}` | Cashu credential | Chunked upload |
-| POST | `/auth/{uuid}` | — | NUT-11 passphrase → download token |
-| GET | `/download/{uuid}/{chunk}` | Bearer (if protected) | R2 chunk proxy |
-| POST | `/webhook/stripe` | Stripe sig | Subscription lifecycle |
-| POST | `/subscription/checkout` | — | Subscription + PaymentIntent |
-| GET | `/subscription/status` | — | Tier by email |
-| POST | `/subscription/portal` | — | Customer Portal session |
-| GET | `/subscription/credential` | — | Re-issue credential on demand (Stripe path) |
-| POST | `/subscription/lightning` | — | Create BOLT11 invoice for tier purchase (B7) |
-| POST | `/webhook/lightning` | — | LNbits payment callback → credential issuance (B7) |
-| GET | `/subscription/lightning/credential` | — | Poll for issued credential by paymentHash (B7) |
-| POST | `/log/error` | — | Client error → AE (20/60s rate limited) |
-| GET | `/wl/config` | — | Badge config by Host header, Cache-Control max-age=3600 (SW3) |
-| POST | `/api/v1/credential/issue` | HMAC (rfs_live_ + rfs_sign_) | Issue credential on behalf of end user (SW2a) |
-| POST | `/api/v1/keys/rotate` | HMAC | Rotate API keypair, 24h grace (SW2a) |
-| GET | `/api/v1/transfers` | HMAC | AE-backed transfer list, transfer_ref filter (SW5) |
-| POST | `/api/v1/webhooks` | HMAC | Register webhook endpoint (SW4) |
-| GET | `/api/v1/webhooks` | HMAC | List webhook endpoints (SW4) |
-| DELETE | `/api/v1/webhooks/{id}` | HMAC | Remove webhook endpoint (SW4) |
-| — | Scheduled cron | — | Hostname health checks + dead-letter retry (SW8) |
+**B9:** Incident response tabletop (**gates SD-block launch** — first self-serve customer arrives there, before B9). `docs/incident-response.md` + `docs/security-breach.md` created AP-5. Build: status page incident panel, `incident_active` KV schema. SimpleX SMP on Instance C (own box, B9). Cyber Essentials Plus · G-Cloud · ISO 27001 · NHS DSPT · Defensive publication via IP.com (30 days after whitepaper).
+
+**B12:** FROST threshold signatures — M-of-N co-signatories for credential issuance. Law firm partner sign-off, music masters delivery, film/VFX chain of custody.
+
+**B8+:** Argon2id Enterprise KDF — WASM, client-side, m=65536 t=3 p=4. BIP-85 enterprise key management. Nostr keypair auth for dashboard (secp256k1 challenge-response).
+
+**B10:** ML-KEM post-quantum key wrapping — Production Max + Enterprise first, free tier deferred.
+
+**B9+:** Silent Payments (BIP-352) — requires full Bitcoin node. refueler-multi-core (Esplora fork) — post-B9.
+
+**Publication-gated (B9 whitepaper §Future work only):** "Purchase a recovery window" — no product copy before shipping.
 
 ---
 
-## Testing infrastructure
+## Compression strategy (RU0 · B13)
 
-Canonical reference: `TESTING.md` (repo root). Load for any testing session.
+Skip-compress via `fflate.ZipPassThrough` (STORED, method=0) for: Video (`.mov .mp4 .mxf .r3d .braw .ari .mkv .avi .wmv .webm .m4v`) · Audio (`.mp3 .aac .m4a .ogg .flac .opus`) · Images (`.jpg .jpeg .heic .heif .webp .avif`) · Archives (`.zip .gz .bz2 .xz .7z .rar`). PNG/TIFF/TXT/MD/CSV/JSON — keep `ZipDeflate` level 6. Never `{ level: 0 }` in ZipDeflate — macOS Archive Utility rejects DEFLATED method=8 with zero passes.
 
-| Layer | Tool | Status |
-|-------|------|--------|
-| Unit tests | Vitest 2 | 212 passing · 0 skipped · 8 suites |
-| Integration tests | Vitest + wrangler dev --local | 212 passing / 0 skipped. All 5 seams closed. |
-| Security regression suite | Vitest integration | Complete. MIME, UUID, chunk bounds, tier cap, rate limits, credential farming, nonce binding. |
-| Load tests | k6 | ✅ S68–S69. All four scripts passing. Local workerd thresholds. Tighten to <150ms at B9 staging. |
-| CI pipeline | GitHub Actions | Level 1 live and green (S70–S72). Level 2 (integration suite in CI) — B7–B8. |
-| Dashboard emission | JSON reporter → KV → dashboard card | B10–B11 scope |
-| Staging environment | refueler-share-staging Worker | B9 scope |
-
----
-
-## /notes/ article pipeline — refueler.io
-
-All articles live on `refueler.io/notes/` (main domain). Source Serif 4 body, IBM Plex Mono for data/tables.
-No social media distribution. refueler.io is the canonical destination.
-**Full editorial detail:** see `notes-articles-list.md` in repo root.
-
-| # | Title (short) | Publish order | Dependency | Status |
-|---|--------------|---------------|------------|--------|
-| 1 | Subpoena table | 1st | None | Live — iteration ready from week of 5 Aug |
-| 2 | Client files / inbox | 2nd | None | Planned — structure locked AP-1 |
-| 3 | Metadata value | 3rd | None | Planned — structure locked AP-1 |
-| 4 | Blind vs secure server | 4th | None | Planned — structure locked AP-1 |
-| 5 | Jurisdiction vs architecture | 5th | None | Planned — structure locked AP-1 |
-| 6 | Anonymous payment option | After B7 live | B7 Lightning | Planned |
-| 7 | Journalists and file transfer | Flexible | Susie intro first | Planned |
-| 8 | PI insurer risk | After SW complete | SW block | Planned — highest B2B value |
-| 9 | After the link expires | Anytime | None | Planned |
-| 10 | Case study (video editor) | Last | Real user + history | Planned |
-| 11 | API / white-label notes | After SW complete | SW block | Planned |
-| 12 | API technical integration / Nostr auth | After SW complete | SW block | Planned |
-
-**Key contacts:**
-- Susie, Bitcoin Policy UK — article 7 / journalist angle. Approach after article 2 is live.
-- BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback reader, potential case study subject.
-
----
-
-## API / white-label — architecture locked (AP-2 + AP-3a)
-
-**Auth:** HMAC-SHA256 over `method + path + timestamp + body_hash`. Three credentials per relationship: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, Business only, shown once).
-
-**Credential issuance:** `POST /api/v1/credential/issue`. Request: `{ tier, transfer_ref, expiry_hours }`. `transfer_ref` logged to AE as `blob1`, never Supabase, opaque to Refueler. Returns `{ uuid, credential, upload_url_base }`. Quota in KV `api_quota_{key_id}`. 402 on exhaustion.
-
-**Stripe decoupling:** `subscribers` = billing ledger only, never queried on upload path. Credential issued at webhook receipt, collected via `GET /subscription/credential`. `X-Email` dropped. Renewal: credentials stack, 7-day warning banner (sessionStorage-dismiss).
-
-**Five-tier structure (pricing off-repo):**
-
-| Tier | Cap | Expiry | Billing |
-|------|-----|--------|---------|
-| Free | 4 GB | 1 / 7 days | — |
-| Creative Premium | 100 GB | 1 / 7 / 30 days | Monthly / 3-month / yearly |
-| Production Max | 250 GB + API (100 creds + 250 GB quota) | 1 / 7 / 30 / 90 days | Monthly / 3-month / yearly |
-| Business | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Invoiced (annual minimum) |
-| Enterprise | Custom · 5 TB/mo included · Argon2id KDF · BIP-85 key mgmt | Custom | Annual contract |
-
-No discounts. No savings framing. Prepay cadences are convenience, not a deal.
-
-**Badge:** "Powered by Refueler Share" — Production Max API only. Removed at Business+. Fail-safe: no KV record → `badge: true`.
-
-**Custom hostname:** CF for SaaS. Client CNAME → `wl.share.refueler.io`. Existing Worker. No new Worker.
-
----
-
-## B13 notes — compression strategy + creative market positioning
-
-**Context (logged 5 Aug 2026):** Live stall on 1.51 GB photo folder revealed that fflate level-6 compression on already-compressed files (JPEG, video, audio) wastes significant CPU and time for zero size benefit, contributing to a ~20–40% speed deficit vs unencrypted services like Smash. This is acceptable for legal/professional buyers; it is a real barrier for creative professionals working with video.
-
-**Compression strategy — implemented RU0 (28 Aug 2026), benchmarking at B13a/HQ-series:**
-
-Skip compression for file types that are already compressed. Implemented as `fflate.ZipPassThrough` (STORED, method=0) in the streaming zip path — not `{ level: 0 }` in ZipDeflate, which would produce a DEFLATED header with zero passes (macOS Archive Utility rejects this). The zip wrapper is retained for receiver convenience; only the compression pass is skipped.
-
-| Category | Skip compression | Notes |
-|----------|-----------------|-------|
-| Video | `.mov .mp4 .mxf .r3d .braw .ari .mkv .avi .wmv .webm .m4v .mpg .mpeg` | All compressed codecs. Raw formats (.r3d, .braw, .ari) are proprietary compressed. |
-| Audio | `.mp3 .aac .m4a .ogg .flac .opus .wma` | FLAC is lossless but already compressed. |
-| Images | `.jpg .jpeg .heic .heif .webp .avif` | PNG and TIFF are compressible — keep level 6 for those. |
-| Archives | `.zip .gz .bz2 .xz .7z .rar .tar.gz` | Already compressed — level 0. |
-| Office/PDF | `.pdf .docx .xlsx .pptx` | Modern Office formats are zipped internally — marginal gain only, test both. |
-| Documents | `.txt .md .csv .json .xml .html` | Keep level 6 — compress well, small files. |
-
-**Implementation (RU0):** `shouldSkipCompression(relativePath)` — extension lookup against `SKIP_COMPRESS_EXTENSIONS` Set. `ZipPassThrough` for skip-list types, `ZipDeflate level 6` for everything else. Unit tests cover all skip-list extensions + compressible types. Manual smoke test pending: (a) 1.5 GB JPEG folder, (b) 500 MB ProRes folder, (c) mixed document folder. Benchmark against Smash for each. Target: ≤15% slower than Smash on video/photo folders. Benchmark scope: B13a or HQ-series.
-
-**Creative market positioning — B13a decision:**
-- Creative Premium tier is well-named for photographers and designers (document + image heavy, reasonable file sizes)
-- Production Max is the correct tier for video professionals (250 GB cap, longer expiry windows)
-- The privacy story for video is strong: unreleased footage, NDA'd productions, talent contracts, music not yet announced — all genuine use cases
-- **Market sequencing (locked 5 Aug 2026):** lawyers and professionals first; creatives second; general consumer never. Do not optimise marketing for creatives until legal/professional channel is proven.
-- **Speed honesty:** do not claim parity with Smash or WeTransfer. Honest framing: "Faster than email. Slower than services that can read your files. That's the trade."
-
----
-
-## Internal framing — what Share is (Opus-1 · 27 Aug 2026)
-
-*(Canonical statement for CLAUDE.md and planning sessions. Not marketing copy.)*
-
-Refueler Share is anonymous, encrypted, asynchronous file transfer whose architecture solves two problems no competitor solves at once: the **recipient problem** — a transfer survives either party going offline — and the **compulsion problem** — there is nothing to hand over, because the server only ever holds encrypted noise and never held a key or an identity. **Silent Drop is the sharpest expression of that architecture, not a new pillar of it**: point the same blind-signature, client-encrypted, server-blind machinery at a standing inbound channel and a recipient can publish one permanent link that any sender can use — no account, no software, no Bitcoin knowledge — while Refueler can link no sender to the recipient, to another sender, or to another transfer. This is why only one side ever needs to be sophisticated.
-
-Tiers resolve on two independent dimensions: **capacity** (Free → Creative Premium → Production Max → Business → Enterprise) and **payment rail** (Stripe, which carries identity and so supports refunds and recovery; Lightning, which carries none and so unlocks the identity-free features Silent Drop depends on). The architectural direction is **"the policy is the credential"** — access and custody conditions expressed cryptographically via NUT-10 Nutroot secrets and FROST, rather than enforced by a server that could be compelled — which is simply the compulsion axis followed to its conclusion.
-
-The gap Silent Drop closes is the **correlation problem**: can a recipient maintain a permanent, publicly-shareable way to receive files from an open and unknown set of senders, such that the recipient's identity is never bound to the address, senders need no account and reveal nothing, and no two transfers — same sender or different — can be linked to each other or to the recipient? Every existing mechanism fails a clause. Silent Drop does not.
-
-*"Faster than email. Slower than services that can read your files. And the only one where the inbox is as blind as the server."*
+Market sequencing: lawyers/professionals first; creatives second. Speed honesty: "Faster than email. Slower than services that can read your files. That's the trade."
 
 ---
 

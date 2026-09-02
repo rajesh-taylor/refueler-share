@@ -25,7 +25,6 @@
 | 19 | 14 Jul | grouped | `/admin/metrics`: MRR, subscribers_by_tier, paid_total, churn MTD. RLS deny-all on ledger tables. `cancelled_at` added to `subscribers` |
 | 20 | 14 Jul | grouped | `double_spend_attempts` table, `credential_uniqueness_rate` metric |
 | 21 | 14 Jul | grouped | `frontend/admin/dashboard.html` scaffold: password gate, live metric cards, 60s refresh |
-| 19-plan | 14 Jul | — | Roadmap S19–S120 drafted. Critical chains recorded in Share-Master-Context.md |
 | 22 | 15 Jul | `d1bcb5a`+`f36e385` | `GET /admin/ae-metrics`: AE SQL proxy, CF_AE_TOKEN scoped. CORS `X-Admin-Key` fix. |
 | 23 | 15 Jul | `a4bc625` | AE SQL column syntax fix (`double1`/`blob1` not array syntax). p95/p99 latency + error rate cards. |
 | 24 | 15 Jul | `5be5811` | `GET /admin/snapshot`, System Summary dashboard section (6 metric tiles) |
@@ -38,7 +37,7 @@
 - `secp.Point` — removed in noble v2, use `secp.ProjectivePoint`
 - `binding = "R2"` in wrangler.toml — must be `BUCKET`
 - BLAKE3 for passphrase hash — must be SHA-256
-- `wrangler r2 bucket lifecycle set --rule` inline JSON — use `add` subcommand; `lifecycle get` → `lifecycle list`
+- `wrangler r2 bucket lifecycle set --rule` inline JSON — use `add` subcommand
 - AE SQL: use `double1`/`blob1` column names, not `doubles[N]`/`blob[N]` array syntax
 - DO NOT await `env.AE.writeDataPoint()` — fire-and-forget
 - DO NOT call AE SQL API from Worker — proxy via `/admin/ae-metrics` only
@@ -53,15 +52,14 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| 27 | `5f3cb8e` | Stripe CLI installed. 4 test prices created. Root cause of `client_secret` mismatch identified: `checkout/sessions ui_mode:embedded` incompatible with `stripe.elements()` |
-| 28 | `5f3cb8e` | Direct Subscription creation pattern confirmed. 4242 card flow ✓. Webhook handler extended with `customer.subscription.created`. |
-| 29 | `5d8c1ea` | `STRIPE_SECRET_KEY` rotated to `sk_live_...ZehD`. Portal `resource_missing` confirmed correct (no active sub). Cancellation code-complete. **B3 closed.** |
+| 27 | `5f3cb8e` | Stripe CLI installed. 4 test prices created. Root cause of `client_secret` mismatch: `checkout/sessions ui_mode:embedded` incompatible with `stripe.elements()` |
+| 28 | `5f3cb8e` | Direct Subscription creation confirmed. 4242 card flow ✓. Webhook handler extended. |
+| 29 | `5d8c1ea` | `STRIPE_SECRET_KEY` rotated. Portal `resource_missing` confirmed correct. Cancellation code-complete. **B3 closed.** |
 
 **B3 do-not-retry:**
 - DO NOT use `checkout/sessions ui_mode:embedded` — use direct Subscription + `expand[0]=latest_invoice.payment_intent`
 - DO NOT `decodeURIComponent` Stripe `client_secret` — already decoded
 - DO NOT attempt Customer Portal without active subscription — Stripe returns `resource_missing`
-- 4242 card is test-mode only — never works in live mode
 
 ---
 
@@ -69,37 +67,26 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S34 | `7738450f` | BLAKE3 WASM in Worker. `verifyChunkHash()` live. Integrity gap closed. |
-| S35-e | `95a12b4` | Paid tiers greyed out (soft launch). Uncounted. |
+| S34 | `7738450f` | BLAKE3 WASM in Worker. `verifyChunkHash()` live. |
 | S35 | `ab01388` | AAD overflow fix — `DataView.setUint32(0,i,false)` into 4-byte buffer. |
 | S36 | `b877c76` | KV-backed rate limiting: `ratelimit.js`, 3 endpoints, 429s logged to AE. |
 | S36b | `0cc4de9` | `/log/error` endpoint + `reportError()` helper. 6 capture points. |
-| S36c | `2db7b08` | Dashboard legibility pass. Snapshot strip. Paper/Carbon cookie. Modal stubs. |
-| S37 | `7684118` | Dashboard: Satoshi figures, row 2 6-cell, row 3 3-cell. `client_errors_24h` stub. |
-| S38 | `20da7d4` | `client_errors_24h` AE query. 3 rogue secrets deleted. Wrangler 4.112. |
+| S37–S38 | `7684118`+`20da7d4` | Dashboard design pass. `client_errors_24h` AE query. 3 rogue secrets deleted. |
 | S39 | `ab4fc98` | Server-side tier enforcement. 10 MB chunk cap. KV byte counter. |
-| S40 | `c6f1a7a` | MIME denylist gate on chunk 0 (6 types). 415 + AE log on miss. |
+| S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 + AE log on miss. |
 | S41 | `b2a4ba0` | UUID validation (RFC 4122). Chunk bounds check. |
-| S42a | `c8a57a42` | `handleLogError` fix. Filename sanitisation. 64 KB manifest cap. Chunk + expiry guards. |
-| S42b | `18d85351` | Per-UUID auth rate limit. Download rate limiting. Chunk count defence. |
-| S42c | `c053cbc` | UUID-bound credential issuance. Worker generates UUID. `waitForTurnstile` fix. |
-| S42d | `0b32e69` | Turnstile nonce binding. Safari polling fallback. Wrangler 4.113. |
+| S42a–S42d | various | `handleLogError` fix. Filename sanitisation. Per-UUID auth rate limit. UUID-bound credential issuance. Turnstile nonce binding. |
 | S42e | — | Full B4 audit. Marketing claim rulings. UK regulatory language. B5 handoff. |
 | S43 | `5c54802` | DESIGN-TOKENS.md v1.0 applied to index, upgrade, status pages. |
-| S44 | `b15f407` | Dashboard design pass I: sidebar, token alignment, Satoshi figures, 4 latency cards. |
-| S45 | `7187e41` | Dashboard design pass II: 240px sidebar, gold wordmark, farming card. |
-| S46a | `bbf271a` | Modal build I: 14 modal keys, skeleton, focus trap. CSS+JS extracted to dashboard.css/js. |
-| S46b | `023dfcc` | Modal polish: formatBytes, zero=green, datasource banner, × close. smokeTest 27 pass. |
-| S47a | `63eb253` | FREE_EXPIRY fixed (5d→7d). Progress smooth. QR retina. Cap nudge. status.njk editorial. |
-| S47b | `d8faf0f` | QR 200px SVG (qr-creator). 2-col button grid. Serif integrity notes. Ghost back links. |
-| S47c | `cb7a925` | Receiver landing page. USP A/B test (Variant A/B, sessionStorage, AE logging). |
-| S47d | `3eb4ec4` | QR guard. Drop zone single-file rejection. Colophon. Footer subdomain-only. Turnstile theme. |
-| S48 | `0761f4c` | Maintenance modal. Theme cookie `rs-theme` scoped to `.refueler.io`. No FOUC. |
-| S48a | `0152aae` | FSAA streaming download. Pipeline depth 2. Per-chunk retry 1s/2s/4s. Blob fallback. |
-| S49a | `3598a65` | Carbon gold edging. `--inset-rule` throughout. Brand token aliases in shared-styles. |
-| S50 | `e3a4407` | Serif audit. 3 correct usages confirmed. 3 CSS-only additions. |
+| S44–S45 | `b15f407`+`7187e41` | Dashboard design pass I+II: sidebar, token alignment, gold wordmark. |
+| S46a–S46b | `bbf271a`+`023dfcc` | Modal build: 14 modal keys, skeleton, focus trap. formatBytes, zero=green. |
+| S47a–S47d | various | FREE_EXPIRY fixed (5d→7d). QR 200px SVG (qr-creator). Receiver landing page. USP A/B test (Variant A/B, sessionStorage, AE logging). |
+| S48 | `0761f4c` | Maintenance modal. Theme cookie `rs-theme`. No FOUC. |
+| S48a | `0152aae` | FSAA streaming download. Per-chunk retry 1s/2s/4s. Blob fallback. |
+| S49a | `3598a65` | Carbon gold edging. `--inset-rule` throughout. |
+| S50 | `e3a4407` | Serif audit. 3 correct usages confirmed. |
 | S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). |
-| S52 | — | `TIER_EXPIRY_SECONDS.free` 5d→7d. `--heading` alias. Lightning ops plan. Context v4.0. B5 closed. |
+| S52 | — | `TIER_EXPIRY_SECONDS.free` 5d→7d. Lightning ops plan. Context v4.0. B5 closed. |
 
 ---
 
@@ -107,38 +94,30 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S53 | `b1d9855`+`ca1260c` | Folder upload I. fflate 0.8.2, client-side zip, zip progress UI. fflate bare `Uint8Array` fix (macOS). |
-| S54 | `c732abf` | Folder upload II. `sanitisePath`, depth limit 20, file count cap 500 warn/2000 hard stop, memory pressure warning. |
-| S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is decision locked, `rc-folder-note`. |
-| S56 | `6cf711d`+`7735787` | Folder upload smoke test. fflate + qr-creator self-hosted. Drop zone fix. Full round-trip ✓. |
+| S53 | `b1d9855`+`ca1260c` | Folder upload I. fflate 0.8.2, client-side zip, zip progress UI. |
+| S54 | `c732abf` | Folder upload II. `sanitisePath`, depth limit 20, file count cap 500/2000. |
+| S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is decision locked. |
+| S56 | `6cf711d`+`7735787` | Folder upload smoke test. fflate + qr-creator self-hosted. Full round-trip ✓. |
 | S57 | — | Bearer TTL investigation. 900s hardcoded exp fatal for large transfers. Root cause identified. |
 | S58 | `f94a158` | Bearer TTL fix. Token exp = `manifest.expiry_timestamp`. Smoke test ✓. |
-| S59 | — | Buffer. Skipped — S58 clean. |
 | S60 | `e59305c` | Unit tests I. Vitest 2 harness. ratelimit + manifest. 43 passing. |
-| S61 | — | Unit tests II. nut00 BDHKE + blake3. 100 passing. blake3.js null-guard fix. |
-| S62 | — | Unit tests III. turnstile + stripe. 178 passing across 6 suites. |
-| S63 | — | Testing infra review I. Integration harness designed. TESTING.md created. |
-| S64 | `def77b5` | Integration tests I. wrangler dev --local harness. Full BDHKE in client.js. 181 passing. |
-| S65 | `8dc8dce` | Security regression suite I. Rate limits, UUID binding, nonce binding. 188 passing. |
-| S66 | `344e32d` | Security regression suite II. MIME, UUID validation, chunk bounds, tier cap. 207 passing / 8 suites. |
-| S67 | — | Testing infra review II. k6 architecture locked. TESTING.md discrepancies flagged. |
-| S68 | `53d24ee` | Load tests I. credential-burst + concurrent-transfers. chunks.js hash table pre-computed. All thresholds green. |
-| S69 | `38c60e5` | Load tests II. download-saturation + mixed-realistic + preload-transfers.mjs + README. All thresholds green. |
-| S70 | `731b571` | CI pipeline I. GitHub Actions Level 1 green. stripe-events.js Web Crypto. ESLint flat config. |
-| S71 | `93b2b86` | CI pipeline II + Lightning admin toggle + Stripe webhook security tests. 211 passing / 1 skipped. |
-| S72 | `319225f` | Stripe webhook provide/inject fix. Valid-sig test un-skipped. 212 passing / 0 skipped. |
-| S72a | — | B6 close. Snag sweep. TESTING.md v0.5. Context trim. B7 brief. B6 formally closed. |
+| S61–S62 | — | Unit tests II–III. nut00 BDHKE + blake3 + turnstile + stripe. 178 passing / 6 suites. |
+| S63–S64 | `def77b5` | Integration harness. wrangler dev --local. Full BDHKE in client.js. 181 passing. TESTING.md created. |
+| S65–S66 | `8dc8dce`+`344e32d` | Security regression suite I–II. MIME, UUID, chunk bounds, tier cap. 207 passing / 8 suites. |
+| S67–S69 | various | k6 architecture + load tests I–II. All thresholds green. |
+| S70–S72 | `731b571`+`93b2b86`+`319225f` | CI Level 1 green. Lightning admin toggle. Stripe webhook security tests. 212 passing / 0 skipped. |
+| S72a | — | B6 close. TESTING.md v0.5. Context trim. B7 brief. |
 
 **B6 do-not-retry (permanent):**
-- DO NOT use `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x — bare `new Uint8Array(buf)` only.
-- DO NOT load fflate or qr-creator from cdnjs — self-hosted only (`frontend/`).
-- DO NOT put file inputs inside the drop zone hit area — JS-triggered only.
-- DO NOT hardcode 900s TTL for download tokens — pass `manifest.expiry_timestamp`.
-- DO NOT call `client.putManifest()` in integration tests — manifest auto-written after final chunk.
-- DO NOT send `X-P2SH-Secret-Hash` in a separate manifest PUT — must be chunk 0 upload header.
-- DO NOT start Supabase mock in the test file — lifecycle owns it.
-- DO NOT use a dummy blinded message in `issueCredential` test helper — real BDHKE unblinding required.
-- DO NOT use `ProjectivePoint.subtract()` — noble v2. Use `.add(point.negate())`.
+- DO NOT use `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x — bare `new Uint8Array(buf)` only
+- DO NOT load fflate or qr-creator from cdnjs — self-hosted only
+- DO NOT put file inputs inside the drop zone hit area — JS-triggered only
+- DO NOT hardcode 900s TTL for download tokens — pass `manifest.expiry_timestamp`
+- DO NOT call `client.putManifest()` in integration tests — manifest auto-written after final chunk
+- DO NOT send `X-P2SH-Secret-Hash` in a separate manifest PUT — must be chunk 0 upload header
+- DO NOT start Supabase mock in the test file — lifecycle owns it
+- DO NOT use a dummy blinded message in `issueCredential` test helper — real BDHKE unblinding required
+- DO NOT use `ProjectivePoint.subtract()` — noble v2. Use `.add(point.negate())`
 
 ---
 
@@ -146,22 +125,22 @@
 
 | # | Date | Summary |
 |---|------|---------|
-| AP-0 | 29 Jul | Ad-hoc strategy. Article pipeline (12 titles). API/white-label planning item. Mullvad payment decoupling. Client dashboard scoped. API pricing model direction set. Susie/BHODL contacts logged. |
-| AP-1 | 29 Jul | /notes/ article pipeline locked. Articles 2–5 structures confirmed. Byline: Rajesh Taylor. notes-articles-list.md created. Article 1 iteration decisions locked, one-week hold. |
-| AP-2 | 30 Jul | API architecture planning. Auth: HMAC signing. Credential issuance on behalf of end users. Stripe decoupling. Renewal: credentials stack. Dashboard: hosted, AE-backed. All decisions locked. |
-| AP-3 | 30 Jul | White-label implementation planning. Custom hostname flow. Badge config via KV. IT handover doc locked. Five-tier structure locked. Pricing cadence 1/3/12 months. |
-| AP-3a | 30 Jul | Webhook spec locked. Single API key + rotation locked. OEM positioning paragraph drafted. SW block created: 12 core + 2 buffer. All context files updated. |
-| AP-4 | 1 Aug | Security and cryptography strategy session. Argon2id for Enterprise API (client-side KDF, post-B8). ML-KEM shipping order locked (Prod Max + Enterprise first, B10). BIP-39/BIP-85 enterprise key derivation. FROST threshold signatures (B12). SimpleX Chat B9+. Incident response plan (B9 scope). |
-| AP-5 | 1 Aug | Incident response and security breach planning. `docs/incident-response.md` and `docs/security-breach.md` created. B9 build scope confirmed. |
-| AP-6 | 2 Aug | Competitive analysis: DashBeam. Resumable upload gap confirmed as one genuine weakness. HTTP/3 + BLAKE3 positioning locked. R-series and HQ-series post-SW blocks created. |
-| AP-7 | 2 Aug | Two-axis category framing locked: "recipient problem" + "compulsion problem". Two-axis framing is index hero candidate and article 5 spine. Renewal warning banner copy locked. Article 1 hold cleared. Git push hygiene rule added to CLAUDE.md. |
-| AP-8 | 4 Aug | Nav rewrite + head.njk theme script rewrite across both repos. Share nav: Notes, Upgrade, Support, theme pill. `rs-theme` cookie scoped to `.refueler.io` (30-day, SameSite=Lax). Cross-domain theme persistence confirmed. |
-| AP-9 | 27 Aug | B7 re-sequence. Lightning infra I (S74) added. Silent Drop confirmed Production Max only. B9 backend locked as LNbits-on-Hetzner CAX21. B7 session budget expanded 25→50 core + 5 buffer. |
-| AP-9a | 28 Aug | Three Opus-1 decisions patched: Lightning identity invariant added to do-not-retry. Journalist/source-protection hero copy gating rule added. Internal framing block added to Share-Master-Context.md. |
+| AP-0 | 29 Jul | Ad-hoc strategy. Article pipeline. API/white-label planning. Susie/BHODL contacts. |
+| AP-1 | 29 Jul | /notes/ article pipeline locked. Articles 2–5 structures confirmed. notes-articles-list.md created. |
+| AP-2 | 30 Jul | API architecture: HMAC signing, credential issuance, Stripe decoupling, renewal stacking. Locked. |
+| AP-3 | 30 Jul | White-label: custom hostname flow, badge config via KV, IT handover doc, five-tier structure. |
+| AP-3a | 30 Jul | Webhook spec locked. Single API keypair + rotation. OEM paragraph drafted. SW block (12+2) created. |
+| AP-4 | 1 Aug | Security + crypto strategy. Argon2id Enterprise (post-B8). ML-KEM B10. BIP-85/FROST B12. SimpleX B9+. |
+| AP-5 | 1 Aug | Incident response planning. `docs/incident-response.md` + `docs/security-breach.md` created. |
+| AP-6 | 2 Aug | Competitive analysis: DashBeam. Resumable upload gap confirmed. HTTP/3 + BLAKE3 positioning locked. |
+| AP-7 | 2 Aug | Two-axis framing locked: recipient problem + compulsion problem. Recovery window framing locked. Article 1 hold cleared. |
+| AP-8 | 4 Aug | Nav rewrite + `head.njk` theme script. `rs-theme` cookie scoped to `.refueler.io`. |
+| AP-9 | 27 Aug | B7 re-sequence. Lightning infra I added. Silent Drop confirmed Production Max only. B7 budget 25→50. |
+| AP-9a | 28 Aug | Lightning identity invariant added. Journalist/source-protection hero copy gating rule added. |
 
 ---
 
-## Sessions 73–73a — B7 in progress (5 Aug 2026)
+## Sessions 73–73a — B7 in progress
 
 | # | Commit | Summary |
 |---|--------|---------|
@@ -170,11 +149,13 @@
 
 **B7 snags (resolve at S93–S95):**
 - Theme toggle absent from modals
-- `receiver_ab_shown` / `receiver_ab_downloaded` events routed to `/log/error` instead of AE — fix at S93
+- `receiver_ab_shown` / `receiver_ab_downloaded` events routed to `/log/error` instead of AE
 
 ---
 
-AD-1 — Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Theme fixed to rs-theme cookie / dataset.theme. Worker endpoints unchanged.
+## AD-1
+
+Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Theme fixed to rs-theme cookie / dataset.theme. Worker endpoints unchanged.
 
 ---
 
@@ -182,7 +163,7 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at `src/share/ad
 
 | # | Commit | Summary |
 |---|--------|---------|
-| RU0 ✓ | `49915f2`→`4b223b1` | Streaming zip: replaced `fflate.zip()` (buffered, OOM on 1.5 GB+) with `fflate.Zip` streaming API. Already-compressed types → `ZipPassThrough` (STORED, method=0). Compressible types → `ZipDeflate` level 6. **Smoke test PASSED: 1.72 GB JPEG folder.** |
+| RU0 ✓ | `49915f2`→`4b223b1` | Streaming zip: replaced `fflate.zip()` (buffered, OOM on 1.5 GB+) with `fflate.Zip` streaming API. `ZipPassThrough` (STORED) for already-compressed types. `ZipDeflate` level 6 for compressible. **Smoke test PASSED: 1.72 GB JPEG folder.** |
 
 **RU0 do-not-retry:**
 - DO NOT use `fflate.zip()` (buffered) — OOM on large folders. `fflate.Zip` (streaming) only.
@@ -197,11 +178,6 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at `src/share/ad
 |---|--------|---------|
 | RU1 ✓ | `ae78b81`→`48ed213` | IndexedDB schema live — `idbOpen()`, `writeChunkState()` (every 200 ACK), `readResumeState()`, `clearResumeState()`. `checkResumeState()` on page load with 8-day stale guard. Resume card HTML in `index.njk` (gold "Interrupted" tag, filename + pct detail, Resume + Discard buttons). Discard wired. Resume = placeholder. |
 
-**RU1 smoke test (31 Aug 2026, Safari, 40 Mbps):**
-- 3.72 GB JPEG folder: streaming path, bytes progress bar ✓
-- Stall at chunk 331/476 — Safari silent connection drop, fetch() hung, retry never triggered
-- Resume card did NOT appear after refresh — IDB state unconfirmed before reload
-
 ---
 
 ## RU1a — Resumable uploads II (1 Sep 2026)
@@ -211,38 +187,35 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at `src/share/ad
 | RU1a ✓ | `9e255fa`/`f05583f` | `resumeUpload()` wired: restores AES key/IV from IDB, re-issues credential, prompts for original file (name+size identity check), re-hashes confirmed chunks for rolling BLAKE3 root, uploads remaining chunks. Expiry-awareness: `tier` + `expiryTimestamp` on IDB record. `fetchWithTimeout()` (60s, AbortController) fixes Safari silent hang. 3× retry (2s/5s/10s). Zip progress capped at 95% + "Finalising archive" label. Toggle knob Carbon fix. 36/36 tests passing. |
 
 **RU1a do-not-retry:**
-- DO NOT use `var(--carbon)` for the active toggle knob — use `#E8E2D8` (Paper literal).
-- DO NOT store IDB records without `tier` and `expiryTimestamp`.
-- DO NOT use bare `fetch()` for chunk uploads — always `fetchWithTimeout()` with `AbortController`.
+- DO NOT use `var(--carbon)` for the active toggle knob — use `#E8E2D8` (Paper literal)
+- DO NOT store IDB records without `tier` and `expiryTimestamp`
+- DO NOT use bare `fetch()` for chunk uploads — always `fetchWithTimeout()` with `AbortController`
 
 ---
 
-## R-series — Resumable uploads (post-SYNC-1, before SW)
+## RU2–RU2e — Resumable uploads III–VII (Sep 2026)
 
-| Session | Commit | Summary |
-|---------|--------|---------|
+| # | Commit | Summary |
+|---|--------|---------|
 | RU2 | `9fce220` | Resume progress strings wired. Renewal banner deferred to SW-block. |
-| RU2a | — | IDB write verification: all five fields confirmed present. Resume card confirmed rendering. Mirror sync gap identified: resume card HTML absent from `refueler-io`. |
-| RU2b | `bd48ad8` | Resume card HTML synced to `refueler-io/src/share/index.njk`. Card confirmed rendering with live IDB record. Resume click returned "could not validate" — root cause identified (Turnstile never rendered on resume path). |
-| RU2c | `2f348cb` / Worker `0c216a5` | Root cause fixed: resume credential now uses `resume: true` + `resume_uuid`; Worker does R2 HEAD check on chunk `0000` to verify partial upload exists, then issues without Turnstile. Also: 3× retry loop on resume upload leg; chunk count mismatch guard post file-picker; `promptForResumeFile` focus/change race fixed with `settled` flag; folder size warning removed. Smoke test partial: resume card renders correctly, R2 bypass works, file picker opens on Resume click. Two bugs found — see RU2d. Blink env var dead references noted for B7 cleanup. |
-| RU2d | `2e1604a` / `bc0d597` / `1030572` | Verification loop hang fixed. Resume button fix. CORS fix. Smoke test: WiFi-kill → card → resume → share card ✓. |
-| RU2e | `1e33ebe` | 409 detection on first resumed chunk PUT: clear IDB, show "already completed" message, repurpose Discard btn as "New upload" → `location.reload()`. Encrypted-chunks reassurance note (`resume-note`) on resume card — shown at `checkResumeState()`, hidden on 409. **RU-block closed.** |
-
-**Buffer pool (1 session used):** RU2e consumed. RU1b unused (buffer).
+| RU2a | — | IDB write verification: all five fields confirmed present. Resume card confirmed rendering. Mirror sync gap identified. |
+| RU2b | `bd48ad8` | Resume card HTML synced to `refueler-io/src/share/index.njk`. Root cause: Turnstile never rendered on resume path. |
+| RU2c | `2f348cb`/Worker `0c216a5` | Resume credential uses `resume: true` + `resume_uuid`; Worker R2 HEAD check on chunk `0000`; no Turnstile. 3× retry loop. `promptForResumeFile` focus/change race fixed. |
+| RU2d | `2e1604a`/`bc0d597`/`1030572` | Verification loop hang fixed. Resume button fix. CORS fix. WiFi-kill → card → resume → share card ✓. |
+| RU2e | `1e33ebe` | 409 detection: clear IDB, show "already completed", repurpose Discard as "New upload". Encrypted-chunks reassurance note. **RU-block closed.** |
 
 **RU do-not-retry:**
-- DO NOT require Turnstile on the resume credential path — use `resume: true` + `resume_uuid` + R2 HEAD check.
-- DO NOT treat HTTP 409 on resume chunk PUT as a generic 4xx — it means transfer already complete. Clear IDB, surface message, offer reload. (RU2e)
+- DO NOT require Turnstile on the resume credential path — use `resume: true` + `resume_uuid` + R2 HEAD check
+- DO NOT treat HTTP 409 on resume chunk PUT as generic 4xx — it means transfer already complete
 
 ---
 
 ## SYNC-1 — Dual-repo asset sync fix (31 Aug 2026)
 
-**Commits:** `refueler-share` `2d26587` · `refueler.io` `706fe65` + `ae6f9e1`
+**Commits:** `refueler-share` `2d26587` · `refueler.io` `706fe65`+`ae6f9e1`
 
-- Canonical: `refueler-share/frontend/`. Mirror: `refueler.io/src/share/assets/`.
-- `bin/sync-share.sh` committed — guarded sync script (copy → diff verify → commit+push both repos).
-- Embedded git repos (`refueler-app`, `terminals/numo-fork`) added to `.gitignore` in `refueler-io` — will not recur.
+- `bin/sync-share.sh` committed — guarded sync (copy → diff verify → commit+push both repos).
+- Embedded git repos (`refueler-app`, `terminals/numo-fork`) added to `.gitignore` in `refueler-io`.
 
 **Do-not-retry:**
 - DO NOT edit files in `refueler.io/src/share/assets/` directly — GENERATED header for a reason.
@@ -250,43 +223,12 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at `src/share/ad
 
 ---
 
-## HQ-series — HTTP/3 + BLAKE3 integrity positioning (post-R-series, before SD-block)
+## HQ-series — HTTP/3 + BLAKE3 integrity positioning
 
-| Session | Label | Scope |
-|---------|-------|-------|
-| HQ1 | HTTP/3 verification + AE instrumentation | Confirm HTTP/3 active. Add `Alt-Svc` logging to AE. Add chunk upload latency datapoint. Draft canonical copy string. Wire to upgrade page and index page. |
-| HQ2 | Competitive positioning copy + /notes/ hook | Write the technical distinction cleanly. No overclaiming — "server-side chunk integrity" not "end-to-end file integrity." |
-
-**Buffer pool (2 sessions):** HQ1b · HQ2b
-
----
-
-## SD-block — Silent Drop (post-HQ, before SW)
-
-Session plan produced at S88. Scope: Production Max, Lightning-only standing-receive inbox. SD-feature ships here; journalist hero copy gated until B9. Incident-response tabletop must complete before SD-block launch.
-
----
-
-## SW block session plan — white-label + API build (post-SD-block)
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. |
-| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. |
-| SW2b | API auth III | Rotation with 24h grace. Unit tests. |
-| SW3 | Badge + /wl/config | `GET /wl/config` by Host header. Fail-safe `badge: true`. Badge component Paper/Carbon. |
-| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. |
-| SW4b | Webhooks III | Daily cron retry of dead-letter items. |
-| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
-| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. |
-| SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. |
-| SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. |
-| SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
-| SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. |
-
-**Buffer pool (2 sessions):** SW2c · SW5b
+| Session | Commit | Summary |
+|---------|--------|---------|
+| HQ1 ✓ | `b66d401` | `blob4` httpProtocol added to AE schema. "Hashing password" copy fix. Auth comment updated. Stale zk_verification_note replaced. |
+| HQ2 ✓ | `9cd2241` | BLAKE3 + HTTP/3 trust band (upgrade page). Plans + Status in share nav. activePage fix. Async card removed. njk/CSS path issues resolved. |
 
 ---
 
@@ -295,7 +237,7 @@ Session plan produced at S88. Scope: Production Max, Lightning-only standing-rec
 | Session | Label | Scope |
 |---------|-------|-------|
 | NB-1 | Node runbook (Opus, no code) | OS hardening → phoenixd + seed backup → LNbits → cloudflared tunnel → Tor per-service .onion → backup + monitoring → failure modes. |
-| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. Verify phoenixd → BIP-352 on-chain send. |
+| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. Verify phoenixd → bech32 on-chain send. |
 | NB-3 | End-to-end test | LNbits invoice → pay → callback → GET re-verify → splice-out liquidation. |
 | NB-4 | Node live | Set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY`. Declare node live. B7 code may now start. |
 
@@ -362,25 +304,44 @@ Session plan produced at S88. Scope: Production Max, Lightning-only standing-rec
 
 ---
 
-## HQ-series — HTTP/3 + BLAKE3 positioning
+## SD-block — Silent Drop (post-HQ, before SW)
 
-| Session | Commit | Summary |
-|---------|--------|---------|
-| HQ1 | `b66d401` | blob4 httpProtocol added to AE schema (upload + credential_issue events). "Hashing password" copy fix. Auth comment updated. Stale zk_verification_note replaced. |
-| HQ2 | `9cd2241` | BLAKE3 + HTTP/3 trust band (upgrade). Plans + Status in share nav. activePage fix. Async card removed. njk/CSS path issues resolved. |
+Session plan produced at S88. Scope: Production Max, Lightning-only standing-receive inbox. SD-feature ships here; journalist hero copy gated until B9. Incident-response tabletop must complete before SD-block launch.
+
+---
+
+## SW block session plan — white-label + API build (post-SD-block)
+
+| Session | Label | Scope |
+|---------|-------|-------|
+| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. |
+| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. |
+| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. |
+| SW3 | Badge + /wl/config | `GET /wl/config` by Host header. Fail-safe `badge: true`. Badge component Paper/Carbon. |
+| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. |
+| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. |
+| SW4b | Webhooks III | Daily cron retry of dead-letter items. |
+| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
+| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. |
+| SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. |
+| SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. |
+| SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
+| SW9 | SW close | Snag sweep. TESTING.md additions. Context trim pass. B8 brief. Buffer review. |
+
+**Buffer pool (2 sessions):** SW2c · SW5b
 
 ---
 
 ## Locked block sequence (Opus-2 · 29 Aug 2026)
 
-`NB → B7 → SYNC-1 → RU1/RU2 → HQ → SD-block → SW → B8 → B9 → B10+`
+`NB → B7 → SYNC-1 → RU-block → HQ → SD-block → SW → B8 → B9 → B10+`
+
+*(SYNC-1 and RU-block and HQ-series are now complete — sequence advances to SD-block after B7.)*
 
 ---
 
-## Opus-2 · 29 Aug 2026 — planning session (uncounted)
+## Opus-2 · 29 Aug 2026 (uncounted)
 
-B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created. S74–S76 rewritten for LNbits REST. Webhook model corrected (unsigned callback → authenticated GET re-verify). Phoenixd→LND trigger locked. Instance topology confirmed. SD-block placed post-HQ, pre-SW. SYNC-1 inserted before RU1. R-series moved ahead of SW. Blink cleanup checklist produced.
-
-Ad-hoc 30 Aug — zipAndSelect root cause: `fflate.zip()` loads all files into RAM simultaneously; fatal at 3.72 GB. Safari failure at chunk 82 was ERR_NAME_NOT_RESOLVED — transient DNS, not a code bug.
+B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created. S74–S76 rewritten for LNbits REST. Webhook model corrected (unsigned callback → authenticated GET re-verify). Phoenixd→LND trigger locked. Instance topology confirmed (A: Share+Pass, B: Legend post-B9, C: SimpleX at B9). SD-block placed post-HQ, pre-SW. SYNC-1 inserted. Blink cleanup checklist produced. Ad-hoc 30 Aug — `fflate.zip()` OOM root cause confirmed; Safari chunk 82 failure was transient DNS, not code bug.
 
 *"Nothing stops this train."*
