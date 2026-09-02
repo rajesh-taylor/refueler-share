@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 6.4 | **Created:** 28 July 2026 | **Updated:** Merchant-Vocab-1 · 2026-09-01
+> **Version:** 6.5 | **Created:** 28 July 2026 | **Updated:** HQ2 · 2026-09-02
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -49,7 +49,18 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 | Admin dashboard pages `src/share/admin/` | Admin Worker endpoints |
 | Notes articles at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning) |
 
-**Dual-repo asset sync (SYNC-1 · 31 Aug 2026):** `share.js`, `share.css`, `share-tokens.css`, `status.css`, `fflate.min.js`, `qr-creator.min.js`, `blake3/` exist in both repos. **`refueler-share/frontend/` is canonical.** `refueler.io/src/share/assets/` is the mirror. Mirror copies carry a `GENERATED FILE` header — never edit them directly. Sync tool: `bin/sync-share.sh` in `refueler-share`. Run after every edit to any shared asset. `plans.css` is io-only and excluded from sync.
+**Dual-repo asset sync (SYNC-1 · 31 Aug 2026):** `share.js`, `share.css`, `share-tokens.css`, `status.css`, `fflate.min.js`, `qr-creator.min.js`, `blake3/` exist in both repos. **`refueler-share/frontend/` is canonical.** `refueler.io/src/share/assets/` is the mirror. Mirror copies carry a `GENERATED FILE` header — never edit them directly. Sync tool: `bin/sync-share.sh` in `refueler-share` (**path: `bin/sync-share.sh`**, not repo root). Run after every edit to any shared asset. `plans.css` is io-only and excluded from sync.
+
+**Share index.njk locked rules (HQ2 · 2 Sep 2026) — three values that must never revert:**
+- `permalink: /share/index.html` — never `/index.html` (conflicts with site root `src/index.njk`)
+- CSS href: `/share/assets/share.css` — never `/share.css` (CSS lives at `/share/assets/`, not root)
+- `activePage: "share"` — never `""` (nav conditionals for PLANS/STATUS depend on this)
+
+**After placing any version of `refueler-io/src/share/index.njk`, always run this sed pass:**
+```bash
+sed -i '' 's/activePage: ""/activePage: "share"/' /Users/rajeshtaylor/Documents/refueler.io/src/share/index.njk && sed -i '' 's|href="/share.css"|href="/share/assets/share.css"|' /Users/rajeshtaylor/Documents/refueler.io/src/share/index.njk && sed -i '' 's|permalink: /index.html|permalink: /share/index.html|' /Users/rajeshtaylor/Documents/refueler.io/src/share/index.njk
+```
+Never place a Claude-generated `index.njk` without running this pass. Template changes (*.njk) go to `refueler-io/src/share/` only — never `refueler-share/src/`.
 
 ### Legend boundary
 | `refueler-io` | `refueler-legend` |
