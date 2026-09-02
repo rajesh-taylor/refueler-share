@@ -139,14 +139,6 @@ function showMaintenanceModal(status) {
       <button class="info-card-dismiss" id="dismiss-info" aria-label="Dismiss">✕</button>
     </div>
 
-    <!-- Async framing card — recipient problem (HQ2) ────────────────────────
-         Second line in this region, not a replacement for the lock line above.
-         Shown to all visitors; dismissed separately from the lock line.        -->
-    <div class="async-card" id="async-card">
-      <span class="async-card-dismiss" id="dismiss-async" role="button" aria-label="Dismiss" tabindex="0">✕</span>
-      <p class="async-body">Send now. Your file waits in encrypted storage until your recipient is ready — close the tab, shut the laptop, get on a plane. Nothing depends on both of you being online at the same moment. Most 'instant' transfer tools quietly need the sender to sit and wait. This one doesn't.</p>
-    </div>
-
     <!-- File inputs — outside the drop zone so they never intercept drag events   -->
     <!-- or block button clicks. Triggered programmatically by JS click handlers.  -->
     <!-- S56: moved from inside drop-zone where position:absolute caused conflicts. -->
@@ -165,12 +157,12 @@ function showMaintenanceModal(status) {
     </div>
 
     <!-- Secondary nav — Plans + Status (HQ2) ──────────────────────────────────
-         Sits below the drop zone. Hidden when a file is selected (share.js adds
-         the 'hidden' class to #share-subnav alongside #info-card + #async-card). -->
+         Sits below the drop zone. Hidden when a file is selected.
+         Styled to match .site-nav register — display, uppercase, fg-muted.     -->
     <div class="share-subnav" id="share-subnav">
-      <a href="/upgrade.html" class="share-subnav-link">Plans</a>
+      <a href="/share/plans/" class="share-subnav-link">Plans</a>
       <span class="share-subnav-dot">·</span>
-      <a href="/status.html" class="share-subnav-link">Status</a>
+      <a href="/share/status/" class="share-subnav-link">Status</a>
     </div>
 
     <!-- Zip progress card (shown while compressing a folder, before upload progress) -->
@@ -345,23 +337,6 @@ function showMaintenanceModal(status) {
 <script type="module" src="/share.js"></script>
 
 <script>
-// ── Async card dismiss — HQ2 ─────────────────────────────────────────────────
-(function () {
-  const ASYNC_DISMISS_KEY = 'rs-async-card-dismissed';
-  const card = document.getElementById('async-card');
-  const btn  = document.getElementById('dismiss-async');
-  if (!card || !btn) return;
-
-  // Hide immediately if previously dismissed
-  try { if (sessionStorage.getItem(ASYNC_DISMISS_KEY)) { card.style.display = 'none'; return; } } catch {}
-
-  btn.addEventListener('click', () => {
-    card.style.display = 'none';
-    try { sessionStorage.setItem(ASYNC_DISMISS_KEY, '1'); } catch {}
-  });
-  btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') btn.click(); });
-})();
-
 // ── Share subnav hide on file select — HQ2 ───────────────────────────────────
 // Watches for options-card becoming visible (share.js removes 'hidden' class).
 // When a file is selected the subnav hides with the rest of the pre-upload chrome.

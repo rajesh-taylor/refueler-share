@@ -398,41 +398,6 @@ main {
   margin: 0 0 8px;
 }
 
-/* ── Async framing card — HQ2 (recipient problem) ───────────────────────────
-   Second card in the info region. Dismissable per session. Serif editorial
-   register — same as #usp-block. No icon, no border accent. Quiet.
-   ──────────────────────────────────────────────────────────────────────────── */
-.async-card {
-  background: var(--card-bg);
-  border: 0.5px solid var(--card-border);
-  border-radius: var(--radius);
-  padding: 14px 40px 14px 18px;
-  position: relative;
-  font-size: 13px;
-}
-.async-card-dismiss {
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--fg-subtle);
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-  flex-shrink: 0;
-}
-.async-card-dismiss:hover { color: var(--fg); }
-.async-body {
-  font-family: var(--serif);
-  font-weight: 300;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--fg-muted);
-  margin: 0;
-}
-
 /* ── HTTP/3 infrastructure whisper — HQ2 ────────────────────────────────────
    Full-width, above footer. Mono, low contrast. Static — not part of the
    upload/download flow. No dismiss. Both Paper and Carbon use the same
@@ -451,27 +416,29 @@ main {
 
 /* ── Share secondary nav — Plans · Status (HQ2) ─────────────────────────────
    Below drop zone, above progress cards. Hidden when file is selected.
-   Mono, fg-subtle — infrastructure register, not marketing.
+   Matches .site-nav register: display font, uppercase, 0.1em tracking.
    ──────────────────────────────────────────────────────────────────────────── */
 .share-subnav {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 4px 0 0;
+  gap: 1.5rem;
+  padding: 8px 0 0;
 }
 .share-subnav-link {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--fg-subtle);
+  font-family: var(--display);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
   text-decoration: none;
-  letter-spacing: 0.04em;
-  transition: color 0.15s;
+  transition: color 0.2s;
 }
-.share-subnav-link:hover { color: var(--fg-muted); }
+.share-subnav-link:hover { color: var(--fg); }
 .share-subnav-dot {
-  font-family: var(--mono);
-  font-size: 11px;
+  font-family: var(--display);
+  font-size: 0.7rem;
   color: var(--fg-subtle);
-  opacity: 0.5;
+  opacity: 0.4;
 }
