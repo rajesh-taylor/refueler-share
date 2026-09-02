@@ -235,6 +235,12 @@ async function checkResumeState() {
   const detail = `${record.fileName} — ${pct}% uploaded (chunk ${record.chunkIndex + 1} of ${record.totalChunks}, ${formatBytes(record.fileSize)})`;
   if (resumeDetail) resumeDetail.textContent = detail;
 
+  // Reassurance note — shown below the detail line on the resume card.
+  // Architecturally accurate: AES-GCM key lives in the URL fragment only,
+  // never touches the server. The server holds encrypted noise and nothing else.
+  const resumeNote = $('resume-note');
+  if (resumeNote) resumeNote.classList.remove('hidden');
+
   if (resumeCard) resumeCard.classList.remove('hidden');
 
   // ── Discard: wipe IDB record and dismiss card.
@@ -478,6 +484,24 @@ async function resumeUpload(record) {
           { method: 'PUT', headers, body: encrypted },
           CHUNK_UPLOAD_TIMEOUT_MS
         );
+        if (res.status === 409) {
+          // Stale R2 object — this transfer was already completed in a prior session
+          // (e.g. a CORS-blocked run that landed server-side but not client-side).
+          // Nothing to resume: clear IDB, tell the user, offer a fresh upload.
+          reportError('resume_409', `chunk ${i} 409 — transfer already complete`, `uuid:${uploadUUID.slice(0,8)}`);
+          await clearResumeState(uploadUUID);
+          progressCard.classList.add('hidden');
+          if (resumeCard) resumeCard.classList.remove('hidden');
+          if (resumeDetail) {
+            resumeDetail.textContent = 'This transfer was already completed — start a new upload.';
+          }
+          const resumeNote = $('resume-note');
+          if (resumeNote) resumeNote.classList.add('hidden');
+          const resumeDiscardBtn409 = $('resume-discard-btn');
+          if (resumeDiscardBtn409) resumeDiscardBtn409.textContent = 'New upload';
+          if (resumeDiscardBtn409) resumeDiscardBtn409.addEventListener('click', () => location.reload(), { once: true });
+          return;
+        }
         if (res.status >= 400 && res.status < 500) {
           const errText = await res.text();
           reportError('resume_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);

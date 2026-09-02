@@ -251,18 +251,22 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Sub-keys per API user (Business tier) | One keypair per commercial relationship + `transfer_ref` attribution |
 | Never edit `frontend/upgrade.html` directly | Eleventy overwrites it from `src/upgrade.njk` on every build |
 | DO NOT add email field or Supabase row to the Lightning credential path | This invariant is load-bearing for Silent Drop — the inbox's no-identity promise depends on the Lightning path never creating an identity record. Lock it now so nothing later "helpfully" adds one. (Locked Opus-1 · 27 Aug 2026) |
+| DO NOT treat HTTP 409 on resume chunk PUT as a generic 4xx error | 409 = transfer already complete (stale R2 object). Clear IDB + show "already completed" message + New Upload CTA. Do not rethrow. (RU2e) |
+| DO NOT require Turnstile on resume credential path | Use `resume: true` + `resume_uuid` + R2 HEAD check on chunk 0000. (RU2c) |
 
 ---
 
 ## Current state
 
-**B7 in progress — S73/S73a complete. S73b next (Opus-2: roadmap resequence + node bootstrap runbook planning). Lightning provider locked: LNbits on Hetzner CAX21.**
+**B7 in progress — S73/S73a complete. NB-series (node bootstrap) next. Lightning provider locked: LNbits on Hetzner CAX21.**
+**RU-block ✓ complete (RU0 → RU2e). Resume flow end-to-end working. Next block: HQ-series.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
 | B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
 | B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6 load tests (all green), CI Level 1, Lightning admin toggle, Stripe webhook security suite. |
 | B7 in progress | `a19778c` | S73/S73a: client errors modal — UA parsing, detail table, provenance note, layout fix. |
+| RU-block ✓ | see RU2e | Full resumable upload flow: streaming zip (RU0) → IDB schema (RU1) → re-credential + file picker + retry (RU1a/RU2c) → 409 detection + encrypted-chunks reassurance note (RU2e). |
 
 **Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
 
@@ -280,7 +284,7 @@ Core S19–S100 · Buffer S101–S120. Session count is a guide not a constraint
 | **NB-series** (pre-B7) | NB-1…NB-4 | **Node bootstrap** — phoenixd + LNbits + cloudflared + Tor on Instance A. Runbook-first (Opus), then provision, then test-invoice round-trip. Gates all B7 code. |
 | B7 | S74–S100 | Lightning/LNbits (phoenixd-backed) + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer. |
 | **SYNC** (post-B7) | SYNC-1 | **Dual-repo asset sync fix.** Blocks ALL frontend sessions — must land before RU1 (which edits `share.js`). See §Dual-repo asset sync. |
-| R-series | RU1 ✓ · RU1a–RU2+ | Resumable uploads — RU1 done (streaming zip + IDB schema). RU1a next: compression finalise UX, Safari fetch timeout, resume flow. Closes the one DashBeam gap. |
+| R-series ✓ | RU0–RU2e ✓ | Resumable uploads complete. Streaming zip (RU0) · IDB schema (RU1) · re-credential + file picker + Safari timeout (RU1a) · resume flow end-to-end + 409 handling + reassurance note (RU2–RU2e). DashBeam gap closed. |
 | HQ-series | HQ1–HQ2+ | HTTP/3 + BLAKE3 integrity positioning. Pairs with R-series to complete the DashBeam-gap response. |
 | **SD-block** | SD1–SD-n | **Silent Drop** — Production Max, Lightning-only standing-receive inbox. Feature ships here; journalist hero copy stays gated until B9. See §SD-block placement. |
 | SW | SW1–SW9+ | White-label + API build — 12 core + 2 buffer. After SD (self-serve SD revenue funds the solicitor engagement that gates SW/Business). |
@@ -308,7 +312,7 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S
 - REFUELER-BRIDGE.md: commit to `refueler-io` when /notes/ session opens that repo
 - First-transfer experience aesthetic (Jaeger-LeCoultre restraint, Source Serif 4, ceremonial link presentation, haptics, A/B tests) — copy preparation in ad-hoc sessions; build scope B13a
 - Pay-to-extend transfer window design — design document due B8. Framing locked: **"Purchase a recovery window"** — never "pay to extend." Use case: recipient (or sender) purchases additional download time without contacting the other party, preserving the professional relationship. Self-purchase scenario: junior partner extends window on firm's business account without interrupting senior partner or client. **Privacy properties (locked AP-7):** (1) Refueler cannot correlate the extension payment with the original upload — server is blind to who is extending and why; (2) Lightning payment preserves pseudonymity of the purchasing party; (3) original sender's anonymity is structurally unchanged. **Publication restriction (locked AP-7):** mention in B9 whitepaper §Future work only — no public product copy or marketing before the feature ships. Shipping first prevents misreading as punitive artificial-scarcity monetisation and prevents storing competitors implementing a degraded version and poisoning the framing. Tone in all copy when it ships: discreet, convenient, professional — not punitive. Do not build before design locked at B8.
-[CRITICAL] Resumable uploads — R-series in progress (RU1 ✓, RU1a ✓, RU2 ✓, RU2a ✓, RU2b ✓). Resume card confirmed rendering on refueler.io/share/. RU2c next: wire Resume button click-through — validate credential, skip confirmed chunks, complete upload. Safari Promise.race() timeout wrapper still needed for the 5 Aug hang scenario (open item for RU2c or buffer).
+[RESOLVED] Resumable uploads — RU-block ✓ complete (RU0–RU2e). End-to-end resume flow working: WiFi-kill → interrupted card → resume → share card. 409 handling (stale R2 object) and encrypted-chunks reassurance note added at RU2e.
 - Context file archive strategy — implement at S87: split `Share-Master-Context.md` into working memory (≤350 lines, current + next block only) and new `Share-Archive.md` (compacted block summaries B1–B6, one paragraph per block, key commit hashes, permanent do-not-retry items not already in CLAUDE.md). `Share-Archive.md` lives in repo root, never loaded by default — attach to Project only if historical question arises.
 
 ---
