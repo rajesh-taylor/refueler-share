@@ -247,6 +247,11 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `ProjectivePoint.subtract()` in noble v2 | Use `.add(point.negate())` |
 | `localStorage` / `rfTheme` for theme in `head.njk` | `rs-theme` cookie scoped to `.refueler.io`, `dataset.theme` only (AP-8) |
 | `classList.add('carbon-mode')` in theme script | `document.documentElement.dataset.theme = 'carbon'` (AP-8) |
+- Template changes (*.njk) go to `refueler-io/src/share/` directly. CSS/JS go to `refueler-share/frontend/` (canonical) then `bash bin/sync-share.sh`. Never place njk in refueler-share/src/ expecting them on the live site.
+- `share/index.njk` must have `activePage: "share"` (not `""`) for nav conditionals to fire.
+- CSS served at `/share/assets/share.css` not `/share.css` — href in templates must reflect this.
+- sync-share.sh path: `bin/sync-share.sh` (not repo root).
+- Share-specific secondary nav (Plans/Status as a separate band across Share pages) deferred to future session.
 | Cloudflare Queues / Durable Objects / D1 for webhooks | `ctx.waitUntil` + KV dead-letter only |
 | Sub-keys per API user (Business tier) | One keypair per commercial relationship + `transfer_ref` attribution |
 | Never edit `frontend/upgrade.html` directly | Eleventy overwrites it from `src/upgrade.njk` on every build |

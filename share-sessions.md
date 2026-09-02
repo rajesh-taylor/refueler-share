@@ -367,6 +367,7 @@ Session plan produced at S88. Scope: Production Max, Lightning-only standing-rec
 | Session | Commit | Summary |
 |---------|--------|---------|
 | HQ1 | `b66d401` | blob4 httpProtocol added to AE schema (upload + credential_issue events). "Hashing password" copy fix. Auth comment updated. Stale zk_verification_note replaced. |
+| HQ2 | `9cd2241` | BLAKE3 + HTTP/3 trust band (upgrade). Plans + Status in share nav. activePage fix. Async card removed. njk/CSS path issues resolved. |
 
 ---
 
