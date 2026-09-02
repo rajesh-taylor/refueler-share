@@ -226,7 +226,7 @@ AD-1 — Share admin dashboard frontend migrated to refueler-io at `src/share/ad
 | RU2b | `bd48ad8` | Resume card HTML synced to `refueler-io/src/share/index.njk`. Card confirmed rendering with live IDB record. Resume click returned "could not validate" — root cause identified (Turnstile never rendered on resume path). |
 | RU2c | `2f348cb` / Worker `0c216a5` | Root cause fixed: resume credential now uses `resume: true` + `resume_uuid`; Worker does R2 HEAD check on chunk `0000` to verify partial upload exists, then issues without Turnstile. Also: 3× retry loop on resume upload leg; chunk count mismatch guard post file-picker; `promptForResumeFile` focus/change race fixed with `settled` flag; folder size warning removed. Smoke test partial: resume card renders correctly, R2 bypass works, file picker opens on Resume click. Two bugs found — see RU2d. Blink env var dead references noted for B7 cleanup. |
 | RU2d | `2e1604a` / `bc0d597` / `1030572` | Verification loop hang fixed. Resume button fix. CORS fix. Smoke test: WiFi-kill → card → resume → share card ✓. |
-| RU2e | TBD | 409 detection on first resumed chunk PUT: clear IDB, show "already completed" message, repurpose Discard btn as "New upload" → `location.reload()`. Encrypted-chunks reassurance note (`resume-note`) on resume card — shown at `checkResumeState()`, hidden on 409. **RU-block closed.** |
+| RU2e | `1e33ebe` | 409 detection on first resumed chunk PUT: clear IDB, show "already completed" message, repurpose Discard btn as "New upload" → `location.reload()`. Encrypted-chunks reassurance note (`resume-note`) on resume card — shown at `checkResumeState()`, hidden on 409. **RU-block closed.** |
 
 **Buffer pool (1 session used):** RU2e consumed. RU1b unused (buffer).
 
