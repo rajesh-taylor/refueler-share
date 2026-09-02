@@ -27,32 +27,21 @@ main {
   align-items: flex-start;
   gap: 12px;
   font-size: 13px;
-  color: var(--fg-muted);
+  color: var(--fg);
 }
 .info-card .info-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-.info-card-dismiss {
-  margin-left: auto;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--fg-subtle);
+.info-card > span:not(.info-icon) {
+  font-family: var(--sans);
+  font-weight: 400;
   font-size: 14px;
-  line-height: 1;
-  padding: 0 0 0 8px;
-  flex-shrink: 0;
-}
-.info-card-dismiss:hover { color: var(--fg); }
-.info-card > span:not(.info-icon):not(.info-card-dismiss) {
-  font-family: var(--serif);
-  font-weight: 300;
-  font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.6;
+  color: var(--fg);
 }
 
 /* ── Drop zone ───────────────────────────────────────────────────── */
 .drop-zone {
   background: var(--card-bg);
-  border: 1.5px dashed var(--drop-border);
+  border: 1px solid var(--border-mid);
   border-radius: var(--radius);
   padding: 56px 24px;
   text-align: center;
@@ -398,47 +387,4 @@ main {
   margin: 0 0 8px;
 }
 
-/* ── HTTP/3 infrastructure whisper — HQ2 ────────────────────────────────────
-   Full-width, above footer. Mono, low contrast. Static — not part of the
-   upload/download flow. No dismiss. Both Paper and Carbon use the same
-   reduced-opacity treatment so it never competes with page content.
-   ──────────────────────────────────────────────────────────────────────────── */
-.http3-whisper {
-  text-align: center;
-  padding: 16px 24px 20px;
-}
-.http3-whisper-text {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--fg-subtle);
-  letter-spacing: 0.04em;
-}
 
-/* ── Share secondary nav — Plans · Status (HQ2) ─────────────────────────────
-   Below drop zone, above progress cards. Hidden when file is selected.
-   Matches .site-nav register: display font, uppercase, 0.1em tracking.
-   ──────────────────────────────────────────────────────────────────────────── */
-.share-subnav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.5rem;
-  padding: 8px 0 0;
-}
-.share-subnav-link {
-  font-family: var(--display);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  text-decoration: none;
-  transition: color 0.2s;
-}
-.share-subnav-link:hover { color: var(--fg); }
-.share-subnav-dot {
-  font-family: var(--display);
-  font-size: 0.7rem;
-  color: var(--fg-subtle);
-  opacity: 0.4;
-}
