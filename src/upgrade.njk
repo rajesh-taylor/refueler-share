@@ -86,7 +86,7 @@ stripeThemeRemount: true
 {% set activePage = "upgrade" %}
 {% include "nav.njk" %}
 
-<!-- ── Main page ─────────────────────────────────────────────────── -->
+<!-- ── Main page ─────────────────────────────────────────────────────── -->
 <div class="page" id="mainPage">
 
   <a href="/index.html" class="upgrade-back-link">← Back to Refueler Share</a>
@@ -190,6 +190,21 @@ stripeThemeRemount: true
       </ul>
     </div>
 
+  </div>
+
+  <!-- ── Infrastructure trust band — HQ2 ─────────────────────────────────── -->
+  <!-- BLAKE3 chunk integrity + HTTP/3 transport. Two distinct claims,         -->
+  <!-- two distinct tags. S42e-clean: "chunk" scoped, no end-to-end assertion. -->
+  <div class="trust-band">
+    <div class="trust-item">
+      <span class="trust-tag">CHUNK INTEGRITY</span>
+      <p class="trust-body">Each chunk is BLAKE3-verified on arrival. Corrupted pieces are rejected before they're stored.</p>
+    </div>
+    <div class="trust-divider"></div>
+    <div class="trust-item">
+      <span class="trust-tag">HTTP/3</span>
+      <p class="trust-body">Your files move over Cloudflare's HTTP/3 network wherever your browser and connection support it.</p>
+    </div>
   </div>
 
   <!-- Payment section -->

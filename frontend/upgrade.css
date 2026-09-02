@@ -413,3 +413,60 @@ input::placeholder { color: var(--fg-subtle); }
 @media (prefers-reduced-motion: reduce) {
   *, html, body { transition: none !important; }
 }
+
+/* ── Trust band — HQ2 (BLAKE3 + HTTP/3) ─────────────────────────────────────
+   Sits between .tiers and .payment-section. Two items separated by a hairline
+   divider. Tag in mono; body in serif weight 300. Gold tag is brand chrome
+   only — not a CTA. S42e-clean: "chunk" scoped, no end-to-end assertion.
+   ──────────────────────────────────────────────────────────────────────────── */
+.trust-band {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin-bottom: 32px;
+  background: var(--card-bg);
+  border: 0.5px solid var(--card-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.trust-item {
+  flex: 1;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trust-divider {
+  width: 0.5px;
+  background: var(--card-border);
+  align-self: stretch;
+  flex-shrink: 0;
+}
+.trust-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  display: inline-block;
+}
+.trust-body {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 1.65;
+  color: var(--fg-muted);
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .trust-band {
+    flex-direction: column;
+  }
+  .trust-divider {
+    width: auto;
+    height: 0.5px;
+    align-self: auto;
+  }
+}
