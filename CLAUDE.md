@@ -56,6 +56,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - `X-Email` header dropped from upload path entirely — snag resolves by removal.
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
 - `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html` (conflicts with site root index).
+- `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Never produce index.njk as a download — always edit via sed directly on `refueler-io/src/share/index.njk`.
 **BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
 Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
 `blake3_worker.js`. 400 on hash mismatch. This claim is safe to assert with correct scope
