@@ -94,7 +94,8 @@ stripeThemeRemount: true
   <div class="page-header">
     <h1>Choose your plan</h1>
     <p>Free transfers need no account. Upgrade for larger files and longer expiry.</p>
-    <div class="soft-launch-notice">Free tier open · Paid plans launching soon</div>
+    <p>Faster than email. Slower than services that can read your files. That's the trade.</p>
+    <div class="soft-launch-notice">Crown tier open · Paid plans launching soon</div>
   </div>
 
   <!-- Billing toggle -->
@@ -133,11 +134,11 @@ stripeThemeRemount: true
   <!-- Tier cards -->
   <div class="tiers">
 
-    <!-- Free -->
+    <!-- Crown (Free) -->
     <div class="tier-card free-card">
       <div class="current-plan-tag">Current</div>
-      <div class="tier-label">Free</div>
-      <div class="tier-name">Skint Tog</div>
+      <div class="tier-label">Crown</div>
+      <div class="tier-name">Crown</div>
       <div class="tier-price">
         <span class="tier-price-main">£0</span>
         <span class="tier-price-period">/ forever</span>
@@ -151,11 +152,11 @@ stripeThemeRemount: true
       </ul>
     </div>
 
-    <!-- Creative Premium -->
+    <!-- Freeman -->
     <div class="tier-card coming-soon" id="card-creative">
       <div class="coming-soon-tag">Coming Soon</div>
-      <div class="tier-label gold">Creative</div>
-      <div class="tier-name">Creative Premium</div>
+      <div class="tier-label gold">Freeman</div>
+      <div class="tier-name">Freeman</div>
       <div class="tier-price">
         <span class="tier-price-main" id="price-creative">£12</span>
         <span class="tier-price-period" id="period-creative">/ month</span>
@@ -170,11 +171,11 @@ stripeThemeRemount: true
       </ul>
     </div>
 
-    <!-- Production Max -->
+    <!-- Sovereign -->
     <div class="tier-card coming-soon" id="card-max">
       <div class="coming-soon-tag">Coming Soon</div>
-      <div class="tier-label gold">Professional</div>
-      <div class="tier-name">Production Max</div>
+      <div class="tier-label gold">Sovereign</div>
+      <div class="tier-name">Sovereign</div>
       <div class="tier-price">
         <span class="tier-price-main" id="price-max">£24</span>
         <span class="tier-price-period" id="period-max">/ month</span>
@@ -211,7 +212,7 @@ stripeThemeRemount: true
   <div class="payment-section" id="paymentSection">
     <div class="payment-header">
       <div class="payment-title">Payment</div>
-      <div class="payment-summary" id="paymentSummary">Creative Premium — £12/month</div>
+      <div class="payment-summary" id="paymentSummary">Freeman — £12/month</div>
     </div>
 
     <div class="payment-tabs">
@@ -268,14 +269,19 @@ stripeThemeRemount: true
 const WORKER_URL = 'https://refueler-share.rt-fc4.workers.dev';
 const STRIPE_PK  = 'pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q';
 
+// S90: ARCHIVED yearly price IDs below — replace before enabling paid tiers.
+// Freeman (Creative Premium) yearly correct ID:  price_1TyzKIGlctwiB9U3Dn71fGbA
+// Sovereign (Production Max) yearly correct ID:  price_1TyzNaGlctwiB9U3T8uV4UIW
+// Also: 3-month billing period (price_1TyzF4GlctwiB9U3Zo0fG8Ic / price_1TyzMLGlctwiB9U3cA31BOQc)
+// entirely absent from this toggle — add in S90 after Opus tier model session.
 const PRICE_IDS = {
   creative: {
     monthly: 'price_1Ts7lsGlctwiB9U3hdtgChU2',
-    yearly:  'price_1Ts7sqGlctwiB9U3YRloCFfi',
+    yearly:  'price_1Ts7sqGlctwiB9U3YRloCFfi', // S90: ARCHIVED — replace with price_1TyzKIGlctwiB9U3Dn71fGbA
   },
   max: {
     monthly: 'price_1Ts7vIGlctwiB9U3kb3NCLue',
-    yearly:  'price_1Ts7xIGlctwiB9U3JyZB8Kwj',
+    yearly:  'price_1Ts7xIGlctwiB9U3JyZB8Kwj', // S90: ARCHIVED — replace with price_1TyzNaGlctwiB9U3T8uV4UIW
   },
 };
 
@@ -342,7 +348,7 @@ function selectTier(tier) {
 }
 
 function updateSummary() {
-  const names   = { creative: 'Creative Premium', max: 'Production Max' };
+  const names   = { creative: 'Freeman', max: 'Sovereign' };
   const billing = billingYearly ? 'yearly' : 'monthly';
   const d       = PRICES_DISPLAY[selectedTier][billing];
   document.getElementById('paymentSummary').textContent =
