@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 6.5 | **Created:** 28 July 2026 | **Updated:** HQ2 · 2026-09-02
+> **Version:** 6.6 | **Created:** 28 July 2026 | **Updated:** HQ2 · 2026-09-03
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -634,5 +634,58 @@ The lineage: Templar letter of credit (c.1150) → Venetian bill of exchange →
 | Three city-states | London (finance), Washington (military), Vatican (religion) | International scale — available when Refueler operates across jurisdictions. Whitepaper future work gesture only. |
 
 ---
+
+## Upstream protocol monitoring — Cashu
+
+> Added: 2026-09-03. Review at B8 design lock and Pass planning session.
+
+### PR #371 — NUT-00: BLS12-381 (v3 protocol)
+**Author:** robwoodgate · **Status:** Open → `cashubtc:main` · **CDK PR:** cdk#2194 (POC)
+
+Adds BLS12-381 pairing-based BDHKE as the v3 Cashu blind-signature protocol (keyset version byte `02`). Legacy `00`/`01` secp256k1 keysets unchanged — wire shape (`BlindedMessage`, `BlindSignature`, `Proof`) unaffected. Key deltas:
+- Verification shifts from DLEQ to pairing equality: `e(C, G2) == e(Y, K)`
+- NUT-12 DLEQ scoped to secp256k1 keysets only — v3 proofs carry no `dleq`
+- Deterministic weighted batch verification via Fiat-Shamir transcript — significant throughput gain at POS/Pass issuance scale
+- NUT-13 blinding factors use rejection sampling against `BLS_FR_ORDER`
+
+**Cross-product impact:**
+- **Merchant:** Batch verification efficiency directly benefits high-frequency POS proof validation.
+- **Pass:** Bulk event credential issuance benefits from weighted batch verification.
+- **Share:** No immediate impact. CDK pinned at 0.17.2 — do not unpin until stable release ships v3 support (est. 6–12 months post-merge).
+
+**Action:** Monitor merge. Do not upgrade CDK until a stable release ships v3. Flag at B8 design session.
+
+---
+
+### PR #421 — NUT-10: Nutroot secrets (v3 keysets)
+**Author:** robwoodgate · **Status:** Open, stacked on #371 · **CDK PR:** cdk#2433 (POC)
+
+Gives Cashu tokens programmable spending conditions expressed as a Taproot-inspired Merkle tree of declarative condition leaves. Named **nutroot** (not taproot — commits structure only, none of Bitcoin's validation rules). Three leaf types: `threshold` (M-of-N), `after` (timelock), `hashlock`. No opcodes, no stack, no interpreter. Tree shape is deterministic from leaf count. Every v3 input signs a shared transaction transcript enabling atomic batch operations.
+
+**Critical scoping:** NUT-11 and NUT-14 are explicitly scoped to pre-v3 keysets. NUT-22 BATs (Blind Authentication Tokens) are the v3 equivalent of NUT-11 Mode 2 — a `02` BAT signs a full request transcript (method + target + body hash).
+
+**Cross-product impact:**
+
+| Product | Application | Priority |
+|---|---|---|
+| **Pass** | `threshold` (M-of-N entry, e.g. VIP+standard), `after` (time-gated access windows), `hashlock` (QR redemption gate = reveal preimage). Atomic batch issuance for event cohorts via transaction transcript. | High — design Pass architecture around nutroot leaves, not custom logic |
+| **Merchant** | NUT-18/26 delta: nutroot payment request option `(k, l, b)` in `creqB` under TLV `0x0b`. Conditional POS settlement (threshold: merchant confirm + customer spend; after: expiry). NUT-28 positional sender slots enable merchant attribution with customer privacy intact. | High — Note/Clearance model maps cleanly |
+| **Share** | `threshold` leaves replace planned FROST complexity for B12 M-of-N credential issuance. `after` leaves are the native primitive for "recovery window / pay-to-extend" (B9 §Future work). NUT-22 BATs may supersede NUT-11 Mode 2 planned implementation — **review NUT-22 spec before B8 design session is locked.** | Medium — NUT-11 Mode 1 unaffected |
+
+**Action:** Pass architecture planning session should treat nutroot `threshold`/`after`/`hashlock` as the foundational primitive. Re-read NUT-22 before B8 design lock. Target merge monitoring: Q4 2026 (author's pace + two independent POC implementations already passing shared test vectors suggest near-ready).
+
+---
+
+### cashu-vpn — reference architecture (not integration target)
+**Author:** robwoodgate · **Repo:** github.com/robwoodgate/cashu-vpn · **Licence:** MIT
+
+Sells short-lived WireGuard VPN access for Cashu ecash. Architecturally relevant as independent confirmation that Refueler's payment pattern is correct:
+- BIP32 xpub fresh-key-per-sale (mint cannot link purchases across sessions) — same unlinkability model as Share's credential issuance
+- Offline NUT-11 P2PK proof verification against cached mint pubkeys — no per-sale mint call (same pattern as Share worker)
+- Non-custodial: server holds watch-only xpub only; locked receipts claimed offline via `sweep:remote`
+
+**Not an integration target for Share.** Running Refueler-operated exit infrastructure moves the IP trust problem rather than solving it — Hetzner box would see user real IP AND Share traffic pattern. This is strictly worse than the current model. Correct recommendation remains: Mullvad (multi-hop) in B9 whitepaper. Share users tunnel their own VPN before hitting Share.
+
+**robwoodgate** is the author of PR #371, #421, cashu-vpn, and multiple CDK PRs. South-east England based. The most active contributor to Cashu's cryptographic layer currently. Worth cultivating as an ecosystem contact — potential whitepaper reviewer, Pass architecture feedback, btc++ Berlin.
 
 *"Nothing stops this train."*
