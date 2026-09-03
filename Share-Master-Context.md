@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.0 | **Last updated:** AP-10 · 3 Sep 2026
+> **Version:** 7.1 | **Last updated:** S89 · 3 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -56,14 +56,16 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 
 Account: `rt@rajeshtaylor.com` · GBP · Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
 
-| Product | Price ID | Lookup key | Amount |
-|---------|----------|------------|--------|
-| Creative Premium monthly | `price_1Ts7lsGlctwiB9U3hdtgChU2` | `share-creative-monthly` | £12/mo |
-| Creative Premium 3-month | `price_1TyzF4GlctwiB9U3Zo0fG8Ic` | `share-creative-3month` | £36/3mo |
-| Creative Premium yearly | `price_1TyzKIGlctwiB9U3Dn71fGbA` | `share-creative-yearly` | £144/yr |
-| Production Max monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo |
-| Production Max 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo |
-| Production Max yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr |
+| Product | Price ID | Lookup key | Amount | Status |
+|---------|----------|------------|--------|--------|
+| Creative Premium monthly | `price_1Ts7lsGlctwiB9U3hdtgChU2` | `share-creative-monthly` | £12/mo | ⚠️ Archive at S90 |
+| Creative Premium 3-month | `price_1TyzF4GlctwiB9U3Zo0fG8Ic` | `share-creative-3month` | £36/3mo | ⚠️ Archive at S90 |
+| Creative Premium yearly | `price_1TyzKIGlctwiB9U3Dn71fGbA` | `share-creative-yearly` | £144/yr | ⚠️ Archive at S90 |
+| Sovereign (Stripe) monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo | ✅ Active — rename at S90 |
+| Sovereign (Stripe) 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo | ✅ Active — rename at S90 |
+| Sovereign (Stripe) yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr | ✅ Active — rename at S90 |
+
+**Tier rename locked S89:** Free → **Citizen**. Creative Premium retired (stale — no live subscribers, archive at S90). Production Max → **Sovereign**. Sovereign has two rails: Stripe (identity, recovery) and Lightning (no identity, unlocks identity-free features). Rail is a property of the credential, not a separate tier.
 
 Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi`, `price_1Ts7xIGlctwiB9U3JyZB8Kwj`
 
@@ -203,7 +205,7 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost (~€8–10/month). |
 | 10 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
 | 11 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block runs with node live from day one. |
-| 12 | SD-block — Silent Drop | ✅ | Production Max + Lightning-only standing-receive inbox. |
+| 12 | SD-block — Silent Drop | ✅ | Sovereign + Lightning-only standing-receive inbox. |
 | 13 | Article pipeline (first article) | ✅ | Unlocks after node fully functional. |
 | 14 | B9 → B10+ | — | Continue as previously sequenced. |
 
@@ -239,9 +241,9 @@ Four settings building on the Traitor's Gate concept. Prisoners had to time thei
 | Setting | Tier | Mechanism |
 |---|---|---|
 | **Destroy after download** (core) | All tiers | `pending_destruction: true` on manifest · user-triggered deletion |
-| **Close tide** — auto-delete at precise datetime | Creative Premium + Production Max | `available_until_timestamp` on manifest · Worker returns 410 after this moment regardless of download status |
-| **Open tide** — available from datetime | Creative Premium + Production Max | `available_from_timestamp` on manifest · Worker returns 423 Locked before this moment |
-| **Combined tidal window** | Creative Premium + Production Max | Both fields set · destroy after download active · gate opens and closes on sender's schedule |
+| **Close tide** — auto-delete at precise datetime | Sovereign + Business + Enterprise | `available_until_timestamp` on manifest · Worker returns 410 after this moment regardless of download status |
+| **Open tide** — available from datetime | Sovereign + Business + Enterprise | `available_from_timestamp` on manifest · Worker returns 423 Locked before this moment |
+| **Combined tidal window** | Sovereign + Business + Enterprise | Both fields set · destroy after download active · gate opens and closes on sender's schedule |
 
 Manifest fields: `available_from_timestamp` (ISO 8601, optional) · `available_until_timestamp` (ISO 8601, optional) · `pending_destruction` (boolean) · `consumed` (boolean).
 
@@ -339,7 +341,7 @@ Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maint
 **Note on SW resequencing:** AP-10 moves SW before B7 (no Hetzner required for SW build). SD-block still ships after B7 is live (SD requires Lightning). The solicitor gate applies to opening Business tier sales, not to building SW code.
 
 **Feature vs positioning split:**
-- **SD-feature** (standing-receive inbox, recovery-cliff framing, Production Max Lightning-only) — ships at SD-block.
+- **SD-feature** (standing-receive inbox, recovery-cliff framing, Sovereign Lightning-only) — ships at SD-block.
 - **SD journalist/source-protection hero copy** — gated until B9: blinded-relay crypto reviewed + VPN scope stated honestly.
 
 **Tabletop gate:** incident-response tabletop (hard constraint before first customer) gates SD-block launch.
@@ -368,15 +370,18 @@ Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maint
 
 **Credential issuance:** `POST /api/v1/credential/issue`. `transfer_ref` → AE `blob1` only, never Supabase. Quota in KV `api_quota_{key_id}`.
 
-**Five-tier structure:**
+**Tier + rail structure (locked S89):**
 
-| Tier | Cap | Expiry | Billing |
-|------|-----|--------|---------|
-| Free | 4 GB | 1 / 7 days | — |
-| Creative Premium | 100 GB | 1 / 7 / 30 days | Monthly / 3-month / yearly |
-| Production Max | 250 GB + API | 1 / 7 / 30 / 90 days | Monthly / 3-month / yearly |
-| Business | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Invoiced (annual minimum) |
-| Enterprise | Custom · 5 TB/mo · Argon2id · BIP-85 | Custom | Annual contract |
+| Tier | Cap | Expiry | Rail | Billing |
+|------|-----|--------|------|---------|
+| **Citizen** (free) | 4 GB | 1 / 7 days | n/a | — |
+| **Sovereign** | 250 GB + API | 1 / 7 / 30 / 90 days | Stripe or Lightning | £24/mo · £72/3mo · £288/yr |
+| **Business** | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Stripe or Lightning | Invoiced (annual minimum) |
+| **Enterprise** | Custom · 5 TB/mo · Argon2id · BIP-85 | Custom | Stripe or Lightning | Annual contract |
+
+**Rail model:** Sovereign has two rails. Stripe rail: identity at Stripe, conventional recovery, all features. Lightning rail: no identity at any layer, unlocks identity-free features (Silent Drop standing inbox). Rail is a property of the credential, not a separate tier name.
+
+**Retired:** Freeman (never shipped). Creative Premium (stale — no live subscribers). Archive stale Stripe price objects at S90. Crown retires to brand/institutional vocabulary only — no longer a tier name.
 
 No discounts. No yearly savings framing.
 
@@ -427,7 +432,7 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session. **2
 
 **B8+:** Argon2id Enterprise KDF — WASM, client-side, m=65536 t=3 p=4. BIP-85 enterprise key management. Nostr keypair auth for dashboard (secp256k1 challenge-response).
 
-**B10:** ML-KEM post-quantum key wrapping — Production Max + Enterprise first, free tier deferred.
+**B10:** ML-KEM post-quantum key wrapping — Sovereign + Enterprise first, Citizen deferred.
 
 **B9+:** Silent Payments (BIP-352) — requires full Bitcoin node. refueler-multi-core (Esplora fork) — post-B9.
 

@@ -327,7 +327,7 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 | S86 | LNURL-withdraw gift architecture | No code. Design document: gift flow, wallet compatibility, NUT-20 binding potential. |
 | S87 | LNbits skinning scope | No code. Keep/strip/brand decisions. Paper/Carbon token mapping. |
 | S88 | Silent Drop design session | No code. Confirm blinded-relay design. Produce SD-block session plan. |
-| S89 | Tidy-up I — tier naming + copy | Names/copy audit across all pages. No Stripe objects. |
+| S89 | — | Tier rename locked: Free → Citizen · Creative Premium retired · Production Max → Sovereign (two rails). Crown = brand/institutional only. S90: archive stale Creative Premium Stripe price objects. BRIDGE v6.8. |
 | S90 | Tidy-up II — Stripe objects | Stripe product/price alignment with locked tier model. After S89 confirmed. |
 | S91 | CI Level 2 I | Integration suite in GitHub Actions. Lightning mock for webhook tests. |
 | S91a | CI Level 2 II | Lightning mock coverage. All passing in CI. |
