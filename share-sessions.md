@@ -99,7 +99,7 @@
 | S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is decision locked. |
 | S56 | `6cf711d`+`7735787` | Folder upload smoke test. fflate + qr-creator self-hosted. Full round-trip ✓. |
 | S57 | — | Bearer TTL investigation. 900s hardcoded exp fatal for large transfers. Root cause identified. |
-| S58 | `f94a158` | Bearer TTL fix. Token exp = `manifest.expiry_timestamp`. Smoke test ✓. |
+| S58 | `f94a158` | Bearer TTL fix. Token exp = `manifest.expiry`. Smoke test ✓. |
 | S60 | `e59305c` | Unit tests I. Vitest 2 harness. ratelimit + manifest. 43 passing. |
 | S61–S62 | — | Unit tests II–III. nut00 BDHKE + blake3 + turnstile + stripe. 178 passing / 6 suites. |
 | S63–S64 | `def77b5` | Integration harness. wrangler dev --local. Full BDHKE in client.js. 181 passing. TESTING.md created. |
@@ -137,6 +137,7 @@
 | AP-8 | 4 Aug | Nav rewrite + `head.njk` theme script. `rs-theme` cookie scoped to `.refueler.io`. |
 | AP-9 | 27 Aug | B7 re-sequence. Lightning infra I added. Silent Drop confirmed Production Max only. B7 budget 25→50. |
 | AP-9a | 28 Aug | Lightning identity invariant added. Journalist/source-protection hero copy gating rule added. |
+| AP-10 | 3 Sep | Roadmap resequenced (no Hetzner required for TG-block, TH-series, SW, B8). Traitor's Gate locked (internal vocab, UI = "Destroy after download", tidal window system, tier gating, user-triggered deletion). Tower Hill / OpenTimestamps: 2–3 Opus scoping sessions, Share + Pass + Legend. Execution Dock: 48h Three Tides grace, dashboard card, no fee. Dragon status vocabulary locked. Editorial atoms locked: Pileus, Three Guineas, Pepys quote, Penn/Bushel's Case, JQA, Cibber frieze, EIC, Tower Subway, Beating of the Bounds. Articles gated on Hetzner live. BRIDGE v6.7, Master-Context v7.0. |
 
 ---
 
@@ -234,16 +235,53 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 ## NB-series — node bootstrap (pre-B7, gates all B7 code)
 
+**NB-1 can proceed immediately (Opus, no server). NB-2 onwards requires Hetzner commitment.**
+
 | Session | Label | Scope |
 |---------|-------|-------|
 | NB-1 | Node runbook (Opus, no code) | OS hardening → phoenixd + seed backup → LNbits → cloudflared tunnel → Tor per-service .onion → backup + monitoring → failure modes. |
-| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. Verify phoenixd → bech32 on-chain send. |
+| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. Verify phoenixd → bech32 on-chain send. **First Hetzner cost incurred here.** |
 | NB-3 | End-to-end test | LNbits invoice → pay → callback → GET re-verify → splice-out liquidation. |
-| NB-4 | Node live | Set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY`. Declare node live. B7 code may now start. |
+| NB-4 | Node live | Set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY`. Declare node live. B7 code may now start. Article pipeline unlocks. |
+
+---
+
+## TG-block — Traitor's Gate (new, no Hetzner required)
+
+**Internal name: Traitor's Gate. UI label: "Destroy after download." All tiers for core; tidal window = paid only.**
+
+| Session | Label | Scope |
+|---------|-------|-------|
+| TG-1 | Design + manifest spec | Manifest fields: `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`. Pre-code confirmation. |
+| TG-2 | Worker implementation | `DELETE /transfer/{uuid}` endpoint. `pending_destruction` flag set on final chunk. 410 on consumed manifest. Tidal window check on every download request (423 before open tide, 410 after close tide). Unit tests. |
+| TG-3 | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only — gated by credential). |
+| TG-3a | Frontend — download side | Pre-download modal (awareness). Post-download confirmation gate: "File received. Save it now." → [I've saved it] → triggers `DELETE /transfer/{uuid}`. |
+| TG-4 | Execution Dock — dashboard | Harbourmaster dashboard card: Execution Dock section. Amber state. Transfer rows: label · expiry · 48h deletion countdown · [Destroy now] button. |
+| TG-5 | Tests + smoke | Full round-trip: upload with destroy flag → download → confirm → verify 410. Tidal window boundary tests. Execution Dock card render. |
+
+**TG-block do-not-retry (update after sessions):**
+- DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true` and wait for frontend confirmation
+- DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
+
+---
+
+## TH-series — Tower Hill / OpenTimestamps (new, no Hetzner required)
+
+**2–3 Opus scoping sessions before build. Cover Share + Pass + Legend together.**
+
+| Session | Label | Scope |
+|---------|-------|-------|
+| TH-Opus-1 | Share scoping | OpenTimestamps API mechanics. `.ots` proof format. Worker fetch to aggregator. Tier placement (all tiers? paid only?). Framing copy. |
+| TH-Opus-2 | Pass + Legend scoping | Pass: ticket issuance timestamping. Legend: native `.ots` verification UI. Cross-product `.ots` format consistency. |
+| TH-Opus-3 | Build spec | Session plan for build sessions. Endpoint design. Proof storage (R2 alongside manifest? Separate download?). |
+| TH-1 | Share build | `POST /timestamp/{uuid}` or integrate into upload completion. OpenTimestamps API call. `.ots` proof stored in R2 alongside chunks. Download link includes proof. |
+| TH-2 | Frontend + tests | Optional toggle on upload. Proof download alongside transfer link. Unit + integration tests. |
 
 ---
 
 ## B7 session plan — Lightning/LNbits + anonymous paid tier
+
+**All B7 sessions from S74 onwards gate on NB-4 (node live). Build can begin on wrangler dev --local; live smoke test requires node.**
 
 | Session | Label | Scope |
 |---------|-------|-------|
@@ -293,7 +331,7 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 | S90 | Tidy-up II — Stripe objects | Stripe product/price alignment with locked tier model. After S89 confirmed. |
 | S91 | CI Level 2 I | Integration suite in GitHub Actions. Lightning mock for webhook tests. |
 | S91a | CI Level 2 II | Lightning mock coverage. All passing in CI. |
-| S92 | Notes article 6 prep | "Paying anonymously for file transfer" — structure + copy draft. No code. |
+| S92 | Notes article 6 prep | "Paying anonymously for file transfer" — structure + copy draft. No code. Unlocks after node live. |
 | S93 | B7 snag sweep I | Theme toggle in modals. `receiver_ab` A/B event routing fix. |
 | S94 | B7 snag sweep II | Manifest-field minimalism audit. UUID/fragment entropy pre-audit. |
 | S95 | B7 snag sweep III | Remaining snags. Status tile for admin dashboard. |
@@ -304,13 +342,15 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 ---
 
-## SD-block — Silent Drop (post-HQ, before SW)
+## SD-block — Silent Drop (post-B7, before SW)
 
 Session plan produced at S88. Scope: Production Max, Lightning-only standing-receive inbox. SD-feature ships here; journalist hero copy gated until B9. Incident-response tabletop must complete before SD-block launch.
 
 ---
 
-## SW block session plan — white-label + API build (post-SD-block)
+## SW block session plan — white-label + API build (post-TG-block + TH-series, pre-B7)
+
+**SW block moved before B7 in AP-10 resequence. No Hetzner required. Solicitor gate applies to opening Business tier sales, not to building SW code.**
 
 | Session | Label | Scope |
 |---------|-------|-------|
@@ -332,11 +372,11 @@ Session plan produced at S88. Scope: Production Max, Lightning-only standing-rec
 
 ---
 
-## Locked block sequence (Opus-2 · 29 Aug 2026)
+## Locked block sequence (revised AP-10 · 3 Sep 2026)
 
-`NB → B7 → SYNC-1 → RU-block → HQ → SD-block → SW → B8 → B9 → B10+`
+`NB-1 → S89/S90 → snag sweeps → S88 → TG-block → TH-series → SW → B8 → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
-*(SYNC-1 and RU-block and HQ-series are now complete — sequence advances to SD-block after B7.)*
+*(SYNC-1, RU-block, and HQ-series complete. TG-block and TH-series are new no-cost blocks inserted before SW.)*
 
 ---
 

@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 6.0 | **Last updated:** M-session · 2 Sep 2026
+> **Version:** 7.0 | **Last updated:** AP-10 · 3 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -168,15 +168,15 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 
 ## Current state
 
-**B7 in progress — S73/S73a complete. NB-series (node bootstrap) next.**
+**B7 in progress — S73/S73a complete. NB-series (node bootstrap) is the Hetzner-gated block.**
 **SYNC-1 ✓ · RU-block ✓ (RU0–RU2e) · HQ-series ✓ (HQ1–HQ2)**
-**Next block after NB+B7: SD-block.**
+**Roadmap resequenced AP-10: no Hetzner required for TG-block, TH-session, SW, B8.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
 | B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
 | B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6, CI Level 1, Lightning toggle. |
-| B7 in progress | `a19778c` | S73/S73a: client errors modal fix. Node bootstrap (NB-series) is pre-B7 gate. |
+| B7 in progress | `a19778c` | S73/S73a: client errors modal fix. Node bootstrap (NB-series) is Hetzner-gated — deferred after AP-10 resequence. |
 | SYNC-1 ✓ | `2d26587` | `bin/sync-share.sh` committed. Embedded git repos gitignored in refueler-io. |
 | RU-block ✓ | `1e33ebe` | Streaming zip (RU0) → IDB schema (RU1) → re-credential + Safari fix (RU1a) → full resume flow + 409 + reassurance note (RU2–RU2e). |
 | HQ-series ✓ | `9cd2241` | HTTP/3 AE logging. BLAKE3 + HTTP/3 trust band on upgrade page. Plans/Status in nav. |
@@ -185,25 +185,117 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 
 ---
 
-## Roadmap
+## Roadmap — resequenced AP-10 (3 Sep 2026)
 
-| Block | Sessions | Scope |
-|-------|----------|-------|
-| B1–B6 ✓ | S1–S72a | Foundation through testing infrastructure |
-| **NB-series** (pre-B7) | NB-1…NB-4 | **Node bootstrap** — phoenixd + LNbits + cloudflared + Tor on Instance A. Runbook-first (Opus). Gates all B7 code. |
-| B7 | S74–S100 | Lightning/LNbits (phoenixd-backed) + two-rail upgrade page + Silent Drop groundwork — 47 core + 5 buffer. |
-| **SD-block** | SD1–SD-n | **Silent Drop** — Production Max, Lightning-only standing-receive inbox. Tidy-up sessions S89/S90 precede. |
-| SW | SW1–SW9 | White-label + API build. After SD (self-serve SD revenue funds solicitor gate on SW/Business). |
-| B8 | TBD | NUT-11 Mode 2 keypair auth. |
-| B9 | TBD | LNURL-withdraw + security whitepaper + Merkle + staging + incident response + blinded-relay crypto review (unlocks SD journalist copy). |
-| B10 | TBD | Enterprise + ML-KEM + chaos tests |
-| B11 | TBD | Alpha + load test + CI Level 3 + dashboard test card |
-| B12 | TBD | Public beta launch + FROST threshold signatures (planning) |
-| B13 | post-B12 | Go-to-market — compression strategy + creative tier positioning |
+**No new server costs until the Hetzner commitment point. All sessions before that point run on existing Cloudflare + Supabase + Stripe infrastructure.**
 
-**Locked sequence (Opus-2):** `NB → B7 → SD-block → SW → B8 → B9 → B10+`
+| Order | Block / Session | Hetzner? | Notes |
+|---|---|---|---|
+| 1 | NB-1 (Opus, runbook writing) | ❌ | Planning only — runbook for NB-2 onwards. No server yet. |
+| 2 | S89 — tier naming tidy-up | ❌ | Copy/naming pass across all pages. No Stripe objects. |
+| 3 | S90 — Stripe objects | ❌ | Product/price alignment. After S89 confirmed. |
+| 4 | S93–S95 — B7 snag sweep | ❌ | Theme toggle in modals. AE event routing fix. Existing infra. |
+| 5 | S88 — SD design session | ❌ | Silent Drop design. No code. Planning only. |
+| 6 | **TG-block — Traitor's Gate** | ❌ | New feature. Pure Worker + R2 + manifest. All tiers. |
+| 7 | **TH-series — Tower Hill / OpenTimestamps** | ❌ | 2–3 Opus scoping sessions. Share + Pass + Legend `.ots` use cases. Then build session. |
+| 8 | SW block (SW1–SW9) | ❌ | CF for SaaS on existing Workers plan. Solicitor gate on Business sales, not on build. |
+| 9 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
+| — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost (~€8–10/month). |
+| 10 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
+| 11 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block runs with node live from day one. |
+| 12 | SD-block — Silent Drop | ✅ | Production Max + Lightning-only standing-receive inbox. |
+| 13 | Article pipeline (first article) | ✅ | Unlocks after node fully functional. |
+| 14 | B9 → B10+ | — | Continue as previously sequenced. |
 
-Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S74→S76 (Lightning invoice→credential) · NB-1→NB-4→S74 (node live gates Lightning code) · SW2→SW4 (API auth→webhooks) · SD-feature→B9-blinded-relay→SD-journalist-copy (positioning gate).
+**Locked sequence (revised AP-10):** `NB-1 → S89/S90 → snag sweeps → S88 → TG-block → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
+
+---
+
+## Traitor's Gate — feature decisions (locked AP-10 · 3 Sep 2026)
+
+**Internal vocabulary only. Never in product-facing copy. UI label: "Destroy after download."**
+
+### What it is
+The Traitor's Gate is the water gate through which accused prisoners arrived at the Tower by barge, timed to high tide. One way in, no way back. The name is retrospective — many who entered were not traitors. The Gate is the mechanism, not a judgment.
+
+**Feature:** sender toggles destruction mode at upload. Once the recipient's final chunk is confirmed downloaded and the user clicks the post-download confirmation, the Worker deletes all R2 objects and marks the manifest `consumed: true`. Any subsequent request returns 410.
+
+### UI copy (locked)
+
+| Element | Copy |
+|---|---|
+| Toggle label | **Destroy after download** |
+| Toggle subtitle | "The link and server copy are permanently deleted once collected." |
+| Post-upload amber notice (sender) | "This transfer is set to destroy after download. Your recipient will be prompted to save the file before the link is deleted." |
+| Pre-download modal (recipient) | "This transfer is set to destroy after download. Save the file to a device you control — the link will be permanently deleted once you confirm receipt." [I understand — download now] |
+| Post-download confirmation (recipient) | "File received. Save it now to a device you control. The link and server copy will be deleted when you confirm." → **[I've saved it]** |
+
+**Deletion is user-triggered, not automatic.** Worker sets `pending_destruction: true` on manifest after final chunk is served. Actual R2 deletion and `consumed: true` happen only on the frontend `DELETE /transfer/{uuid}` call triggered by [I've saved it]. If the browser crashes before confirmation, the normal expiry backstop applies.
+
+### Tidal window — the extension (locked AP-10)
+
+Four settings building on the Traitor's Gate concept. Prisoners had to time their arrival to the tide — the gate only opened at high water. Sender controls when the gate opens and closes.
+
+| Setting | Tier | Mechanism |
+|---|---|---|
+| **Destroy after download** (core) | All tiers | `pending_destruction: true` on manifest · user-triggered deletion |
+| **Close tide** — auto-delete at precise datetime | Creative Premium + Production Max | `available_until_timestamp` on manifest · Worker returns 410 after this moment regardless of download status |
+| **Open tide** — available from datetime | Creative Premium + Production Max | `available_from_timestamp` on manifest · Worker returns 423 Locked before this moment |
+| **Combined tidal window** | Creative Premium + Production Max | Both fields set · destroy after download active · gate opens and closes on sender's schedule |
+
+Manifest fields: `available_from_timestamp` (ISO 8601, optional) · `available_until_timestamp` (ISO 8601, optional) · `pending_destruction` (boolean) · `consumed` (boolean).
+
+### Execution Dock (locked AP-10)
+
+Harbourmaster dashboard card for uncollected expired transfers. **No fee mechanism — no "stay of execution" payment.** Sender-facing only.
+
+| State | Timing | Dashboard |
+|---|---|---|
+| Active | Within expiry window | Green |
+| **Execution Dock** | Expired, not yet collected, within 48h grace (Three Tides) | Amber — countdown to deletion |
+| Consumed | Deleted (collected or grace elapsed) | Grey |
+
+Dashboard card shows: transfer label · expiry timestamp · deletion countdown · [Destroy now] button (immediate) · [Do nothing] (tide executes at hour 48). No extension option on free tier — re-upload. Paid tier longer expiry windows make the Dock less common.
+
+Three Tides = 48-hour grace period, named for the Execution Dock, Wapping sentence: bodies left until three tides washed over them (~36–48 hours).
+
+### Whitepaper treatment
+Traitor's Gate and the Tidal Window system belong in the whitepaper's §Transfer lifecycle section, with the historical context stated once, briefly. "The gate opened only at high tide. The timing was the recipient's, not the sender's. Our architecture makes the sender the tidekeeper." Do not over-explain the metaphor.
+
+---
+
+## Tower Hill / OpenTimestamps — scoping (agreed AP-10)
+
+**2–3 Opus planning sessions before any build.** Cover Share + Pass + Legend use cases together.
+
+**The feature:** optional at upload — BLAKE3 hash of assembled file submitted to OpenTimestamps API (`https://a.pool.opentimestamps.org/timestamp/{hash_hex}`). Aggregates thousands of hashes, commits a single Merkle root to Bitcoin OP_RETURN every few hours. Sender receives `.ots` proof file alongside transfer link. Verification requires no trust in Refueler or OpenTimestamps — mathematically verifiable from Bitcoin blockchain alone.
+
+**Framing:** temporal existence proof only. "This file existed at this moment." No ownership claim. No IP registration. Honest and technically precise. Not spamming the blockchain — one OP_RETURN shared across all users globally, every few hours.
+
+**Cross-product use cases to scope in TH-series:**
+- Share: BLAKE3 hash of assembled file. `.ots` proof downloadable alongside transfer.
+- Pass: ticket issuance timestamped. Verifiable without relying on Refueler's ledger.
+- Legend: native `.ots` verification in the block explorer UI. The only privacy-respecting explorer that also speaks OpenTimestamps.
+
+**Whitepaper:** Tower Hill section — Bitcoin as immutable public witness to private transfers. Public existence proof for a private transfer. No contradiction.
+
+**Blockchain spam concern:** addressed by OpenTimestamps aggregation. One OP_RETURN, shared across global users, every few hours. Correct response to any Bitcoiner who asks: "We're not adding UTXOs or inscribing. We're using a 32-byte OP_RETURN shared across millions of documents. That's what the blockchain is for."
+
+---
+
+## Dragon — system status vocabulary (locked AP-10)
+
+**Dragon = operational status. Raven = legal warrant canary. Never conflated.**
+
+The Dragon is the wall; the Raven is the alarm. The Dragon signals presence — it holds the line, continuously. The Raven signals absence — when it stops being renewed, something has fallen.
+
+| Dragon state | Copy | KV flag |
+|---|---|---|
+| All systems operational | **The Dragon holds** | `maintenance_active: false` |
+| Degraded / partial outage | **The Dragon sleeps** | `maintenance_active: partial` |
+| Critical / maintenance | **The Dragon has fallen** | `maintenance_active: true` |
+
+Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maintenance toggle = the Dragonkeeper. Internal/status page vocabulary only — never in public product copy. City of London boundary bollard dragons are a separate concept and must not be conflated.
 
 ---
 
@@ -240,17 +332,17 @@ Critical chains: S34→S42→S97 (integrity) · S18→S24→S81 (dashboard) · S
 
 ---
 
-## SD-block placement (locked Opus-2)
+## SD-block placement (locked Opus-2, confirmed AP-10)
 
 **Where:** after B7, before SW. Tidy-up sessions S89 (tier naming) and S90 (Stripe objects) precede SD build.
 
-**Why SD before SW:** SD is self-serve Lightning revenue with no solicitor gate. SW/Business is hard-gated on solicitor engagement. Ship SD → earn → fund solicitor → open SW.
+**Note on SW resequencing:** AP-10 moves SW before B7 (no Hetzner required for SW build). SD-block still ships after B7 is live (SD requires Lightning). The solicitor gate applies to opening Business tier sales, not to building SW code.
 
 **Feature vs positioning split:**
 - **SD-feature** (standing-receive inbox, recovery-cliff framing, Production Max Lightning-only) — ships at SD-block.
 - **SD journalist/source-protection hero copy** — gated until B9: blinded-relay crypto reviewed + VPN scope stated honestly.
 
-**Tabletop gate:** incident-response tabletop (hard constraint before first customer) gates SD-block launch. First self-serve customer arrives here — pull tabletop forward from B9.
+**Tabletop gate:** incident-response tabletop (hard constraint before first customer) gates SD-block launch.
 
 ---
 
@@ -297,6 +389,7 @@ Admin: `GET|POST /admin/status` · `GET /admin/metrics` · `GET /admin/ae-metric
 Stripe: `POST /webhook/stripe` · `POST /subscription/checkout` · `GET /subscription/status` · `POST /subscription/portal` · `GET /subscription/credential`.
 Lightning (B7): `POST /subscription/lightning` · `POST /webhook/lightning` · `GET /subscription/lightning/credential`.
 SW: `GET /wl/config` · `POST /api/v1/credential/issue` · `POST /api/v1/keys/rotate` · `GET /api/v1/transfers` · `POST|GET|DELETE /api/v1/webhooks{/id}` · scheduled cron.
+TG-block (new): `DELETE /transfer/{uuid}` (user-triggered destruction) · manifest fields `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`.
 
 ---
 
@@ -310,6 +403,8 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session. **2
 
 12 articles planned at `refueler.io/notes/`. Full editorial detail: `notes-articles-list.md`. Articles 1–5: no product dependency (article 1 live). Article 6: unlocks post-B7 Lightning. Articles 8/11/12: post-SW. Article 7 (journalists): Susie (Bitcoin Policy UK) intro first. Key contact: BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback.
 
+**Article pipeline gated on node live (Hetzner).** First article written after NB-4. Four additional article topics identified at AP-10 — see REFUELER-BRIDGE.md §Editorial vocabulary.
+
 ---
 
 ## NUT protocol scope
@@ -317,7 +412,7 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session. **2
 | Status | NUTs |
 |--------|------|
 | Complete | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
-| Deferred B8 | NUT-11 Mode 2 (keypair challenge-response, Prod Max) |
+| Deferred B8 | NUT-11 Mode 2 (keypair challenge-response, Prod Max) — review NUT-22 BATs before B8 design lock |
 | Post-B8 | Argon2id as NUT-11 Mode 1 KDF extension |
 | Deferred B10 | ML-KEM key wrapping |
 | Monitor | NUT-10 v3 "Nutroot secrets" PR #421 — HIGH for B12/Pass |

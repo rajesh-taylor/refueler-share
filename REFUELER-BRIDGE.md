@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 6.6 | **Created:** 28 July 2026 | **Updated:** HQ2 · 2026-09-03
+> **Version:** 6.7 | **Created:** 28 July 2026 | **Updated:** AP-10 · 2026-09-03
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -145,144 +145,6 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 
 **ADR:** `numo-fork/NUMO-PAY-A-ADR.md` and `refueler-io/docs/NUMO-PAY-A-ADR.md`
 
-**Base:** cashubtc/Numo v1.8. **Package:** `io.refueler.merchant`. **Fork:** `rajesh-taylor/numo-fork`. Hardening phases 1–3: complete. Hard fork: permanent.
-
-**Governing decision:** NumoPay is a Supabase-backed order-entry terminal. It holds no funds and processes no payments of its own. The entire Cashu wallet ceremony, `CashuWalletManager`, `AutoWithdrawManager`, NFC HCE, and CDK dependency are deleted.
-
-**CDK return condition:** Block 8 / Pass floor-device redemption only. Must pin to stable `cdk-android:0.17.2` matching `refueler-mint` (lock 4s). `-rc.1` must never ship to a real merchant device.
-
-**Auth:** Supabase magic link once → EncryptedSharedPreferences JWT → `verify-pin` v2 EF at shift-start → 30-min local grant. `FLAG_KEEP_SCREEN_ON`. No mid-shift re-auth. 12h JWT (43200s).
-
-**Payment routing:** Lightning walk-in → `create-order` EF → LNURL-pay to `venue_partners.lightning_address` → QR on device → Realtime poll for confirmation. Cash/card walk-in → record-only insert, `status: 'confirmed'` immediately. No Cashu melt.
-
-**Android theming:** `Theme.Refueler` replaces `Theme.Numo`. Carbon always-on. Status colours protected: Pending `#C8A96E` · In Prep `#7899D4` · Ready `#3DCA7A`.
-
----
-
-## Lightning provider — RESOLVED (Opus-2 · 29 Aug 2026)
-
-> **RESOLVED:** provider locked to **LNbits-on-Hetzner (phoenixd-backed)** for all Refueler projects. Node bootstrap = NB-series pre-B7. Blink dead (UK custodial discontinued Aug 31 2026). Boltz dead (suspended Aug 3 2026). Voltage eliminated. Strike eliminated.
-
----
-
-## Ops wallet — RESOLVED (S73b / NB-1 · 29 Aug 2026)
-
-LNbits Ops wallet on Hetzner Instance A. Replaces Blink ops wallet entirely. Created at NB-3. Admin key offline. Share wallet at B7-S74 (invoice/read key only). Pass wallet at Pass-A. Float ~£300 sats, 3-month review. Liquidation: phoenixd splice-out → Sparrow bech32.
-
----
-
-## Incident response — locked Sim-Close
-
-**Protocol:** `INCIDENT-PROTOCOL.md` in `refueler-io/docs/`. **Internal:** Signal. **External:** Tuta `hello@refueler.io`. **Public:** `refueler.io/status/` only. Core rule: Internal → contain → public.
-
----
-
-## Merchant handover documents — locked Design-A
-
-Files in `refueler-io/docs/`: `merchant-onboarding-v1.html`, `merchant-venue-keys-v1.html`, `merchant-onboarding-process-v1.html`, `INCIDENT-PROTOCOL.md`. **Docs ↔ UI sync rule (active):** confirm currency at every block close touching terminal UI.
-
----
-
-## Sim-Close — DECLARED COMPLETE (2026-08-17)
-
-Pre-merchant gate list: G-1 ✅ CLEARED CC-97 · G-2 (hard blocker): Menu Management v1, after TDP-C · G-3: iPad physical check, before first real merchant · G-4 ✅ Hardening-A · G-5 ✅ S-26 FK.
-
----
-
-## Legend — post-B9 scope additions (locked CC-103 planning · 20 Aug 2026)
-
-**Legend is a block explorer. Not a charting tool, not a news aggregator, not a price terminal.** Every feature tested against: does this help a user understand the chain privately, without logging, without a custodian?
-
-**Verified estate report (v3):** Contextual metrics pages: supply position vs 21M cap, power law at generation time (Burger methodology), 4/8/12-year return windows vs gold/S&P/gilts, EO 6102 note.
-
-**Haiku chain-state helper (paid tier, post-B9):** Plain English explanation of Legend findings — last movement, holding period, KYC exchange interaction history, power law context. No investment advice. Nothing persists.
-
-**Sparrow Wallet (Phase 8):** Esplora-compatible endpoint → one URL paste. Distribution channel and trust signal.
-
-**What Legend never becomes:** news section · live price terminal · portfolio tracker · social layer · comparison tool with third-party price feeds.
-
----
-
-## Share — platform notes
-
-**Safari upload ceiling:** ~1.5 GB real-world on current in-memory path. Do not headline large-file capability on Safari.
-
----
-
-## Share — Silent Drop (locked AD-HOC · 27 Aug 2026, confirmed Opus-2)
-
-**What it is:** A static, permanent inbox address that allows any sender to deliver encrypted files to the inbox holder without either party needing an account, and without Refueler being able to link senders to recipients or to each other.
-
-**Tier:** Production Max only. Lightning-only by architectural necessity. No Creative Premium lite version. The boundary is qualitative: send-focused tier vs standing-receive tier. No Stripe object for this feature (would attach identity).
-
-**Name:** "Silent Drop" is the candidate. Not locked until copy is live. No Stripe objects until name is final. Two tidy-up sessions precede SD-block: S89 (tier naming + name lock, no Stripe objects) → S90 (Stripe price objects for Stripe-rail tiers only).
-
-**Mechanics:** Opaque KV inbox ID · byte counter cap · pause mode · address rotation (24h grace) · per-transfer TTL via R2 lifecycle rules · no sender names/IPs/file names stored.
-
-**BOLT12-inspired Option A (locked):** Cloudflare Worker as blinded relay over HTTPS; secp256k1 blinded paths. Buildable on existing infrastructure. No Lightning node required for this feature.
-
-**SD-block placement (locked Opus-2):** `NB → B7 → SYNC-1 → RU1/RU2 → HQ → SD-block → SW`. Journalist hero copy gated until B9 (blinded-relay review + VPN scoping). Incident-response tabletop must complete before SD-block launch.
-
-**Competitive framing:** The correlation problem — can a recipient maintain a permanent public receive-point such that no two transfers (same or different senders) can be linked? Every existing mechanism fails a clause. Silent Drop does not.
-
----
-
-## Share × Lightning — node infrastructure (locked Opus-2 · 29 Aug 2026; runbook locked S73b / NB-1)
-
-**Hetzner CAX21 (€5.77/mo base).** Software: phoenixd + LNbits (Docker + PostgreSQL) + cloudflared + Tor (per-service .onions).
-
-**NB-series runbook:** NB-1 (runbook locked, no server) · NB-2 (provision + OS hardening + phoenixd, STOP for seed write) · NB-3 (LNbits + Ops wallet + tunnel + invoice round-trip) · NB-4 (Tor .onions + hardening review) · NB-5 (refueler-io project — EF secrets, Blink scrub, Share wallet NOT here).
-
-**Wallet structure:** Ops (NB-3, admin key) · Share (B7-S74, invoice/read key only) · Pass (Pass-A).
-
-**Extension policy:** none at bootstrap. Earn each extension at the session that needs it. Never: Cashu extension, TPoS, Shop, SatsPay, Boltz, Nostr extensions.
-
-**API layering:** All automation → LNbits REST only. phoenixd reached only by LNbits (funding source) + Rajesh (admin/liquidation). Never exposed on Cloudflare Tunnel.
-
-**Phoenixd → LND trigger:** sustained ≥£10k/mo × 3 months + named operator committed to channel ops; OR ACINQ discontinues/changes terms. Not a current blocker.
-
-**Instance topology:** Instance A = Share + Pass (NB-series) · Instance B = Legend (post-B9) · Instance C = SimpleX SMP (B9, own box). Each failure domain isolated.
-
----
-
-## Cashu protocol — NUT-00 v3 and NUT-10 v3 Nutroot secrets (AD-HOC · 27 Aug 2026)
-
-**NUT-00 v3 (BLS12-381):** B10+ consideration for Share. Not urgent through B9.
-
-**NUT-10 v3 Nutroot secrets:** Taproot-style spending conditions. Leaf types: `threshold(k, [pubkeys])` · `after(timestamp)` · `hashlock(preimage_hash)`.
-
-**Share priority:** HIGH. B12 FROST gets a proper interoperable Cashu foundation. B9 whitepaper §Future work must reference Nutroot secrets — supersedes NUT-29 framing.
-
-**Pass priority:** VERY HIGH. Pass v2 should be built on this foundation. "The policy is the credential."
-
----
-
-## Pass × Nutroot secrets — use case set (locked AD-HOC · 27 Aug 2026)
-
-`threshold`: event entry with shared custody · corporate allocation · family passes · press accreditation.
-`after`: early access windows · multi-day festival daily activation · refund window embargo · season ticket renewal.
-`hashlock`: proxy pickup · conditional staff access · merchandise redemption · collaborative gifting.
-
-**Most novel combinations:** FROST threshold + Nutroot threshold leaf (private members events, no list in any database) · timelock + hashlock (talk-slot access) · threshold + timelock (board meeting quorum gate).
-
----
-
-## Share × Legend — distress integration (locked Multi-[n] · 22 Aug 2026)
-
-Share is the correct transmission channel for Legend's Merkle-verified Chain Trace Report. "Send privately" button alongside "Download PDF." Unique encrypted link; decryption key never leaves user's device. Solicitor/GDPR angle: removes professional indemnity exposure without requiring technical knowledge from either party.
-
----
-
-## Pass × Legend — address watch notification layer (locked Multi-[n] · 22 Aug 2026)
-
-Legend issues a Cashu bearer watch credential when a user registers an address watch. Credential stored in Pass. When watched address moves, Legend marks credential as triggered. User sees quiet alert in Pass. No address/amount in notification body — signal only.
-
----
-
-## Recovery Coordination Layer — v3 candidate (locked Multi-[n] · 22 Aug 2026)
-
-FROST-based private coordination for mass-compromise events. Each victim's FROST key share generated independently on their own device. Threshold k-of-n co-sign a collective claim document. Individual Merkle proofs are sealed components — verifiable by trustee/court, not in the public filing. UC-9 Opus session required before any build planning.
-
 ---
 
 ## Session references — cross-repo
@@ -306,6 +168,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 | **Opus-3a · 1 Sep 2026** | all repos | **Liberty mint reconciliation — both provisional names resolved.** Pass mint: **Jewel Tower** (locked). Jewel Tower held Edward III's Privy Wardrobe (treasure → reward tokens, live melt path) and later housed Weights & Measures standards (standardisation → access credentials). Mixed-melt mint; name holds both functions. Black Rod rotation co-locates at Westminster. Legend mint: **Guildhall** (locked). Chamberlain's Court at Guildhall admits individuals to the Freedom of the City (c.1237, living tradition) — access-grant semantics, no value held, correct for a no-melt mint. Deep ledger / record-keeping function moves explicitly to St Paul's / Triforium. Silent Ceremony rotation co-locates at Guildhall. **Temple Treasury retired completely** — no product use, no ops use. "the Temple treasury" retained as three lowercase words in whitepaper §Historical prior art only; strongest as invisible prose, not a named concept. Melt-hygiene mnemonic: settlement-flavoured names (Jewel Tower, the Exchange) on melt mints; admission-flavoured names (Royal Mint, Guildhall) on no-melt mints. Four Liberties mint column fully locked. BRIDGE v6.2. |
 | **Pass-Vocab-1 · 1 Sep 2026** | all repos | **Pass geographic vocabulary locked — three unnamed things named.** Reward token UI name: **a Pass** (product name, normie-legible, literally correct — the Jewel Tower issues Passes). Live melt path event: **Redemption** (primary: Westminster Abbey coronation ritual — the Lord President redeems the Sword of Offering with newly minted coin, a formal financial act with a named sequence; secondary/backup: HM Treasury gilt redemption — repaying and cancelling a debt instrument, wiping the liability from the balance sheet; both Westminster-rooted, one word). Integrity verification metaphor: **Trial of the Pyx** (locked for whitepaper §BLAKE3 integrity + §Historical prior art + closed-door pitch; internal name for the integrity test suite). Access credential has no new geographic name — plain language in docs; "your Pass" in UI. Vocabulary matrix updated. BRIDGE v6.3. |
 | **Merchant-Vocab-1 · 1 Sep 2026** | all repos | **Merchant geographic vocabulary locked — three unnamed things named.** Reward stamp instrument: **a Note** (normie-legible, pre-Bank-of-England provenance — Royal Exchange merchants issued promissory notes before 1694; EIC scrip noted as whitepaper provenance sentence, not a named term). Live melt path event: **Clearance** ("Your Note has cleared" — the Exchange was where bills were cleared; LCH direct descendant). Venue stamp vs settlement token distinction: no second noun — both are a Note throughout the lifecycle; architecture distinguishes accrual state from cleared state internally. Mint name **the Exchange** locked (was provisional). Constitutional line: Westminster *passes* laws → Temple *keeps the record* → the Exchange *issues Notes* → Notes *clear* at the Exchange → the Tower *moves the cargo*. BRIDGE v6.4. |
+| **AP-10 · 3 Sep 2026** | refueler-share + all repos | Roadmap resequenced (no Hetzner required for TG-block, TH-session, SW, B8). Traitor's Gate feature locked: internal/whitepaper vocabulary only; UI = "Destroy after download"; tidal window system (four settings); tier gating (core = all tiers, temporal control = paid only); UX confirmation gate (user-triggered deletion post-download). Tower Hill / OpenTimestamps scoped: 2–3 Opus sessions covering Share + Pass + Legend `.ots` use cases. Execution Dock locked: Harbourmaster dashboard card, 48h Three Tides grace, no fee mechanism, sender-facing only. Dragon status vocabulary locked: presence-based operational status, distinct from Raven (absence-based legal signal). Editorial atoms locked: Pileus quote, Three Guineas, Pepys quote, Penn/Bushel's Case, JQA at All Hallows, Cibber frieze/Monument, EIC private intelligence, Tower Subway. Beating of the Bounds reserved for B9 audit + article. BRIDGE v6.7. |
 
 ---
 
@@ -338,7 +201,7 @@ FROST-based private coordination for mass-compromise events. Each victim's FROST
 
 ---
 
-## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1)
+## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1 + AP-10)
 
 The Refueler product ecosystem is anchored in London geography — specifically the Thames corridor from Westminster eastward to the Pool of London. This is not decorative: it reflects where Refueler is built, by a Londoner, and the institutions drawn on performed real historical versions of what these products do. The vocabulary is coherent, earned, and novel in both senses of the word.
 
@@ -355,6 +218,12 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | **Cargo** | The encrypted file bundle in transit. Used in API event names (`cargo_received`), webhook payloads, and developer docs. Not used in patient-facing or professional UI copy — use "documents" there. | Docs / API / webhooks |
 | **Locke** | The credential-as-key mechanism — presented to access Harbourmaster. Locke/Lock double-meaning. Named in whitepaper and docs; not necessarily surfaced to end users. | Whitepaper / docs |
 | **Raven** | The warrant canary system — replaces "canary" across all products. Ravens signal safety by presence, not by dying. Absence = compromise signal. Architecturally more accurate than the canary metaphor. One Raven per Liberty — four total. | Whitepaper / docs / public |
+| **Dragon** | The operational status indicator — presence-based system health signal, distinct from Raven (absence-based legal warrant canary). "The Dragon holds" = all systems operational. "The Dragon sleeps" = degraded / partial outage. "The Dragon has fallen" = critical failure or maintenance. The Dragon is the wall; the Raven is the alarm. Internal vocabulary and status page only. Never conflated with City of London boundary bollard dragons. | Internal / status page |
+| **Traitor's Gate** | Internal/whitepaper vocabulary for the Destroy after download feature and its tidal window system. UI label: "Destroy after download." The Gate is the mechanism; the user is not the traitor. The name refers to the water gate through which the accused arrived — one way in, no way back. Never in product-facing copy. Whitepaper + closed-door only. | Internal / whitepaper |
+| **Tidal Window** | The temporal access control system built on Traitor's Gate. Four settings: (1) Destroy after download [all tiers]; (2) Close tide — auto-delete at precise datetime [paid tiers]; (3) Open tide — available from datetime [paid tiers]; (4) Combined tidal window — from + until + destroy [paid tiers]. Enforced at Worker via manifest fields `available_from_timestamp` + `available_until_timestamp`. | Whitepaper / docs |
+| **Execution Dock** | The uncollected-transfer queue in the Harbourmaster dashboard. Transfers expired without collection enter a 48-hour grace window (Three Tides) before R2 deletion executes. Amber state in dashboard. Sender-facing only — recipient never sees this designation. No fee mechanism: extend means re-upload on free tier; paid tier expiry windows make this less common. Named for Execution Dock, Wapping, where pirates were left until three tides had washed over them. | Harbourmaster dashboard / internal |
+| **Three Tides** | The 48-hour grace period at Execution Dock before R2 deletion. Named for the historic sentence at Execution Dock: bodies left until three tides washed over them (~36–48 hours). | Internal / dashboard |
+| **Beating of the Bounds** | Reserved for: (1) the B9 security audit — a formal walk of every system boundary, endpoint, rate limit, and cryptographic claim; (2) an article on boundary knowledge as embodied memory (the City boundary existed only in the memory of those who had walked it — the key has the same property). Not a feature name. | Whitepaper / article |
 | **Tower of London** | Brand geography home of **Share**. Every locked Share term has a real address here: Royal Mint (inside the walls 500 years), Port of London Authority (Tower Hill), the harbour lexicon (Pool of London), Tower Bridge, the Ravens, and the Warder's nightly Ceremony of the Keys. The tightest product-to-place fit of the four. | Share product |
 | **Tower Bridge** | Tier differentiator visual metaphor — the bridge raises for large vessels (Production Max / Business). Free tier passes under. Creative Premium navigates the Thames with skill. Not a UI label; lives in design language and copy tone. | Design / copy |
 | **Westminster** | Brand geography home of **Pass**. The Palace of Westminster *passes* laws — permits, who may do what and when. Rotation ceremony: Black Rod (State Opening). | Pass product |
@@ -394,6 +263,9 @@ Refueler Share  ·  home: Tower of London
               └── Locke (credential-as-key for Harbourmaster access)
               └── Warder · Ceremony of the Keys (keyset rotation)
               └── Raven (Share's warrant canary — 2–3 mirrors)
+              └── Dragon (operational status indicator — presence-based)
+              └── Traitor's Gate (internal: Destroy after download + Tidal Window system)
+              └── Execution Dock (Harbourmaster dashboard: uncollected transfer queue)
 
 Refueler Pass  ·  home: Westminster
   └── Jewel Tower (Pass mint — issues Passes, holds live melt path)
@@ -416,8 +288,8 @@ Refueler Merchant  ·  home: Royal Exchange
         └── Raven (Merchant's warrant canary — 2–3 mirrors)
 ```
 
-### Resolved — AP-ARCH · 31 Aug 2026; Opus-3 · 31 Aug 2026; Opus-3b · 31 Aug 2026; Opus-3a · 1 Sep 2026; Pass-Vocab-1 · 1 Sep 2026; Merchant-Vocab-1 · 1 Sep 2026
-Four separate mints. Four independent seeds. No shared mint, no shared keyset across products. Pass vocabulary complete. Merchant vocabulary complete. All four Liberties fully named. See §The four Liberties below.
+### Resolved — AP-ARCH · 31 Aug 2026; Opus-3 · 31 Aug 2026; Opus-3b · 31 Aug 2026; Opus-3a · 1 Sep 2026; Pass-Vocab-1 · 1 Sep 2026; Merchant-Vocab-1 · 1 Sep 2026; AP-10 · 3 Sep 2026
+Four separate mints. Four independent seeds. No shared mint, no shared keyset across products. Pass vocabulary complete. Merchant vocabulary complete. All four Liberties fully named. Dragon vocabulary locked. Traitor's Gate internal vocabulary locked.
 
 ---
 
@@ -497,6 +369,8 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 
 **The metaphor:** the traditional warrant canary dies to signal danger — a one-time, unrepeatable signal. Refueler uses Ravens instead: by statute, there must be at least six Ravens at the Tower of London, or the Tower — and with it, the kingdom — falls. The Raven does not die. It is simply absent. And its absence is continuous, compounding, and impossible to hide. A Refueler Raven must be renewed on a fixed schedule; failure to renew is the signal. For the whitepaper, this etymology is stated once, briefly, in §5.
 
+**The Dragon is not the Raven.** The Dragon signals operational status — presence-based, continuous, about infrastructure health. The Raven signals legal status — absence-based, one-time, about compulsion and compromise. These two signals cover different threat surfaces, must never share vocabulary, display surface, or ambiguity. Raven = legal alarm. Dragon = operational wall.
+
 | Product | Raven statement | Mirrors |
 |---|---|---|
 | Share (Tower / Royal Mint) | No compulsion, no logging beyond stated, no backdoor | 2–3 |
@@ -548,7 +422,7 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 
 ---
 
-## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026)
+## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026; AP-10 · 3 Sep 2026)
 
 | Term | Website / UI | Professional copy | Whitepaper / docs | Closed door / internal |
 |---|---|---|---|---|
@@ -562,6 +436,13 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | Cargo | — | — | ✓ (API/webhooks) | ✓ |
 | Royal Mint | — | ✓ (Share mint) | ✓ | ✓ |
 | Port Authority | — | — | ✓ (admission-control layer) | ✓ |
+| Dragon | — | — | — | ✓ (status indicator) |
+| Execution Dock | — | — | ✓ | ✓ (dashboard card) |
+| Three Tides | — | — | — | ✓ |
+| Traitor's Gate | — | — | ✓ (feature internal name) | ✓ |
+| Tidal Window | — | — | ✓ | ✓ |
+| Beating of the Bounds | — | — | ✓ (WP + article) | ✓ |
+| The Pileus | — | — | ✓ (WP preamble) | ✓ |
 | Tower of London | — | ✓ (Share brand) | ✓ | ✓ |
 | Westminster | — | ✓ (Pass brand) | ✓ | ✓ |
 | Temple | — | ✓ (Legend brand) | ✓ | ✓ |
@@ -585,7 +466,7 @@ A **Liberty** in London is a zone with its own jurisdiction where ordinary autho
 | The four Liberties | — | — | ✓ | ✓ |
 | Temple Bar | — | — | ✓ | ✓ |
 | Tower Bridge | — | ✓ (tier metaphor) | — | ✓ |
-| Traitors Gate | — | — | — | ✓ (pitch only) |
+| Traitors Gate | — | — | ✓ (WP — feature context) | ✓ (internal only) |
 | White Tower | — | — | — | ✓ (held) |
 | Shakespeare's Globe | — | — | — | ✓ (re-credential metaphor, pitch) |
 | Temple of Mithras | — | — | ✓ (metadata argument) | ✓ |
@@ -618,6 +499,25 @@ The lineage: Templar letter of credit (c.1150) → Venetian bill of exchange →
 
 ---
 
+## Editorial vocabulary and article reference material (locked AP-10 · 3 Sep 2026)
+
+Locked editorial atoms for whitepaper, articles, and presentations. None of these appear in product-facing UI copy unless specified.
+
+| Atom | Content | Use |
+|---|---|---|
+| **Pileus quote** | "Liberty holds the pileus but does not wear it. Freedom is offered. It must be chosen." The pileus — Roman freed-slave hat, symbol of manumission — is held out by Liberty in Cibber's Monument frieze, not worn. Offered, not imposed. | Whitepaper preamble and Four Liberties section. |
+| **Pepys execution quote** | *"I went to see Major General Harrison Hung Drawn and Quartered. He was looking as cheerful as any man could in that condition."* — Samuel Pepys, 13 October 1660. Plaque outside the Hung Drawn & Quartered pub, Great Tower Street. Harrison was a Fifth Monarchist who had signed Charles I's death warrant. Pepys went to watch and recorded it with complete equanimity. | Brand voice reference. The register: English, dry, unflappable in the presence of something technically gruesome. Whitepaper / talks / btc++ Berlin. |
+| **Three Guineas** | Lord Balmerino tipped his executioner three guineas (22-carat gold, £1.05 each, 8.3g) at Tower Hill on 18 August 1746, before kneeling on the wrong side of the block, correcting himself, and giving the signal. His execution reportedly took three blows. £22,744 at 2026 purchasing power. Chain: guinea (1663) → pound (1816) → decimalised (1971) → Nixon/Bretton Woods (same year, August 1971) → Bitcoin. | Article 6 lede (anonymous payment). The guinea survived 153 years before the state ended it. |
+| **Pepys's cheese** | On 1 September 1666 Pepys buried "my Parmazan cheese as well as my wine and some other things" in a pit in his garden at the Navy Office, Seething Lane, to protect them from the approaching Great Fire. He believed obscurity protected his records (Shelton's tachygraphy shorthand). His diary was deciphered in 1819 by John Smith — working from the manuscripts for three years without realising a key to the shorthand was on the same library shelf. **Fact-check required:** the Four Seasons / Ten Trinity Square renovation claim is unverified — the Navy Office was on Seething Lane (~300m from Ten Trinity Square). Use the Seething Lane burial only. | Article on security through obscurity (Pepys, 1665) vs cryptographic security (today). "Pepys buried his cheese because he trusted the ground more than the street. We bury your files in cryptography for the same reason." |
+| **Penn / Bushel's Case** | William Penn baptised at All Hallows by the Tower, 1644. Penn-Mead trial, 1670 — jury refused to convict despite the judge threatening them with starvation and imprisonment. Established jury independence as a constitutional principle (Bushel's Case). "You cannot compel conscience." Penn founded Pennsylvania. | Whitepaper preamble / compulsion argument. "What no court could extract from Penn's jury, our architecture makes architecturally impossible." |
+| **JQA at All Hallows** | John Quincy Adams (6th US President) married at All Hallows by the Tower in 1797, while serving as US Minister to the Netherlands. Son of John Adams (2nd President) — one of only two father-son presidential pairs in US history. Both exceptional correspondents and diarists. JQA kept 51 volumes. | American audience presentations. btc++ Berlin (October 2026). |
+| **Cibber frieze / Monument** | The Monument west frieze designed by Robert Hooke FRS in consultation with Wren (Hooke's credit understated). Sculpted by Caius Gabriel Cibber (released daily from debtors' prison to sculpt, returning each night). Liberty holds the pileus — not wears it. Masonic symbols in frieze (square and compass in Architecture's hand). Monument sits on Candlewick/Bridge Ward boundary. Monument height = distance to Pudding Lane bakery origin (202ft). Shaft housed a zenith telescope. Six people have jumped from it (more than the Great Fire's confirmed fatalities of six). | Whitepaper Four Liberties section. Monument is in Candlewick Ward — Merchant territory (fire was mercantile catastrophe, rebuilding a mercantile act). Never claimed as Share territory. |
+| **EIC private intelligence** | East India Company (chartered 1600, East India House, Leadenhall Street, ~600m from Tower). Own army 260,000 men at peak — twice the British Army. Cipher dispatches London-India not readable by Crown. All EIC goods declared at Custom House, adjacent to Tower. | Article on compulsion argument: private encrypted infrastructure is historically normal, 300 years before Silicon Valley. "The question of whether private actors can operate beyond state surveillance is not new. It resolves the same way: in favour of whoever controls the keys." |
+| **Tower Subway** | Opened August 1870, north entrance at Petty Wales. First subterranean tunnel under Thames. Cable-hauled single carriage, 12 passengers max. Fares: 1d first class, ½d second. Closed within 4 months (unreliable). Converted to pedestrian use — 1 million/year at ½d. Superseded by Tower Bridge (1894, free). Original entrance demolished 1926; stumpy brick tower replacement visible. Oral history from former Tiger Tavern (now Starbucks) barman: tunnel from the Tower itself ran to that corner — used by Elizabeth I and Yeoman Warders. **Oral history, not documented fact.** | Legend brand narrative: hidden infrastructure beneath the visible surface. "There are things moving under this city that don't appear on the map." |
+| **Beating of the Bounds** | Ancient ceremony where parish boundaries were physically walked, with willow wands used to strike boundary markers. Required because boundaries existed only in the memory of those who had walked them — before maps, there was no other record. The City of London still performs it. | B9 security audit framing (walk every system boundary). Article: boundary knowledge as embodied memory — the key has the same property. You either have it or you don't. |
+
+---
+
 ## Reserved geography — held for future use
 
 | Location | Properties | Candidate use |
@@ -630,8 +530,11 @@ The lineage: Templar letter of credit (c.1150) → Venetian bill of exchange →
 | Bank of England | Independent within the system, cannot be audited by Treasury, *the* central monetary authority | **The foil / antithesis** — the establishment monetary institution Refueler defines itself against. Whitepaper §monetary distinction only, handled with care. Never a mint. |
 | Somerset House | National records, Revenue, cultural space | Held lightly — revenue association undermines privacy message |
 | Fleet Street | Information channel, Temple Bar to Ludgate Hill, editors decided what ran | Editorial voice — notes articles, the /notes/ pipeline |
-| Traitors Gate | Watergate entrance, prisoners taken silently by river, public excluded | Closed-door only — "the email inbox was always a Traitors Gate." Never product copy. |
+| Traitors Gate | Water gate entrance to the Tower. Prisoners arrived by barge timed to high tide. The gate opened at high water only — the tidal window was non-negotiable. One way in, no way back. Name retrospective — many who entered (More, Boleyn, Raleigh) were not traitors. | **Internal/whitepaper vocabulary for the Destroy after download feature and Tidal Window system.** Never in product-facing copy. "The Gate is the mechanism; the user is not the traitor." In closed-door pitch: "the email inbox was always a Traitors Gate." |
+| Monument (Candlewick Ward) | Designed by Hooke, consultation by Wren. Cibber frieze: Liberty holds pileus. Masonic programme. Stands on Candlewick/Bridge Ward boundary. Height = distance to Pudding Lane. | **Merchant territory** (fire was mercantile catastrophe, rebuilding mercantile act). Pileus quote locked for whitepaper. Never Share territory. |
+| Execution Dock (Wapping foreshore) | Pirates hanged at the low water mark, left for Three Tides (~48h). Prisoners occupied the jurisdictional gap between land and maritime law. Last execution 1830. Captain Kidd, 1701. | **Execution Dock**: Harbourmaster dashboard card for uncollected-transfer queue. Three Tides = 48h grace. The word "Wapping" not used in copy (poor local reputation, means marshy place). |
 | Three city-states | London (finance), Washington (military), Vatican (religion) | International scale — available when Refueler operates across jurisdictions. Whitepaper future work gesture only. |
+| Mark Lane / Tower Hill station | Original 1884 Metropolitan District Railway station (renamed Tower Hill). Old terracotta surface building still visible at Tower Hill / Byward Street corner. New Tower Hill station opened 1967, ~100m west. Original tunnels' current use undocumented publicly. | Legend article: infrastructure persisting beneath the visible city. Urban exploration record exists but not verified. |
 
 ---
 
