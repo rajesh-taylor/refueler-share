@@ -54,20 +54,15 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 
 ## Stripe — live mode
 
-Account: `rt@rajeshtaylor.com` · GBP · Publishable key: `pk_live_qTLdmzRXg6KHXtxbgGYQZc7L00Kl4saD2q`
-
 | Product | Price ID | Lookup key | Amount | Status |
 |---------|----------|------------|--------|--------|
-| Creative Premium monthly | `price_1Ts7lsGlctwiB9U3hdtgChU2` | `share-creative-monthly` | £12/mo | ⚠️ Archive at S90 |
-| Creative Premium 3-month | `price_1TyzF4GlctwiB9U3Zo0fG8Ic` | `share-creative-3month` | £36/3mo | ⚠️ Archive at S90 |
-| Creative Premium yearly | `price_1TyzKIGlctwiB9U3Dn71fGbA` | `share-creative-yearly` | £144/yr | ⚠️ Archive at S90 |
-| Sovereign (Stripe) monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo | ✅ Active — rename at S90 |
-| Sovereign (Stripe) 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo | ✅ Active — rename at S90 |
-| Sovereign (Stripe) yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr | ✅ Active — rename at S90 |
+| Sovereign monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo | ✅ Active |
+| Sovereign 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo | ✅ Active |
+| Sovereign yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr | ✅ Active |
 
-**Tier rename locked S89:** Free → **Citizen**. Creative Premium retired (stale — no live subscribers, archive at S90). Production Max → **Sovereign**. Sovereign has two rails: Stripe (identity, recovery) and Lightning (no identity, unlocks identity-free features). Rail is a property of the credential, not a separate tier.
+**Tier rename complete S90:** Citizen (free). Sovereign (paid, two rails). Creative Premium archived. Product ID: `prod_Urre2e3PQgr5Uq`.
 
-Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi`, `price_1Ts7xIGlctwiB9U3JyZB8Kwj`
+Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi` · `price_1Ts7xIGlctwiB9U3JyZB8Kwj` · `price_1Ts7lsGlctwiB9U3hdtgChU2` · `price_1TyzF4GlctwiB9U3Zo0fG8Ic` · `price_1TyzKIGlctwiB9U3Dn71fGbA` (Creative Premium)
 
 Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe` · Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
 Portal: configured · redirect to `https://share.refueler.io/upgrade.html`
