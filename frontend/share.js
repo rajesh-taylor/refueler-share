@@ -101,6 +101,15 @@ const rcDownloadBtn    = $('rc-download-btn');
 const uspBlock         = $('usp-block');
 const uspText          = $('usp-text');
 
+// ── TG-block DOM refs (injected into options card by enterUploadMode) ─────────
+// Elements do not exist in the Njk — created in JS so Njk stays untouched.
+let destroyToggle   = null; // <input type="checkbox"> #destroy-after-download
+let destroyNotice   = null; // <div> #destroy-notice — amber sender warning
+let tidalSection    = null; // <div> #tidal-window-section — paid-only wrapper
+let availableFrom   = null; // <input type="datetime-local"> #available-from
+let availableUntil  = null; // <input type="datetime-local"> #available-until
+let tidalError      = null; // <div> #tidal-error — inline invariant error
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Info card
 // ─────────────────────────────────────────────────────────────────────────────
@@ -719,9 +728,154 @@ function enterUploadMode() {
     updateUploadBtn();
   });
   passphraseInput.addEventListener('input', updateUploadBtn);
+
+  // ── TG-block: inject destroy toggle + tidal window into options card ─────────
+  // Inserted before the upload button row. All elements created here so Njk is
+  // untouched. IDs match the confirmed pre-code spec exactly.
+  _injectTransferOptions();
+
   uploadBtn.addEventListener('click', startUpload);
   copyBtn.addEventListener('click', copyShareLink);
   newUploadBtn.addEventListener('click', () => location.reload());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TG-block: inject transfer option controls into the options card
+//
+// Called once from enterUploadMode(). Inserts:
+//   1. Destroy-after-download toggle row (all tiers)
+//   2. Amber sender notice (shown when toggle is on)
+//   3. Tidal window section — available-from / available-until pickers
+//      (paid tiers only; hidden entirely for Citizen / free)
+//
+// Placement: immediately before the upload button wrapper div.
+// Datetime pickers use native input[type=datetime-local] — IBM Plex Mono,
+// Paper/Carbon tokens, no custom calendar. Min attribute set dynamically to
+// prevent past dates. Values converted to unix integer seconds on the wire.
+// ─────────────────────────────────────────────────────────────────────────────
+function _injectTransferOptions() {
+  const uploadBtnWrap = uploadBtn.closest('.mt16');
+  if (!uploadBtnWrap) return; // guard: options card not in expected shape
+
+  // ── 1. Destroy-after-download toggle ───────────────────────────────────────
+  const destroyRow = document.createElement('div');
+  destroyRow.className = 'mt16';
+  destroyRow.id = 'destroy-toggle-row';
+  destroyRow.innerHTML = `
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Destroy after download</div>
+        <div class="toggle-desc">This transfer is deleted the moment it is downloaded</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="destroy-after-download" />
+        <span class="slider"></span>
+      </label>
+    </div>`;
+  uploadBtnWrap.insertAdjacentElement('beforebegin', destroyRow);
+  destroyToggle = $('destroy-after-download');
+
+  // ── 2. Amber sender notice — shown when destroy toggle is on ───────────────
+  const notice = document.createElement('div');
+  notice.id = 'destroy-notice';
+  notice.className = 'destroy-notice hidden';
+  notice.innerHTML = `<strong>Once downloaded, this transfer is gone.</strong> The recipient cannot return to it. Send only when you are certain.`;
+  destroyRow.insertAdjacentElement('afterend', notice);
+  destroyNotice = notice;
+
+  destroyToggle.addEventListener('change', () => {
+    destroyNotice.classList.toggle('hidden', !destroyToggle.checked);
+  });
+
+  // ── 3. Tidal window — available-from / available-until ─────────────────────
+  // Hidden for Citizen (free) tier. Visibility set by _updateTidalVisibility()
+  // when a credential is issued (issuedTier is known). Default: hidden.
+  const tidal = document.createElement('div');
+  tidal.id = 'tidal-window-section';
+  tidal.className = 'tidal-window hidden';
+  tidal.setAttribute('aria-label', 'Transfer availability window');
+  tidal.innerHTML = `
+    <div class="tidal-heading">
+      <div class="toggle-label">Availability window</div>
+      <div class="toggle-desc">Optionally restrict when this transfer can be downloaded</div>
+    </div>
+    <div class="tidal-pickers">
+      <div class="tidal-field">
+        <label for="available-from" class="tidal-label">Available from</label>
+        <input type="datetime-local" id="available-from" class="tidal-input" />
+      </div>
+      <div class="tidal-field">
+        <label for="available-until" class="tidal-label" id="available-until-label">Available until</label>
+        <input type="datetime-local" id="available-until" class="tidal-input" />
+      </div>
+    </div>
+    <div id="tidal-error" class="tidal-error hidden" role="alert"></div>`;
+  destroyNotice.insertAdjacentElement('afterend', tidal);
+  tidalSection   = $('tidal-window-section');
+  availableFrom  = $('available-from');
+  availableUntil = $('available-until');
+  tidalError     = $('tidal-error');
+
+  // Set minimum datetime to now (prevents past selection without extra JS validation).
+  // Rounded to the current minute — datetime-local step is 60s by default.
+  function _setPickerMin() {
+    const nowMs  = Date.now();
+    const nowMin = new Date(nowMs - (nowMs % 60000)); // floor to minute
+    const iso    = nowMin.toISOString().slice(0, 16);  // "YYYY-MM-DDTHH:MM"
+    availableFrom.min  = iso;
+    availableUntil.min = iso;
+  }
+  _setPickerMin();
+
+  // Recompute min each time a picker is focused — page may have been open a while.
+  availableFrom.addEventListener('focus', _setPickerMin);
+  availableUntil.addEventListener('focus', _setPickerMin);
+
+  // Clear tidal error on any picker change so stale messages don't linger.
+  availableFrom.addEventListener('change', () => _clearTidalError());
+  availableUntil.addEventListener('change', () => _clearTidalError());
+}
+
+// Show / hide tidal section based on issued tier.
+// Called from startUpload() once issuedTier is known.
+// free / citizen → hidden. sovereign / business / enterprise → visible.
+function _updateTidalVisibility(tier) {
+  if (!tidalSection) return;
+  const isPaid = tier && tier !== 'free' && tier !== 'citizen';
+  tidalSection.classList.toggle('hidden', !isPaid);
+}
+
+// Read picker values → unix integer seconds, or null if empty.
+function _pickerToUnix(input) {
+  if (!input || !input.value) return null;
+  return Math.floor(new Date(input.value).getTime() / 1000);
+}
+
+// Validate tidal invariant: available_from ≤ available_until ≤ expiry_timestamp.
+// Returns null on pass, or an error string to show inline.
+function _validateTidal(fromUnix, untilUnix, expiryTimestamp) {
+  if (fromUnix !== null && untilUnix !== null && fromUnix > untilUnix) {
+    return '"Available from" must be before "Available until".';
+  }
+  if (untilUnix !== null && untilUnix > expiryTimestamp) {
+    return '"Available until" cannot be after the transfer expiry date.';
+  }
+  if (fromUnix !== null && fromUnix > expiryTimestamp) {
+    return '"Available from" cannot be after the transfer expiry date.';
+  }
+  return null;
+}
+
+function _showTidalError(msg) {
+  if (!tidalError) return;
+  tidalError.textContent = msg;
+  tidalError.classList.remove('hidden');
+}
+
+function _clearTidalError() {
+  if (!tidalError) return;
+  tidalError.textContent = '';
+  tidalError.classList.add('hidden');
 }
 
 function setDropMsg(msg) {
@@ -1184,8 +1338,30 @@ async function startUpload() {
   uploadUUID = issuedUuid;
   const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
 
+  // ── TG-block: reveal tidal section now that tier is known ──────────────────
+  // Must happen before the invariant check so the user can see (and correct)
+  // any picker values if they pre-filled them before the credential was issued.
+  _updateTidalVisibility(issuedTier);
+
   setStage('Uploading', 15);
   const expiryTimestamp = Math.floor(Date.now() / 1000) + FREE_EXPIRY;
+
+  // ── TG-block: read destroy + tidal state ───────────────────────────────────
+  const destroyAfterDownload = destroyToggle && destroyToggle.checked ? '1' : null;
+  const availableFromUnix    = _pickerToUnix(availableFrom);
+  const availableUntilUnix   = _pickerToUnix(availableUntil);
+
+  // Invariant check: available_from ≤ available_until ≤ expiry_timestamp.
+  // Shown inline — never silently dropped. Aborts upload if violated.
+  const tidalErr = _validateTidal(availableFromUnix, availableUntilUnix, expiryTimestamp);
+  if (tidalErr) {
+    _showTidalError(tidalErr);
+    // Restore UI so user can correct and retry.
+    uploadBtn.disabled = false;
+    optionsCard.classList.remove('hidden');
+    progressCard.classList.add('hidden');
+    return;
+  }
 
   // Per-chunk upload with Safari timeout wrapper and 3× retry.
   const CHUNK_RETRY_DELAYS = [2000, 5000, 10000];
@@ -1223,7 +1399,11 @@ async function startUpload() {
       headers['X-File-Name']              = selectedFile.name;
       headers['X-Credential-Commitment']  = commitment;   // S42c: UUID-bound commitment
       headers['X-Issued-Tier']            = issuedTier;   // S42c: tier at credential issuance
-      if (p2shHashHex) headers['X-P2SH-Secret-Hash'] = p2shHashHex;
+      if (p2shHashHex)          headers['X-P2SH-Secret-Hash']         = p2shHashHex;
+      // TG-block headers — chunk-0 only, same pattern as X-P2SH-Secret-Hash.
+      if (destroyAfterDownload) headers['X-Destroy-After-Download']   = destroyAfterDownload;
+      if (availableFromUnix)    headers['X-Available-From']           = String(availableFromUnix);
+      if (availableUntilUnix)   headers['X-Available-Until']          = String(availableUntilUnix);
     }
 
     // Retry loop — handles Safari silent connection drops (timedOut) and

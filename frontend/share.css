@@ -387,4 +387,79 @@ main {
   margin: 0 0 8px;
 }
 
+/* ── TG-block: destroy notice ────────────────────────────────────── */
+/* Amber sender warning shown when destroy-after-download is toggled on. */
+/* Border uses --gold (#C8A96E). No dismiss — it is a state indicator.  */
+.destroy-notice {
+  border-left: 3px solid var(--gold, #C8A96E);
+  background: var(--card-bg);
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.6;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin-top: 10px;
+}
+.destroy-notice strong {
+  color: var(--gold, #C8A96E);
+  font-weight: 600;
+}
+
+/* ── TG-block: tidal window ──────────────────────────────────────── */
+/* Paid-tier only — hidden for Citizen by JS. IBM Plex Mono inputs.   */
+.tidal-window {
+  margin-top: 16px;
+  border-top: 1px solid var(--card-border);
+  padding-top: 14px;
+}
+.tidal-heading {
+  margin-bottom: 12px;
+}
+.tidal-pickers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .tidal-pickers { grid-template-columns: 1fr; }
+}
+.tidal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.tidal-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+}
+.tidal-input {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--card-bg);
+  border: 1px solid var(--input-border, var(--border-mid));
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  /* Suppress browser default calendar icon colour bleed in dark mode */
+  color-scheme: light dark;
+}
+.tidal-input:focus {
+  outline: none;
+  border-color: var(--fg-muted);
+}
+/* Tidal inline error */
+.tidal-error {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--c-red, #C0392B);
+  line-height: 1.5;
+}
+
 
