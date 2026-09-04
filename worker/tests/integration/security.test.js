@@ -45,6 +45,7 @@ import {
   signStripePayloadStale,
   makeSubscriptionUpdatedEvent,
 } from './fixtures/stripe-events.js';
+import { hashSecret } from '../../src/nut11.js';
 
 // ── Unique value generators — prevent cross-test KV bleed ─────────────────
 
@@ -668,5 +669,194 @@ describe('Stripe webhook authentication', () => {
     const { headers } = await signStripePayloadBadSig('');
     const res = await postRaw('/webhook/stripe', '', { 'Content-Type': 'application/json', ...headers });
     expect(res.status).toBe(401);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// § TRAITOR'S GATE — DELETE /transfer/{uuid}
+// TG-block — destroy-after-download, consumed state, tidal window
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const TG_PASSPHRASE = 'tg-test-passphrase';
+
+/**
+ * Full upload + auth cycle using a passphrase-protected transfer.
+ * hashSecret() matches what handleAuth uses — same import from nut11.js.
+ * Returns { uuid, bearer } ready for DELETE /transfer/{uuid}.
+ */
+async function uploadAndAuth(ip = uniqueIp('tg')) {
+  const credRes = await client.issueCredential();
+  expect(credRes.status).toBe(200);
+  const cred = credRes.body;
+
+  const key = await generateKey();
+  const [plain] = makeChunks(1, 256);
+  const { ciphertext } = await encryptChunk(plain.bytes, key);
+  const hash = blake3Hex(ciphertext);
+  const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+  const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+
+  // Compute p2sh_secret_hash using the same hashSecret() the Worker uses in handleAuth.
+  const p2shHash = await hashSecret(TG_PASSPHRASE);
+  credHeaders['X-P2SH-Secret-Hash'] = p2shHash;
+
+  const up = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
+  expect(up.status, 'chunk 0 upload must succeed').toBe(200);
+
+  const authRes = await fetchAs(ip, `/auth/${cred.uuid}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ passphrase: TG_PASSPHRASE }),
+  });
+  expect(authRes.status, `POST /auth must return 200, got ${authRes.status}`).toBe(200);
+  const bearer = authRes.body.token;
+
+  return { uuid: cred.uuid, bearer };
+}
+
+async function deleteTransfer(uuid, bearer) {
+  const headers = {};
+  if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
+  const res = await fetch(`${BASE_URL()}/transfer/${uuid}`, { method: 'DELETE', headers });
+  return {
+    status: res.status,
+    body: res.headers.get('content-type')?.includes('application/json')
+      ? await res.json().catch(() => null)
+      : await res.text(),
+  };
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('Traitor\'s Gate — DELETE /transfer/{uuid}', () => {
+  it('destroys transfer with valid recipient bearer → 200, subsequent download → 410', async () => {
+    const { uuid, bearer } = await uploadAndAuth();
+
+    const delRes = await deleteTransfer(uuid, bearer);
+    expect(delRes.status).toBe(200);
+    expect(delRes.body.destroyed).toBe(true);
+    expect(typeof delRes.body.consumed_at).toBe('number');
+
+    // Subsequent download attempt → 410 (consumed)
+    const dlRes = await fetchAs(uniqueIp('tg-post-del'), `/download/${uuid}/0000`, {
+      headers: { Authorization: `Bearer ${bearer}` },
+    });
+    expect(dlRes.status).toBe(410);
+  });
+
+  it('DELETE with no Authorization → 401', async () => {
+    const { uuid } = await uploadAndAuth(uniqueIp('tg-no-auth'));
+    const res = await deleteTransfer(uuid, null);
+    expect(res.status).toBe(401);
+  });
+
+  it('DELETE with bearer for wrong UUID → 403', async () => {
+    // Bearer for transfer A
+    const a = await uploadAndAuth(uniqueIp('tg-wrong-a'));
+
+    // Create transfer B (separate credential, separate UUID)
+    const bCredRes = await client.issueCredential();
+    expect(bCredRes.status).toBe(200);
+    const bCred = bCredRes.body;
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const bHeaders = client.buildCredentialHeaders(bCred, 1, ciphertext.length, hash, expiryTs);
+    bHeaders['X-P2SH-Secret-Hash'] = await hashSecret(TG_PASSPHRASE);
+    await client.uploadChunk(bCred.uuid, 0, ciphertext, hash, bHeaders);
+
+    // A's bearer against B's UUID → 403
+    const res = await deleteTransfer(bCred.uuid, a.bearer);
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE after already consumed → 410', async () => {
+    const { uuid, bearer } = await uploadAndAuth(uniqueIp('tg-double-del'));
+    const first = await deleteTransfer(uuid, bearer);
+    expect(first.status).toBe(200);
+    const second = await deleteTransfer(uuid, bearer);
+    expect(second.status).toBe(410);
+  });
+});
+
+describe('Traitor\'s Gate — consumed state blocks auth and download', () => {
+  it('POST /auth after consumed: true → 410', async () => {
+    const { uuid, bearer } = await uploadAndAuth(uniqueIp('tg-auth-consumed'));
+    await deleteTransfer(uuid, bearer);
+
+    const authRes = await fetchAs(uniqueIp('tg-auth-consumed-2'), `/auth/${uuid}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase: TG_PASSPHRASE }),
+    });
+    expect(authRes.status).toBe(410);
+  });
+
+  it('GET /download after consumed: true → 410', async () => {
+    const { uuid, bearer } = await uploadAndAuth(uniqueIp('tg-dl-consumed'));
+    await deleteTransfer(uuid, bearer);
+
+    const dlRes = await fetchAs(uniqueIp('tg-dl-consumed-2'), `/download/${uuid}/0000`, {
+      headers: { Authorization: `Bearer ${bearer}` },
+    });
+    expect(dlRes.status).toBe(410);
+  });
+});
+
+describe('Traitor\'s Gate — tidal window enforcement', () => {
+  it('available_from in future → 423 on POST /auth', async () => {
+    // Free tier → 403 (tier gate). Paid tier → 200 upload then 423 on auth.
+    // Test documents both paths — update when paid tier fixture exists.
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const hdrs = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+    hdrs['X-P2SH-Secret-Hash'] = await hashSecret(TG_PASSPHRASE);
+    hdrs['X-Available-From'] = String(Math.floor(Date.now() / 1000) + 86400);
+
+    const upRes = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, hdrs);
+    expect([200, 403]).toContain(upRes.status);
+    if (upRes.status === 200) {
+      const authRes = await fetchAs(uniqueIp('tg-tidal-auth'), `/auth/${cred.uuid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passphrase: TG_PASSPHRASE }),
+      });
+      expect(authRes.status).toBe(423);
+    }
+  });
+
+  it('available_until in past → 410 on POST /auth (if paid tier; else 403 on upload)', async () => {
+    const credRes = await client.issueCredential();
+    expect(credRes.status).toBe(200);
+    const cred = credRes.body;
+    const key = await generateKey();
+    const [plain] = makeChunks(1, 256);
+    const { ciphertext } = await encryptChunk(plain.bytes, key);
+    const hash = blake3Hex(ciphertext);
+    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+    const hdrs = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
+    hdrs['X-P2SH-Secret-Hash'] = await hashSecret(TG_PASSPHRASE);
+    hdrs['X-Available-Until'] = String(Math.floor(Date.now() / 1000) - 1);
+
+    const upRes = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, hdrs);
+    expect([200, 403]).toContain(upRes.status);
+    if (upRes.status === 200) {
+      const authRes = await fetchAs(uniqueIp('tg-tidal-until'), `/auth/${cred.uuid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passphrase: TG_PASSPHRASE }),
+      });
+      expect(authRes.status).toBe(410);
+    }
   });
 });

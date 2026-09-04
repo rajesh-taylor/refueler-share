@@ -7,6 +7,7 @@ import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 import { createInvoice, getInvoiceStatus } from './lightning.js';
 import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
+import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders } from './manifest_tg.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -96,8 +97,8 @@ function corsHeaders(request) {
   const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
   return {
     'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Destroy-After-Download, X-Available-From, X-Available-Until',
     'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp',
   };
 }
@@ -247,6 +248,13 @@ export default {
           const response = await handleDownload(request, env, downloadMatch[1], chunkIndex);
           return addCors(response, request);
         }, { chunkIndex });
+      }
+
+      const deleteMatch = path.match(/^\/transfer\/([0-9a-f-]{36})$/i);
+      if (request.method === 'DELETE' && deleteMatch) {
+        const uuid = deleteMatch[1];
+        if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
+        return timed('delete_transfer', () => handleDeleteTransfer(request, env, uuid).then(r => addCors(r, request)));
       }
 
       if (request.method === 'POST' && path === '/webhook/stripe') {
@@ -820,6 +828,43 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       console.error('KV byte counter write failed:', e);
     }
 
+    // ── TG: tidal header processing (chunk 0 only) ────────────────────────
+    // X-Destroy-After-Download: 1  — arms pending_destruction on this transfer
+    // X-Available-From: <unix>     — locks transfer until timestamp (paid only)
+    // X-Available-Until: <unix>    — expires transfer at timestamp (paid only)
+    const destroyAfterDownload = request.headers.get('X-Destroy-After-Download') === '1';
+    const availableFromHeader  = request.headers.get('X-Available-From');
+    const availableUntilHeader = request.headers.get('X-Available-Until');
+    const hasTidalHeaders = availableFromHeader !== null || availableUntilHeader !== null;
+
+    if (hasTidalHeaders && !isTidalPermitted(resolvedTier)) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 403, errorMsg: 'tidal_tier_gate' });
+      return err(403, 'Availability scheduling requires a paid subscription.');
+    }
+
+    let availableFromTs = null;
+    let availableUntilTs = null;
+
+    if (availableFromHeader !== null) {
+      availableFromTs = parseInt(availableFromHeader, 10);
+      if (isNaN(availableFromTs)) return err(400, 'X-Available-From must be a unix timestamp (integer)');
+    }
+    if (availableUntilHeader !== null) {
+      availableUntilTs = parseInt(availableUntilHeader, 10);
+      if (isNaN(availableUntilTs)) return err(400, 'X-Available-Until must be a unix timestamp (integer)');
+    }
+
+    const tidalInvariantError = validateTidalHeaders(
+      availableFromTs,
+      availableUntilTs,
+      Math.floor(Date.now() / 1000),  // created_at (manifest not yet written)
+      expiryTs
+    );
+    if (tidalInvariantError) {
+      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'tidal_invariant_violation' });
+      return err(400, tidalInvariantError);
+    }
+
     const manifest = createManifest({
       uuid,
       tier: resolvedTier,
@@ -831,6 +876,12 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     });
     manifest.file_name = fileName;
     manifest.chunks_received = [0];
+
+    // Apply TG fields
+    if (destroyAfterDownload) manifest.pending_destruction = false; // armed
+    if (availableFromTs !== null)  manifest.available_from_timestamp  = availableFromTs;
+    if (availableUntilTs !== null) manifest.available_until_timestamp = availableUntilTs;
+
     await putManifest(env.BUCKET, uuid, manifest);
 
     const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
@@ -920,6 +971,12 @@ async function handleAuth(request, env, uuid) {
     return err(502, 'Transfer manifest exceeds size limit');
   }
   if (!manifest) return err(404, 'Transfer not found');
+
+  // ── TG: consumed / tidal window checks (fire before passphrase gate) ──────
+  const authNowSeconds = Math.floor(Date.now() / 1000);
+  const authStatusCheck = checkTransferStatus(manifest, authNowSeconds);
+  if (!authStatusCheck.ok) return err(authStatusCheck.status, authStatusCheck.body);
+
   if (!requiresPassphrase(manifest)) return err(400, 'Transfer is not passphrase-protected');
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
 
@@ -978,6 +1035,12 @@ async function handleDownload(request, env, uuid, chunkIndex) {
     return err(502, 'Transfer manifest exceeds size limit');
   }
   if (!manifest) return err(404, 'Transfer not found');
+
+  // ── TG: consumed / tidal window checks (fire before expiry / passphrase checks) ─
+  const dlNowSeconds = Math.floor(Date.now() / 1000);
+  const dlStatusCheck = checkTransferStatus(manifest, dlNowSeconds);
+  if (!dlStatusCheck.ok) return err(dlStatusCheck.status, dlStatusCheck.body);
+
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
 
   if (chunkIndex === 0) {
@@ -1023,7 +1086,108 @@ async function handleDownload(request, env, uuid, chunkIndex) {
     headers.set('Content-Range', `bytes ${obj.range.offset}-${obj.range.end}/${obj.size}`);
   }
 
-  return new Response(obj.body, { status, headers });
+  const dlResponse = new Response(obj.body, { status, headers });
+
+  // ── TG: flip pending_destruction → true when last chunk of a destroy-after-download
+  // transfer is served. Advisory only — does not block re-fetches. DELETE /transfer/{uuid}
+  // performs actual chunk deletion when the recipient confirms.
+  // ctx not available here (fetch handler scope) — use waitUntil from outer timed() wrapper.
+  // Fire-and-forget via unhandled promise: if the write fails, the flip is retried on the
+  // next chunk download (flipPendingDestruction is idempotent once true).
+  const updatedManifestForFlip = flipPendingDestruction(manifest, chunkIndex);
+  if (updatedManifestForFlip !== manifest) {
+    putManifest(env.BUCKET, uuid, updatedManifestForFlip).catch(e =>
+      console.error('TG: pending_destruction flip write failed:', e)
+    );
+  }
+
+  return dlResponse;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delete transfer — DELETE /transfer/:uuid  (TG-block)
+//
+// Two auth paths:
+//   Recipient path — bearer token from POST /auth/{uuid} (live, TG-2)
+//   Owner path     — owner-scoped credential (TG-4, stubbed as 501)
+//
+// Deletion sequence (fail-closed, tombstone path A):
+//   1. Read manifest, authorise caller
+//   2. Flip consumed: true, write manifest back FIRST (fail-closed marker)
+//   3. Delete chunks {uuid}/0000 … {uuid}/{N-1}
+//   4. Overwrite manifest with stripped tombstone { consumed, consumed_at }
+//      — drops p2sh_secret_hash, expiry, tidal timestamps
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleDeleteTransfer(request, env, uuid) {
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  const authHeader = request.headers.get('Authorization') ?? '';
+
+  // Owner path — TG-4 stub
+  if (authHeader.startsWith('Bearer rfs_owner_')) {
+    return err(501, 'Owner-scoped deletion is not yet available.');
+  }
+
+  if (!authHeader.startsWith('Bearer ')) {
+    return err(401, 'Authorization required.');
+  }
+
+  const bearerToken = authHeader.slice(7);
+
+  // ── Read manifest ─────────────────────────────────────────────────────────
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+
+  // Already consumed — idempotent
+  if (manifest.consumed === true) {
+    return err(410, 'Transfer has already been destroyed.');
+  }
+
+  // ── Authorise bearer ──────────────────────────────────────────────────────
+  // The bearer is a download token issued by POST /auth/{uuid}.
+  // verifyDownloadToken checks it was signed by our mint key and bound to this UUID.
+  // A token from a different transfer will fail the uuid check.
+  const { valid, uuid: tokenUuid } = await verifyDownloadToken(bearerToken, env.MINT_PRIVATE_KEY);
+  if (!valid || tokenUuid !== uuid) {
+    return err(403, 'Not authorised to destroy this transfer.');
+  }
+
+  // ── Fail-closed deletion sequence ─────────────────────────────────────────
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const totalChunks = manifest.total_chunks ?? 0;
+
+  // Step 2: Write consumed marker first — if chunk deletion fails, transfer
+  // is still marked gone. Clients get 410. Chunks expire via R2 lifecycle TTL.
+  await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
+
+  // Step 3: Delete chunks
+  const deleteErrors = [];
+  for (let i = 0; i < totalChunks; i++) {
+    try {
+      await env.BUCKET.delete(`${uuid}/${String(i).padStart(4, '0')}`);
+    } catch (e) {
+      console.error(`TG: chunk delete failed at index ${i}:`, e);
+      deleteErrors.push(i);
+    }
+  }
+
+  // Step 4: Overwrite with stripped tombstone
+  const tombstone = buildTombstone(nowSeconds);
+  await putManifest(env.BUCKET, uuid, tombstone);
+
+  logEvent(env, {
+    endpoint:  'delete_transfer',
+    tier:      manifest.tier ?? 'free',
+    status:    200,
+    totalChunks,
+    errorMsg:  deleteErrors.length > 0 ? `partial_delete:${deleteErrors.length}` : '',
+  });
+
+  return json({
+    destroyed:    true,
+    consumed_at:  nowSeconds,
+    ...(deleteErrors.length > 0 ? { partial: true, failed_chunks: deleteErrors } : {}),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
