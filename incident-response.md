@@ -81,7 +81,7 @@ These are drawn from established crisis communication practice — the same prin
 
 For any S1 or S2 event:
 
-1. **Status page** (`share.refueler.io/status`) — first, always, before anything else. The status page is the canonical source of truth. Every other channel points to it, not the reverse.
+1. **Status page** (`refueler.io/share/status`) — first, always, before anything else. The status page is the canonical source of truth. Every other channel points to it, not the reverse.
 2. **Email** — paid tier subscribers (Stripe records). Use Stripe email list. Plain text. No HTML. Arrives from `support@refueler.io`.
 3. **SimpleX group** — enterprise clients with dedicated support groups (B9+). Direct, private, before public post.
 4. **Public** — a post on `refueler.io` (not social media). Share does not maintain social channels. `refueler.io` is the canonical public destination.
@@ -125,7 +125,7 @@ What this does not mean: [The architecture point — keys were never held, file 
 
 What we are doing: [Two or three specific actions.]
 
-For updates: share.refueler.io/status — this is the only source of truth. All further updates go there first.
+For updates: refueler.io/share/status — this is the only source of truth. All further updates go there first.
 
 If you have questions: support@refueler.io — it comes directly to me.
 
@@ -198,7 +198,7 @@ Next update: [specific time UTC]
 
 ### Homepage persistent indicator
 
-A small status widget in the bottom-right corner of `share.refueler.io`. Always visible. Three states:
+A small status widget in the bottom-right corner of `refueler.io/share`. Always visible. Three states:
 
 - **Green** (default): "All systems operational"
 - **Amber**: "Service degraded — see status page"

@@ -13,7 +13,7 @@
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
 | Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens`, `subscribers`, `double_spend_attempts` |
 | Frontend | Eleventy 3.x — `src/` → `frontend/` (canonical `refueler-share/frontend/`, mirror `refueler-io/src/share/assets/`) |
-| Subdomain | `share.refueler.io` → CNAME → `refueler-share.pages.dev` |
+| Subdomain | `refueler.io/share/` → `refueler-io` Pages |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
 | Payments (sats) | LNbits on Hetzner CAX21 (B7+) — `LNBITS_API_KEY` / `LNBITS_URL` |
@@ -42,7 +42,7 @@ Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Conten
 | R2 buckets | `refueler-share-prod`, `refueler-share-dev` |
 | KV | `refueler-share-kv` · id `5b1dca6a8f06423f98d0bbc4286e2968` · binding `STATUS_KV` |
 | AE dataset | `share_events` · binding `AE` |
-| Pages | `share.refueler.io` → `refueler-share.pages.dev` |
+| Pages | `refueler.io/share/` → `refueler-io.pages.dev` |
 | Turnstile | Sitekey `0x4AAAAAAD0N7GlHlCRuWITr` · Managed widget (visible only) |
 
 Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_URL`,
@@ -65,7 +65,7 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi` · `price_1Ts7xIGlctwiB9U3JyZB8Kwj` · `price_1Ts7lsGlctwiB9U3hdtgChU2` · `price_1TyzF4GlctwiB9U3Zo0fG8Ic` · `price_1TyzKIGlctwiB9U3Dn71fGbA` (Creative Premium)
 
 Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe` · Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
-Portal: configured · redirect to `https://share.refueler.io/upgrade.html`
+Portal: configured · redirect to `https://refueler.io/share/upgrade.html`
 Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 
 Business tier: invoiced manually via Stripe invoice template. No subscription price object. Off-repo.

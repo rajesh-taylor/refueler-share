@@ -51,7 +51,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - One API keypair per commercial relationship. No sub-keys. Rotation via `POST /api/v1/keys/rotate` (24h grace window). Multi-user = shared firm key + `transfer_ref` attribution + dashboard seats.
 - Webhooks are notification, never control flow. Credential issuance and transfer completion proceed identically whether the client webhook endpoint is up or down.
 - DO NOT use Cloudflare Queues, Durable Objects, or D1 for webhook delivery or any other purpose. `ctx.waitUntil` + KV dead-letter only.
-- Badge links to `share.refueler.io`, not `refueler.io`.
+- Badge links to `refueler.io/share/`.
 - Business tier = invoiced. No Stripe subscription price object for Business — invoice template only, managed manually in Stripe dashboard, off-repo.
 - `X-Email` header dropped from upload path entirely — snag resolves by removal.
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
