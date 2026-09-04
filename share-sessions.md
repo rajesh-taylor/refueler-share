@@ -137,7 +137,7 @@
 | AP-8 | 4 Aug | Nav rewrite + `head.njk` theme script. `rs-theme` cookie scoped to `.refueler.io`. |
 | AP-9 | 27 Aug | B7 re-sequence. Lightning infra I added. Silent Drop confirmed Production Max only. B7 budget 25→50. |
 | AP-9a | 28 Aug | Lightning identity invariant added. Journalist/source-protection hero copy gating rule added. |
-| AP-10 | 3 Sep | Roadmap resequenced (no Hetzner required for TG-block, TH-series, SW, B8). Traitor's Gate locked (internal vocab, UI = "Destroy after download", tidal window system, tier gating, user-triggered deletion). Tower Hill / OpenTimestamps: 2–3 Opus scoping sessions, Share + Pass + Legend. Execution Dock: 48h Three Tides grace, dashboard card, no fee. Dragon status vocabulary locked. Editorial atoms locked: Pileus, Three Guineas, Pepys quote, Penn/Bushel's Case, JQA, Cibber frieze, EIC, Tower Subway, Beating of the Bounds. Articles gated on Hetzner live. BRIDGE v6.7, Master-Context v7.0. |
+| AP-10 | 3 Sep | Roadmap resequenced. TG-block, TH-series, SW, B8 require no Hetzner. Traitor's Gate internal vocab locked. Tower Hill / OpenTimestamps: 2–3 Opus scoping sessions. Execution Dock: 48h Three Tides grace. Dragon status vocabulary locked. BRIDGE v6.7, Master-Context v7.0. |
 
 ---
 
@@ -177,7 +177,7 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 | # | Commit | Summary |
 |---|--------|---------|
-| RU1 ✓ | `ae78b81`→`48ed213` | IndexedDB schema live — `idbOpen()`, `writeChunkState()` (every 200 ACK), `readResumeState()`, `clearResumeState()`. `checkResumeState()` on page load with 8-day stale guard. Resume card HTML in `index.njk` (gold "Interrupted" tag, filename + pct detail, Resume + Discard buttons). Discard wired. Resume = placeholder. |
+| RU1 ✓ | `ae78b81`→`48ed213` | IndexedDB schema live — `idbOpen()`, `writeChunkState()` (every 200 ACK), `readResumeState()`, `clearResumeState()`. `checkResumeState()` on page load with 8-day stale guard. Resume card HTML in `index.njk`. Discard wired. Resume = placeholder. |
 
 ---
 
@@ -185,7 +185,7 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 | # | Commit | Summary |
 |---|--------|---------|
-| RU1a ✓ | `9e255fa`/`f05583f` | `resumeUpload()` wired: restores AES key/IV from IDB, re-issues credential, prompts for original file (name+size identity check), re-hashes confirmed chunks for rolling BLAKE3 root, uploads remaining chunks. Expiry-awareness: `tier` + `expiryTimestamp` on IDB record. `fetchWithTimeout()` (60s, AbortController) fixes Safari silent hang. 3× retry (2s/5s/10s). Zip progress capped at 95% + "Finalising archive" label. Toggle knob Carbon fix. 36/36 tests passing. |
+| RU1a ✓ | `9e255fa`/`f05583f` | `resumeUpload()` wired. AES key/IV restored from IDB. Re-credential path. File identity check. BLAKE3 re-hash of confirmed chunks. `fetchWithTimeout()` fixes Safari hang. 3× retry. Zip progress capped at 95%. 36/36 tests passing. |
 
 **RU1a do-not-retry:**
 - DO NOT use `var(--carbon)` for the active toggle knob — use `#E8E2D8` (Paper literal)
@@ -199,11 +199,11 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 | # | Commit | Summary |
 |---|--------|---------|
 | RU2 | `9fce220` | Resume progress strings wired. Renewal banner deferred to SW-block. |
-| RU2a | — | IDB write verification: all five fields confirmed present. Resume card confirmed rendering. Mirror sync gap identified. |
-| RU2b | `bd48ad8` | Resume card HTML synced to `refueler-io/src/share/index.njk`. Root cause: Turnstile never rendered on resume path. |
-| RU2c | `2f348cb`/Worker `0c216a5` | Resume credential uses `resume: true` + `resume_uuid`; Worker R2 HEAD check on chunk `0000`; no Turnstile. 3× retry loop. `promptForResumeFile` focus/change race fixed. |
+| RU2a | — | IDB write verification confirmed. Resume card rendering confirmed. Mirror sync gap identified. |
+| RU2b | `bd48ad8` | Resume card HTML synced to `refueler-io/src/share/index.njk`. Turnstile never rendered on resume path — root cause. |
+| RU2c | `2f348cb`/Worker `0c216a5` | Resume credential uses `resume: true` + `resume_uuid`; Worker R2 HEAD check on chunk `0000`; no Turnstile. |
 | RU2d | `2e1604a`/`bc0d597`/`1030572` | Verification loop hang fixed. Resume button fix. CORS fix. WiFi-kill → card → resume → share card ✓. |
-| RU2e | `1e33ebe` | 409 detection: clear IDB, show "already completed", repurpose Discard as "New upload". Encrypted-chunks reassurance note. **RU-block closed.** |
+| RU2e | `1e33ebe` | 409 detection: clear IDB, show "already completed", repurpose Discard as "New upload". **RU-block closed.** |
 
 **RU do-not-retry:**
 - DO NOT require Turnstile on the resume credential path — use `resume: true` + `resume_uuid` + R2 HEAD check
@@ -228,8 +228,8 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 | Session | Commit | Summary |
 |---------|--------|---------|
-| HQ1 ✓ | `b66d401` | `blob4` httpProtocol added to AE schema. "Hashing password" copy fix. Auth comment updated. Stale zk_verification_note replaced. |
-| HQ2 ✓ | `9cd2241` | BLAKE3 + HTTP/3 trust band (upgrade page). Plans + Status in share nav. activePage fix. Async card removed. njk/CSS path issues resolved. |
+| HQ1 ✓ | `b66d401` | `blob4` httpProtocol added to AE schema. "Hashing password" copy fix. Auth comment updated. |
+| HQ2 ✓ | `9cd2241` | BLAKE3 + HTTP/3 trust band (upgrade page). Plans + Status in share nav. activePage fix. |
 
 ---
 
@@ -246,7 +246,7 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 ---
 
-## TG-block — Traitor's Gate (new, no Hetzner required)
+## TG-block — Traitor's Gate (no Hetzner required)
 
 **Internal name: Traitor's Gate. UI label: "Destroy after download." All tiers for core; tidal window = paid only.**
 
@@ -254,34 +254,34 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 |---------|-------|-------|
 | TG-1 | Design + manifest spec | Manifest fields: `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`. Pre-code confirmation. |
 | TG-2 | Worker implementation | `DELETE /transfer/{uuid}` endpoint. `pending_destruction` flag set on final chunk. 410 on consumed manifest. Tidal window check on every download request (423 before open tide, 410 after close tide). Unit tests. |
-| TG-3 | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only — gated by credential). |
-| TG-3a | Frontend — download side | Pre-download modal (awareness). Post-download confirmation gate: "File received. Save it now." → [I've saved it] → triggers `DELETE /transfer/{uuid}`. |
-| TG-4 | Execution Dock — dashboard | Harbourmaster dashboard card: Execution Dock section. Amber state. Transfer rows: label · expiry · 48h deletion countdown · [Destroy now] button. |
-| TG-5 | Tests + smoke | Full round-trip: upload with destroy flag → download → confirm → verify 410. Tidal window boundary tests. Execution Dock card render. |
+| TG-3 | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only). |
+| TG-3a | Frontend — download side | Pre-download modal. Post-download confirmation gate → [I've saved it] → triggers `DELETE /transfer/{uuid}`. |
+| TG-4 | Execution Dock — dashboard | Harbourmaster dashboard card: amber state, expiry countdown, [Destroy now] button. |
+| TG-5 | Tests + smoke | Full round-trip: upload with destroy flag → download → confirm → verify 410. Tidal window boundary tests. |
 
-**TG-block do-not-retry (update after sessions):**
-- DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true` and wait for frontend confirmation
+**TG-block do-not-retry:**
+- DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation
 - DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
 
 ---
 
-## TH-series — Tower Hill / OpenTimestamps (new, no Hetzner required)
+## TH-series — Tower Hill / OpenTimestamps (no Hetzner required)
 
 **2–3 Opus scoping sessions before build. Cover Share + Pass + Legend together.**
 
 | Session | Label | Scope |
 |---------|-------|-------|
-| TH-Opus-1 | Share scoping | OpenTimestamps API mechanics. `.ots` proof format. Worker fetch to aggregator. Tier placement (all tiers? paid only?). Framing copy. |
-| TH-Opus-2 | Pass + Legend scoping | Pass: ticket issuance timestamping. Legend: native `.ots` verification UI. Cross-product `.ots` format consistency. |
-| TH-Opus-3 | Build spec | Session plan for build sessions. Endpoint design. Proof storage (R2 alongside manifest? Separate download?). |
-| TH-1 | Share build | `POST /timestamp/{uuid}` or integrate into upload completion. OpenTimestamps API call. `.ots` proof stored in R2 alongside chunks. Download link includes proof. |
+| TH-Opus-1 | Share scoping | OpenTimestamps API mechanics. `.ots` proof format. Tier placement. Framing copy. |
+| TH-Opus-2 | Pass + Legend scoping | Pass: ticket issuance timestamping. Legend: native `.ots` verification UI. |
+| TH-Opus-3 | Build spec | Session plan for build sessions. Endpoint design. Proof storage model. |
+| TH-1 | Share build | OpenTimestamps API call at upload completion. `.ots` proof stored in R2. |
 | TH-2 | Frontend + tests | Optional toggle on upload. Proof download alongside transfer link. Unit + integration tests. |
 
 ---
 
 ## B7 session plan — Lightning/LNbits + anonymous paid tier
 
-**All B7 sessions from S74 onwards gate on NB-4 (node live). Build can begin on wrangler dev --local; live smoke test requires node.**
+**All B7 sessions from S74 onwards gate on NB-4 (node live).**
 
 | Session | Label | Scope |
 |---------|-------|-------|
@@ -316,7 +316,7 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 | S82 | KV Lightning admin toggle | `lightning_available` KV flag. Dashboard toggle UI. |
 | S82a | Graceful degradation | `lightning_available: false` — Lightning hidden, Stripe fully operational. |
 | S83 | Renewal warning banner | 7-day pre-expiry banner. SessionStorage-dismiss. |
-| S83a | Paid tier activation I | Re-enable Creative Premium + Production Max. Stripe full smoke test. |
+| S83a | Paid tier activation I | Re-enable Sovereign. Stripe full smoke test. |
 | S83b | Paid tier activation II | Lightning full smoke test against live LNbits. Both rails confirmed live. |
 | S84 | B7 security audit I | Lightning invoice creation: expiry enforcement, KV race conditions. |
 | S84a | B7 security audit II | Credential farming: entropy audit on payment hash polling. |
@@ -326,8 +326,8 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 | S85 | LNbits ops verification | Post-node-live sanity: wallet API keys scoped, cloudflared healthy, Tor onions resolving. |
 | S86 | LNURL-withdraw gift architecture | No code. Design document: gift flow, wallet compatibility, NUT-20 binding potential. |
 | S87 | LNbits skinning scope | No code. Keep/strip/brand decisions. Paper/Carbon token mapping. |
-| S88 | Silent Drop design session | No code. Confirm blinded-relay design. Produce SD-block session plan. |
-| S89 | `1a0ac93` | Tier rename locked: Free → Citizen · Creative Premium retired · Production Max → Sovereign (two rails). Crown = brand/institutional only. S90: archive stale Creative Premium Stripe price objects. BRIDGE v6.8. |
+| S88 | Silent Drop design session (Opus) | ✓ **Complete** — see SD-block below. |
+| S89 | `1a0ac93` | Tier rename locked: Free → Citizen · Creative Premium retired · Production Max → Sovereign (two rails). Crown = brand/institutional only. |
 | S90 | Tidy-up II — Stripe objects | Stripe product/price alignment with locked tier model. After S89 confirmed. |
 | S91 | CI Level 2 I | Integration suite in GitHub Actions. Lightning mock for webhook tests. |
 | S91a | CI Level 2 II | Lightning mock coverage. All passing in CI. |
@@ -342,9 +342,65 @@ Share admin dashboard frontend migrated to refueler-io at `src/share/admin/`. Th
 
 ---
 
-## SD-block — Silent Drop (post-B7, before SW)
+## SD-block — Silent Drop (post-B8, post-NB-4)
 
-Session plan produced at S88. Scope: Production Max, Lightning-only standing-receive inbox. SD-feature ships here; journalist hero copy gated until B9. Incident-response tabletop must complete before SD-block launch.
+**S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) in place — SD ships after B8, no temp auth builds.
+
+**Prerequisites:** B8 complete (Locke live). NB-4 (node live). Friend-group soft launch (7-day) gates public Sovereign access.
+
+**Locked design decisions (S88):**
+- Opaque intake token → KV inbox key. Sender sees a random string; Worker holds the mapping. No stable identifier visible at any layer.
+- Lightning rail only. Architectural necessity: no email, no Supabase row, no identity to bind an intake point to. Stripe rail = private inbox (not anonymous) — different product.
+- Recipient sets standing-inbox lifecycle and expiry. Execution Dock as optional Quay close mechanism — reclaims storage.
+- Lighthouse + up to 10 Sovereign Quays at launch. Primary Quay (first created) anchored visually in dashboard. Ad-hoc Quays 2–10 default to 30-day expiry + Execution Dock on. Defaults teach the pattern; no explanatory copy required.
+- One Deed (recovery sheet) per Harbourmaster. One keypair covers Locke + all Quays. 12-word BIP-39 mnemonic. Printed. No copy button. Confirmed by checkbox before proceeding. UI calls it "recovery sheet"; whitepaper infers "the Deed."
+- Stripe Sovereign users get a recovery sheet too — offline backup independent of Stripe recovery path.
+- Notification at SD launch: polling (professional users) + Business webhook (`cargo_arrived` / `cargo_retrieved`). SimpleX stub card in dashboard, greyed, labelled "available at B9."
+- Quay fullness: glanceable storage bar on Harbourmaster login. Storage shown per-Quay + total across all 10.
+- Tabletop gate: founder + 2–3 close contacts, 7-day soft launch observation window before public Sovereign access.
+
+**Privacy threat model (locked S88):**
+- Application layer: fully blinded — opaque tokens, UUID isolation (separate cargo UUID from upload credential UUID), no metadata stored.
+- Payment layer: subscription decouples payment from cargo. Adversary watching node sees one payment per billing period per subscriber — not per file, not per Quay. Amount = tier, not file size. Strong property; state explicitly in whitepaper.
+- Network layer: Mullvad multi-hop recommended for sender-side correlation mitigation.
+- Payment graph: pseudonymous. Node-level observer sees payment arrived. Future work: BOLT12 blinded paths when node infrastructure supports (post-B9 §Future work).
+- PTLCs: inherit automatically when phoenixd/LND supports them. No build session required. B9 whitepaper §Future work, one sentence.
+- Submarine swaps: not the right primitive for Share payment layer. Flagged for Pass liquidation privacy post-B9.
+- Payjoin v2: not a Share product feature. Relevant to liquidation sweep hygiene at NB-4 (Sparrow supports natively). Flag for Pass architecture.
+
+**Privacy + security audit gates (locked S88):** Mid-block audit at SD4b. Final audit at SD7a before SD8 close. Both are named sessions, not optional.
+
+| Session | Label | Scope |
+|---------|-------|-------|
+| SD1 | Lighthouse architecture | KV schema design. Opaque intake token → inbox key mapping. One token per Quay. Rotation model. Worker endpoints: `POST /inbox/create` · `GET /inbox/{token}` · `POST /inbox/{token}/upload`. Unit tests. |
+| SD1a | Quay issuance | Create up to 10 Quays per Sovereign Lightning credential. Primary Quay flag. Default lifecycle rules (primary: long expiry, Execution Dock off; ad-hoc: 30-day, Execution Dock on). KV schema for Quay index per Harbourmaster. |
+| SD1b | Opaque token + UUID isolation | Token entropy audit. Mapping layer: `quay_token_{opaque}` → `{ harbourmaster_id, quay_label, expiry, execution_dock, storage_used }`. Cargo UUID generated separately from upload credential UUID — never reuse across layers. No stable identifier visible to sender at any point. |
+| SD2 | Sender upload flow | Sender hits Lighthouse URL. Worker validates token, checks Quay alive, issues one-time upload credential (NUT-00 BDHKE). Quota error deferred to upload attempt — `GET /inbox/{token}` returns consistent response shape regardless of quota state (no 402 at intake check, prevents storage side-channel). Standard encrypted chunk upload. Sender never learns recipient identity. |
+| SD2a | Sender upload UI | Minimal send page — no account, no login. File picker, optional passphrase (NUT-11 Mode 1), upload. Cargo arrived event fires on completion. No sender-facing receipt. |
+| SD2b | Cargo arrived event | AE datapoint: `quay_id` (opaque), `cargo_size`, `arrived_at`. No sender metadata stored. KV write: `cargo_{uuid}` → `{ quay_token, arrived_at, retrieved: false, expiry }`. UUID is Lighthouse-layer generated — not the upload credential UUID. |
+| SD3 | Harbourmaster auth — Locke | NUT-11 Mode 2 P2PK Harbourmaster login. Worker issues nonce. Device signs with Locke private key. Pubkey verified against authorised set in KV. Session token (short TTL) issued on success. No email, no password, no TOTP on Lightning path. **Design constraint:** KV authorised pubkey set is a compulsion surface — state explicitly in Raven for Share and in whitepaper §threat model: "we hold the authorised pubkey list, which we could be compelled to modify; we cannot impersonate a Harbourmaster." |
+| SD3a | Deed generation — Lightning path | At Sovereign Lightning onboarding: keypair generated client-side via `crypto.getRandomValues()` only (never Math.random — flag as do-not-retry). Mnemonic generated from same entropy source as keypair (not separately). 12-word BIP-39 displayed. "Write this down — this is your recovery sheet. If you lose your device, this is the only way back in." No copy button. Confirm checkbox before proceeding. One Deed covers Locke + all Quays (same keypair hierarchy). |
+| SD3b | Deed generation — Stripe path | Stripe Sovereign users receive a recovery sheet at onboarding: offline backup keypair, independent of Stripe recovery path. Same display treatment. Parallel flow to SD3a. |
+| SD3c | Deed recovery flow | User presents 12 words → keypair reconstructed client-side → new Locke bound → old Locke retired in KV authorised set. Smoke test: onboard → lose device → recover → Harbourmaster accessible → Quays intact. |
+| SD4 | Harbourmaster dashboard I | Receipt ledger. Rows: Quay label · cargo arrived · cargo retrieved · expiry · storage used. Primary Quay visual anchor (weight, not badge). Glanceable Quay fullness on login: storage bar per-Quay + total across all 10. Storage reclaimed shown on Execution Dock close. |
+| SD4a | Harbourmaster dashboard II | Quay management. Create / label / set expiry / toggle Execution Dock. Ad-hoc Quay defaults: 30-day + Execution Dock on. Primary Quay protected from casual deletion (confirm step). Execution Dock closes Quay, triggers R2 + KV cleanup, displays reclaimed storage. |
+| SD4b | Harbourmaster dashboard III + mid-block audit | Paper/Carbon tokens. Both themes. IBM Plex Mono for receipt rows. No whisper text. Design sign-off. **Mid-block privacy + security audit: application layer, KV schema, UUID isolation, quota side-channel, pubkey compulsion surface. Fix any findings before SD5.** |
+| SD5 | Notification architecture | Polling model documented. Business webhook: `cargo_arrived` + `cargo_retrieved` to registered endpoint (`rfs_whsec_` signed). SimpleX stub card in dashboard: greyed, "SimpleX notification — available at B9." |
+| SD5a | Renewal warning banner | 7-day pre-expiry banner for Sovereign Lightning subscribers. SessionStorage-dismiss. Copy: "Your Sovereign access renews on [date]. Your Lighthouse remains active." |
+| SD6 | Soft launch gate | No code. Friend-group access enabled (Hetzner live, Lightning rail open). 7-day observation window. Collect: delivery latency, Deed recovery smoke test, Quay lifecycle behaviour, KV edge cases. |
+| SD6a | Soft launch findings | Review AE datapoints. Fix any P0/P1 findings. Document new do-not-retry entries. |
+| SD7 | Journalist/source-protection copy | **Gated: SD shipped + blinded-relay reviewed + VPN scope stated (B9).** Placeholder — do not pull forward. |
+| SD7a | Final audit | Full privacy + security audit before public launch. Payment-layer threat model review. Whitepaper §threat model draft. PTLC + Payjoin §Future work entries written. |
+| SD8 | SD close | Snag sweep. TESTING.md additions (Locke auth, Quay lifecycle, Deed recovery, UUID isolation). Context trim pass. B9 brief written — include: payment-layer threat model, BOLT12 blinded paths §Future work, PTLC §Future work, Payjoin v2 ops note for NB-4 sweep. Public Sovereign Lightning access enabled. |
+
+**Buffer pool (3 sessions):** SD1c · SD3d · SD4c
+
+**SD-block do-not-retry (seed list — update after sessions):**
+- DO NOT reuse upload credential UUID as cargo UUID — generate separately at Lighthouse layer
+- DO NOT return 402 at `GET /inbox/{token}` intake check — defer quota errors to upload attempt
+- DO NOT generate BIP-39 mnemonic from a separate entropy source to the keypair — same `crypto.getRandomValues()` call
+- DO NOT use Math.random() anywhere in Deed generation — `crypto.getRandomValues()` only
+- DO NOT use the word "anonymous" for Stripe-rail Silent Drop — it is private, not anonymous
 
 ---
 
@@ -376,12 +432,18 @@ Session plan produced at S88. Scope: Production Max, Lightning-only standing-rec
 
 `NB-1 → S89/S90 → snag sweeps → S88 → TG-block → TH-series → SW → B8 → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
-*(SYNC-1, RU-block, and HQ-series complete. TG-block and TH-series are new no-cost blocks inserted before SW.)*
+*(SYNC-1, RU-block, HQ-series complete. S88 complete. TG-block and TH-series are no-cost blocks before SW.)*
 
 ---
 
 ## Opus-2 · 29 Aug 2026 (uncounted)
 
-B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created. S74–S76 rewritten for LNbits REST. Webhook model corrected (unsigned callback → authenticated GET re-verify). Phoenixd→LND trigger locked. Instance topology confirmed (A: Share+Pass, B: Legend post-B9, C: SimpleX at B9). SD-block placed post-HQ, pre-SW. SYNC-1 inserted. Blink cleanup checklist produced. Ad-hoc 30 Aug — `fflate.zip()` OOM root cause confirmed; Safari chunk 82 failure was transient DNS, not code bug.
+B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created. S74–S76 rewritten for LNbits REST. Webhook model corrected (unsigned callback → authenticated GET re-verify). Phoenixd→LND trigger locked. Instance topology confirmed. SD-block placed post-HQ, pre-SW. SYNC-1 inserted. Blink cleanup checklist produced.
+
+---
+
+## S88 · 4 Sep 2026 — Silent Drop design (Opus, uncounted)
+
+Full SD-block design session. All decisions locked — see SD-block section above. Key outcomes: opaque token architecture confirmed; Lightning-only necessity established; Deed (one keypair, one recovery sheet) covers Locke + Quays; payment-layer threat model analysed (subscription decouples payment from cargo — strong property); PTLCs and Payjoin v2 assessed (inherit/ops, not build sessions); submarine swaps ruled out for Share, flagged for Pass liquidation post-B9; mid-block and final audit gates written into plan.
 
 *"Nothing stops this train."*

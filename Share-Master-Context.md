@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.1 | **Last updated:** S89 · 3 Sep 2026
+> **Version:** 7.2 | **Last updated:** S88 · 4 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -13,7 +13,7 @@
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
 | Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens`, `subscribers`, `double_spend_attempts` |
 | Frontend | Eleventy 3.x — `src/` → `frontend/` (canonical `refueler-share/frontend/`, mirror `refueler-io/src/share/assets/`) |
-| Subdomain | `refueler.io/share/` → `refueler-io` Pages |
+| Subdomain | `refueler.io/share/` → `refueler-io.pages.dev` |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
 | Payments (sats) | LNbits on Hetzner CAX21 (B7+) — `LNBITS_API_KEY` / `LNBITS_URL` |
@@ -62,7 +62,7 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 
 **Tier rename complete S90:** Citizen (free). Sovereign (paid, two rails). Creative Premium archived. Product ID: `prod_Urre2e3PQgr5Uq`.
 
-Archived (do not use): `price_1Ts7sqGlctwiB9U3YRloCFfi` · `price_1Ts7xIGlctwiB9U3JyZB8Kwj` · `price_1Ts7lsGlctwiB9U3hdtgChU2` · `price_1TyzF4GlctwiB9U3Zo0fG8Ic` · `price_1TyzKIGlctwiB9U3Dn71fGbA` (Creative Premium)
+Archived: `price_1Ts7sqGlctwiB9U3YRloCFfi` · `price_1Ts7xIGlctwiB9U3JyZB8Kwj` · `price_1Ts7lsGlctwiB9U3hdtgChU2` · `price_1TyzF4GlctwiB9U3Zo0fG8Ic` · `price_1TyzKIGlctwiB9U3Dn71fGbA` (Creative Premium)
 
 Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe` · Destination: `we_1Ts8epGlctwiB9U3dXT8XBac`
 Portal: configured · redirect to `https://refueler.io/share/upgrade.html`
@@ -78,9 +78,9 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 
 **Stack on Instance A (Share+Pass):** phoenixd (ACINQ, no bitcoind required) → LNbits (wallets: Share, Pass, Ops) → cloudflared tunnel (Worker→LNbits, no inbound ports) → Tor (per-service .onion for LNbits admin + phoenixd transport).
 
-**Liquidation:** phoenixd splice-out → standard bech32 in Sparrow Wallet. phoenixd cannot send to BIP-352 Silent Payments (no node for scanning). Sweep when balance exceeds ops reserve (set at NB-4).
+**Liquidation:** phoenixd splice-out → standard bech32 in Sparrow Wallet. phoenixd cannot send to BIP-352 Silent Payments (no node for scanning). Sweep when balance exceeds ops reserve (set at NB-4). Payjoin v2 recommended on sweep transactions (Sparrow supports natively) — breaks payment-graph pattern-matching on liquidation. Ops note for NB-4, not a build session.
 
-**Phoenixd → LND trigger (locked):** Migrate when EITHER: (1) ≥£10k/mo Lightning receipts sustained 3 consecutive months AND named operator committed to channel ops; OR (2) ACINQ discontinues/changes phoenixd terms. Not before — switching below £10k is a false economy for a non-coder founder.
+**Phoenixd → LND trigger (locked):** Migrate when EITHER: (1) ≥£10k/mo Lightning receipts sustained 3 consecutive months AND named operator committed to channel ops; OR (2) ACINQ discontinues/changes phoenixd terms.
 
 **Payment flow (B7):**
 1. Frontend → `POST /subscription/lightning` with `{ tier, period }`
@@ -95,7 +95,7 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 
 **Fallback:** `lightning_available` KV flag. Dashboard toggle → Stripe fully operational while re-provisioning.
 
-**Privacy model:** Lightning payer = payment hash + amount + tier only — no identity at any layer. Honest claim: "pseudonymous." DO NOT claim "anonymous."
+**Privacy model:** Lightning payer = payment hash + amount + tier only — no identity at any layer. Honest claim: "pseudonymous." DO NOT claim "anonymous." Silent Drop subscription payments further decouple payment from cargo: one payment per billing period, not per transfer. Amount = tier, not file size. State explicitly in B9 whitepaper.
 
 **DO NOT add a Supabase row or email field to the Lightning credential path** — load-bearing for Silent Drop.
 
@@ -114,7 +114,7 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 
 **Frontend:**
 - Credentials in browser memory only — never localStorage, never sessionStorage.
-- `frontend/blake3/`, `frontend/fflate.min.js`, `frontend/qr-creator.min.js` — self-hosted, force-committed. DO NOT load from cdnjs.
+- `frontend/blake3/`, `frontend/fflate.min.js`, `frontend/qr-creator.min.js` — self-hosted, force-committed.
 - QR library: `qr-creator` (SVG, self-hosted). DO NOT use `qrcodejs`.
 - Folder upload via streaming `fflate.Zip` (S53/RU0). Never `fflate.zip()` (buffered — OOM).
 - `share.js` must remain `type="module"`.
@@ -160,23 +160,29 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 | Require Turnstile on resume credential path | `resume: true` + `resume_uuid` + R2 HEAD check on chunk 0000 |
 | HTTP 409 on resume chunk PUT as generic 4xx | 409 = transfer already complete — clear IDB + "already completed" message + New Upload CTA |
 | Add email / Supabase row to Lightning credential path | Load-bearing for Silent Drop — invariant, locked |
+| Reuse upload credential UUID as SD cargo UUID | Generate separate cargo UUID at Lighthouse layer — never expose upload UUID to sender |
+| Return 402 at `GET /inbox/{token}` intake check | Defer quota errors to upload attempt — consistent response shape prevents storage side-channel |
+| Math.random() in Deed keypair generation | `crypto.getRandomValues()` only — no exceptions |
+| Separate entropy source for BIP-39 mnemonic vs keypair | Same `crypto.getRandomValues()` call for both |
+| Claim "anonymous" for Stripe-rail Silent Drop | Stripe rail = private (not anonymous). Lightning rail = anonymous. |
 
 ---
 
 ## Current state
 
 **B7 in progress — S73/S73a complete. NB-series (node bootstrap) is the Hetzner-gated block.**
-**SYNC-1 ✓ · RU-block ✓ (RU0–RU2e) · HQ-series ✓ (HQ1–HQ2)**
-**Roadmap resequenced AP-10: no Hetzner required for TG-block, TH-session, SW, B8.**
+**SYNC-1 ✓ · RU-block ✓ · HQ-series ✓ · S88 ✓ (SD design locked)**
+**Roadmap resequenced AP-10: no Hetzner required for TG-block, TH-series, SW, B8.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
 | B1–B5 ✓ | — | Foundation → security hardening → design full pass (S1–S52) |
-| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6, CI Level 1, Lightning toggle. |
-| B7 in progress | `a19778c` | S73/S73a: client errors modal fix. Node bootstrap (NB-series) is Hetzner-gated — deferred after AP-10 resequence. |
-| SYNC-1 ✓ | `2d26587` | `bin/sync-share.sh` committed. Embedded git repos gitignored in refueler-io. |
-| RU-block ✓ | `1e33ebe` | Streaming zip (RU0) → IDB schema (RU1) → re-credential + Safari fix (RU1a) → full resume flow + 409 + reassurance note (RU2–RU2e). |
-| HQ-series ✓ | `9cd2241` | HTTP/3 AE logging. BLAKE3 + HTTP/3 trust band on upgrade page. Plans/Status in nav. |
+| B6 ✓ | `319225f` | 212 tests passing · 0 skipped · 8 suites. Folder upload, k6, CI Level 1. |
+| B7 in progress | `a19778c` | S73/S73a: client errors modal fix. Node bootstrap Hetzner-gated. |
+| SYNC-1 ✓ | `2d26587` | `bin/sync-share.sh` committed. Embedded git repos gitignored. |
+| RU-block ✓ | `1e33ebe` | Streaming zip → IDB schema → resume flow → 409 handling. |
+| HQ-series ✓ | `9cd2241` | HTTP/3 AE logging. BLAKE3 + HTTP/3 trust band. Plans/Status in nav. |
+| S88 ✓ | — | Silent Drop design locked. SD-block session plan written. Threat model confirmed. |
 
 **Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
 
@@ -184,137 +190,53 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 
 ## Roadmap — resequenced AP-10 (3 Sep 2026)
 
-**No new server costs until the Hetzner commitment point. All sessions before that point run on existing Cloudflare + Supabase + Stripe infrastructure.**
-
 | Order | Block / Session | Hetzner? | Notes |
 |---|---|---|---|
-| 1 | NB-1 (Opus, runbook writing) | ❌ | Planning only — runbook for NB-2 onwards. No server yet. |
-| 2 | S89 — tier naming tidy-up | ❌ | Copy/naming pass across all pages. No Stripe objects. |
-| 3 | S90 — Stripe objects | ❌ | Product/price alignment. After S89 confirmed. |
-| 4 | S93–S95 — B7 snag sweep | ❌ | Theme toggle in modals. AE event routing fix. Existing infra. |
-| 5 | S88 — SD design session | ❌ | Silent Drop design. No code. Planning only. |
-| 6 | **TG-block — Traitor's Gate** | ❌ | New feature. Pure Worker + R2 + manifest. All tiers. |
-| 7 | **TH-series — Tower Hill / OpenTimestamps** | ❌ | 2–3 Opus scoping sessions. Share + Pass + Legend `.ots` use cases. Then build session. |
-| 8 | SW block (SW1–SW9) | ❌ | CF for SaaS on existing Workers plan. Solicitor gate on Business sales, not on build. |
-| 9 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
-| — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost (~€8–10/month). |
-| 10 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
-| 11 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block runs with node live from day one. |
-| 12 | SD-block — Silent Drop | ✅ | Sovereign + Lightning-only standing-receive inbox. |
-| 13 | Article pipeline (first article) | ✅ | Unlocks after node fully functional. |
-| 14 | B9 → B10+ | — | Continue as previously sequenced. |
+| 1 | NB-1 (Opus, runbook writing) | ❌ | Planning only. |
+| 2 | S89/S90 — tier + Stripe tidy-up | ❌ | S89 complete. S90 pending. |
+| 3 | S93–S95 — B7 snag sweep | ❌ | Theme toggle in modals. AE event routing fix. |
+| 4 | S88 ✓ — SD design | ❌ | Complete. |
+| 5 | TG-block — Traitor's Gate | ❌ | Pure Worker + R2 + manifest. All tiers. |
+| 6 | TH-series — Tower Hill / OpenTimestamps | ❌ | 2–3 Opus scoping sessions then build. |
+| 7 | SW block (SW1–SW9) | ❌ | Solicitor gate on Business sales only, not on build. |
+| 8 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
+| — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
+| 9 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
+| 10 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block with node live. |
+| 11 | SD-block — Silent Drop | ✅ | Sovereign + Lightning-only. Full Locke (B8) required. |
+| 12 | Article pipeline | ✅ | Unlocks after NB-4. |
+| 13 | B9 → B10+ | — | Continue as previously sequenced. |
 
-**Locked sequence (revised AP-10):** `NB-1 → S89/S90 → snag sweeps → S88 → TG-block → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
+**Locked sequence:** `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
 ---
 
-## Traitor's Gate — feature decisions (locked AP-10 · 3 Sep 2026)
+## SD-block — design locked (S88 · 4 Sep 2026)
 
-**Internal vocabulary only. Never in product-facing copy. UI label: "Destroy after download."**
+**Full session plan in share-sessions.md §SD-block.**
 
-### What it is
-The Traitor's Gate is the water gate through which accused prisoners arrived at the Tower by barge, timed to high tide. One way in, no way back. The name is retrospective — many who entered were not traitors. The Gate is the mechanism, not a judgment.
+**Key locks:**
+- Opaque intake token → KV inbox key. No stable identifier visible to sender.
+- Lightning rail only — architectural necessity, not preference. Stripe rail = private inbox (not anonymous).
+- Recipient sets lifecycle. Execution Dock as optional Quay close. KV only — no Supabase row ever.
+- Lighthouse + up to 10 Sovereign Quays at launch. Primary Quay anchored in dashboard by visual weight. Ad-hoc Quays default: 30-day + Execution Dock on. Defaults teach the pattern without explanatory copy.
+- One Deed per Harbourmaster. 12-word BIP-39. Covers Locke + all Quays. UI: "recovery sheet." Whitepaper: "the Deed."
+- Stripe Sovereign users also receive a recovery sheet (parallel flow, SD3b).
+- SD ships after B8 (full Locke in place). No temp auth builds.
+- Friend-group soft launch (7-day) gates public Sovereign access.
+- Mid-block privacy audit at SD4b. Final audit at SD7a. Both mandatory.
 
-**Feature:** sender toggles destruction mode at upload. Once the recipient's final chunk is confirmed downloaded and the user clicks the post-download confirmation, the Worker deletes all R2 objects and marks the manifest `consumed: true`. Any subsequent request returns 410.
+**Threat model (locked S88):**
 
-### UI copy (locked)
-
-| Element | Copy |
-|---|---|
-| Toggle label | **Destroy after download** |
-| Toggle subtitle | "The link and server copy are permanently deleted once collected." |
-| Post-upload amber notice (sender) | "This transfer is set to destroy after download. Your recipient will be prompted to save the file before the link is deleted." |
-| Pre-download modal (recipient) | "This transfer is set to destroy after download. Save the file to a device you control — the link will be permanently deleted once you confirm receipt." [I understand — download now] |
-| Post-download confirmation (recipient) | "File received. Save it now to a device you control. The link and server copy will be deleted when you confirm." → **[I've saved it]** |
-
-**Deletion is user-triggered, not automatic.** Worker sets `pending_destruction: true` on manifest after final chunk is served. Actual R2 deletion and `consumed: true` happen only on the frontend `DELETE /transfer/{uuid}` call triggered by [I've saved it]. If the browser crashes before confirmation, the normal expiry backstop applies.
-
-### Tidal window — the extension (locked AP-10)
-
-Four settings building on the Traitor's Gate concept. Prisoners had to time their arrival to the tide — the gate only opened at high water. Sender controls when the gate opens and closes.
-
-| Setting | Tier | Mechanism |
+| Layer | State | Notes |
 |---|---|---|
-| **Destroy after download** (core) | All tiers | `pending_destruction: true` on manifest · user-triggered deletion |
-| **Close tide** — auto-delete at precise datetime | Sovereign + Business + Enterprise | `available_until_timestamp` on manifest · Worker returns 410 after this moment regardless of download status |
-| **Open tide** — available from datetime | Sovereign + Business + Enterprise | `available_from_timestamp` on manifest · Worker returns 423 Locked before this moment |
-| **Combined tidal window** | Sovereign + Business + Enterprise | Both fields set · destroy after download active · gate opens and closes on sender's schedule |
-
-Manifest fields: `available_from_timestamp` (ISO 8601, optional) · `available_until_timestamp` (ISO 8601, optional) · `pending_destruction` (boolean) · `consumed` (boolean).
-
-### Execution Dock (locked AP-10)
-
-Harbourmaster dashboard card for uncollected expired transfers. **No fee mechanism — no "stay of execution" payment.** Sender-facing only.
-
-| State | Timing | Dashboard |
-|---|---|---|
-| Active | Within expiry window | Green |
-| **Execution Dock** | Expired, not yet collected, within 48h grace (Three Tides) | Amber — countdown to deletion |
-| Consumed | Deleted (collected or grace elapsed) | Grey |
-
-Dashboard card shows: transfer label · expiry timestamp · deletion countdown · [Destroy now] button (immediate) · [Do nothing] (tide executes at hour 48). No extension option on free tier — re-upload. Paid tier longer expiry windows make the Dock less common.
-
-Three Tides = 48-hour grace period, named for the Execution Dock, Wapping sentence: bodies left until three tides washed over them (~36–48 hours).
-
-### Whitepaper treatment
-Traitor's Gate and the Tidal Window system belong in the whitepaper's §Transfer lifecycle section, with the historical context stated once, briefly. "The gate opened only at high tide. The timing was the recipient's, not the sender's. Our architecture makes the sender the tidekeeper." Do not over-explain the metaphor.
-
----
-
-## Tower Hill / OpenTimestamps — scoping (agreed AP-10)
-
-**2–3 Opus planning sessions before any build.** Cover Share + Pass + Legend use cases together.
-
-**The feature:** optional at upload — BLAKE3 hash of assembled file submitted to OpenTimestamps API (`https://a.pool.opentimestamps.org/timestamp/{hash_hex}`). Aggregates thousands of hashes, commits a single Merkle root to Bitcoin OP_RETURN every few hours. Sender receives `.ots` proof file alongside transfer link. Verification requires no trust in Refueler or OpenTimestamps — mathematically verifiable from Bitcoin blockchain alone.
-
-**Framing:** temporal existence proof only. "This file existed at this moment." No ownership claim. No IP registration. Honest and technically precise. Not spamming the blockchain — one OP_RETURN shared across all users globally, every few hours.
-
-**Cross-product use cases to scope in TH-series:**
-- Share: BLAKE3 hash of assembled file. `.ots` proof downloadable alongside transfer.
-- Pass: ticket issuance timestamped. Verifiable without relying on Refueler's ledger.
-- Legend: native `.ots` verification in the block explorer UI. The only privacy-respecting explorer that also speaks OpenTimestamps.
-
-**Whitepaper:** Tower Hill section — Bitcoin as immutable public witness to private transfers. Public existence proof for a private transfer. No contradiction.
-
-**Blockchain spam concern:** addressed by OpenTimestamps aggregation. One OP_RETURN, shared across global users, every few hours. Correct response to any Bitcoiner who asks: "We're not adding UTXOs or inscribing. We're using a 32-byte OP_RETURN shared across millions of documents. That's what the blockchain is for."
-
----
-
-## Dragon — system status vocabulary (locked AP-10)
-
-**Dragon = operational status. Raven = legal warrant canary. Never conflated.**
-
-The Dragon is the wall; the Raven is the alarm. The Dragon signals presence — it holds the line, continuously. The Raven signals absence — when it stops being renewed, something has fallen.
-
-| Dragon state | Copy | KV flag |
-|---|---|---|
-| All systems operational | **The Dragon holds** | `maintenance_active: false` |
-| Degraded / partial outage | **The Dragon sleeps** | `maintenance_active: partial` |
-| Critical / maintenance | **The Dragon has fallen** | `maintenance_active: true` |
-
-Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maintenance toggle = the Dragonkeeper. Internal/status page vocabulary only — never in public product copy. City of London boundary bollard dragons are a separate concept and must not be conflated.
-
----
-
-## B6 carried snags
-
-- QR logo centre (Refueler mark in quiet zone) → B11
-- Receiver page nav (shows main domain links) → B13
-- Manifest-field minimalism audit (M-02 Blossom benchmark) → B9 whitepaper prep
-- UUID/fragment token entropy pre-audit (birthday-paradox) → B9
-- First-transfer experience aesthetic (Jaeger-LeCoultre restraint, ceremonial link presentation, haptics, A/B tests) — B13a
-- Pay-to-extend / "Purchase a recovery window" — design document due B8. **Publication restriction:** B9 whitepaper §Future work only — no product copy before shipping.
-- Context file archive strategy — implement at S87: split into working memory (≤350L) + `Share-Archive.md`.
-
----
-
-## B7 open snags (resolve at S93–S95, final pass S100)
-
-- PayNym column on payment privacy table — "coming soon" placeholder only
-- Own node stub cards (routing fee income, channel liquidity) — greyed until B9
-- Renewal warning banner: 7-day pre-expiry, all paid tiers (Stripe + Lightning). SessionStorage-dismiss.
-- Theme toggle absent from modals
-- `receiver_ab_shown` / `receiver_ab_downloaded` events routing to `/log/error` instead of AE
+| Application | Fully blinded | Opaque tokens, UUID isolation, no metadata |
+| Payment | Subscription decouples payment from cargo | Amount = tier, not file size. One payment per billing period. State in whitepaper. |
+| Network | Mullvad multi-hop recommended | Sender-side correlation mitigation |
+| Payment graph | Pseudonymous | Node-level observer sees payment arrived. BOLT12 blinded paths = B9 §Future work |
+| PTLCs | Inherit when phoenixd/LND supports | No build session. B9 whitepaper §Future work. |
+| Payjoin v2 | Liquidation sweep hygiene | Sparrow native. Ops note at NB-4. Not a product feature. |
+| Submarine swaps | Not applicable to Share | Flagged for Pass liquidation privacy post-B9. |
 
 ---
 
@@ -323,23 +245,8 @@ Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maint
 **Session numbering (B7+):** single-scope = plain number (S78). Split sessions = lettered suffix (S73, S73a). Plain number never skipped.
 
 **Pre-B7 guards:**
-- DO NOT create Stripe objects or lock "Silent Drop" name — naming S89, Stripe S90, SD build SD-block.
 - DO NOT provision Hetzner until NB-1 runbook is written.
 - DO NOT build a phoenixd/LND funding swap — phoenixd is default; LND is trigger-gated.
-
----
-
-## SD-block placement (locked Opus-2, confirmed AP-10)
-
-**Where:** after B7, before SW. Tidy-up sessions S89 (tier naming) and S90 (Stripe objects) precede SD build.
-
-**Note on SW resequencing:** AP-10 moves SW before B7 (no Hetzner required for SW build). SD-block still ships after B7 is live (SD requires Lightning). The solicitor gate applies to opening Business tier sales, not to building SW code.
-
-**Feature vs positioning split:**
-- **SD-feature** (standing-receive inbox, recovery-cliff framing, Sovereign Lightning-only) — ships at SD-block.
-- **SD journalist/source-protection hero copy** — gated until B9: blinded-relay crypto reviewed + VPN scope stated honestly.
-
-**Tabletop gate:** incident-response tabletop (hard constraint before first customer) gates SD-block launch.
 
 ---
 
@@ -349,10 +256,10 @@ Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maint
 
 **Positioning:** "professional-grade anonymity where only one side needs to be sophisticated."
 
-**Two-axis category framing (locked AP-7):** (1) **Recipient problem** — transfer survives either party going offline (synchronous P2P fails by design). (2) **Compulsion problem** — nothing to hand over, never had it (storing services with server-side keys fail by design). Do not name DashBeam in public copy — position by architecture only.
+**Two-axis category framing (locked AP-7):** (1) **Recipient problem** — transfer survives either party going offline. (2) **Compulsion problem** — nothing to hand over, never had it. Do not name DashBeam in public copy.
 
 **Marketing claim rulings (S42e):**
-- ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; anonymous transfer (free tier).
+- ✅ Safe: server-side BLAKE3 chunk integrity; double-spend detection; rate limiting; UUID-bound credential issuance; anonymous transfer (free tier); subscription payment decoupled from cargo (Silent Drop).
 - 🔒 Blocked: full Merkle tree; NUT-11 Mode 2; "audit-certified"; ML-KEM; "end-to-end file integrity" without qualifier.
 - 🔒 Journalist/source-protection hero copy blocked: gate (1) SD shipped, (2) blinded-relay reviewed, (3) VPN scope stated.
 - Resolution: B8 → NUT-11 Mode 2 · B9 → whitepaper + Merkle · B10 → ML-KEM.
@@ -374,9 +281,7 @@ Status page (`/status`) in internal vocabulary = **The Dragon**. The admin maint
 | **Business** | 2 TB/mo · 1,000 credentials | 1 / 7 / 30 / 90 days | Stripe or Lightning | Invoiced (annual minimum) |
 | **Enterprise** | Custom · 5 TB/mo · Argon2id · BIP-85 | Custom | Stripe or Lightning | Annual contract |
 
-**Rail model:** Sovereign has two rails. Stripe rail: identity at Stripe, conventional recovery, all features. Lightning rail: no identity at any layer, unlocks identity-free features (Silent Drop standing inbox). Rail is a property of the credential, not a separate tier name.
-
-**Retired:** Freeman (never shipped). Creative Premium (stale — no live subscribers). Archive stale Stripe price objects at S90. Crown retires to brand/institutional vocabulary only — no longer a tier name.
+**Rail model:** Sovereign has two rails. Stripe rail: identity at Stripe, conventional recovery, all features. Lightning rail: no identity at any layer, unlocks Silent Drop standing inbox. Rail is a property of the credential, not a tier name.
 
 No discounts. No yearly savings framing.
 
@@ -384,26 +289,25 @@ No discounts. No yearly savings framing.
 
 ## Worker endpoints (summary)
 
-Core consumer paths: `POST /credential/issue` (Turnstile) · `PUT /upload/{uuid}/{chunk}` (Cashu) · `POST /auth/{uuid}` · `GET /download/{uuid}/{chunk}` · `POST /log/error`.
+Core: `POST /credential/issue` · `PUT /upload/{uuid}/{chunk}` · `POST /auth/{uuid}` · `GET /download/{uuid}/{chunk}` · `POST /log/error`.
 Admin: `GET|POST /admin/status` · `GET /admin/metrics` · `GET /admin/ae-metrics` · `GET /admin/snapshot`.
 Stripe: `POST /webhook/stripe` · `POST /subscription/checkout` · `GET /subscription/status` · `POST /subscription/portal` · `GET /subscription/credential`.
 Lightning (B7): `POST /subscription/lightning` · `POST /webhook/lightning` · `GET /subscription/lightning/credential`.
 SW: `GET /wl/config` · `POST /api/v1/credential/issue` · `POST /api/v1/keys/rotate` · `GET /api/v1/transfers` · `POST|GET|DELETE /api/v1/webhooks{/id}` · scheduled cron.
-TG-block (new): `DELETE /transfer/{uuid}` (user-triggered destruction) · manifest fields `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`.
+TG-block: `DELETE /transfer/{uuid}` · manifest fields `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`.
+SD-block (new): `POST /inbox/create` · `GET /inbox/{token}` · `POST /inbox/{token}/upload`.
 
 ---
 
 ## Testing infrastructure
 
-Canonical reference: `TESTING.md` (repo root). Load for any testing session. **212 passing · 0 skipped · 8 suites** (6 unit + 2 integration). k6 load tests all green. CI Level 1 live. Level 2 (integration in CI) — B7–B8 scope.
+Canonical reference: `TESTING.md` (repo root). Load for any testing session. **212 passing · 0 skipped · 8 suites** (6 unit + 2 integration). k6 load tests all green. CI Level 1 live. Level 2 — B7–B8 scope.
 
 ---
 
 ## /notes/ article pipeline
 
-12 articles planned at `refueler.io/notes/`. Full editorial detail: `notes-articles-list.md`. Articles 1–5: no product dependency (article 1 live). Article 6: unlocks post-B7 Lightning. Articles 8/11/12: post-SW. Article 7 (journalists): Susie (Bitcoin Policy UK) intro first. Key contact: BHODL co-founder (lawyer + Bitcoiner) — article 2 feedback.
-
-**Article pipeline gated on node live (Hetzner).** First article written after NB-4. Four additional article topics identified at AP-10 — see REFUELER-BRIDGE.md §Editorial vocabulary.
+12 articles planned at `refueler.io/notes/`. Full editorial detail: `notes-articles-list.md`. Articles 1–5: no product dependency (article 1 live). Article 6: unlocks post-B7 Lightning. Articles 8/11/12: post-SW. Article 7 (journalists): Susie (Bitcoin Policy UK) intro first. Article pipeline gated on node live (NB-4).
 
 ---
 
@@ -412,7 +316,7 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session. **2
 | Status | NUTs |
 |--------|------|
 | Complete | NUT-00 (blind sig), NUT-07 (melt), NUT-11 Mode 1 (passphrase gate) |
-| Deferred B8 | NUT-11 Mode 2 (keypair challenge-response, Prod Max) — review NUT-22 BATs before B8 design lock |
+| Deferred B8 | NUT-11 Mode 2 (keypair challenge-response) — review NUT-22 BATs before B8 design lock |
 | Post-B8 | Argon2id as NUT-11 Mode 1 KDF extension |
 | Deferred B10 | ML-KEM key wrapping |
 | Monitor | NUT-10 v3 "Nutroot secrets" PR #421 — HIGH for B12/Pass |
@@ -421,25 +325,47 @@ Canonical reference: `TESTING.md` (repo root). Load for any testing session. **2
 
 ## Future work + B9 scope
 
-**B9:** Incident response tabletop (**gates SD-block launch** — first self-serve customer arrives there, before B9). `docs/incident-response.md` + `docs/security-breach.md` created AP-5. Build: status page incident panel, `incident_active` KV schema. SimpleX SMP on Instance C (own box, B9). Cyber Essentials Plus · G-Cloud · ISO 27001 · NHS DSPT · Defensive publication via IP.com (30 days after whitepaper).
+**B9:** Incident response tabletop. SimpleX SMP on Instance C. BOLT12 blinded paths §Future work. PTLC §Future work (one sentence). Cyber Essentials Plus · G-Cloud · ISO 27001 · NHS DSPT · Defensive publication via IP.com (30 days after whitepaper).
 
-**B12:** FROST threshold signatures — M-of-N co-signatories for credential issuance. Law firm partner sign-off, music masters delivery, film/VFX chain of custody.
+**B12:** FROST threshold signatures — M-of-N co-signatories for credential issuance.
 
-**B8+:** Argon2id Enterprise KDF — WASM, client-side, m=65536 t=3 p=4. BIP-85 enterprise key management. Nostr keypair auth for dashboard (secp256k1 challenge-response).
+**B8+:** Argon2id Enterprise KDF. BIP-85 enterprise key management. Nostr keypair auth for dashboard.
 
-**B10:** ML-KEM post-quantum key wrapping — Sovereign + Enterprise first, Citizen deferred.
+**B10:** ML-KEM post-quantum key wrapping — Sovereign + Enterprise first.
 
 **B9+:** Silent Payments (BIP-352) — requires full Bitcoin node. refueler-multi-core (Esplora fork) — post-B9.
 
-**Publication-gated (B9 whitepaper §Future work only):** "Purchase a recovery window" — no product copy before shipping.
+**Publication-gated (B9 whitepaper §Future work only):** "Purchase a recovery window."
 
 ---
 
-## Compression strategy (RU0 · B13)
+## B6 carried snags
 
-Skip-compress via `fflate.ZipPassThrough` (STORED, method=0) for: Video (`.mov .mp4 .mxf .r3d .braw .ari .mkv .avi .wmv .webm .m4v`) · Audio (`.mp3 .aac .m4a .ogg .flac .opus`) · Images (`.jpg .jpeg .heic .heif .webp .avif`) · Archives (`.zip .gz .bz2 .xz .7z .rar`). PNG/TIFF/TXT/MD/CSV/JSON — keep `ZipDeflate` level 6. Never `{ level: 0 }` in ZipDeflate — macOS Archive Utility rejects DEFLATED method=8 with zero passes.
+- QR logo centre → B11
+- Receiver page nav → B13
+- Manifest-field minimalism audit → B9 whitepaper prep
+- UUID/fragment token entropy pre-audit → B9
+- First-transfer experience aesthetic → B13a
+- Pay-to-extend design document — B8. Publication restriction: B9 whitepaper §Future work only.
+- Context file archive strategy — implement at S96.
 
-Market sequencing: lawyers/professionals first; creatives second. Speed honesty: "Faster than email. Slower than services that can read your files. That's the trade."
+---
+
+## B7 open snags (resolve at S93–S95)
+
+- PayNym column on payment privacy table — "coming soon" placeholder only
+- Own node stub cards — greyed until B9
+- Renewal warning banner — 7-day pre-expiry, all paid tiers
+- Theme toggle absent from modals
+- `receiver_ab_shown` / `receiver_ab_downloaded` events routing to `/log/error` instead of AE
+
+---
+
+## Compression strategy (RU0)
+
+Skip-compress via `fflate.ZipPassThrough` (STORED, method=0): Video · Audio · Images (jpg/heic/heif/webp/avif) · Archives. PNG/TIFF/TXT/MD/CSV/JSON — `ZipDeflate` level 6. Never `{ level: 0 }` in ZipDeflate.
+
+Speed honesty: "Faster than email. Slower than services that can read your files. That's the trade."
 
 ---
 

@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 6.9 | **Created:** 28 July 2026 | **Updated:** AD-HOC · 2026-09-04
+> **Version:** 7.0 | **Created:** 28 July 2026 | **Updated:** S88 · 2026-09-04
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -171,6 +171,7 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 | **S89 · 3 Sep 2026** | all repos | **Tier rename locked.** Free → Citizen. Creative Premium retired (no live subscribers — archive Stripe price objects at S90). Production Max → Sovereign. Crown retires to brand/institutional vocabulary only. Rail model: both rails at Sovereign; identity-free features gated by Lightning rail, not tier. BRIDGE v6.8. |
 | **AD-HOC · 4 Sep 2026** | all repos | **EIC promoted to named villain** (whitepaper/closed-door only). Muscovy Company provenance clause added (first joint-stock entity, 1555; extraterritorial jurisdiction; Muscovite Street geography). Freedom of the City / impressment locked for §Compulsion argument — Freeman's credential as NUT-11 P2PK precedent; tightens Guildhall geography. St. Peter ad Vincula locked as whitepaper prose texture only (ad Vincula / in chains; Mint and chapel sharing the same walled ground). City Wall / Posterns locked as prose texture — postern as the architectural precedent for inconspicuous sanctioned passage; Aldgate / Fenchurch Street connection noted. The Tower walk locked as opening geography paragraph candidate. BRIDGE v6.9. |
 | **AP-10 · 3 Sep 2026** | refueler-share + all repos | Roadmap resequenced (no Hetzner required for TG-block, TH-session, SW, B8). Traitor's Gate feature locked: internal/whitepaper vocabulary only; UI = "Destroy after download"; tidal window system (four settings); tier gating (core = all tiers, temporal control = paid only); UX confirmation gate (user-triggered deletion post-download). Tower Hill / OpenTimestamps scoped: 2–3 Opus sessions covering Share + Pass + Legend `.ots` use cases. Execution Dock locked: Harbourmaster dashboard card, 48h Three Tides grace, no fee mechanism, sender-facing only. Dragon status vocabulary locked: presence-based operational status, distinct from Raven (absence-based legal signal). Editorial atoms locked: Pileus quote, Three Guineas, Pepys quote, Penn/Bushel's Case, JQA at All Hallows, Cibber frieze/Monument, EIC private intelligence, Tower Subway. Beating of the Bounds reserved for B9 audit + article. BRIDGE v6.7. |
+| **S88 · 4 Sep 2026** | refueler-share | Silent Drop full design session (Opus). All SD-block decisions locked. Opaque token architecture confirmed (no stable identifier visible to sender at any layer). Lightning-only established as architectural necessity. One Deed (12-word BIP-39, one keypair covers Locke + all Quays). Lighthouse + 10 Sovereign Quays at launch. Dashboard defaults teach Quay lifecycle pattern without explanatory copy. Payment-layer threat model confirmed: subscription decouples payment from cargo (one payment per billing period, amount = tier not file size — strong privacy property, state in whitepaper). PTLC: inherit when node supports, no build session, B9 §Future work. Payjoin v2: liquidation sweep ops note at NB-4, not a product feature. Submarine swaps: not applicable to Share payment layer, flagged for Pass liquidation privacy post-B9. Refill four-quadrant homescreen concept noted (four equal rectangles, products illuminate as they ship). SD-block session plan written (SD1–SD8 + 3 buffer). Mid-block audit at SD4b, final audit at SD7a — both mandatory. BRIDGE v7.0. |
 
 ---
 
@@ -541,6 +542,63 @@ Locked editorial atoms for whitepaper, articles, and presentations. None of thes
 | Execution Dock (Wapping foreshore) | Pirates hanged at the low water mark, left for Three Tides (~48h). Prisoners occupied the jurisdictional gap between land and maritime law. Last execution 1830. Captain Kidd, 1701. | **Execution Dock**: Harbourmaster dashboard card for uncollected-transfer queue. Three Tides = 48h grace. The word "Wapping" not used in copy (poor local reputation, means marshy place). |
 | Three city-states | London (finance), Washington (military), Vatican (religion) | International scale — available when Refueler operates across jurisdictions. Whitepaper future work gesture only. |
 | Mark Lane / Tower Hill station | Original 1884 Metropolitan District Railway station (renamed Tower Hill). Old terracotta surface building still visible at Tower Hill / Byward Street corner. New Tower Hill station opened 1967, ~100m west. Original tunnels' current use undocumented publicly. | Legend article: infrastructure persisting beneath the visible city. Urban exploration record exists but not verified. |
+
+---
+
+## Silent Drop — architecture locked (S88 · 4 Sep 2026)
+
+Full product decisions in BRIDGE §Silent Drop — product decisions (AP-BRAND). This section adds the architectural locks confirmed at S88.
+
+### Intake layer
+- **Opaque token per Quay.** Lighthouse URL carries a random opaque string. Worker maps it → KV inbox key internally. Sender sees nothing linkable. No stable identifier visible at any layer or any network position.
+- **Cargo UUID isolation.** Cargo UUID generated separately at the Lighthouse layer — never reuse the upload credential UUID in any sender-visible response. Prevents UUID-correlation attack across layers.
+- **Quota side-channel prevention.** `GET /inbox/{token}` returns a consistent response shape regardless of quota state. Quota errors deferred to upload attempt only — no 402 at intake check.
+
+### KV schema (no Supabase — invariant)
+- `quay_token_{opaque}` → `{ harbourmaster_id, quay_label, expiry, execution_dock, storage_used }`
+- `cargo_{uuid}` → `{ quay_token, arrived_at, retrieved: false, expiry }` — UUID is Lighthouse-layer generated
+- Quay index per Harbourmaster in KV. No Supabase row. No email. Ever.
+
+### Deed (recovery sheet)
+- One Deed per Harbourmaster. One BIP-39 12-word mnemonic. One keypair. Covers Locke + all Quays.
+- Keypair and mnemonic generated from the same `crypto.getRandomValues()` call. Never Math.random(). Never separate entropy sources.
+- UI name: "recovery sheet." Whitepaper vocabulary: "the Deed." Precedent: Tutamail printed recovery sheet (privacy-circle-familiar pattern).
+- Stripe Sovereign users also receive a recovery sheet (parallel onboarding flow) — offline backup independent of Stripe's recovery path.
+- No copy button. Confirm checkbox before proceeding.
+
+### Quay dashboard design principle (locked S88)
+Primary Quay (first created): long expiry, Execution Dock off by default, visual anchor in dashboard.
+Ad-hoc Quays 2–10: 30-day expiry, Execution Dock on by default.
+Defaults teach the mental model (permanent intake + disposable per-case Quays) without explanatory copy. Storage bar per-Quay + total shown on login. Storage reclaimed shown on Execution Dock close.
+
+### Compulsion surface (whitepaper §threat model)
+KV authorised pubkey set is the one compulsion surface: Refueler holds it, could be compelled to modify it, cannot impersonate a Harbourmaster. State explicitly in Share Raven and in whitepaper §threat model. Not in product copy.
+
+### Notification at SD launch
+Polling (professional users) + Business webhook (`cargo_arrived` / `cargo_retrieved`, `rfs_whsec_` signed). SimpleX stub card in Harbourmaster dashboard, greyed, "available at B9." SimpleX arrives at B9 (Instance C).
+
+### Payment-layer threat model (confirmed S88)
+
+| Layer | State | Whitepaper treatment |
+|---|---|---|
+| Application | Fully blinded — opaque tokens, UUID isolation, no metadata | State as product claim |
+| Payment | Subscription decouples from cargo. One payment/period. Amount = tier, not file size. | State explicitly as privacy property |
+| Network | Mullvad multi-hop recommended | B9 copy |
+| Payment graph | Pseudonymous — node-level observer sees payment arrived | BOLT12 blinded paths — §Future work |
+| PTLCs | Inherit when phoenixd/LND supports — no build session | B9 whitepaper §Future work, one sentence |
+| Payjoin v2 | Liquidation sweep ops note (Sparrow native) — not a product feature | NB-4 ops runbook |
+| Submarine swaps | Not applicable to Share payment layer | Flagged for Pass liquidation privacy post-B9 |
+
+### SD-block launch gate
+Friend-group soft launch: founder + 2–3 close contacts, 7-day observation window, before public Sovereign access. Mid-block privacy + security audit at SD4b. Final audit at SD7a. Both mandatory, not optional.
+
+---
+
+## Refill — homescreen design principle (noted S88)
+
+**Concept (not yet locked — hold for Refill app scoping session):** Four equal rectangles on the Refill homescreen — Pass, Legend, Share, Refill. Products illuminate as they ship; unbuilt ones are visually present but dimmed (lower contrast, not hidden, not "coming soon" badged). User sees the shape of the whole ecosystem from day one. As each product ships, it comes alive.
+
+This is a stronger story than revealing products sequentially — it tells the user they are early. Carry as a founding constraint into the Refill app scoping session. Do not impose on SD-block or any current build sessions.
 
 ---
 
