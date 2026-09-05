@@ -1042,7 +1042,9 @@ return new Response(JSON.stringify({
     available_from_timestamp: manifest.available_from_timestamp  ?? null,
     available_until_timestamp: manifest.available_until_timestamp ?? null,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
 
+// ─────────────────────────────────────────────────────────────────────────────
 // Download — GET /download/:uuid/:chunk
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleDownload(request, env, uuid, chunkIndex) {
@@ -1947,5 +1949,4 @@ function parseRange(rangeHeader) {
   const offset = parseInt(m[1], 10);
   const end    = m[2] ? parseInt(m[2], 10) : undefined;
   return { offset, length: end !== undefined ? end - offset + 1 : undefined };
-}
 }
