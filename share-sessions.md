@@ -253,13 +253,16 @@ Share admin dashboard frontend migrated to `refueler-io` at `src/share/admin/`. 
 | TG-3 ✓ | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only). Commit `b3b3226`. |
 | TG-3a ✓ | Frontend — download side | Pre-download amber modal. Post-download confirm gate → [I've saved it] → `DELETE /transfer/{uuid}` (passphrase) or `POST /confirm/{uuid}` (open). Tidal countdown. Commit `b3b3226`. |
 | TG-4 ✓ | Execution Dock — dashboard | `handleExecutionDock` + `GET /admin/execution-dock`. `dock_index` KV write on chunk-0. `handleOwnerDelete` replacing 501 stub. Execution Dock KPI card in System Summary (amber count from `badge_count`). Commit `9258050`. |
-| TG-5 | Tests + smoke | Full round-trip: upload with destroy flag → download → confirm → verify 410. Tidal window boundary tests. |
+| TG-5 ✓ | Tests + smoke | `tg-round-trip.test.js` (16 integration tests). `supabase-mock.js` + `/_test/seed-subscriber` HTTP endpoint. `client.js` TG methods. `tg-smoke.sh` 10/10 production smoke. TESTING.md v0.7. **432 passing.** Commit `0e51385`. |
 
 **TG-block do-not-retry:**
 - DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation
 - DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
 - DO NOT compute `X-P2SH-Secret-Hash` with plain BLAKE3 in tests — use `hashSecret()` from `nut11.js`
 - Owner-scoped DELETE (TG-4) ✓ shipped — `handleOwnerDelete` live at commit `9258050`
+- `pending_destruction` flip is fire-and-forget unhandled promise — not reliably observable in local wrangler. Test via unit tests (`destroy.test.js`, `confirm_tg.test.js`), not integration. Production behaviour verified via smoke.
+- `available_from` must be >= `created_at` (Worker processing time) — use `nowSeconds() + 1` minimum in tests, never `nowSeconds() - N`
+- Supabase mock `seedSubscriber()` is only callable within the same process — use HTTP `POST /_test/seed-subscriber` from test files (globalSetup runs in a separate process)
 
 ---
 
