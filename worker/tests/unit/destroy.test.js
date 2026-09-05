@@ -54,7 +54,7 @@ describe('checkTransferStatus', () => {
       NOW
     );
     expect(result.ok).toBe(false);
-    expect(result.status).toBe(423);
+    expect(result.status).toBe(425);
   });
 
   it('now === available_from → ok (boundary is inclusive)', () => {

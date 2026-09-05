@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.6 | **Created:** S63 · 27 July 2026 | **Updated:** AP-4 ad-hoc · 1 Aug 2026
+> **Version:** v0.7 | **Created:** S63 · 27 July 2026 | **Updated:** S-TG-5 · 5 Sep 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -26,9 +26,9 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 ## 2. Current test suite
 
-**212 tests passing across 8 suites** (Vitest 2 — 6 unit + 2 integration, run separately):
+**282 tests passing across 10 suites** (Vitest 2 — 7 unit + 3 integration, run separately):
 
-**Unit suites** (`worker/tests/unit/` — 207 passing):
+**Unit suites** (`worker/tests/unit/` — 242 passing):
 
 | Suite | Tests | Covers |
 |-------|-------|--------|
@@ -38,13 +38,15 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 | `blake3.test.js` | 27 | Hash correctness against `@noble/hashes/blake3` reference, input validation, constant-time comparison, null-guard error handling |
 | `turnstile.test.js` | 34 | Input guards, CF success/failure paths, HTTP errors, malformed JSON, fail-closed behaviour |
 | `stripe.test.js` | 44 | HMAC-SHA256 webhook signature verification, ±300s replay window, body tampering detection, checkout customer find-or-create, tier routing across all 6 live lookup keys |
+| `destroy.test.js` | 64 | TG manifest state machine: `checkTransferStatus` (consumed/tidal boundary checks), `validateTidalHeaders` (window invariants), `flipPendingDestruction` (last-chunk armed flip, idempotency), `buildTombstone` (field strip — exactly 2 keys), `isTidalPermitted` (tier gate, case-insensitive) |
 
-**Integration suites** (`worker/tests/integration/` — 5 passing via `npm run test:integration`):
+**Integration suites** (`worker/tests/integration/` — 40 passing via `npm run test:integration`):
 
 | Suite | Tests | Covers |
 |-------|-------|--------|
 | `round-trip.test.js` | 3 | Full upload→download, passphrase-protected transfer, double-spend rejection |
 | `security.test.js` | 21 | Rate limits, credential farming, nonce binding, MIME denylist, UUID validation, chunk bounds, tier cap, Stripe webhook auth (all 5 passing including valid-sig → 200) |
+| `tg-round-trip.test.js` | 16 | TG full lifecycle: destroy-after-download (open + passphrase), tidal windows (available_from past/future, available_until open/elapsed, Citizen rejection → 403, available_until > expiry → 400), combined tidal window, owner DELETE (admin key, idempotency, tombstone gate on all chunk indices), DELETE auth boundaries (no-auth 401, cross-transfer bearer 403, bad-admin-key 401), POST /confirm (open transfer, idempotency) |
 
 **Honest assessment:** the pure logic of each module is correct in isolation (unit), and the full Worker runtime enforces it correctly against real workerd with real KV/R2 simulation (integration). All five original seams are closed. No skipped tests.
 
@@ -67,13 +69,18 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 - `worker/vitest.config.integration.js` — separate config from unit tests. Integration tests never run in the default `npm test` path; invoked explicitly via `npm run test:integration`.
 - Setup file boots `wrangler dev --local --persist-to=.wrangler-test-state` as a child process, polls `/status` until ready, tears down after the suite.
 - Env: dev bucket bindings only. `SUPABASE_URL` points at a mock HTTP server (see fixtures) — integration tests never touch the live Supabase project.
+- `ADMIN_KEY` env var consumed by `client.js` `adminKey()` helper — set in `.dev.vars` for local runs.
 
 ### HTTP client helper — `worker/tests/integration/client.js`
 
 Thin fetch wrapper against the local Worker:
-- `client.issueCredential(turnstileToken)` → parsed credential
-- `client.uploadChunk(uuid, index, bytes, headers)` → response
-- `client.putManifest(uuid, manifest)` / `client.auth(uuid, passphrase)` / `client.downloadChunk(uuid, index, bearer)`
+- `client.issueCredential()` → full BDHKE flow, returns parsed credential with `_credentialForUpload`
+- `client.uploadChunk(uuid, index, bytes, hash, headers)` / `client.buildCredentialHeaders(...)` → chunk PUT
+- `client.auth(uuid, passphrase)` / `client.downloadChunk(uuid, index, bearer)` → auth + download
+- `client.getMeta(uuid)` → public manifest metadata
+- `client.confirmTransfer(uuid, bearer?)` → POST /confirm/:uuid (open transfers, bearer optional)
+- `client.deleteTransfer(uuid, bearer?, opts?)` → DELETE /transfer/:uuid (passphrase path, bearer required)
+- `client.ownerDeleteTransfer(uuid, opts?)` → DELETE /transfer/:uuid (admin key path, Execution Dock)
 - Every method returns `{ status, headers, body }` — assertions stay in tests, not the client.
 
 ### Clean state between tests
@@ -116,7 +123,7 @@ Fixtures are shared between Vitest integration tests and k6 load scripts. k6 run
 
 ### Future blocks
 
-- B7: `lightning.js` — Blink callback payloads, payment-hash KV entries, invoice fixtures
+- B7: `lightning.js` — LNbits callback payloads, payment-hash KV entries, invoice fixtures
 - SW: `webhooks.js` — signed event payloads, valid/invalid/stale `rfs_whsec_` signatures, dead-letter KV entries
 - B8: `keypair.js` — NUT-11 Mode 2 keypairs, challenge-response transcripts
 - B9: `lnurl.js` — LNURL-withdraw callback fixtures
@@ -193,7 +200,7 @@ Rule: **no security fix ships in future blocks without a row added to this table
 | R2 | `refueler-share-prod` | `refueler-share-dev`, aggressive lifecycle expiry (1 day) |
 | Supabase | `tihgvdokeofnjxjkenmm` | Separate free-tier project or schema |
 | Stripe | Live keys | Test keys only |
-| Lightning | Blink live | Blink test/regtest path per B9 planning |
+| Lightning | LNbits live | LNbits test/regtest path per B9 planning |
 | Turnstile | Production sitekey | Separate sitekey or test-mode always-pass key |
 | Secrets | Production set | Fully parallel set — zero shared secrets |
 
@@ -308,6 +315,8 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 | 6 | Execution-capable uploads are refused at the boundary | `integration/security.test.js` | `rejects denylisted Content-Type on chunk 0 (415)` | MIME gate enforced, correctly scoped to chunk 0 |
 | 7 | Webhook payloads are authenticated and replay-protected | `unit/stripe.test.js` + `integration/security.test.js` | all five Stripe webhook auth tests | Forge and replay rejected; positive case proven in real Worker |
 | 8 | Incident response plan exists and has been rehearsed | `docs/incident-response.md` + tabletop simulation log | tabletop simulation completed pre-alpha | Response protocol exists, is known, and has been tested before being needed |
+| 9 | Destroy-after-download transfers are permanently consumed after recipient confirmation | `integration/tg-round-trip.test.js` | `POST /confirm returns 200 and destroyed: true` · `re-download after confirm returns 410` · `second POST /confirm returns 410 (already consumed)` | Tombstone gate enforced end-to-end in real Worker runtime; consumed state is permanent |
+| 10 | Tidal windows are enforced server-side; Citizen tier cannot schedule availability | `integration/tg-round-trip.test.js` | `returns 425 when available_from is in the future` · `returns 410 when available_until has elapsed` · `Citizen tier — tidal headers rejected with 403 at upload` | Time-gating and tier gate hold at real Worker boundary |
 
 **Scope honesty:** this trail proves server-side *chunk* integrity, not end-to-end file integrity — full Merkle root verification unimplemented until B9. Rows added for NUT-11 Mode 2 (B8), Merkle (B9), ML-KEM (B10), HMAC API auth (SW) when tests exist — never before.
 
@@ -317,7 +326,8 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 
 | Block | Harness additions | Where |
 |-------|-------------------|-------|
-| B7 | Blink webhook fixture, payment-hash KV fixture, credential poll helper; security rows: webhook replay, double-issuance | S83/S83a |
+| TG-block | `destroy.test.js` unit suite (64 tests). `tg-round-trip.test.js` integration suite (16 tests). `scripts/tg-smoke.sh` production smoke. Whitepaper rows 9–10. `client.js` TG methods: `confirmTransfer`, `deleteTransfer`, `ownerDeleteTransfer`. | S-TG-5 |
+| B7 | LNbits webhook fixture, payment-hash KV fixture, credential poll helper; security rows: webhook replay, double-issuance | S83/S83a |
 | SW | `webhooks.js` fixture. Integration tests: HMAC auth boundary, quota 402, `wl_config` fail-safe, key-rotation grace window, webhook delivery retry, dead-letter creation. Whitepaper row: "API requests are HMAC-authenticated and replay-protected." | SW2/SW4 + SW9 |
 | B8 | Keypair fixture, NUT-11 Mode 2 challenge-response integration test; security row: keypair auth cannot be bypassed via Mode 1 | Inside B8 build sessions |
 | B9 | Mock LNURL callback fixture, LNURL-withdraw credential delivery round-trip; Merkle verification tests; incident response plan docs + tabletop simulation; `incident_active` KV integration test (set/clear/panel render) | Dedicated whitepaper + incident response sessions |
@@ -340,6 +350,8 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 ```
 refueler-share/
   TESTING.md                          ← this file
+  scripts/
+    tg-smoke.sh                       ← S-TG-5 production smoke (10 boundary checks)
   docs/
     r2-lifecycle.md
     incident-response.md              ← B9 (S1 template, tabletop log, channel order)
@@ -347,18 +359,20 @@ refueler-share/
     vitest.config.js                  ← unit config
     vitest.config.integration.js      ← S64
     tests/
-      unit/                           ← 207 passing
+      unit/                           ← 242 passing
         ratelimit.test.js
         manifest.test.js
         nut00.test.js
         blake3.test.js
         turnstile.test.js
         stripe.test.js
+        destroy.test.js               ← S-TG-2 (64 tests)
         kv-mock.js
       integration/                    ← S64+
         client.js
         round-trip.test.js
         security.test.js
+        tg-round-trip.test.js         ← S-TG-5 (16 tests)
         fixtures/                     ← shared with k6 — pure ESM, no vitest/node imports
           credential.js
           chunks.js

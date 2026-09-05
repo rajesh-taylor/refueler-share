@@ -72,6 +72,11 @@ function baseUrl() {
   return process.env.WORKER_BASE_URL ?? 'http://localhost:8788';
 }
 
+function adminKey() {
+  // Must match ADMIN_KEY in worker/.dev.vars exactly.
+  return process.env.ADMIN_KEY ?? 'Neelam';
+}
+
 async function parseBody(res) {
   const ct = res.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
@@ -223,5 +228,65 @@ export async function post(path, body, headers = {}) {
     method: 'POST',
     headers,
     body,
+  });
+}
+
+// ── TG-block endpoints (S-TG-5) ───────────────────────────────────────────
+
+/**
+ * POST /confirm/{uuid}
+ *
+ * Recipient-side destroy confirmation for open (non-passphrase) transfers.
+ * For passphrase-protected transfers, pass the bearer token from POST /auth/{uuid}.
+ * For open transfers, bearer may be omitted — the endpoint does not require it.
+ *
+ * @param {string} uuid
+ * @param {string|null} bearer - download token from POST /auth/{uuid}, or null
+ */
+export async function confirmTransfer(uuid, bearer = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
+  return request(`/confirm/${uuid}`, { method: 'POST', headers });
+}
+
+/**
+ * DELETE /transfer/{uuid} — recipient-authenticated deletion (passphrase path).
+ *
+ * @param {string} uuid
+ * @param {string|null} bearer - download token from POST /auth/{uuid}
+ * @param {object} opts
+ * @param {boolean} opts.omitAuth - if true, sends no Authorization header at all (tests 401 path)
+ */
+export async function deleteTransfer(uuid, bearer = null, opts = {}) {
+  const { omitAuth = false } = opts;
+  const headers = {};
+  if (!omitAuth) {
+    if (bearer) {
+      headers['Authorization'] = `Bearer ${bearer}`;
+    } else {
+      headers['Authorization'] = 'Bearer invalid-token';
+    }
+  }
+  return request(`/transfer/${uuid}`, { method: 'DELETE', headers });
+}
+
+/**
+ * DELETE /transfer/{uuid} — admin-keyed owner deletion (Execution Dock path).
+ *
+ * Sends "Authorization: Bearer rfs_owner_executiondock" to trigger the owner
+ * path in handleDeleteTransfer, then X-Admin-Key for the actual authorisation.
+ *
+ * @param {string} uuid
+ * @param {object} opts
+ * @param {boolean} opts.badKey - send a wrong X-Admin-Key value (tests 401 path)
+ */
+export async function ownerDeleteTransfer(uuid, opts = {}) {
+  const { badKey = false } = opts;
+  return request(`/transfer/${uuid}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': 'Bearer rfs_owner_executiondock',
+      'X-Admin-Key':   badKey ? 'wrong-key' : adminKey(),
+    },
   });
 }

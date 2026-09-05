@@ -17,8 +17,6 @@ export function startSupabaseMock() {
       req.on('end', () => {
 
         // ── GET /rest/v1/spent_tokens ─────────────────────────────────────
-        // Worker: GET /rest/v1/spent_tokens?serial=eq.<hex>&select=serial
-        // Returns [] if not spent, [{ serial }] if spent.
         if (req.method === 'GET' && path === '/rest/v1/spent_tokens') {
           const serialParam = url.searchParams.get('serial') ?? '';
           const serial = serialParam.replace(/^eq\./, '');
@@ -60,7 +58,7 @@ export function startSupabaseMock() {
           return;
         }
 
-        // ── POST /rest/v1/subscribers (upsert) ───────────────────────────
+        // ── POST /rest/v1/subscribers (upsert from Worker) ───────────────
         if (req.method === 'POST' && path === '/rest/v1/subscribers') {
           try {
             const row = JSON.parse(body);
@@ -87,6 +85,36 @@ export function startSupabaseMock() {
           return;
         }
 
+        // ── POST /_test/seed-subscriber — test control endpoint ───────────
+        // Allows test processes to inject a subscriber row via HTTP.
+        // Never called by the Worker — used only by the test suite.
+        if (req.method === 'POST' && path === '/_test/seed-subscriber') {
+          try {
+            const row = JSON.parse(body);
+            if (!row.email || !row.tier) {
+              res.writeHead(400); res.end(JSON.stringify({ error: 'email and tier required' }));
+              return;
+            }
+            subscribers.set(row.email, { email: row.email, tier: row.tier, status: row.status ?? 'active' });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ seeded: true }));
+          } catch {
+            res.writeHead(400); res.end('{}');
+          }
+          return;
+        }
+
+        // ── POST /_test/reset — test control endpoint ─────────────────────
+        // Clears all state. Allows tests to reset between runs via HTTP
+        // (used instead of mockHandle.reset() which doesn't cross process boundary).
+        if (req.method === 'POST' && path === '/_test/reset') {
+          spentSerials.clear();
+          subscribers.clear();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ reset: true }));
+          return;
+        }
+
         // ── Fallback ──────────────────────────────────────────────────────
         console.error(`[supabase-mock] No handler: ${req.method} ${path}`);
         res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -103,6 +131,9 @@ export function startSupabaseMock() {
         reset() {
           spentSerials.clear();
           subscribers.clear();
+        },
+        seedSubscriber({ email, tier, status = 'active' }) {
+          subscribers.set(email, { email, tier, status });
         },
       });
     });
