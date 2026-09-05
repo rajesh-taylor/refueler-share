@@ -10,6 +10,7 @@ import { createInvoice, getInvoiceStatus } from './lightning.js';
 import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
+import { handleExecutionDock } from './handlers/execution_dock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -311,6 +312,10 @@ export default {
 
       if (request.method === 'GET' && path === '/admin/snapshot') {
         return timed('admin_snapshot', () => handleAdminSnapshot(request, env).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'GET' && path === '/admin/execution-dock') {
+        return timed('admin_execution_dock', () => handleExecutionDock(request, env).then(r => addCors(r, request)));
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
@@ -893,6 +898,23 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     await putManifest(env.BUCKET, uuid, manifest);
 
+    // ── Execution Dock: write dock_index KV entry (TG-4) ──────────────────
+    // Fire-and-forget. Records transfer in the dock index so the Harbourmaster
+    // dashboard can surface expired-but-uncollected transfers without R2 scans.
+    // Key: dock_index:{uuid}  Value: JSON { expiry_timestamp, tier, file_name, created_at }
+    // TTL: expiry + 48h Three Tides grace + 1h buffer.
+    const dockTtl = (expiryTs - Math.floor(Date.now() / 1000)) + 48 * 3600 + 3600;
+    env.STATUS_KV.put(
+      `dock_index:${uuid}`,
+      JSON.stringify({
+        expiry_timestamp: expiryTs,
+        tier:             resolvedTier,
+        file_name:        fileName,
+        created_at:       Math.floor(Date.now() / 1000),
+      }),
+      { expirationTtl: Math.max(dockTtl, 3600) }
+    ).catch(e => console.error('Execution Dock KV write failed:', e));
+
     const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
     if (!meltRes.ok) console.error('NUT-07 melt failed:', serial, await meltRes.text());
 
@@ -1120,7 +1142,7 @@ async function handleDownload(request, env, uuid, chunkIndex) {
 //
 // Two auth paths:
 //   Recipient path — bearer token from POST /auth/{uuid} (live, TG-2)
-//   Owner path     — owner-scoped credential (TG-4, stubbed as 501)
+//   Owner path     — X-Admin-Key check (TG-4, replaces 501 stub)
 //
 // Deletion sequence (fail-closed, tombstone path A):
 //   1. Read manifest, authorise caller
@@ -1133,9 +1155,9 @@ async function handleDeleteTransfer(request, env, uuid) {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('Authorization') ?? '';
 
-  // Owner path — TG-4 stub
+  // Owner path — X-Admin-Key (TG-4)
   if (authHeader.startsWith('Bearer rfs_owner_')) {
-    return err(501, 'Owner-scoped deletion is not yet available.');
+    return handleOwnerDelete(request, env, uuid);
   }
 
   if (!authHeader.startsWith('Bearer ')) {
@@ -1197,6 +1219,68 @@ async function handleDeleteTransfer(request, env, uuid) {
   return json({
     destroyed:    true,
     consumed_at:  nowSeconds,
+    ...(deleteErrors.length > 0 ? { partial: true, failed_chunks: deleteErrors } : {}),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner delete — admin-keyed forced deletion (TG-4)
+//
+// Harbourmaster can force-delete any transfer regardless of recipient auth.
+// Requires X-Admin-Key header matching env.ADMIN_KEY.
+// Used by the Execution Dock [Destroy now] button.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleOwnerDelete(request, env, uuid) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) {
+    return err(401, 'Unauthorised.');
+  }
+
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+
+  if (manifest.consumed === true) {
+    return err(410, 'Transfer has already been destroyed.');
+  }
+
+  const nowSeconds  = Math.floor(Date.now() / 1000);
+  const totalChunks = manifest.total_chunks ?? 0;
+
+  // Step 2: consumed marker first (fail-closed)
+  await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
+
+  // Step 3: delete chunks
+  const deleteErrors = [];
+  for (let i = 0; i < totalChunks; i++) {
+    try {
+      await env.BUCKET.delete(`${uuid}/${String(i).padStart(4, '0')}`);
+    } catch (e) {
+      console.error(`TG owner delete: chunk delete failed at index ${i}:`, e);
+      deleteErrors.push(i);
+    }
+  }
+
+  // Step 4: tombstone
+  const tombstone = buildTombstone(nowSeconds);
+  await putManifest(env.BUCKET, uuid, tombstone);
+
+  // Remove from dock index — no longer needed
+  env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
+    console.error('Execution Dock KV delete failed:', e)
+  );
+
+  logEvent(env, {
+    endpoint: 'owner_delete',
+    tier:     manifest.tier ?? 'free',
+    status:   200,
+    totalChunks,
+    errorMsg: deleteErrors.length > 0 ? `partial_delete:${deleteErrors.length}` : '',
+  });
+
+  return json({
+    destroyed:   true,
+    consumed_at: nowSeconds,
     ...(deleteErrors.length > 0 ? { partial: true, failed_chunks: deleteErrors } : {}),
   });
 }
