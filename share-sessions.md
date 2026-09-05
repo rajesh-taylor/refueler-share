@@ -266,17 +266,19 @@ Share admin dashboard frontend migrated to `refueler-io` at `src/share/admin/`. 
 
 ---
 
-## TH-series — Tower Hill / OpenTimestamps (no Hetzner required)
+## TH-series — Tower Hill / Permanent Record (no Hetzner required)
 
-**2–3 Opus scoping sessions before build. Cover Share + Pass + Legend together.**
+**All design locks in Share-Master-Context.md §TH-series.**
+**OTS wariness on record. TH-0 spike gates TH-1 build commitment.**
 
 | Session | Label | Scope |
 |---------|-------|-------|
-| TH-Opus-1 | Share scoping | OpenTimestamps API mechanics. `.ots` proof format. Tier placement. Framing copy. |
-| TH-Opus-2 | Pass + Legend scoping | Pass: ticket issuance timestamping. Legend: native `.ots` verification UI. |
-| TH-Opus-3 | Build spec | Session plan for build sessions. Endpoint design. Proof storage model. |
-| TH-1 | Share build | OpenTimestamps API call at upload completion. `.ots` proof stored in R2. |
-| TH-2 | Frontend + tests | Optional toggle on upload. Proof download alongside transfer link. Unit + integration tests. |
+| TH-Opus-1 ✓ | Share scoping | OTS mechanics. Proof format. Tier placement. Framing copy. Sovereign cap 250→100 GB locked. Legend entitlement model locked. Permanent record / date seal names locked. |
+| TH-Opus-2 | Pass + Legend scoping | Legend price setting. Cross-product entitlement architecture. Pass: credential issuance timestamps. Legend: native verifier design. 1–2 sessions. |
+| TH-Opus-3 | Build spec | Session plan. Relay endpoint design. Deletion-path integration with TG-block. TH-0 spike defined. TH-1/TH-2 split confirmed. |
+| TH-0 | Bundle spike | `javascript-opentimestamps` in-browser. Bundle size. Calendar endpoint paths. Go/no-go for TH-1. |
+| TH-1 | Share build | `POST /timestamp/submit` + `GET /timestamp/upgrade` relay. `date-seal.ots.enc` R2 write. Manifest fields. Deletion path integration. |
+| TH-2 | Frontend + tests | Opt-in toggle (Sovereign only). Proof in download bundle. Lazy upgrade on recipient download. Unit + integration tests. |
 
 ---
 

@@ -210,6 +210,56 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 | 12 | Article pipeline | ✅ | Unlocks after NB-4. |
 | 13 | B9 → B10+ | — | Continue as previously sequenced. |
 
+## TH-series — Tower Hill / Permanent Record (locked TH-Opus-1 · 5 Sep 2026)
+
+**Internal name:** Tower Hill. **UI label:** Permanent record. **Short form:** Date seal
+(badge labels, bundle filename: `date-seal.ots.enc`). "Traitor" discipline applies — no
+OTS jargon, no "blockchain" in primary copy.
+
+**Architectural locks:**
+- All OTS logic is client-side. Worker is a blind byte-relay only — no OTS library in Worker.
+- Worker relay endpoints: `POST /timestamp/submit` · `GET /timestamp/upgrade` (opaque byte
+  forwarding to calendar servers; Worker sees nonced 32-byte SHA-256 digest only).
+- Storage: `{uuid}/date-seal.ots.enc` — encrypted under transfer fragment key (AES-GCM,
+  own AAD). Lazy client-side upgrade on download. No cron. No Durable Objects.
+- Manifest fields: `timestamp_state: 'none' | 'pending' | 'complete'` · `timestamp_submitted_at`.
+  No digest, no calendar URLs in manifest.
+- Deletion: `date-seal.ots.enc` joins every deletion path — expiry, destroy-after-download,
+  Execution Dock grace-sweep, owner delete. Load-bearing. Flag at TH-1 build.
+- Hash canon (never conflate — add to architectural lock table):
+  - BLAKE3 → chunk integrity (internal)
+  - SHA-256 (OTS) → existence proof, Bitcoin-anchored (client-side only)
+  - Cashu → anonymous auth
+- Verification: Legend is the native verifier. No duplicate verify view in Share v1.
+- Copy register: "permanent record," never "notarise." Honest scope: proves bytes existed
+  on or before a block date, not who sent them, not that they're true.
+- OTS wariness on record: TH-0 spike (bundle size + calendar endpoint check) before any
+  build commitment. Block parks without shame if spike is ugly.
+
+**Tier placement (locked):**
+- Sovereign+ only, opt-in toggle. No Citizen surface, no mention.
+- Legend-provisioned Sovereign entitlement: 100 GB cap, no API access.
+  (Full Sovereign = 100 GB. Business/API = 250 GB + pay-per-GB overage.)
+- One-directional: Legend subscription includes Sovereign Share entitlement.
+  Sovereign Share subscribers do not receive Legend access.
+
+**Sovereign cap revision (locked TH-Opus-1):**
+- Sovereign cap revised from 250 GB → **100 GB**. No legacy subscribers affected.
+- Business/API: 250 GB included, pay-per-GB over. Overage invoiced (manual, annual minimum).
+- Rationale: professional audience (legal, healthcare, estate) moves PDFs and documents,
+  not bulk media. 250 GB was an unvalidated round number. Catch before any published copy.
+
+**Cross-product entitlement (design dependency — TH-Opus-2/3):**
+- Legend subscription provisions a Sovereign Share credential server-side.
+- Architecture: KV entitlement flag or cross-product token. Design at TH-Opus-2/3.
+- Legend-provisioned cap: 100 GB, no API access. Prevents Legend becoming API backdoor.
+- Legend price to be set at TH-Opus-2. One or two scoping sessions, not a heavy block.
+
+**Product loop:**
+- Stamp in Share → verify in Legend. Connective tissue between products.
+- Estate/will workflow: Legend user queries UTXOs, sends wallet descriptor/will/PSBT via
+  Share with permanent record. Legend verifies. No third-party tool required.
+
 **Locked sequence:** `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
 ---

@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 1.9 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** S88 · 4 Sep 2026
+> **Version:** 2.0 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** TH-Opus-1 · 5 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -23,11 +23,17 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 | Layer | Technology | Role |
 |---|---|---|
 | Chunk indexing & verification | BLAKE3 | Internal only — content addressing, integrity checks |
+| Existence proof | SHA-256 (OTS) | Client-side only — Bitcoin-anchored permanent record. Never touches Worker. |
 | Anonymous authentication | Cashu blind signatures | Access tokens, payment gate |
 | Storage | Cloudflare R2 | Egress-free object store |
 | Payment | LNbits on Hetzner CAX21 (B7+, all Refueler projects) | Upload capacity settled via Lightning |
 
-**These two layers must never be conflated.** BLAKE3 is not the auth layer. Cashu is not the hashing layer.
+**Three hashes, three jobs — never conflate:**
+- **BLAKE3** → chunk integrity (internal, Worker + browser)
+- **SHA-256 (OTS)** → existence proof, Bitcoin-anchored (client-side only — never in Worker)
+- **Cashu** → anonymous auth (no hashing role)
+
+BLAKE3 is not the auth layer. Cashu is not the hashing layer. SHA-256/OTS is not the integrity layer and never enters the Worker.
 
 ---
 
@@ -44,6 +50,8 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`,
   `frontend/share.js`, `frontend/upgrade.css` only (extracted S51).
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
+- **Sovereign storage cap: 100 GB. Locked TH-Opus-1.** Previously 250 GB — revised before any published copy. Business/API: 250 GB + pay-per-GB overage (invoiced). No legacy subscribers affected.
+- **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
 
 **API / white-label locked decisions (AP-2/AP-3a):**
 - HMAC signing: every API request signed with HMAC-SHA256 over `method + path + timestamp + body_hash`.
@@ -57,6 +65,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
 - `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html` (conflicts with site root index).
 - `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Never produce index.njk as a download — always edit via sed directly on `refueler-io/src/share/index.njk`.
+
 **BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
 Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
 `blake3_worker.js`. 400 on hash mismatch. This claim is safe to assert with correct scope
@@ -67,9 +76,12 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 - ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase
   ledger. Rate limiting on all public endpoints. UUID-bound credential issuance (Worker precursor
   to NUT-20).
+- ✅ **Safe to assert (TH-Opus-1+):** Permanent record (Bitcoin-anchored existence proof) for
+  Sovereign+ transfers where sender opts in. Honest scope: proves bytes existed on or before a
+  block date. Does not prove authorship, truth, or delivery.
 - 🔒 **Still blocked:** Full Merkle tree verification. NUT-11 Mode 2 (keypair auth).
   "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim
-  without the Merkle qualifier.
+  without the Merkle qualifier. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
 - 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 (whitepaper + Merkle) → B10 (ML-KEM).
 
 ---
@@ -79,8 +91,9 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**B6 ✓ complete (S72a). B7 in progress — S73/S73a complete. Opus-2 ✓ (29 Aug). S88 ✓ (4 Sep — SD design locked).**
-**Next: TG-block (Traitor's Gate) — no Hetzner required.** Locked block sequence (AP-10): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`. See Share-Master-Context.md §Roadmap + §SD-block design locked + §Dual-repo asset sync.
+**TG-block ✓ complete (commit `18d2157`, 432 tests passing). TH-Opus-1 ✓ (5 Sep — Tower Hill / Permanent Record scoped).**
+**Next: TH-Opus-2 (Pass + Legend scoping — Legend price, cross-product entitlement architecture).**
+Locked block sequence (AP-10): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`. See Share-Master-Context.md §Roadmap + §TH-series + §SD-block.
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
@@ -94,7 +107,7 @@ the first session of a group — never skipped. See Share-Master-Context.md §B7
 never deploys. Combine into one command:
 
 ```
-git commit -m "AP-7: description" && git push
+git commit -m "TH-Opus-1: description" && git push
 ```
 
 Rajesh consistently forgets the push step. Claude must always include `&& git push` in the
@@ -121,6 +134,8 @@ This is not optional.
 **Applies to:** S87 (B7) · SW9 (SW) · then B8, B9, B10, B11, B12 close sessions
 (renumber after B7 close — check Share-Master-Context.md §Roadmap for current numbers).
 Also apply at any session where either file exceeds its target line count mid-block.
+
+---
 
 ## Deferred experiments
 
