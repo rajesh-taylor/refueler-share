@@ -1,4 +1,4 @@
-/* eslint-disable no-use-before-define */
+/* eslint-disable no-undef, no-use-before-define */
 import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyCredential } from './nut00.js';
 import { verifyChunkHash } from './blake3.js';
