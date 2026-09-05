@@ -250,16 +250,16 @@ Share admin dashboard frontend migrated to `refueler-io` at `src/share/admin/`. 
 |---------|-------|-------|
 | TG-1 | Design + manifest spec | Manifest fields: `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`. Tier gate, status matrix, deletion sequence all locked. Pre-code confirmation. |
 | TG-2 ✓ | Worker implementation | `DELETE /transfer/{uuid}`. `consumed`/tidal checks on `GET /download` + `POST /auth`. Tidal headers on chunk-0 upload. `manifest_tg.js` (5 pure fns). `destroy.test.js` (36 unit). Security integration tests (8 TG rows). **355 passing.** Commit `1c673b1`. Deployed `aaa8f521`. |
-| TG-3 | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only). |
-| TG-3a | Frontend — download side | Pre-download modal. Post-download confirmation gate → [I've saved it] → triggers `DELETE /transfer/{uuid}`. |
-| TG-4 | Execution Dock — dashboard | Harbourmaster dashboard card: amber state, expiry countdown, [Destroy now] button. |
+| TG-3 ✓ | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only). Commit `b3b3226`. |
+| TG-3a ✓ | Frontend — download side | Pre-download amber modal. Post-download confirm gate → [I've saved it] → `DELETE /transfer/{uuid}` (passphrase) or `POST /confirm/{uuid}` (open). Tidal countdown. Commit `b3b3226`. |
+| TG-4 ✓ | Execution Dock — dashboard | `handleExecutionDock` + `GET /admin/execution-dock`. `dock_index` KV write on chunk-0. `handleOwnerDelete` replacing 501 stub. Execution Dock KPI card in System Summary (amber count from `badge_count`). Commit `9258050`. |
 | TG-5 | Tests + smoke | Full round-trip: upload with destroy flag → download → confirm → verify 410. Tidal window boundary tests. |
 
 **TG-block do-not-retry:**
 - DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation
 - DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
 - DO NOT compute `X-P2SH-Secret-Hash` with plain BLAKE3 in tests — use `hashSecret()` from `nut11.js`
-- Owner-scoped DELETE (TG-4) stubbed as 501 — clean branch in `handleDeleteTransfer`, do not collapse
+- Owner-scoped DELETE (TG-4) ✓ shipped — `handleOwnerDelete` live at commit `9258050`
 
 ---
 
@@ -412,7 +412,7 @@ Full SD-block design session. All decisions locked. Key outcomes: opaque token a
 
 `NB-1 → S89/S90 → snag sweeps → S88 → TG-block → TH-series → SW → B8 → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
-*(SYNC-1, RU-block, HQ-series, S88, S89/S90 complete. TG-2 complete. TG-3 is next.)*
+(SYNC-1, RU-block, HQ-series, S88, S89/S90 complete. TG-2 ✓ TG-3 ✓ TG-3a ✓ TG-4 ✓. Next: TG-5 — tests + smoke.)*
 
 ---
 

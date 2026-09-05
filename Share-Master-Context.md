@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.2 | **Last updated:** S88 · 4 Sep 2026
+> **Version:** 7.3 | **Last updated:** S-TG-4b · 5 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -12,7 +12,7 @@
 | Worker URL | `https://refueler-share.rt-fc4.workers.dev` |
 | Storage | Cloudflare R2 — `refueler-share-prod` / `refueler-share-dev` |
 | Ledger | Supabase `tihgvdokeofnjxjkenmm` — `spent_tokens`, `subscribers`, `double_spend_attempts` |
-| Frontend | Eleventy 3.x — `src/` → `frontend/` (canonical `refueler-share/frontend/`, mirror `refueler-io/src/share/assets/`) |
+| Frontend | Eleventy 3.x — `src/` → `frontend/` (canonical `refueler-share/frontend/`, mirror `refueler-io/src/share/assets/`) · Local: `/Users/rajeshtaylor/Documents/refueler.io` |
 | Subdomain | `refueler.io/share/` → `refueler-io.pages.dev` |
 | Crypto | AES-GCM (Web Crypto), BLAKE3 WASM (browser local bundle + Worker WASM), secp256k1 (@noble v2) |
 | Payments (fiat) | Stripe — live mode, GBP, embedded Payment Element |
@@ -165,13 +165,15 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 | Math.random() in Deed keypair generation | `crypto.getRandomValues()` only — no exceptions |
 | Separate entropy source for BIP-39 mnemonic vs keypair | Same `crypto.getRandomValues()` call for both |
 | Claim "anonymous" for Stripe-rail Silent Drop | Stripe rail = private (not anonymous). Lightning rail = anonymous. |
+| Local refueler.io path wrong | Local repo is `/Users/rajeshtaylor/Documents/refueler.io` — not `refueler-io`. Never use `refueler-io` as a local filesystem path. |
+| Surgical sed/python patch to `index.js` | Always produce a complete replacement file. Run `node --check worker/src/index.js` before presenting. |
 
 ---
 
 ## Current state
 
 **B7 in progress — S73/S73a complete. NB-series (node bootstrap) is the Hetzner-gated block.**
-**SYNC-1 ✓ · RU-block ✓ · HQ-series ✓ · S88 ✓ (SD design locked)**
+**SYNC-1 ✓ · RU-block ✓ · HQ-series ✓ · S88 ✓ (SD design locked) · TG-block in progress (TG-4 ✓)**
 **Roadmap resequenced AP-10: no Hetzner required for TG-block, TH-series, SW, B8.**
 
 | Block | Commit | Summary |
@@ -183,8 +185,9 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 | RU-block ✓ | `1e33ebe` | Streaming zip → IDB schema → resume flow → 409 handling. |
 | HQ-series ✓ | `9cd2241` | HTTP/3 AE logging. BLAKE3 + HTTP/3 trust band. Plans/Status in nav. |
 | S88 ✓ | — | Silent Drop design locked. SD-block session plan written. Threat model confirmed. |
+| TG-block in progress | `9258050` | TG-2 ✓ · TG-3 ✓ · TG-3a ✓ · TG-4 ✓. Execution Dock live. Next: TG-5 (tests + smoke). |
 
-**Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration).**
+**Test count: 212 passing · 0 skipped across 8 suites (6 unit + 2 integration). TG-2 added 36 unit + 8 integration = 355 passing.**
 
 ---
 
@@ -196,7 +199,7 @@ Business tier: invoiced manually via Stripe invoice template. No subscription pr
 | 2 | S89/S90 — tier + Stripe tidy-up | ❌ | S89 complete. S90 pending. |
 | 3 | S93–S95 — B7 snag sweep | ❌ | Theme toggle in modals. AE event routing fix. |
 | 4 | S88 ✓ — SD design | ❌ | Complete. |
-| 5 | TG-block — Traitor's Gate | ❌ | Pure Worker + R2 + manifest. All tiers. |
+| 5 | TG-block — Traitor's Gate | ❌ | TG-4 ✓. Next: TG-5. |
 | 6 | TH-series — Tower Hill / OpenTimestamps | ❌ | 2–3 Opus scoping sessions then build. |
 | 7 | SW block (SW1–SW9) | ❌ | Solicitor gate on Business sales only, not on build. |
 | 8 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
@@ -290,7 +293,7 @@ No discounts. No yearly savings framing.
 ## Worker endpoints (summary)
 
 Core: `POST /credential/issue` · `PUT /upload/{uuid}/{chunk}` · `POST /auth/{uuid}` · `GET /download/{uuid}/{chunk}` · `POST /log/error`.
-Admin: `GET|POST /admin/status` · `GET /admin/metrics` · `GET /admin/ae-metrics` · `GET /admin/snapshot`.
+Admin: `GET|POST /admin/status` · `GET /admin/metrics` · `GET /admin/ae-metrics` · `GET /admin/snapshot` · `GET /admin/execution-dock`.
 Stripe: `POST /webhook/stripe` · `POST /subscription/checkout` · `GET /subscription/status` · `POST /subscription/portal` · `GET /subscription/credential`.
 Lightning (B7): `POST /subscription/lightning` · `POST /webhook/lightning` · `GET /subscription/lightning/credential`.
 SW: `GET /wl/config` · `POST /api/v1/credential/issue` · `POST /api/v1/keys/rotate` · `GET /api/v1/transfers` · `POST|GET|DELETE /api/v1/webhooks{/id}` · scheduled cron.
@@ -301,7 +304,7 @@ SD-block (new): `POST /inbox/create` · `GET /inbox/{token}` · `POST /inbox/{to
 
 ## Testing infrastructure
 
-Canonical reference: `TESTING.md` (repo root). Load for any testing session. **212 passing · 0 skipped · 8 suites** (6 unit + 2 integration). k6 load tests all green. CI Level 1 live. Level 2 — B7–B8 scope.
+Canonical reference: `TESTING.md` (repo root). Load for any testing session. **355 passing · 0 skipped · 8 suites** (6 unit + 2 integration + TG-2 additions). k6 load tests all green. CI Level 1 live. Level 2 — B7–B8 scope.
 
 ---
 
