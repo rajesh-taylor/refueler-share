@@ -463,3 +463,95 @@ main {
 }
 
 
+
+/* ── TG-block: pre-download modal overlay ────────────────────────────────── */
+/* Shown when pending_destruction=true. Full-page overlay, centred card.      */
+/* Uses existing amber tokens — no new colours.                               */
+.pre-dl-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.pre-dl-modal-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border-top: 3px solid var(--c-amber);
+  max-width: 460px;
+  width: 100%;
+  padding: 32px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.pre-dl-modal-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.pre-dl-modal-heading {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+.pre-dl-modal-body {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+/* ── TG-block: post-download confirm gate ────────────────────────────────── */
+/* Inserted above #dl-signoff after file is saved. Amber-tinted card.        */
+.dl-confirm-gate {
+  margin-bottom: 1.5rem;
+  background: var(--c-amber-bg);
+  border: 0.5px solid var(--c-amber);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dl-confirm-gate--done {
+  background: transparent;
+  border-color: var(--card-border);
+}
+.dl-confirm-question {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+  margin: 0;
+}
+.dl-confirm-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+.dl-confirm-status--success {
+  color: var(--c-amber);
+}
+.dl-confirm-status--error {
+  color: var(--fg-muted);
+}
+
+/* ── TG-block: tidal window receiver display ─────────────────────────────── */
+/* Countdown (available_from) and static until label (available_until).      */
+.tidal-countdown-display,
+.tidal-until-display {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}

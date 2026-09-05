@@ -1581,7 +1581,52 @@ async function enterDownloadMode({ uuid, key, iv }) {
   const isPassphraseProtected = !!meta.passphrase_protected;
   if (isPassphraseProtected) rcPassphraseRow.classList.remove('hidden');
 
+  // ── TG-block: read receiver-side destroy + tidal fields ──────────────────
+  const willSelfDestruct     = !!meta.pending_destruction;
+  const availableFromUnixRx  = meta.available_from_timestamp  || null;
+  const availableUntilUnixRx = meta.available_until_timestamp || null;
+
   receiverCard.style.display = 'flex';
+
+  // ── TG-block: tidal window gating ────────────────────────────────────────
+  // If available_from is in the future, block download and show countdown.
+  const nowSecs = () => Math.floor(Date.now() / 1000);
+
+  if (availableFromUnixRx && nowSecs() < availableFromUnixRx) {
+    rcDownloadBtn.disabled = true;
+    const countdownEl = document.createElement('p');
+    countdownEl.id = 'tidal-countdown';
+    countdownEl.className = 'tidal-countdown-display muted mono small';
+    rcDownloadBtn.insertAdjacentElement('afterend', countdownEl);
+
+    function _updateCountdown() {
+      const secsLeft = Math.max(0, availableFromUnixRx - nowSecs());
+      if (secsLeft === 0) {
+        rcDownloadBtn.disabled = false;
+        countdownEl.remove();
+        return;
+      }
+      const h = Math.floor(secsLeft / 3600);
+      const m = Math.floor((secsLeft % 3600) / 60);
+      const s = secsLeft % 60;
+      const parts = [];
+      if (h > 0) parts.push(`${h}h`);
+      if (m > 0 || h > 0) parts.push(`${m}m`);
+      parts.push(`${s}s`);
+      countdownEl.textContent = `Available in ${parts.join(' ')}`;
+      setTimeout(_updateCountdown, 1000);
+    }
+    _updateCountdown();
+  }
+
+  // If available_until is set, show static "Available until [datetime]" label.
+  if (availableUntilUnixRx) {
+    const untilEl = document.createElement('p');
+    untilEl.id = 'tidal-until-display';
+    untilEl.className = 'tidal-until-display muted mono small';
+    untilEl.textContent = `Available until ${_formatDatetime(availableUntilUnixRx)}`;
+    rcDownloadBtn.insertAdjacentElement('afterend', untilEl);
+  }
 
   // ── USP copy — Variant B locked (A/B test retired, B won) ─────────────────
   uspText.textContent = 'No account. No email. No history. Your data. Not ours.';
@@ -1591,37 +1636,48 @@ async function enterDownloadMode({ uuid, key, iv }) {
   rcDownloadBtn.addEventListener('click', async () => {
     receiverCard.style.display = 'none';
 
-    if (isPassphraseProtected) {
-      unlockScreen.style.display = 'flex';
-      unlockBtn.addEventListener('click', async () => {
-        const passphrase = unlockInput.value.trim();
-        if (!passphrase) return;
-        unlockBtn.disabled = true;
-        unlockError.textContent = '';
-        try {
-          const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ passphrase }),
-          });
-          if (!authRes.ok) {
-            unlockError.textContent = authRes.status === 401 ? 'Incorrect password.' : 'Something went wrong.';
+    // TG-block: pre-download acknowledgement modal if transfer self-destructs.
+    const _proceed = async () => {
+      if (isPassphraseProtected) {
+        unlockScreen.style.display = 'flex';
+        unlockBtn.addEventListener('click', async () => {
+          const passphrase = unlockInput.value.trim();
+          if (!passphrase) return;
+          unlockBtn.disabled = true;
+          unlockError.textContent = '';
+          try {
+            const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ passphrase }),
+            });
+            if (!authRes.ok) {
+              unlockError.textContent = authRes.status === 401 ? 'Incorrect password.' : 'Something went wrong.';
+              unlockBtn.disabled = false;
+              return;
+            }
+            const { token } = await authRes.json();
+            downloadToken = token;
+            unlockInput.value = '';
+            unlockScreen.style.display = 'none';
+            await startDownloadGated(uuid, meta, willSelfDestruct);
+          } catch {
+            unlockError.textContent = 'Network error. Try again.';
             unlockBtn.disabled = false;
-            return;
           }
-          const { token } = await authRes.json();
-          downloadToken = token;
-          unlockInput.value = '';
-          unlockScreen.style.display = 'none';
-          await startDownloadGated(uuid, meta);
-        } catch {
-          unlockError.textContent = 'Network error. Try again.';
-          unlockBtn.disabled = false;
-        }
+        });
+        unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
+      } else {
+        await startDownloadGated(uuid, meta, willSelfDestruct);
+      }
+    };
+
+    if (willSelfDestruct) {
+      _showPreDownloadModal(() => {
+        _proceed();
       });
-      unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
     } else {
-      await startDownloadGated(uuid, meta);
+      await _proceed();
     }
   }, { once: true });
 }
@@ -1629,7 +1685,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Download capability gate — routes to FSAA stream or Blob fallback
 // ─────────────────────────────────────────────────────────────────────────────
-async function startDownloadGated(uuid, meta) {
+async function startDownloadGated(uuid, meta, willSelfDestruct = false) {
   const hasFSAA = typeof showSaveFilePicker !== 'undefined';
 
   if (hasFSAA) {
@@ -1646,19 +1702,19 @@ async function startDownloadGated(uuid, meta) {
         return;
       }
       reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
-      await startDownload(uuid, meta);
+      await startDownload(uuid, meta, willSelfDestruct);
       return;
     }
-    await startDownloadStream(uuid, meta, fileHandle);
+    await startDownloadStream(uuid, meta, fileHandle, willSelfDestruct);
   } else {
-    await startDownload(uuid, meta);
+    await startDownload(uuid, meta, willSelfDestruct);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FSAA streaming download — pipeline depth 2, per-chunk retry (3×, exp backoff)
 // ─────────────────────────────────────────────────────────────────────────────
-async function startDownloadStream(uuid, meta, fileHandle) {
+async function startDownloadStream(uuid, meta, fileHandle, willSelfDestruct = false) {
   const totalChunks = meta.total_chunks;
   if (!totalChunks || totalChunks < 1) {
     showDownloadError('Transfer metadata is incomplete. Please try again.');
@@ -1755,6 +1811,8 @@ async function startDownloadStream(uuid, meta, fileHandle) {
     uspBlock.classList.add('hidden');
     dlSignoff.classList.remove('hidden');
     try { logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
+    // TG-block: post-download confirm gate
+    if (willSelfDestruct) _showConfirmGate(uuid, !!downloadToken);
 
   } catch (e) {
     reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`).catch(() => {});
@@ -1776,7 +1834,7 @@ async function startDownloadStream(uuid, meta, fileHandle) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Blob fallback download — browsers without FSAA support
 // ─────────────────────────────────────────────────────────────────────────────
-async function startDownload(uuid, meta) {
+async function startDownload(uuid, meta, willSelfDestruct = false) {
   const totalChunks = meta?.total_chunks;
   if (!totalChunks || totalChunks < 1) {
     showDownloadError('Transfer metadata is incomplete. Please try again.');
@@ -1860,6 +1918,100 @@ async function startDownload(uuid, meta) {
   uspBlock.classList.add('hidden');
   dlSignoff.classList.remove('hidden');
   try { logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
+  // TG-block: post-download confirm gate
+  if (willSelfDestruct) _showConfirmGate(uuid, !!downloadToken);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TG-block receiver helpers — pre-download modal, post-download confirm gate,
+// datetime formatter, tidal countdown display.
+// "Traitor" must not appear in any identifier, class, or aria-label.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Format a Unix timestamp as a human-readable local datetime string.
+function _formatDatetime(unixSecs) {
+  const d = new Date(unixSecs * 1000);
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+// Pre-download acknowledgement modal — shown before download begins when
+// pending_destruction is true. Overlays the page; onConfirm called on proceed.
+function _showPreDownloadModal(onConfirm) {
+  const overlay = document.createElement('div');
+  overlay.id = 'pre-dl-modal';
+  overlay.className = 'pre-dl-modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Download warning');
+
+  overlay.innerHTML = `
+    <div class="pre-dl-modal-card">
+      <div class="pre-dl-modal-icon" aria-hidden="true">⚠️</div>
+      <p class="pre-dl-modal-heading">This transfer will be permanently deleted</p>
+      <p class="pre-dl-modal-body">Once you confirm you have saved the file, it will be removed from Refueler's servers. Make sure you have a safe place to save it before you continue.</p>
+      <button id="pre-dl-modal-btn" class="btn btn-primary btn-full">I understand — download</button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('pre-dl-modal-btn').addEventListener('click', () => {
+    overlay.remove();
+    onConfirm();
+  }, { once: true });
+}
+
+// Post-download confirm gate — shown after file is saved to disk.
+// Prompts recipient to confirm; on confirm calls Worker destruction endpoint.
+// isPassphrase: if true, uses DELETE /transfer/{uuid} (bearer auth);
+//               if false, uses POST /confirm/{uuid} (no auth).
+async function _showConfirmGate(uuid, isPassphrase) {
+  const gate = document.createElement('div');
+  gate.id = 'dl-confirm-gate';
+  gate.className = 'dl-confirm-gate';
+
+  gate.innerHTML = `
+    <p class="dl-confirm-question">Have you saved the file?</p>
+    <button id="dl-confirm-btn" class="btn btn-primary">I've saved it — delete this transfer</button>
+    <p id="dl-confirm-status" class="dl-confirm-status hidden"></p>`;
+
+  dlSignoff.insertAdjacentElement('beforebegin', gate);
+
+  document.getElementById('dl-confirm-btn').addEventListener('click', async () => {
+    const btn    = document.getElementById('dl-confirm-btn');
+    const status = document.getElementById('dl-confirm-status');
+    btn.disabled = true;
+
+    try {
+      let res;
+      if (isPassphrase) {
+        res = await fetch(`${WORKER_URL}/transfer/${uuid}`, {
+          method: 'DELETE',
+          headers: downloadToken ? { 'Authorization': `Bearer ${downloadToken}` } : {},
+        });
+      } else {
+        res = await fetch(`${WORKER_URL}/confirm/${uuid}`, { method: 'POST' });
+      }
+
+      if (res.ok) {
+        gate.classList.add('dl-confirm-gate--done');
+        btn.remove();
+        status.textContent = 'Transfer permanently deleted.';
+        status.classList.remove('hidden');
+        status.classList.add('dl-confirm-status--success');
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch {
+      btn.disabled = false;
+      const status2 = document.getElementById('dl-confirm-status');
+      status2.textContent = 'Could not confirm deletion — the transfer will expire naturally.';
+      status2.classList.remove('hidden');
+      status2.classList.add('dl-confirm-status--error');
+    }
+  }, { once: true });
 }
 
 function showDownloadError(msg) {
