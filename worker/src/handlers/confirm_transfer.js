@@ -123,6 +123,26 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
         console.error('confirm: tombstone write failed:', e);
       }
 
+      // Step 4: Mark collected in Execution Dock KV index.
+      // Updates dock_index:{uuid} so the sent-transfers view shows 'collected'.
+      // Fire-and-forget — a failed write self-corrects on next dashboard refresh.
+      try {
+        const dockRaw = await env.STATUS_KV.get(`dock_index:${uuid}`, { type: 'json' });
+        if (dockRaw) {
+          await env.STATUS_KV.put(
+            `dock_index:${uuid}`,
+            JSON.stringify({
+              ...dockRaw,
+              collected:    true,
+              collected_at: nowSeconds,
+            }),
+            { expirationTtl: 86400 * 7 } // 7-day tail after collection then self-cleans
+          );
+        }
+      } catch (e) {
+        console.error('confirm: dock_index collected update failed:', e);
+      }
+
       // AE log — fire-and-forget inside waitUntil.
       if (env.AE) {
         try {

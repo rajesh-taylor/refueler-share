@@ -10,6 +10,7 @@ import { createInvoice, getInvoiceStatus } from './lightning.js';
 import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
+import { handleExecutionDock } from './handlers/execution_dock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -311,6 +312,10 @@ export default {
 
       if (request.method === 'GET' && path === '/admin/snapshot') {
         return timed('admin_snapshot', () => handleAdminSnapshot(request, env).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'GET' && path === '/admin/execution-dock') {
+        return timed('admin_execution_dock', () => handleExecutionDock(request, env).then(r => addCors(r, request)));
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
@@ -893,6 +898,29 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     await putManifest(env.BUCKET, uuid, manifest);
 
+    // ── Execution Dock: write dock_index KV entry ─────────────────────────
+    // TTL = remaining time to expiry + 7-day post-expiry visibility tail.
+    // Floored at 24h so 1-day transfers still appear in the dock briefly.
+    // Fire-and-forget — a failed write means this transfer won't appear in
+    // the Execution Dock but does not affect the upload itself.
+    {
+      const nowForDock = Math.floor(Date.now() / 1000);
+      const dockTtl   = Math.max((expiryTs - nowForDock) + (86400 * 7), 86400);
+      env.STATUS_KV.put(
+        `dock_index:${uuid}`,
+        JSON.stringify({
+          uuid,
+          file_name:        fileName ?? null,
+          expiry_timestamp: expiryTs,
+          created_at:       nowForDock,
+          tier:             resolvedTier,
+          collected:        false,
+          collected_at:     null,
+        }),
+        { expirationTtl: dockTtl }
+      ).catch(e => console.error('Execution Dock: dock_index write failed:', e));
+    }
+
     const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
     if (!meltRes.ok) console.error('NUT-07 melt failed:', serial, await meltRes.text());
 
@@ -1120,7 +1148,7 @@ async function handleDownload(request, env, uuid, chunkIndex) {
 //
 // Two auth paths:
 //   Recipient path — bearer token from POST /auth/{uuid} (live, TG-2)
-//   Owner path     — owner-scoped credential (TG-4, stubbed as 501)
+//   Owner path     — X-Admin-Key header (Harbourmaster, TG-4)
 //
 // Deletion sequence (fail-closed, tombstone path A):
 //   1. Read manifest, authorise caller
@@ -1133,9 +1161,13 @@ async function handleDeleteTransfer(request, env, uuid) {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('Authorization') ?? '';
 
-  // Owner path — TG-4 stub
-  if (authHeader.startsWith('Bearer rfs_owner_')) {
-    return err(501, 'Owner-scoped deletion is not yet available.');
+  // ── Owner path — Harbourmaster admin key (TG-4) ───────────────────────────
+  // Dashboard sends X-Admin-Key for owner-initiated destruction.
+  // Entirely separate from the recipient bearer token path below.
+  // Do not collapse these two paths — different callers, different auth.
+  const ownerKey = request.headers.get('X-Admin-Key');
+  if (ownerKey && ownerKey === env.ADMIN_KEY) {
+    return handleOwnerDelete(env, uuid);
   }
 
   if (!authHeader.startsWith('Bearer ')) {
@@ -1197,6 +1229,67 @@ async function handleDeleteTransfer(request, env, uuid) {
   return json({
     destroyed:    true,
     consumed_at:  nowSeconds,
+    ...(deleteErrors.length > 0 ? { partial: true, failed_chunks: deleteErrors } : {}),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner-scoped transfer deletion — called from handleDeleteTransfer (TG-4)
+//
+// Auth: X-Admin-Key (Harbourmaster credential). No bearer token required.
+// Deletion sequence: fail-closed consumed marker → chunk delete → tombstone.
+// Additionally removes dock_index KV entry so the transfer leaves the
+// Execution Dock immediately rather than waiting for KV eventual consistency.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleOwnerDelete(env, uuid) {
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+
+  // Already consumed — idempotent. Clean up KV defensively.
+  if (manifest.consumed === true) {
+    env.STATUS_KV.delete(`dock_index:${uuid}`).catch(() => {});
+    return err(410, 'Transfer has already been destroyed.');
+  }
+
+  const nowSeconds  = Math.floor(Date.now() / 1000);
+  const totalChunks = manifest.total_chunks ?? 0;
+
+  // Step 1: Fail-closed consumed marker — written before chunk deletion.
+  // If chunk deletion fails, manifest marks transfer as gone. Clients get 410.
+  // Orphaned chunks expire via R2 lifecycle TTL.
+  await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
+
+  // Step 2: Delete chunks
+  const deleteErrors = [];
+  for (let i = 0; i < totalChunks; i++) {
+    try {
+      await env.BUCKET.delete(`${uuid}/${String(i).padStart(4, '0')}`);
+    } catch (e) {
+      console.error(`TG owner delete: chunk ${i} failed:`, e);
+      deleteErrors.push(i);
+    }
+  }
+
+  // Step 3: Overwrite with stripped tombstone
+  await putManifest(env.BUCKET, uuid, buildTombstone(nowSeconds));
+
+  // Step 4: Remove from Execution Dock KV index — fire-and-forget
+  env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
+    console.error('Execution Dock: dock_index delete failed:', e)
+  );
+
+  logEvent(env, {
+    endpoint:   'owner_delete_transfer',
+    tier:       manifest.tier ?? 'free',
+    status:     200,
+    totalChunks,
+    errorMsg:   deleteErrors.length > 0 ? `partial_delete:${deleteErrors.length}` : '',
+  });
+
+  return json({
+    destroyed:   true,
+    consumed_at: nowSeconds,
     ...(deleteErrors.length > 0 ? { partial: true, failed_chunks: deleteErrors } : {}),
   });
 }
