@@ -8,6 +8,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 import { createInvoice, getInvoiceStatus } from './lightning.js';
 import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders } from './manifest_tg.js';
+import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -143,7 +144,7 @@ function logEvent(env, {
 // Router
 // ─────────────────────────────────────────────────────────────────────────────
 export default {
-  async fetch(request, env) {
+    async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
@@ -255,6 +256,13 @@ export default {
         const uuid = deleteMatch[1];
         if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
         return timed('delete_transfer', () => handleDeleteTransfer(request, env, uuid).then(r => addCors(r, request)));
+      }
+
+            const confirmMatch = path.match(/^\/confirm\/([0-9a-f-]{36})$/i);
+      if (request.method === 'POST' && confirmMatch) {
+        const uuid = confirmMatch[1];
+        if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
+        return timed('confirm_transfer', () => handleConfirmTransfer(request, env, ctx, uuid).then(r => addCors(r, request)));
       }
 
       if (request.method === 'POST' && path === '/webhook/stripe') {
@@ -1002,13 +1010,15 @@ async function handleMeta(request, env, uuid) {
     });
   }
 return new Response(JSON.stringify({
-    file_name:            manifest.file_name        ?? null,
-    total_bytes:          manifest.total_bytes       ?? null,
-    total_chunks:         manifest.total_chunks      ?? null,
-    expiry_timestamp:     manifest.expiry_timestamp  ?? null,
-    passphrase_protected: !!manifest.p2sh_secret_hash,
+    file_name:                manifest.file_name               ?? null,
+    total_bytes:              manifest.total_bytes             ?? null,
+    total_chunks:             manifest.total_chunks            ?? null,
+    expiry_timestamp:         manifest.expiry_timestamp        ?? null,
+    passphrase_protected:     !!manifest.p2sh_secret_hash,
+    pending_destruction:      manifest.pending_destruction     ?? false,
+    available_from_timestamp: manifest.available_from_timestamp  ?? null,
+    available_until_timestamp: manifest.available_until_timestamp ?? null,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-}
 
 // Download — GET /download/:uuid/:chunk
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1852,4 +1862,5 @@ function parseRange(rangeHeader) {
   const offset = parseInt(m[1], 10);
   const end    = m[2] ? parseInt(m[2], 10) : undefined;
   return { offset, length: end !== undefined ? end - offset + 1 : undefined };
+}
 }

@@ -13,7 +13,7 @@
 
 // ---------------------------------------------------------------------------
 // Status check — called by both auth and download handlers before any work.
-// Returns { ok: true } or { ok: false, status: 410|423, body: string }.
+// Returns { ok: true } or { ok: false, status: 410|425, body: string }.
 // ---------------------------------------------------------------------------
 export function checkTransferStatus(manifest, nowSeconds) {
   // Terminal: consumed (deleted)
@@ -21,17 +21,17 @@ export function checkTransferStatus(manifest, nowSeconds) {
     return { ok: false, status: 410, body: 'Transfer has been destroyed.' };
   }
 
-  const from = manifest.available_from_timestamp ?? null;
+  const from  = manifest.available_from_timestamp  ?? null;
   const until = manifest.available_until_timestamp ?? null;
 
-  // Not yet available
+  // Not yet available — 425 Too Early
   if (from !== null && nowSeconds < from) {
-    return { ok: false, status: 423, body: 'Transfer is not yet available.' };
+    return { ok: false, status: 425, body: 'This transfer is not yet available.' };
   }
 
-  // Tidal window closed
+  // Tidal window closed — 410 Gone
   if (until !== null && nowSeconds > until) {
-    return { ok: false, status: 410, body: 'Transfer availability window has closed.' };
+    return { ok: false, status: 410, body: 'This transfer is no longer available.' };
   }
 
   // pending_destruction: true is advisory — never blocks a re-fetch
@@ -69,10 +69,9 @@ export function validateTidalHeaders(availableFrom, availableUntil, createdAt, e
 // Does NOT delete chunks — that happens in the confirmation-triggered DELETE.
 // ---------------------------------------------------------------------------
 export function flipPendingDestruction(manifest, chunkIndex) {
-  // Only armed transfers participate
+  // Only armed transfers participate (pending_destruction === false, not absent)
   if (manifest.pending_destruction !== false) return manifest;
 
-  // Confirm exact field name: total_chunks (per TESTING.md assertion + upload handler)
   const totalChunks = manifest.total_chunks;
   if (typeof totalChunks !== 'number') return manifest; // malformed manifest — skip
 
@@ -84,26 +83,22 @@ export function flipPendingDestruction(manifest, chunkIndex) {
 
 // ---------------------------------------------------------------------------
 // Build the tombstone object written back to R2 after chunk deletion.
-// Tombstone path A: consumed marker, no credential or expiry data.
-// Drops: p2sh_secret_hash, expiry_timestamp, available_from_timestamp,
-//        available_until_timestamp, pending_destruction.
-// Keeps: consumed, consumed_at (for audit).
+// Drops all sensitive fields; keeps only consumed + consumed_at for audit.
 // ---------------------------------------------------------------------------
 export function buildTombstone(nowSeconds) {
   return {
-    consumed: true,
-    consumed_at: nowSeconds,
+    consumed:     true,
+    consumed_at:  nowSeconds,
   };
 }
 
 // ---------------------------------------------------------------------------
 // Tier gate for tidal headers.
 // Returns true if the credential's tier permits tidal scheduling.
-// Paid tiers: 'sovereign', 'business', 'enterprise' (lowercase, as baked into token).
+// Paid tiers: 'sovereign', 'business', 'enterprise' (lowercase).
 //
 // NOTE: confirm the exact tier string baked into the Cashu token secret
-// in worker/src/handlers/credential_issue.js before first deploy.
-// If the field is named differently (e.g. `plan`), update callers.
+// in the credential issue handler before first deploy.
 // ---------------------------------------------------------------------------
 const PAID_TIERS = new Set(['sovereign', 'business', 'enterprise']);
 
