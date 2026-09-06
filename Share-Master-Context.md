@@ -262,6 +262,21 @@ OTS jargon, no "blockchain" in primary copy.
 
 **Locked sequence:** `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
+**TH-Opus-3a locked (committed value + bundle):**
+- Committed value: commitment = SHA-256(blake3_root ‖ seal_nonce). blake3_root = standard
+  BLAKE3-256 of assembled plaintext (NOT chunk tree; capture at assembly — new). seal_nonce =
+  16-byte crypto.getRandomValues, fragment-only, Permanent-Record transfers only, never the key.
+- blake3_root reaches Legend by re-derivation only. Never shipped/embedded.
+- Bundle: date-seal.ots.enc (encrypted, per TH-Opus-1) fetched once with download; seal_nonce from
+  fragment; no plaintext R2, no flag beyond timestamp_state.
+- AMENDS TH-Opus-1: upgrade moves to Legend. Share Worker = POST /timestamp/submit only.
+  Drop GET /timestamp/upgrade from Share. Jittered submit delay for timing decorrelation.
+- Nutroot (B8/B12 forward): x = commitment, H = SHA-256(x). Bearer by default; recipient binding =
+  future P2PK leaf. `after` via two-phase credential (real anchor height); no estimation.
+- Whitepaper calendar-trust line: "A pending calendar response is a promise, not proof; Refueler
+  submits each commitment to multiple independent OpenTimestamps calendars, so a dishonest calendar
+  cannot forge a Bitcoin attestation and cannot prevent anchoring while one honest calendar remains."
+- Do-not-conflate: nonce carries all privacy; BLAKE3 carries none of it.
 ---
 
 ## SD-block — design locked (S88 · 4 Sep 2026)

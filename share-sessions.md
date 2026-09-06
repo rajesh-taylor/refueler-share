@@ -425,4 +425,13 @@ Full SD-block design session. All decisions locked. Key outcomes: opaque token a
 
 B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created. S74–S76 rewritten for LNbits REST. Webhook model corrected (unsigned callback → authenticated GET re-verify). Phoenixd→LND trigger locked. Instance topology confirmed. SD-block placed post-HQ, pre-SW. SYNC-1 inserted. Blink cleanup checklist produced.
 
+## TH-Opus-3a · Sep 2026 (uncounted, design)
+
+Committed-value stress-test. Locked Option B: commitment = SHA-256(blake3_root ‖ seal_nonce).
+Dedicated 16-byte fragment seal_nonce chosen over reused AES-GCM IV (entanglement risk).
+blake3_root re-derived by Legend (never shipped). Hashlock: x = commitment, H = SHA-256(x);
+two-phase `after` (real anchor height, no estimation). Upgrade path moves to Legend — amends
+TH-Opus-1, drops GET /timestamp/upgrade from Share Worker. No TH-Opus-3b. TH-1 = 3
+confirmations (fragment wiring, calendar egress, .ots byte layout).
+
 *"Nothing stops this train."*
