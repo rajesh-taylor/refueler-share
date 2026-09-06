@@ -8,7 +8,7 @@ import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 import { createInvoice, getInvoiceStatus } from './lightning.js';
 import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
-import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders } from './manifest_tg.js';
+import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
 
@@ -101,7 +101,7 @@ function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Destroy-After-Download, X-Available-From, X-Available-Until',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID',
     'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp',
   };
 }
@@ -265,6 +265,25 @@ export default {
         const uuid = confirmMatch[1];
         if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
         return timed('confirm_transfer', () => handleConfirmTransfer(request, env, ctx, uuid).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'POST' && path === '/timestamp/submit') {
+        // Rate limit: 10 requests / 60s per IP — one per transfer; prevents calendar spam
+        const tsTipIp = getClientIp(request);
+        const tsTipRl = await checkRateLimit(env, tsTipIp, 'timestamp_submit', 10, 60);
+        if (tsTipRl.limited) {
+          logEvent(env, { endpoint: 'timestamp_submit', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, tsTipRl.resetAt, corsHeaders(request));
+        }
+        return timed('timestamp_submit', () => handleTimestampSubmit(request, env, ctx).then(r => addCors(r, request)));
+      }
+
+      // TH-2: GET /timestamp/seal/:uuid — fetch encrypted .ots blob for download-path offer
+      const sealMatch = path.match(/^\/timestamp\/seal\/([0-9a-f-]{36})$/i);
+      if (request.method === 'GET' && sealMatch) {
+        const uuid = sealMatch[1];
+        if (!UUID_RE.test(uuid)) return addCors(err(400, 'Invalid transfer ID'), request);
+        return timed('timestamp_seal', () => handleTimestampSeal(request, env, uuid).then(r => addCors(r, request)));
       }
 
       if (request.method === 'POST' && path === '/webhook/stripe') {
@@ -1041,6 +1060,8 @@ return new Response(JSON.stringify({
     pending_destruction:      manifest.pending_destruction     ?? false,
     available_from_timestamp: manifest.available_from_timestamp  ?? null,
     available_until_timestamp: manifest.available_until_timestamp ?? null,
+    // TH-1: timestamp state — 'none' | 'pending' | 'complete'. Legacy manifests default to 'none'.
+    timestamp_state:          getTimestampState(manifest),
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
@@ -1140,6 +1161,150 @@ async function handleDownload(request, env, uuid, chunkIndex) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Timestamp submit — POST /timestamp/submit  (TH-1)
+//
+// Blind byte relay: Worker receives iv(12)‖ciphertext from the client,
+// stores it as {uuid}/date-seal.ots.enc, and sets timestamp_state: 'pending'.
+// Worker never sees plaintext — no OTS library in Worker.
+//
+// The client has already:
+//   1. Built commitment = SHA-256(blake3_root ‖ seal_nonce)
+//   2. POSTed commitment to both OTS calendars, received pending bodies
+//   3. Assembled the pending .ots file
+//   4. Encrypted it under the transfer's AES-GCM session key (AAD = "seal")
+//   5. Sent iv(12) ‖ ciphertext here
+//
+// Auth: X-Transfer-UUID header identifies the transfer. No credential required —
+// the sender already proved ownership via the upload credential on chunk-0.
+// The UUID identifies the R2 path; a forged UUID would find no manifest (404).
+// Rate-limited 10/60s per IP at the router layer.
+//
+// Tier gate: Sovereign+ only. Checked against manifest.tier (set at upload).
+// manifest.tier is authoritative — never trust a client-sent tier header here.
+//
+// Idempotency: if timestamp_state is already 'pending' or 'complete', return 409.
+// Callers should not retry unless recovering from a failed first attempt.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleTimestampSubmit(request, env, ctx) {
+  // ── UUID ──────────────────────────────────────────────────────────────────
+  const uuid = request.headers.get('X-Transfer-UUID') ?? '';
+  if (!UUID_RE.test(uuid)) return err(400, 'Invalid or missing X-Transfer-UUID');
+
+  // ── Read manifest ─────────────────────────────────────────────────────────
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+
+  // ── Tier gate: Sovereign+ only ────────────────────────────────────────────
+  // manifest.tier is set at upload (chunk-0 X-Issued-Tier, server-resolved).
+  // Citizen / free tier: 403 — no surface in UI, so this should never fire
+  // from a legitimate client. Belt-and-braces against direct API calls.
+  const manifestTier = (manifest.tier ?? 'free').toLowerCase();
+  if (manifestTier === 'free' || manifestTier === 'citizen') {
+    return err(403, 'Permanent record requires a Sovereign subscription.');
+  }
+
+  // ── Eligibility: upload complete, not consumed, state === 'none' ──────────
+  if (!isTimestampEligible(manifest)) {
+    const state = getTimestampState(manifest);
+    if (manifest.consumed === true) return err(410, 'Transfer has been destroyed.');
+    if (manifest.upload_complete !== true) return err(409, 'Upload not yet complete.');
+    // Already pending or complete — idempotent rejection.
+    return err(409, `Timestamp already in state: ${state}`);
+  }
+
+  // ── Read encrypted .ots blob from request body ────────────────────────────
+  let otsBlob;
+  try {
+    const buf = await request.arrayBuffer();
+    if (buf.byteLength < 13) return err(400, 'Timestamp blob too short (min 13 bytes: iv + ciphertext)');
+    // Sanity cap: pending .ots from two calendars is ~650 bytes; with AES-GCM overhead ~700.
+    // Hard cap at 8 KB — generous for future calendar additions, rejects garbage payloads.
+    if (buf.byteLength > 8192) return err(413, 'Timestamp blob exceeds 8 KB limit');
+    otsBlob = new Uint8Array(buf);
+  } catch (e) {
+    return err(400, 'Could not read request body');
+  }
+
+  // ── Store encrypted blob to R2 ────────────────────────────────────────────
+  // Key: {uuid}/date-seal.ots.enc — joins all deletion paths (expiry, destroy-after-download,
+  // Execution Dock grace sweep, owner delete). Deletion is load-bearing — never omit.
+  try {
+    await env.BUCKET.put(`${uuid}/date-seal.ots.enc`, otsBlob, {
+      httpMetadata: { contentType: 'application/octet-stream' },
+    });
+  } catch (e) {
+    console.error('TH-1: R2 put date-seal.ots.enc failed:', e);
+    return err(502, 'Failed to store timestamp blob');
+  }
+
+  // ── Update manifest: timestamp_state → 'pending' ──────────────────────────
+  // Jittered delay (50–200ms) before manifest write for timing decorrelation.
+  // Prevents a calendar submit time from being inferred from the manifest write timestamp.
+  const jitterMs = 50 + Math.floor(Math.random() * 150);
+  await new Promise(r => setTimeout(r, jitterMs));
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const patch = buildTimestampPendingPatch(nowSeconds);
+  await putManifest(env.BUCKET, uuid, { ...manifest, ...patch });
+
+  logEvent(env, {
+    endpoint: 'timestamp_submit',
+    tier:     manifestTier,
+    status:   200,
+  });
+
+  return json({ ok: true, timestamp_state: 'pending' });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timestamp seal fetch — GET /timestamp/seal/:uuid  (TH-2)
+//
+// Returns the encrypted .ots blob (iv‖ciphertext) for the download-path offer.
+// The blob is AES-GCM encrypted under the transfer's session key (AAD = "seal").
+// It is meaningless without the session key, which lives in the URL fragment only.
+// No tier gate on the read — the encryption provides the access control.
+//
+// Guards:
+//   - UUID must be valid
+//   - Manifest must exist and not be consumed (tombstone)
+//   - timestamp_state must be 'pending' or 'complete'
+//   - R2 object must exist
+//
+// Rate limit: shares the download rate limit (300/60s per IP) — same endpoint family.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleTimestampSeal(request, env, uuid) {
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+  if (manifest.consumed === true) return err(410, 'Transfer has been destroyed.');
+
+  const state = getTimestampState(manifest);
+  if (state === 'none') return err(404, 'No date seal for this transfer.');
+
+  // R2 read — {uuid}/date-seal.ots.enc
+  let obj;
+  try {
+    obj = await env.BUCKET.get(`${uuid}/date-seal.ots.enc`);
+  } catch (e) {
+    console.error('TH-2: R2 get date-seal.ots.enc failed:', e);
+    return err(502, 'Could not retrieve date seal.');
+  }
+  if (!obj) return err(404, 'Date seal not found.');
+
+  const buf = await obj.arrayBuffer();
+
+  return new Response(buf, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(buf.byteLength),
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Delete transfer — DELETE /transfer/:uuid  (TG-block)
 //
 // Two auth paths:
@@ -1206,6 +1371,13 @@ async function handleDeleteTransfer(request, env, uuid) {
     }
   }
 
+  // TH-1: Delete permanent record blob if present — load-bearing, joins every deletion path.
+  // Fire-and-forget: if the .ots blob was never written (timestamp_state === 'none'), delete
+  // is a no-op. If it was written, deletion is best-effort alongside chunk deletion.
+  env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
+    console.error('TH-1: date-seal.ots.enc delete failed (bearer path):', e)
+  );
+
   // Step 4: Overwrite with stripped tombstone
   const tombstone = buildTombstone(nowSeconds);
   await putManifest(env.BUCKET, uuid, tombstone);
@@ -1262,6 +1434,11 @@ async function handleOwnerDelete(request, env, uuid) {
       deleteErrors.push(i);
     }
   }
+
+  // TH-1: Delete permanent record blob — joins every deletion path.
+  env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
+    console.error('TH-1: date-seal.ots.enc delete failed (owner path):', e)
+  );
 
   // Step 4: tombstone
   const tombstone = buildTombstone(nowSeconds);

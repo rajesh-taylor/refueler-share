@@ -1,6 +1,14 @@
 // ── share.js — extracted from src/index.njk at S51 ──────────────────────────
 // DO NOT edit inline JS in index.njk — edit this file only.
 // Loaded as <script type="module" src="/share.js"></script>
+// TH-2: permanent-record toggle, seal_nonce, blake3PlaintextRoot, OTS download offer.
+
+// ── TH-2: import permanent-record helpers from timestamp.js ──────────────────
+import {
+  generateSealNonce,
+  runPermanentRecord,
+  decryptOts,
+} from './timestamp.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -110,6 +118,10 @@ let availableFrom   = null; // <input type="datetime-local"> #available-from
 let availableUntil  = null; // <input type="datetime-local"> #available-until
 let tidalError      = null; // <div> #tidal-error — inline invariant error
 
+// ── TH-2: permanent-record DOM refs ──────────────────────────────────────────
+let permanentRecordToggle  = null; // <input type="checkbox"> #permanent-record-toggle
+let permanentRecordNotice  = null; // <div> #permanent-record-notice — amber notice
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Info card
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,9 +134,11 @@ $('dismiss-info').addEventListener('click', () => infoCard.classList.add('hidden
 // One record per interrupted transfer. Overwritten on each 200 ACK.
 // Cleared on discard or successful completion.
 //
-// Record shape (RU1a — added `tier`):
+// Record shape (TH-2: added sealNonceHex — additive, no schema bump required):
 // { uuid, chunkIndex, totalChunks, fileName, fileSize, keyHex, ivHex,
-//   tier, expiryTimestamp, timestamp }
+//   tier, expiryTimestamp, timestamp, sealNonceHex }
+// sealNonceHex: hex string | undefined — absent on legacy records and Citizen uploads.
+// Resume path: if absent, permanent record is silently skipped on resume. Correct.
 // ─────────────────────────────────────────────────────────────────────────────
 const IDB_NAME    = 'refueler-share-resume';
 const IDB_STORE   = 'transfers';
@@ -145,7 +159,8 @@ function idbOpen() {
 }
 
 // Write (or overwrite) chunk completion state after each 200 ACK.
-// RU1a: record now includes `tier` and `expiryTimestamp` for expiry-awareness on resume.
+// RU1a: record includes tier and expiryTimestamp for expiry-awareness on resume.
+// TH-2: record includes sealNonceHex (optional) for fragment reconstruction on resume.
 async function writeChunkState(record) {
   try {
     const db = await idbOpen();
@@ -301,6 +316,11 @@ async function checkResumeState() {
 // committed to R2 under the original UUID. The resumed upload sends the new
 // credential on the first resumed chunk so the Worker can re-validate tier
 // and capacity before allowing further chunks.
+//
+// TH-2: sealNonceHex restored from IDB record if present. Fragment includes &sn=
+// on the share URL if present, enabling the recipient to reconstruct it.
+// Permanent record itself is NOT re-run on resume — the pipeline already
+// completed (or was skipped) before the interruption. Correct: do not retry.
 // ─────────────────────────────────────────────────────────────────────────────
 async function resumeUpload(record) {
   if (!record) return;
@@ -323,6 +343,9 @@ async function resumeUpload(record) {
   const resumeFromChunk = record.chunkIndex + 1; // first chunk not yet confirmed
   const expiryTimestamp = record.expiryTimestamp
     || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
+
+  // TH-2: restore sealNonceHex from IDB if present
+  const sealNonceHex = record.sealNonceHex || null;
 
   setStage('Re-credentialling', 8);
 
@@ -546,6 +569,7 @@ async function resumeUpload(record) {
       fileName: record.fileName, fileSize: record.fileSize,
       keyHex: record.keyHex, ivHex: record.ivHex,
       tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
+      sealNonceHex: sealNonceHex || undefined, // TH-2: carry through on resume
     }).catch(() => {});
 
     const uploadedChunks  = i - resumeFromChunk + 1;
@@ -563,7 +587,11 @@ async function resumeUpload(record) {
   await new Promise(r => setTimeout(r, 700));
   progressCard.classList.add('hidden');
 
-  const fragmentStr = `uuid=${uploadUUID}&key=${record.keyHex}&iv=${record.ivHex}`;
+  // TH-2: include &sn= in fragment if sealNonceHex was stored in IDB record.
+  // Permanent record pipeline itself is not re-run on resume.
+  const fragmentStr = sealNonceHex
+    ? `uuid=${uploadUUID}&key=${record.keyHex}&iv=${record.ivHex}&sn=${sealNonceHex}`
+    : `uuid=${uploadUUID}&key=${record.keyHex}&iv=${record.ivHex}`;
   const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, false);
@@ -729,9 +757,8 @@ function enterUploadMode() {
   });
   passphraseInput.addEventListener('input', updateUploadBtn);
 
-  // ── TG-block: inject destroy toggle + tidal window into options card ─────────
-  // Inserted before the upload button row. All elements created here so Njk is
-  // untouched. IDs match the confirmed pre-code spec exactly.
+  // ── TG-block + TH-2: inject destroy toggle, tidal window, permanent-record
+  //    toggle into options card ──────────────────────────────────────────────
   _injectTransferOptions();
 
   uploadBtn.addEventListener('click', startUpload);
@@ -740,13 +767,15 @@ function enterUploadMode() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TG-block: inject transfer option controls into the options card
+// TG-block + TH-2: inject transfer option controls into the options card
 //
 // Called once from enterUploadMode(). Inserts:
 //   1. Destroy-after-download toggle row (all tiers)
 //   2. Amber sender notice (shown when toggle is on)
 //   3. Tidal window section — available-from / available-until pickers
 //      (paid tiers only; hidden entirely for Citizen / free)
+//   4. [TH-2] Permanent-record toggle row (paid tiers only; hidden for Citizen)
+//   5. [TH-2] Amber permanent-record notice (shown when toggle is on)
 //
 // Placement: immediately before the upload button wrapper div.
 // Datetime pickers use native input[type=datetime-local] — IBM Plex Mono,
@@ -788,7 +817,7 @@ function _injectTransferOptions() {
   });
 
   // ── 3. Tidal window — available-from / available-until ─────────────────────
-  // Hidden for Citizen (free) tier. Visibility set by _updateTidalVisibility()
+  // Hidden for Citizen (free) tier. Visibility set by _updatePaidFeaturesVisibility()
   // when a credential is issued (issuedTier is known). Default: hidden.
   const tidal = document.createElement('div');
   tidal.id = 'tidal-window-section';
@@ -834,15 +863,55 @@ function _injectTransferOptions() {
   // Clear tidal error on any picker change so stale messages don't linger.
   availableFrom.addEventListener('change', () => _clearTidalError());
   availableUntil.addEventListener('change', () => _clearTidalError());
+
+  // ── 4. [TH-2] Permanent-record toggle ─────────────────────────────────────
+  // Hidden for Citizen (free) tier. Revealed by _updatePaidFeaturesVisibility()
+  // once issuedTier is known. Default: hidden (same timing as tidal section).
+  // Label and description: spec-locked — no "notarise", no "blockchain".
+  const permanentRow = document.createElement('div');
+  permanentRow.className = 'mt16 hidden';
+  permanentRow.id = 'permanent-record-row';
+  permanentRow.innerHTML = `
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Permanent record</div>
+        <div class="toggle-desc">A Bitcoin-anchored date stamp is added to this transfer</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="permanent-record-toggle" />
+        <span class="slider"></span>
+      </label>
+    </div>`;
+  tidal.insertAdjacentElement('afterend', permanentRow);
+  permanentRecordToggle = $('permanent-record-toggle');
+
+  // ── 5. [TH-2] Amber permanent-record notice ────────────────────────────────
+  // Shown when toggle is on. Honest scope: proves when, not who.
+  // Spec-locked copy — do not edit without product confirmation.
+  const prNotice = document.createElement('div');
+  prNotice.id = 'permanent-record-notice';
+  prNotice.className = 'destroy-notice hidden'; // reuse destroy-notice amber style
+  prNotice.innerHTML = `<strong>This creates an unforgeable record that this file existed.</strong> The stamp is public — it proves when, not who.`;
+  permanentRow.insertAdjacentElement('afterend', prNotice);
+  permanentRecordNotice = prNotice;
+
+  permanentRecordToggle.addEventListener('change', () => {
+    permanentRecordNotice.classList.toggle('hidden', !permanentRecordToggle.checked);
+  });
 }
 
-// Show / hide tidal section based on issued tier.
+// ─────────────────────────────────────────────────────────────────────────────
+// TH-2: _updatePaidFeaturesVisibility(tier)
+// Replaces the former _updateTidalVisibility(). Shows/hides all paid-only
+// transfer options: tidal window section AND permanent-record toggle row.
 // Called from startUpload() once issuedTier is known.
 // free / citizen → hidden. sovereign / business / enterprise → visible.
-function _updateTidalVisibility(tier) {
-  if (!tidalSection) return;
+// ─────────────────────────────────────────────────────────────────────────────
+function _updatePaidFeaturesVisibility(tier) {
   const isPaid = tier && tier !== 'free' && tier !== 'citizen';
-  tidalSection.classList.toggle('hidden', !isPaid);
+  if (tidalSection) tidalSection.classList.toggle('hidden', !isPaid);
+  const permanentRow = $('permanent-record-row');
+  if (permanentRow) permanentRow.classList.toggle('hidden', !isPaid);
 }
 
 // Read picker values → unix integer seconds, or null if empty.
@@ -1286,7 +1355,13 @@ function renderTurnstile() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Upload flow
+// Upload flow — TH-2 changes:
+//   - generateSealNonce() when permanent-record toggle is on (Sovereign+)
+//   - Streaming BLAKE3 plaintext root via incremental h.update() per chunk
+//   - &sn={hex} embedded in fragment
+//   - sealNonceHex added to IDB record
+//   - runPermanentRecord() called after final chunk ACK, before showSharePanel()
+//   - Non-blocking status line on the progress card for OTS result
 // ─────────────────────────────────────────────────────────────────────────────
 async function startUpload() {
   if (!selectedFile) return;
@@ -1338,10 +1413,10 @@ async function startUpload() {
   uploadUUID = issuedUuid;
   const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
 
-  // ── TG-block: reveal tidal section now that tier is known ──────────────────
+  // ── TH-2 + TG-block: reveal paid-only features now that tier is known ───────
   // Must happen before the invariant check so the user can see (and correct)
   // any picker values if they pre-filled them before the credential was issued.
-  _updateTidalVisibility(issuedTier);
+  _updatePaidFeaturesVisibility(issuedTier);
 
   setStage('Uploading', 15);
   const expiryTimestamp = Math.floor(Date.now() / 1000) + FREE_EXPIRY;
@@ -1363,11 +1438,35 @@ async function startUpload() {
     return;
   }
 
+  // ── TH-2: permanent-record state ───────────────────────────────────────────
+  // permanentRecordToggle is only revealed for paid tiers, so a Citizen user
+  // with the toggle somehow checked would still produce sealNonceHex = null here
+  // because the toggle element defaults unchecked and is hidden. Belt-and-braces:
+  // guard on both isPaid AND toggle.checked.
+  const isPaidTier = issuedTier && issuedTier !== 'free' && issuedTier !== 'citizen';
+  const wantsPermanentRecord = isPaidTier && permanentRecordToggle && permanentRecordToggle.checked;
+  const sealNonceHex = wantsPermanentRecord ? generateSealNonce() : null;
+
+  // ── TH-2: streaming BLAKE3 plaintext root ──────────────────────────────────
+  // Incremental: one plaintext chunk hashed at a time — constant memory regardless
+  // of file size. blake3.createHash() is the incremental API (same as blake3Hash()
+  // uses internally). Only initialised when permanent record is wanted.
+  // After the loop, blake3PlaintextHash.digest('hex') gives the root.
+  const blake3PlaintextHash = wantsPermanentRecord ? blake3.createHash() : null;
+
   // Per-chunk upload with Safari timeout wrapper and 3× retry.
   const CHUNK_RETRY_DELAYS = [2000, 5000, 10000];
 
   for (let i = 0; i < totalChunks; i++) {
     const raw = await readChunk(chunks[i]);
+
+    // ── TH-2: update plaintext BLAKE3 root before encrypting ─────────────────
+    // raw is an ArrayBuffer of plaintext — this is the correct capture point.
+    // Update the incremental hasher; do not store raw (released after loop body).
+    if (blake3PlaintextHash) {
+      blake3PlaintextHash.update(new Uint8Array(raw));
+    }
+
     const aad = new Uint8Array(4);
     new DataView(aad.buffer).setUint32(0, i, false);
     const encrypted = await crypto.subtle.encrypt(
@@ -1448,7 +1547,8 @@ async function startUpload() {
     }
 
     // 200 ACK — persist chunk completion state to IndexedDB (RU1).
-    // RU1a: record now includes tier and expiryTimestamp for expiry-awareness on resume.
+    // RU1a: record includes tier and expiryTimestamp for expiry-awareness on resume.
+    // TH-2: sealNonceHex included so resume path can reconstruct fragment correctly.
     // Fire-and-forget: IDB write must never block the upload loop.
     writeChunkState({
       uuid:            uploadUUID,
@@ -1461,6 +1561,7 @@ async function startUpload() {
       tier:            'free',
       expiryTimestamp,
       timestamp:       Date.now(),
+      sealNonceHex:    sealNonceHex || undefined, // TH-2: absent for Citizen / no PR
     }).catch(() => {}); // already fire-and-forget inside writeChunkState, belt and braces
 
     setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
@@ -1469,15 +1570,41 @@ async function startUpload() {
   // Transfer complete — clear IDB resume record (no longer needed).
   clearResumeState(uploadUUID).catch(() => {});
 
+  // ── TH-2: fire permanent-record pipeline after final chunk ACK ─────────────
+  // Fire-and-forget: await the result but do not block the share panel on it.
+  // Surface result as a non-blocking status line on the progress card.
+  // blake3PlaintextRoot: finalise the incremental hasher here — all chunks read.
+  let permanentRecordOk = false;
+  if (wantsPermanentRecord && blake3PlaintextHash && sealNonceHex) {
+    setStage('Anchoring to Bitcoin', 97);
+    const blake3PlaintextRoot = blake3PlaintextHash.digest('hex');
+    const prResult = await runPermanentRecord(uploadUUID, blake3PlaintextRoot, sealNonceHex, sessionAesKey);
+    permanentRecordOk = prResult.ok;
+    if (!prResult.ok) {
+      reportError('permanent_record', prResult.error || 'unknown', `uuid:${uploadUUID.slice(0,8)}`);
+    }
+  }
+
   // Smooth finish: animate to 100%, hold 600ms, then transition to share panel
   setStage('Finalising', 98);
   await new Promise(r => setTimeout(r, 80));
   setStage('Done', 100);
-  progressDetail.textContent = 'Transfer complete';
+  // TH-2: show OTS status line alongside "Transfer complete"
+  if (wantsPermanentRecord) {
+    progressDetail.textContent = permanentRecordOk
+      ? 'Transfer complete — date seal submitted ✓'
+      : 'Transfer complete — date seal failed (transfer still available)';
+  } else {
+    progressDetail.textContent = 'Transfer complete';
+  }
   await new Promise(r => setTimeout(r, 700));
   progressCard.classList.add('hidden');
 
-  const fragmentStr = `uuid=${uploadUUID}&key=${keyHex}&iv=${ivHex}`;
+  // TH-2: include &sn= in fragment when permanent record was armed.
+  // seal_nonce lives in fragment only — never touches Worker or manifest.
+  const fragmentStr = sealNonceHex
+    ? `uuid=${uploadUUID}&key=${keyHex}&iv=${ivHex}&sn=${sealNonceHex}`
+    : `uuid=${uploadUUID}&key=${keyHex}&iv=${ivHex}`;
   const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, !!p2shHashHex);
@@ -1523,9 +1650,14 @@ function copyShareLink() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Download mode
+// Download mode — TH-2 additions:
+//   - Read timestamp_state from /meta response
+//   - Read sn= from fragment (seal_nonce)
+//   - After file assembly: if timestamp_state is 'pending'|'complete' and sn
+//     is present, fetch date-seal.ots.enc from Worker, decrypt with decryptOts(),
+//     offer as "date-seal.ots" download button in dlSignoff area.
 // ─────────────────────────────────────────────────────────────────────────────
-async function enterDownloadMode({ uuid, key, iv }) {
+async function enterDownloadMode({ uuid, key, iv, sn }) {
   dropZone.classList.add('hidden');
   infoCard.classList.add('hidden');
   optionsCard.classList.add('hidden');
@@ -1538,6 +1670,10 @@ async function enterDownloadMode({ uuid, key, iv }) {
   sessionIv      = new Uint8Array(ivBytes);
   history.replaceState(null, '', location.pathname);
 
+  // TH-2: sn (seal_nonce) from fragment — present only on permanent-record transfers.
+  // If absent, OTS download is skipped. Fragment-only by design.
+  const sealNonceHex = sn || null;
+
   // ── Fetch metadata from /meta/{uuid} ────────────────────────────────────
   let meta = {};
   try {
@@ -1548,6 +1684,10 @@ async function enterDownloadMode({ uuid, key, iv }) {
     showDownloadError('Network error — could not reach server.');
     return;
   }
+
+  // ── TH-2: capture timestamp_state from /meta (already available here) ────
+  const timestampState = meta.timestamp_state || 'none'; // 'none' | 'pending' | 'complete'
+  const hasOts = (timestampState === 'pending' || timestampState === 'complete') && !!sealNonceHex;
 
   // ── Populate receiver card ────────────────────────────────────────────────
   const fileName = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
@@ -1660,7 +1800,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
             downloadToken = token;
             unlockInput.value = '';
             unlockScreen.style.display = 'none';
-            await startDownloadGated(uuid, meta, willSelfDestruct);
+            await startDownloadGated(uuid, meta, willSelfDestruct, hasOts, sealNonceHex);
           } catch {
             unlockError.textContent = 'Network error. Try again.';
             unlockBtn.disabled = false;
@@ -1668,7 +1808,7 @@ async function enterDownloadMode({ uuid, key, iv }) {
         });
         unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
       } else {
-        await startDownloadGated(uuid, meta, willSelfDestruct);
+        await startDownloadGated(uuid, meta, willSelfDestruct, hasOts, sealNonceHex);
       }
     };
 
@@ -1684,8 +1824,9 @@ async function enterDownloadMode({ uuid, key, iv }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Download capability gate — routes to FSAA stream or Blob fallback
+// TH-2: passes hasOts and sealNonceHex through to both paths.
 // ─────────────────────────────────────────────────────────────────────────────
-async function startDownloadGated(uuid, meta, willSelfDestruct = false) {
+async function startDownloadGated(uuid, meta, willSelfDestruct = false, hasOts = false, sealNonceHex = null) {
   const hasFSAA = typeof showSaveFilePicker !== 'undefined';
 
   if (hasFSAA) {
@@ -1702,19 +1843,20 @@ async function startDownloadGated(uuid, meta, willSelfDestruct = false) {
         return;
       }
       reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
-      await startDownload(uuid, meta, willSelfDestruct);
+      await startDownload(uuid, meta, willSelfDestruct, hasOts, sealNonceHex);
       return;
     }
-    await startDownloadStream(uuid, meta, fileHandle, willSelfDestruct);
+    await startDownloadStream(uuid, meta, fileHandle, willSelfDestruct, hasOts, sealNonceHex);
   } else {
-    await startDownload(uuid, meta, willSelfDestruct);
+    await startDownload(uuid, meta, willSelfDestruct, hasOts, sealNonceHex);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FSAA streaming download — pipeline depth 2, per-chunk retry (3×, exp backoff)
+// TH-2: after file assembly, if hasOts, fetch and offer date-seal.ots.
 // ─────────────────────────────────────────────────────────────────────────────
-async function startDownloadStream(uuid, meta, fileHandle, willSelfDestruct = false) {
+async function startDownloadStream(uuid, meta, fileHandle, willSelfDestruct = false, hasOts = false, sealNonceHex = null) {
   const totalChunks = meta.total_chunks;
   if (!totalChunks || totalChunks < 1) {
     showDownloadError('Transfer metadata is incomplete. Please try again.');
@@ -1809,6 +1951,12 @@ async function startDownloadStream(uuid, meta, fileHandle, willSelfDestruct = fa
     dlBar.style.width = '100%';
     dlPct.textContent = '100%';
     uspBlock.classList.add('hidden');
+
+    // TH-2: fetch and offer date-seal.ots before showing signoff
+    if (hasOts) {
+      await _offerOtsDownload(uuid, sealNonceHex);
+    }
+
     dlSignoff.classList.remove('hidden');
     try { logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
     // TG-block: post-download confirm gate
@@ -1833,8 +1981,9 @@ async function startDownloadStream(uuid, meta, fileHandle, willSelfDestruct = fa
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Blob fallback download — browsers without FSAA support
+// TH-2: same OTS offer logic after file assembly.
 // ─────────────────────────────────────────────────────────────────────────────
-async function startDownload(uuid, meta, willSelfDestruct = false) {
+async function startDownload(uuid, meta, willSelfDestruct = false, hasOts = false, sealNonceHex = null) {
   const totalChunks = meta?.total_chunks;
   if (!totalChunks || totalChunks < 1) {
     showDownloadError('Transfer metadata is incomplete. Please try again.');
@@ -1916,10 +2065,83 @@ async function startDownload(uuid, meta, willSelfDestruct = false) {
   dlBar.style.width = '100%';
   dlPct.textContent = '100%';
   uspBlock.classList.add('hidden');
+
+  // TH-2: fetch and offer date-seal.ots before showing signoff
+  if (hasOts) {
+    await _offerOtsDownload(uuid, sealNonceHex);
+  }
+
   dlSignoff.classList.remove('hidden');
   try { logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
   // TG-block: post-download confirm gate
   if (willSelfDestruct) _showConfirmGate(uuid, !!downloadToken);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TH-2: _offerOtsDownload(uuid, sealNonceHex)
+// Fetches date-seal.ots.enc from the Worker, decrypts it with the session AES
+// key, and injects a download button into the dlSignoff area.
+//
+// Worker endpoint: GET /timestamp/seal/{uuid}
+// Response: raw binary blob = iv(12) ‖ ciphertext (same wire format as submitTimestamp)
+// Decryption: decryptOts(blob, sessionAesKey) → Uint8Array (plaintext .ots bytes)
+//
+// The button triggers a browser download of the plaintext as "date-seal.ots".
+// If the fetch or decryption fails, the button is omitted silently — no error
+// shown to the recipient (the file download already succeeded; the OTS is bonus).
+//
+// Note: sessionAesKey must remain extractable=false (importKey with extractable=false)
+// for this to work — decryptOts only needs to call subtle.decrypt, not exportKey.
+// Confirmed: enterDownloadMode() imports with extractable=false, which is fine.
+// ─────────────────────────────────────────────────────────────────────────────
+async function _offerOtsDownload(uuid, sealNonceHex) {
+  if (!uuid || !sealNonceHex || !sessionAesKey) return;
+
+  let otsBytes;
+  try {
+    const res = await fetch(`${WORKER_URL}/timestamp/seal/${uuid}`);
+    if (!res.ok) {
+      reportError('ots_fetch', `HTTP ${res.status}`, `uuid:${uuid.slice(0,8)}`);
+      return;
+    }
+    const raw = await res.arrayBuffer();
+    const blob = new Uint8Array(raw);
+    otsBytes = await decryptOts(blob, sessionAesKey);
+  } catch (e) {
+    reportError('ots_decrypt', e.message, `uuid:${uuid.slice(0,8)}`);
+    return;
+  }
+
+  // Inject download button into dlSignoff area, before the existing signoff content.
+  const otsWrap = document.createElement('div');
+  otsWrap.className = 'ots-download-wrap mt8';
+
+  const otsBtn = document.createElement('button');
+  otsBtn.type = 'button';
+  otsBtn.className = 'btn btn-secondary btn-small';
+  otsBtn.textContent = '⬇ date-seal.ots';
+  otsBtn.title = 'Download the Bitcoin-anchored date stamp for this transfer';
+
+  otsBtn.addEventListener('click', () => {
+    const otsBlob = new Blob([otsBytes], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(otsBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'date-seal.ots';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  });
+
+  otsWrap.appendChild(otsBtn);
+
+  const otsNote = document.createElement('p');
+  otsNote.className = 'muted small mt4';
+  otsNote.textContent = 'Verify with opentimestamps.org — proves when this file existed, not who sent it.';
+  otsWrap.appendChild(otsNote);
+
+  dlSignoff.insertAdjacentElement('beforebegin', otsWrap);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
