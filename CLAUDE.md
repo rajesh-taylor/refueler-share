@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.0 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** TH-Opus-1 · 5 Sep 2026
+> **Version:** 2.1 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-JS-Refactor · 6 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -35,23 +35,33 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 
 BLAKE3 is not the auth layer. Cashu is not the hashing layer. SHA-256/OTS is not the integrity layer and never enters the Worker.
 
+**Frontend module structure (post Share-JS-Refactor · 6 Sep 2026):**
+- `frontend/share.js` — entry point, DOM refs, shared state, mode detection
+- `frontend/crypto.js` — AES-GCM, BLAKE3, NUT-00, SHA-256, helpers, config constants
+- `frontend/upload.js` — upload state machine, IDB resume, folder handling, zip, Turnstile
+- `frontend/download.js` — download state machine, OTS offer, TG receiver helpers
+- `frontend/timestamp.js` — OTS pipeline (born TH-1, always separate)
+
+All five are `type="module"`. Do not collapse back into a single file.
+
 ---
 
 ## Locked decisions
 
 - **Lightning provider: LNbits on Hetzner CAX21. Locked pre-Opus-2 · 28 Aug 2026.** Applies to all Refueler projects (Share, refueler.io POS, Relay, Refill). Blink discontinued custodial accounts UK Aug 31 2026 — dead as a provider. Voltage eliminated (US company, invoice metadata visible to third party, incompatible with compulsion-resistance framing). Strike eliminated (custodial, FCA-dependent). No other candidates.
-- **Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026 (AI-assisted infrastructure probing). Blockstream Swaps exists as a potential replacement but is irrelevant to this stack: liquidation destination is a Silent Payments address, which receives on-chain BTC directly. No swap service is required in the liquidation path.
-- **Node bootstrap is B7 pre-work, not B9.** Timeline: 3–4 weeks deliberate pace including Opus planning sessions. Pre-server work available immediately (see Share-Master-Context.md §B7 notes). No dark provisioning — instance goes live only when runbook is ready and test suite passes.
+- **Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Liquidation destination is a Silent Payments address, which receives on-chain BTC directly. No swap service required.
+- **Node bootstrap is B7 pre-work, not B9.** No dark provisioning — instance goes live only when runbook is ready and test suite passes.
 - No custodial wallet. Payment settled via self-hosted LNbits.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
-- Content-Type header is validated against a denylist of execution-capable types at the upload boundary. The Worker cannot verify payload content — the header check reflects declared intent only. The MIME type is never stored.
+- Content-Type header validated against execution-capable denylist at upload boundary. Header check reflects declared intent only. MIME type never stored.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
-- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`,
-  `frontend/share.js`, `frontend/upgrade.css` only (extracted S51).
+- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
-- **Sovereign storage cap: 100 GB. Locked TH-Opus-1.** Previously 250 GB — revised before any published copy. Business/API: 250 GB + pay-per-GB overage (invoiced). No legacy subscribers affected.
+- **Sovereign storage cap: 100 GB. Locked TH-Opus-1.** Business/API: 250 GB + pay-per-GB overage (invoiced). No legacy subscribers affected.
 - **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
+- **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
+- **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
 
 **API / white-label locked decisions (AP-2/AP-3a):**
 - HMAC signing: every API request signed with HMAC-SHA256 over `method + path + timestamp + body_hash`.
@@ -61,27 +71,20 @@ BLAKE3 is not the auth layer. Cashu is not the hashing layer. SHA-256/OTS is not
 - DO NOT use Cloudflare Queues, Durable Objects, or D1 for webhook delivery or any other purpose. `ctx.waitUntil` + KV dead-letter only.
 - Badge links to `refueler.io/share/`.
 - Business tier = invoiced. No Stripe subscription price object for Business — invoice template only, managed manually in Stripe dashboard, off-repo.
-- `X-Email` header dropped from upload path entirely — snag resolves by removal.
+- `X-Email` header dropped from upload path entirely.
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
-- `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html` (conflicts with site root index).
+- `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html`.
 - `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Never produce index.njk as a download — always edit via sed directly on `refueler-io/src/share/index.njk`.
 
 **BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
 Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
-`blake3_worker.js`. 400 on hash mismatch. This claim is safe to assert with correct scope
-(server-side chunk integrity). Full Merkle root verification (assembled file vs BLAKE3 tree root)
+`blake3_worker.js`. 400 on hash mismatch. Full Merkle root verification (assembled file vs BLAKE3 tree root)
 remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 
-**Integrity/audit marketing claims — current ruling (S42e):**
-- ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase
-  ledger. Rate limiting on all public endpoints. UUID-bound credential issuance (Worker precursor
-  to NUT-20).
-- ✅ **Safe to assert (TH-Opus-1+):** Permanent record (Bitcoin-anchored existence proof) for
-  Sovereign+ transfers where sender opts in. Honest scope: proves bytes existed on or before a
-  block date. Does not prove authorship, truth, or delivery.
-- 🔒 **Still blocked:** Full Merkle tree verification. NUT-11 Mode 2 (keypair auth).
-  "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim
-  without the Merkle qualifier. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
+**Integrity/audit marketing claims — current ruling (S42e + TH-series):**
+- ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase ledger. Rate limiting on all public endpoints. UUID-bound credential issuance.
+- ✅ **Safe to assert (TH-series+):** Permanent record (Bitcoin-anchored existence proof) for Sovereign+ transfers where sender opts in. Honest scope: proves bytes existed on or before a block date. Does not prove authorship, truth, or delivery.
+- 🔒 **Still blocked:** Full Merkle tree verification. NUT-11 Mode 2 (keypair auth). "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim without the Merkle qualifier. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
 - 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 (whitepaper + Merkle) → B10 (ML-KEM).
 
 ---
@@ -91,9 +94,18 @@ remains unimplemented — do not claim end-to-end file integrity until B9 audit.
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**TG-block ✓ complete (commit `18d2157`, 432 tests passing). TH-Opus-1 ✓ (5 Sep — Tower Hill / Permanent Record scoped).**
-**Next: TH-Opus-2 (Pass + Legend scoping — Legend price, cross-product entitlement architecture).**
-Locked block sequence (AP-10): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`. See Share-Master-Context.md §Roadmap + §TH-series + §SD-block.
+**TH-block ✓ complete (6 Sep 2026):**
+- TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped
+- TH-Opus-2 ✓ — Legend price locked (£50/mo · £600/yr starting price). Cross-product entitlement architecture locked. Legend native verifier locked. Pass timestamping pattern locked. BRIDGE v8.0.
+- TH-1 ✓ — Worker OTS relay, `POST /timestamp/submit`, `date-seal.ots.enc` on all deletion paths. Deployed `a71f12fe`.
+- TH-2 ✓ — Permanent-record toggle UI, `seal_nonce`, `blake3PlaintextRoot`, `runPermanentRecord()`, download OTS offer, `GET /timestamp/seal/:uuid`. Deployed `53e3c7fb`.
+- Share-JS-Refactor ✓ — `share.js` split into `crypto.js` / `upload.js` / `download.js` / entry `share.js`. Deployed `45a4d3b3`. 324 tests passing.
+
+**Next: naming/copy session** — tier names on plans page, upgrade page, any residual old-tier-name references, "Burns after reading" copy decision.
+**Then: Stripe objects session** — price object description updates to match Citizen/Sovereign.
+**Then: SW white-label block** — HMAC signing, credential issuance endpoint, webhook delivery.
+
+Locked block sequence (AP-10): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series ✓ → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
@@ -107,7 +119,7 @@ the first session of a group — never skipped. See Share-Master-Context.md §B7
 never deploys. Combine into one command:
 
 ```
-git commit -m "TH-Opus-1: description" && git push
+git commit -m "message" && git push
 ```
 
 Rajesh consistently forgets the push step. Claude must always include `&& git push` in the
@@ -131,8 +143,7 @@ This is not optional.
 - §B-n snag list: remove fully resolved items. Carried items only.
 - Target: under 350 lines at all times.
 
-**Applies to:** S87 (B7) · SW9 (SW) · then B8, B9, B10, B11, B12 close sessions
-(renumber after B7 close — check Share-Master-Context.md §Roadmap for current numbers).
+**Applies to:** SW9 (SW) · then B8, B9, B10, B11, B12 close sessions.
 Also apply at any session where either file exceeds its target line count mid-block.
 
 ---
