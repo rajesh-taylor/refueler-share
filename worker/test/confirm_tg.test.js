@@ -328,9 +328,10 @@ describe('handleConfirmTransfer', () => {
     await ctx.flush();
 
     // Both chunks should be deleted
-    expect(env.BUCKET.delete).toHaveBeenCalledTimes(2);
+    expect(env.BUCKET.delete).toHaveBeenCalledTimes(3);
     expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/0000`);
     expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/0001`);
+    expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/date-seal.ots.enc`);
 
       // Tombstone written — putManifest is mocked, verify it was called
     const { putManifest } = await import('../src/manifest.js');
