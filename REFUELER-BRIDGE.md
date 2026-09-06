@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.0 | **Created:** 28 July 2026 | **Updated:** TH-Opus-2 · 2026-09-06
+> **Version:** 8.1 | **Created:** 28 July 2026 | **Updated:** TH-0 · 2026-09-06
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -174,6 +174,7 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 | **S-TG-4a/4b · 5 Sep 2026** | refueler-share, refueler-io | TG-4 complete: `handleExecutionDock` + `GET /admin/execution-dock` + `dock_index` KV write + `handleOwnerDelete`. Execution Dock KPI card in System Summary. BRIDGE v7.1. |
 | **S88 · 4 Sep 2026** | refueler-share | Silent Drop full design session (Opus). All SD-block decisions locked. BRIDGE v7.0. |
 | **TH-Opus-2 · 6 Sep 2026** | all repos | **Tower Hill — Legend price locked. Cross-product entitlement architecture locked. Legend native verifier design locked. Pass timestamping pattern locked. Monument / ti-fectar introduced.** See §TH-Opus-2 decisions below. BRIDGE v8.0. |
+| **TH-0 · 6 Sep 2026** | refueler-share | **OTS bundle spike — javascript-opentimestamps killed (601 KB gzipped, no fetch path). Hand-rolled approach confirmed GO.** Calendars reachable (2/2 from host; Cloudflare egress to confirm at TH-1 start). Round-trip clean. Committed-value construction identified as load-bearing for Legend verifier and Pass hashlock: `SHA-256(blake3_root \|\| url_fragment_nonce)`. Share×Pass×Legend three-product proof-of-receipt primitive identified — see §Share×Pass×Legend forward note. BRIDGE v8.1. |
 
 ---
 
@@ -196,6 +197,7 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 - **[Legend]** UC-9 Opus session — Recovery Coordination Layer. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
 - **[Legend] Create Stripe product/price objects for Legend: £50/mo + £480/yr** — at Legend subscription flow build session.
 - **[Share] Add `LEGEND_ENTITLEMENT_PUBKEY` Worker secret** — at Legend cross-product entitlement build session (post-Legend subscription flow live).
+- **[Share] Run TH-Opus-3a + TH-Opus-3b (Opus, Share project)** before TH-1 build session — stress-test committed-value construction, Pass hashlock forward note, privacy model, whitepaper treatment. Two sessions. See §Share×Pass×Legend forward note.
 
 ---
 
@@ -273,7 +275,7 @@ When a Legend subscription settles (Stripe rail or Lightning rail), Legend issue
   "tier": "sovereign",
   "cap_gb": 100,
   "api": false,
-  "period_end": <unix_timestamp>,
+  "period_end": "<unix_timestamp>",
   "voucher_id": "<random>",
   "bind_pubkey": null,
   "sig": "<Legend issuer secp256k1 signature>"
@@ -340,6 +342,34 @@ When a Legend subscription settles (Stripe rail or Lightning rail), Legend issue
 ### Composes with Nutroot (forward note)
 
 The keyset epoch seal composes naturally with Nutroot (NUT-10 v3 PR #421): timestamping an epoch seals *when the spending conditions were fixed*, making them un-backdatable. Design to compose when Nutroot ships — do not take a dependency on it. Monitor status at B8 design session.
+
+---
+
+## Share × Pass × Legend — Nutroot hashlock forward note (TH-0 · 6 Sep 2026)
+
+**Status: not a build item. B8/B12 territory, gates on Nutroot PR #421 merge + NUT-11 Mode 2 live.**
+
+The OTS committed value chosen at TH-1 — `SHA-256(blake3_root || url_fragment_nonce)` — is structurally identical to a Nutroot `hashlock` leaf preimage. This is not a coincidence. It is the correct design revealing itself from three directions simultaneously: privacy (opaque to non-URL-holders), integrity (BLAKE3 root composes with OTS into one receipt), and interoperability (preimage shape matches Nutroot hashlock).
+
+**The three-product proof-of-receipt flow:**
+
+1. **Share** stamps the transfer: computes `commitment = SHA-256(blake3_root || url_fragment_nonce)`, submits to OTS calendar via Worker relay, stores pending `.ots` in R2. Also issues a Pass credential (Nutroot token) with two leaves:
+   - `hashlock` leaf: lock = `SHA-256(commitment)`. Spendable only by whoever reveals `commitment` itself.
+   - `after` leaf: minimum Bitcoin block height for confirmation (e.g. current tip + ~6 blocks ≈ 1 hour forward).
+
+2. **Legend** verifies the OTS proof. When the Bitcoin block seal is confirmed, Legend has traversed the Merkle path from `commitment` to the attested block. It returns the `commitment` value to the credential holder (who already knows it — it's derived from their file + URL). The `hashlock` is satisfied. The `after` leaf is satisfied once the block height is met.
+
+3. **Pass** accepts the credential with both leaves satisfied and executes whatever the policy specifies: unlock a document vault, release a payment, grant access, countersign a certificate. The Refill app surfaces the credential state to the holder — locked until Legend confirms, then unlocked.
+
+**The concrete use case:** a barrister sends a settlement agreement via Share. The OTS proof is issued as a Pass credential with policy encoded in Nutroot leaves: binding only if the counterparty demonstrates receipt before the settlement deadline block height. No notary. No DocuSign. Verified against Bitcoin. The recipient's Refill app shows the credential as locked pending Legend's confirmation. On confirmation: the credential unlocks and the policy executes. Westminster passes it. Temple verifies it. The Tower stamped it. Three products, one flow, no intermediary.
+
+**Why this matters for TH-1:** the committed value construction `SHA-256(blake3_root || url_fragment_nonce)` must not be changed after TH-1 without re-evaluating this entire flow. If TH-1 chooses `SHA-256(raw_file)` instead, the privacy model breaks (file content linkable) and the hashlock preimage no longer derives from something the recipient uniquely holds (the URL nonce). The construction is load-bearing for all three products.
+
+**Build dependency chain:** TH-1 locks the preimage shape → B8 builds NUT-11 Mode 2 (Locke) → Pass planning session (Q4 2026) designs Nutroot credential with hashlock using this preimage shape → B12 builds FROST + Nutroot → three-product flow becomes operational.
+
+**Whitepaper treatment (B9):** §Future work. One paragraph. Do not claim it is built. State the primitive and the dependency chain honestly.
+
+**Do not raise this in Pass planning session without first confirming Nutroot PR #421 status.** If Nutroot has not merged by Q4 Pass planning, the hashlock leaf is theoretical — note it, do not design around it.
 
 ---
 
@@ -468,8 +498,7 @@ Locked editorial atoms for whitepaper, articles, and presentations. None of thes
 | **Pepys's cheese** | On 1 September 1666 Pepys buried "my Parmazan cheese as well as my wine and some other things" in a pit in his garden at the Navy Office, Seething Lane, to protect them from the approaching Great Fire. He believed obscurity protected his records (Shelton's tachygraphy shorthand). His diary was deciphered in 1819 by John Smith — working from the manuscripts for three years without realising a key to the shorthand was on the same library shelf. **Fact-check required:** the Four Seasons / Ten Trinity Square renovation claim is unverified — the Navy Office was on Seething Lane (~300m from Ten Trinity Square). Use the Seething Lane burial only. | Article on security through obscurity (Pepys, 1665) vs cryptographic security (today). "Pepys buried his cheese because he trusted the ground more than the street. We bury your files in cryptography for the same reason." |
 | **Penn / Bushel's Case** | William Penn baptised at All Hallows by the Tower, 1644. Penn-Mead trial, 1670 — jury refused to convict despite the judge threatening them with starvation and imprisonment. Established jury independence as a constitutional principle (Bushel's Case). "You cannot compel conscience." Penn founded Pennsylvania. | Whitepaper preamble / compulsion argument. "What no court could extract from Penn's jury, our architecture makes architecturally impossible." |
 | **JQA at All Hallows** | John Quincy Adams (6th US President) married at All Hallows by the Tower in 1797, while serving as US Minister to the Netherlands. Son of John Adams (2nd President) — one of only two father-son presidential pairs in US history. Both exceptional correspondents and diarists. JQA kept 51 volumes. | American audience presentations. btc++ Berlin (October 2026). |
-| **Cibber frieze / Monument** | The Monument west frieze designed by Robert Hooke FRS in consultation with Wren (Hooke's credit understated). Sculpted by Caius Gabriel Cibber (released daily from debtors' prison to sculpt, returning each night). Liberty holds the pileus — not wears it. Masonic symbols in frieze (square and compass in Architecture's hand). Monument sits on Candlewick/Bridge Ward boundary. Monument height = distance to Pudding Lane bakery origin (202ft). Shaft housed a zenith telescope. Six people have jumped from it (more than the Great Fire's confirmed fatalities of six). | Whitepaper Four Liberties section. Monument is in Candlewick Ward — Merchant territory (fire was mercantile catastrophe, rebuilding a mercantile act). Never claimed as Share territory. |
-| **EIC — the named villain** | East India Company (chartered 1600, East India House, Leadenhall Street, ~600m from Tower). Own army 260,000 men at peak — twice the British Army. Cipher dispatches London-India not readable by Crown. All EIC goods declared at Custom House, adjacent to Tower. The model was inherited from the Muscovy Company, chartered 1555 — the first English joint-stock entity, whose agents in Moscow operated under their own laws, exempt from Russian jurisdiction; Muscovite Street, a five-minute walk from Leadenhall, still carries the name. The EIC refined the template: a private surveillance and compulsion apparatus, incorporated, with directors who could be summoned, operating from a fixed address. That is the architecture Refueler is structurally opposed to. **The villain is not a foreign power or a criminal. It is a company. Chartered. Legal. With paperwork.** The horror is that it happened incrementally, institutionally — until it had an army twice the size of the state's and the state came to it for information. Refueler removes the address. There is nobody to summon. | Whitepaper §Compulsion argument (the named villain); closed-door pitches; btc++ Berlin. Never in product UI or marketing copy. The contrast line: "The EIC had an address. We don't. The EIC had directors. We don't. The EIC declared at Custom House. The Royal Mint is blind." |
+| **EIC as villain** | East India Company — the original surveillance-as-business-model. Extraterritorial jurisdiction, private army, monopoly on information as much as trade. Leadenhall Street (HQ) is five minutes north of the Tower. The four Liberties are where the monopoly's reach was limited. Named villain in whitepaper and closed-door pitch only — never product copy. | Whitepaper §compulsion / §historical. Closed-door pitch framing. |
 | **Tower Subway** | Opened August 1870, north entrance at Petty Wales. First subterranean tunnel under Thames. Cable-hauled single carriage, 12 passengers max. Fares: 1d first class, ½d second. Closed within 4 months (unreliable). Converted to pedestrian use — 1 million/year at ½d. Superseded by Tower Bridge (1894, free). Original entrance demolished 1926; stumpy brick tower replacement visible. Oral history from former Tiger Tavern (now Starbucks) barman: tunnel from the Tower itself ran to that corner — used by Elizabeth I and Yeoman Warders. **Oral history, not documented fact.** | Legend brand narrative: hidden infrastructure beneath the visible surface. "There are things moving under this city that don't appear on the map." |
 | **Beating of the Bounds** | Ancient ceremony where parish boundaries were physically walked, with willow wands used to strike boundary markers. Required because boundaries existed only in the memory of those who had walked them — before maps, there was no other record. The City of London still performs it. | B9 security audit framing (walk every system boundary). Article: boundary knowledge as embodied memory — the key has the same property. You either have it or you don't. |
 | **Freedom of the City / impressment** | The Freedom of the City of London, granted at Guildhall since c.1237, conferred exemption from the press gang. A Freeman could not be seized and forced into naval or military service against his will. The legal mechanism was a credential — issued by the Guildhall Chamberlain's Court, presented at the moment of compulsion, that the press gang was required to honour. This is NUT-11 P2PK in 1650: a credential bound to a person, resistant to state compulsion by architecture rather than by policy. Trade without toll is the secondary privilege — Freeman could move value through the City gates without paying. Both privileges derive from the same instrument: a credential that changes what the state can do to you. | Whitepaper §Compulsion argument and §Permission model. Pairs with Penn/Bushel's Case (conscience) and the EIC villain arc (the institution that had no such constraint). Tightens the Guildhall geography: Guildhall doesn't merely keep records — it issues the credential that protects you from the state. |
@@ -589,7 +618,7 @@ Gives Cashu tokens programmable spending conditions expressed as a Taproot-inspi
 
 | Product | Application | Priority |
 |---|---|---|
-| **Pass** | `threshold` (M-of-N entry, e.g. VIP+standard), `after` (time-gated access windows), `hashlock` (QR redemption gate = reveal preimage). Atomic batch issuance for event cohorts via transaction transcript. Keyset epoch timestamping composes with nutroot: sealing *when the spending conditions were fixed* makes them un-backdatable. | High — design Pass architecture around nutroot leaves, not custom logic |
+| **Pass** | `threshold` (M-of-N entry, e.g. VIP+standard), `after` (time-gated access windows), `hashlock` (QR redemption gate = reveal preimage). Atomic batch issuance for event cohorts via transaction transcript. Keyset epoch timestamping composes with nutroot: sealing *when the spending conditions were fixed* makes them un-backdatable. **Hashlock preimage candidate: `SHA-256(blake3_root \|\| url_fragment_nonce)` from Share OTS committed value — see §Share×Pass×Legend forward note.** | High — design Pass architecture around nutroot leaves, not custom logic |
 | **Merchant** | NUT-18/26 delta: nutroot payment request option `(k, l, b)` in `creqB` under TLV `0x0b`. Conditional POS settlement (threshold: merchant confirm + customer spend; after: expiry). NUT-28 positional sender slots enable merchant attribution with customer privacy intact. | High — Note/Clearance model maps cleanly |
 | **Share** | `threshold` leaves replace planned FROST complexity for B12 M-of-N credential issuance. `after` leaves are the native primitive for "recovery window / pay-to-extend" (B9 §Future work). NUT-22 BATs may supersede NUT-11 Mode 2 planned implementation — **review NUT-22 spec before B8 design session is locked.** | Medium — NUT-11 Mode 1 unaffected |
 
