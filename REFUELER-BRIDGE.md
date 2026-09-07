@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.4 | **Created:** 28 July 2026 | **Updated:** SW-Opus-2 · 2026-09-07
+> **Version:** 8.5 | **Created:** 28 July 2026 | **Updated:** SW-Opus-3 · 2026-09-07
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -155,6 +155,8 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 | **TH-Opus-2 · 6 Sep 2026** | all repos | **Tower Hill — Legend price locked. Cross-product entitlement architecture locked. Legend native verifier design locked. Pass timestamping pattern locked. Monument / ti-fectar introduced.** See §TH-Opus-2 decisions below. BRIDGE v8.0. |
 | **TH-0 · 6 Sep 2026** | refueler-share | **OTS bundle spike — javascript-opentimestamps killed (601 KB gzipped, no fetch path). Hand-rolled approach confirmed GO.** Calendars reachable (2/2 from host; Cloudflare egress to confirm at TH-1 start). Round-trip clean. Committed-value construction identified as load-bearing for Legend verifier and Pass hashlock: `SHA-256(blake3_root \|\| url_fragment_nonce)`. Share×Pass×Legend three-product proof-of-receipt primitive identified — see §Share×Pass×Legend forward note. BRIDGE v8.1. |
 | **SW-Opus-1 · 7 Sep 2026** | refueler-share + all repos | **Platform API + white-label architecture locked.** Three-tier model confirmed (Citizen / Sovereign / API — Business + Enterprise demolished). Sovereign Teams → SW-Opus-2. Rail model extended to API tier: identity rail (Stripe/invoice) and anonymous rail (Lightning/sats) mutually exclusive per relationship; rail declared by principal at onboarding, never inferred from payment. Mandatory pre-payment disclosure of both irreversibles (account loss + prepaid balance loss) locked for four surfaces: user agreement, initial call/email, website. Model B (platform credit pool) selected — only model that survives the anonymous rail. Two substrates: identity rail = server ledger; anonymous rail = client-held bearer Cashu credit tokens. Rate card versioned per product. Term protection = identity-rail feature only. API v1 features: capability discovery, OTS-confirmation webhook, acceptance + collection receipts. "Proof of delivery" retired as a phrase. API v2 features gated per dependency. MCP v1 tools: `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote` — MCP runs in agent's trust domain, handles ciphertext only (invariant). Policy-encoded transfers locked as Nutroot three-product forward commitment. BOLT12 locked as B9+ forward commitment; credit-issuance contract must accept arbitrary-amount pay-then-mint. Sandbox: credential-limited, no time cap, both rails, `rfs_test_` prefix. BRIDGE v8.3. |
+| **SW-Opus-2 · 7 Sep 2026** | all repos | **Unit economics, rate-card v1.0, GBP invoicing policy, credit blocks, margin model, treasury policy, Sovereign Teams structure, GTM reframe, rate-card notification wording. BRIDGE v8.4.** |
+| **SW-Opus-3 · 7 Sep 2026** | all repos | **Identity-API access fee locked (flat £99 / Professional £249 defined-but-unbuilt, banded on service level not allowance, both prices subject to review). DPA mandatory for all identity-rail clients by default; Refueler provides standard Art. 28 addendum; client-paper review gated to Professional band. GDPR framing narrowed: anonymous rail = controller-of-metadata, not "outside GDPR." AM role defined: onboarding call, rail-declaration sign-off, DPA coordination, security-incident notification, Raven canary explanation, quarterly usage review, rate-card change notification; AM function named in agreement, personal name at onboarding only, no SLA. Four-surface pre-payment disclosure wording locked (both rails, bracketed placeholders slot at SW7). SW table in share-sessions.md overwritten to match Master-Context. IT handover PDF session dropped by intent. SW1 confirmed ready. BRIDGE v8.5.** |
 
 ---
 
@@ -179,7 +181,12 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 - **[Share] Add `LEGEND_ENTITLEMENT_PUBKEY` Worker secret** — at Legend cross-product entitlement build session (post-Legend subscription flow live).
 - ~~**[Share] Run TH-Opus-3a + TH-Opus-3b**~~ ✅ TH-series complete · 6 Sep 2026.
 - **[Share] Run SW-Opus-2** before SW build sessions — unit economics, rate-card numbers, Sovereign Teams sizing, family office GTM. See SW-Opus-1 decisions in CLAUDE.md.
-- **[Share / AM] Pre-payment disclosure — four surfaces.** Mandatory plain-language disclosure of both irreversibles (account loss + prepaid balance loss on anonymous rail) must appear in: (1) user agreement docs; (2) initial client call/meeting (Rajesh/AM); (3) follow-up email; (4) website. Coordinate before first API client relationship opens. Rail is declared by principal before AP handoff — AP never touches the product decision.
+- **[Share / AM] Pre-payment disclosure — four surfaces. ✅ Wording locked SW-Opus-3.** Both rails. Bracketed placeholders ([recovery credential], [anonymous standing-receive]) slot at SW7. Principal must declare rail before AP is involved — one-way door. Anonymous rail: "signed digital tokens held by client," never "ecash" in client-facing copy.
+- **[Share / AM] Accountant-arrival disclosure.** Add to identity-rail initial-call talking points and follow-up email: principal must declare rail before sharing payment details with accounts team. Fiat payment arriving after rail is locked does not flip the rail — but creates a paper trail pointing at an anonymous-intent service. Decision sequencing is the privacy protection.
+- **[All products / Legend] Legend node costs.** When Legend infrastructure is scoped: attribute a share of node operating costs to Share and Pass, both of which depend on Legend for OTS verification and block queries. Accounting convention for margin model — resolve at Legend scoping Opus.
+- **[Legend / pricing] Pleb-Bitcoiner design principle.** Free tier must be genuinely useful, not a nag screen. Sovereign tier priced for Bitcoin conviction, not compliance budget. API is where commercial weight sits. Lock formally at Legend planning session and Pass-Vocab-2.
+- **[Share] Engage solicitor for standard Art. 28 DPA addendum** before first identity-API client. Priority review items: §4 (no-uptime SLA) and §5 (DPA). Client-paper review (bespoke DPA) is a Professional-band service, not included at £99.
+- **[Share] SW table in share-sessions.md** — overwrite to Master-Context version. ✅ Confirmed SW-Opus-3.
 - **[Share vocabulary track] API/MCP whitepaper atom descriptors.** , / need London-register naming before B9 whitepaper. Not urgent — allocate at a naming session.
 
 ---
@@ -741,6 +748,90 @@ phoenixd already supports BOLT12 — no new infrastructure. SW constraints that 
 Credential-limited, no time cap. Model-B test-credits; both rails walkable with real HMAC. `rfs_test_`-prefixed keys (never `rfs_live_` or `rfs_sign_` in test files — GitHub scanner). Non-anonymous by design (observable for debugging) — "do not send real cargo to the sandbox" stated plainly in the sandbox itself.
 
 ---
+## SW-Opus-3 decisions — locked 7 Sep 2026
+
+### Identity-API access fee
+
+**Flat £99/month at launch.** Covers: named account contact; email support (business hours, async, best-effort — not a hotline); itemised dashboard access; DPA addendum (standard, default, not opt-in); capability discovery (free per rate card); OTS-confirmation webhook (free, bundled). One invoice line in normal operation. Metered sat usage is an abuse ceiling, not a billing mechanism — at v1.0 prices, realistic identity-rail clients (law firm, GP clinic) generate <£3/month metered equivalent; treat identity-rail revenue as access-fee-only for planning purposes.
+
+**Professional £249/month** — defined, not built. Activates when a real client requests: priority support, custom webhook retry policy, additional AM time, or review of client's own bespoke DPA paper. No second Stripe object until a client pulls it into existence. Both prices subject to upward review as Legend node infrastructure costs are attributed across products.
+
+**Invoicing cadence:** access fee monthly in advance + metered reconciliation on same invoice monthly in arrears. One invoice, two possible line items. Second line reads £0.00 for essentially all v1 clients.
+
+**Annual rate-card lock:** identical per-month rate (Mullvad rule), 12-month rate-card version lock. Term protection is identity-rail feature; monthly gets 30 days' notice. Anonymous rail: current card always.
+
+### DPA
+
+**Mandatory by default for every identity-rail API client.** Not opt-in, not self-certified. Refueler provides a short standard Art. 28 addendum (controller-to-processor or processor-to-sub-processor depending on role). Signable via DocuSign or wet ink. Client-paper review (bespoke DPA) is a Professional-band service — not included at £99.
+
+**Solicitor must draft standard addendum before first identity-API client.** Priority review items: §4 (no-uptime SLA) and §5 (DPA). Engage before first Business-tier client.
+
+### GDPR framing — anonymous rail (narrowed from "outside GDPR")
+
+> On the anonymous rail Refueler establishes no identity, no account, no email, and no database row for the client, and enters no controller-processor relationship — so no Art. 28 DPA counterparty exists and none is required. Refueler's only GDPR footprint on this rail is as controller of minimal service metadata (IP, file size, chunk count, timestamps) under its own privacy notice, on a legitimate-interest basis (security/abuse prevention), minimally retained. Users wanting to remove IP from that footprint tunnel their own VPN — the standing Mullvad recommendation.
+
+Use this wording in the user agreement and whitepaper threat model. Not "outside UK GDPR."
+
+### AM role
+
+**Who:** Rajesh for first 3–6 months. Presented under founder's name — not dressed as a team. "Your account contact is the founder" is a trust feature for sensitive-data clients.
+
+**Scope:** onboarding call; rail-declaration sign-off; DPA coordination; security-incident notification (AM is the named human who delivers breach notification); Raven canary explanation at onboarding (client understands absence = compromise); quarterly usage review; rate-card change notification.
+
+**Out of scope explicitly:** uptime SLA, 24/7 availability. Async, business-hours, best-effort. Guards §4.
+
+**In agreement:** AM function named ("each identity-API client has a named account contact"). Personal name delivered privately at onboarding — not on the public website.
+
+### Pre-payment disclosure wording — locked (both rails, four surfaces)
+
+Bracketed placeholders slot at SW7: `[recovery credential]` and `[anonymous standing-receive]`.
+"Ecash" never appears in client-facing copy. Use: "signed digital tokens held by you."
+
+#### Identity rail
+
+**User agreement (legal register)**
+> The identity rail provides a recoverable account, invoiced billing in pounds sterling, and a data-processing agreement. In exchange, it does not provide Refueler's identity-free capabilities, including [anonymous standing-receive] and anonymous machine-to-machine transfer, which by design require the absence of any account. The rail is declared once by the client's principal at onboarding and is not inferred from, or altered by, the method by which any invoice is subsequently settled.
+
+**Website (public)**
+> The identity rail gives you a recoverable account, an invoice, and a data-processing agreement — everything a firm's finance and compliance teams need. It cannot offer our identity-free features, which only exist where there is no account to recover.
+
+**Initial call/meeting (talking points)**
+> — If your accounts team will ever need to pay an invoice, the identity rail is the only rail that works for them — and it forecloses the anonymous features. Decide the rail before the accountant enters the picture, not after.
+> — Identity rail = recovery, invoicing, DPA; you give up the identity-free features.
+> — It's a one-way door set at onboarding. Nothing about how you pay later can change it.
+> — Whoever pays the invoice mustn't be the one who decides the rail.
+
+**Follow-up email**
+> To confirm the point from our call: choosing the identity rail gives you a recoverable account, invoiced billing, and a DPA, and means you won't have access to our identity-free features (such as [anonymous standing-receive]). This is a deliberate one-way choice made by you at onboarding — it isn't set by how the invoice is later paid, so it's worth deciding it consciously now rather than letting a payment method decide it for you.
+>
+> One thing worth sorting before you share our details with your finance team: if they'll ever need to raise a purchase order or pay by bank transfer, the identity rail is the one that supports that — and it's worth knowing that choice forecloses the anonymous features. The rail is set at onboarding, not by how the first invoice gets paid. Better to have that conversation now than when accounts payable is already holding the bank details.
+
+#### Anonymous rail
+
+**User agreement (legal register)**
+> The anonymous rail establishes no account, no identity record, and no invoiced relationship. Access depends solely on client-held credentials; there is no recovery mechanism beyond the [recovery credential] the client retains, and its loss is permanent. Prepaid balance is held by the client in the form of signed digital tokens — it is not a balance in a recoverable account held by Refueler, and its loss is an irreversible loss of that balance with no refund possible. The rail is declared once by the client's principal at onboarding.
+
+**Website (public)**
+> The anonymous rail has no account and no invoice — access and balance live only where you keep them. If you lose your credentials, there is no recovery and no refund, by design.
+
+**Initial call/meeting (talking points)**
+> — No account means no recovery: if you lose your [recovery credential], we cannot restore access — there's no back door, which is the point.
+> — Your credit is held by you as digital tokens, not kept in an account with us; lose them and the balance is gone, no refund.
+> — Buy credit you plan to use soon.
+> — This rail unlocks the identity-free features; it's your choice, not your finance team's.
+
+**Follow-up email**
+> Confirming the two things we can't undo on the anonymous rail: there is no account, so if you lose your [recovery credential] we cannot recover your access; and your prepaid credit is held by you, not kept as a recoverable balance with us, so losing it is permanent and cannot be refunded. These aren't defects — they're the absence of the very records that would otherwise compromise your anonymity — but they mean the rail is worth choosing deliberately, and topping up only what you'll use soon.
+
+### Sat economics — identity-rail planning principle (locked)
+
+At rate-card v1.0 (£50k BTC reference peg): 1 sat = £0.00050. Metered usage for realistic identity-rail clients (law firm / GP clinic doing hundreds of transfers/month) generates <£3/month equivalent. **Plan identity-rail revenue as access-fee-only.** Sat allowance functions as an abuse ceiling, not a billing meter. Both rails have a 402 backstop: anonymous rail burns prepaid tokens; identity rail hits a generous sat ceiling with AM follow-up.
+
+**Salary target reference (founder planning only):** £150k/yr (≈2.1 BTC at September 2026 price) requires approximately: 130 identity-API clients at £99, or 20 API + 300 Sovereign + 100 Legend subscriptions. 18–24 month target on conservative trajectory. Legend entitlement-includes-Share bundle is load-bearing in this model.
+
+### SW build block — confirmed ready
+
+No open architectural blockers for SW1–SW9. SW7 inputs (DPA wording, four-surface disclosure, rail-declaration gate) locked in this session. Sandbox spec (SW6) unchanged from SW-Opus-1. IT handover PDF session dropped by intent — folded into SW7 onboarding flow. share-sessions.md SW table overwritten to match Master-Context (authoritative). SW-Teams-1 correctly scoped to refueler.io project as cross-product Opus — not part of SW1–SW9. SW1 prompt confirmed ready to run.
 
 ## Upstream protocol monitoring — Cashu
 
