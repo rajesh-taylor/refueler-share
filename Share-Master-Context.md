@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.4 | **Last updated:** SW-Opus-1 · 7 Sep 2026
+> **Version:** 7.5 | **Last updated:** SW-Opus-3 · 7 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -173,7 +173,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**TH-series ✓ complete. SW-Opus-1 ✓ complete (7 Sep 2026). SW-Opus-2 queued.**
+**TH-series ✓ complete. SW-Opus-1 ✓ · SW-Opus-2 ✓ · SW-Opus-3 ✓ complete (7 Sep 2026). SW1 ready to run.**
 **TG-block ✓ · Share-JS-Refactor ✓ · 432 tests passing.**
 
 | Block | Commit | Summary |
@@ -201,8 +201,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | 5 | TG-block ✓ | ❌ | Complete. |
 | 6 | TH-series ✓ | ❌ | Complete. |
 | 7 | SW-Opus-1 ✓ | ❌ | Complete. Three-tier + API architecture locked. |
-| 8 | SW-Opus-2 | ❌ | Unit economics, rate-card numbers, Sovereign Teams sizing, family office GTM. |
-| 9 | SW block (SW1–SW9) | ❌ | HMAC signing, credential issuance, webhooks, capability discovery, OTS webhook, receipts. |
+| 8 | SW-Opus-2 ✓ | ❌ | Unit economics, rate-card v1.0, Sovereign Teams, GTM reframe. BRIDGE v8.4. |
+| 8a | SW-Opus-3 ✓ | ❌ | Identity-API fee, DPA, AM role, disclosure wording, SW build confirmed. BRIDGE v8.5. |
+| 9 | SW block (SW1–SW9) | ❌ | HMAC auth, credential issuance, webhooks, capability discovery, OTS webhook, receipts, sandbox, onboarding. **Next.** |
 | 10 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
 | 11 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
@@ -212,26 +213,6 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | 15 | B9 → B10+ | — | Continue as previously sequenced. |
 
 ---
-
-## SW block session plan — updated SW-Opus-1
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. |
-| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rail declaration stored at issuance. |
-| SW3 | Capability discovery + badge | `GET /api/v1/capabilities` (tier, rail, feature set, rate-card version). `GET /wl/config` by Host header. Badge component Paper/Carbon. |
-| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. OTS-confirmation webhook wired. |
-| SW4b | Webhooks III | Daily cron retry of dead-letter items. |
-| SW5 | Receipts | Acceptance receipts + collection receipts. "Proof of delivery" phrase nowhere in code or copy. |
-| SW5a | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
-| SW5b | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. |
-| SW6 | Sandbox | `rfs_test_` keypairs. Model-B test-credits. Both rails. Non-anonymous notice. Credential limit enforcement. |
-| SW7 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. Rail declaration gate. Mandatory disclosure flow. |
-| SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
-| SW9 | SW close | Snag sweep. TESTING.md additions. Context trim. B8 brief. Buffer review. |
-
 **Buffer pool (2 sessions):** SW2c · SW5c
 
 ---
@@ -256,17 +237,14 @@ All locked decisions in CLAUDE.md. TH-1 deployed `a71f12fe`. TH-2 deployed `53e3
 
 ---
 
-## SW-Opus-1 — locked decisions (7 Sep 2026)
+## SW-Opus-1/2/3 — locked decisions (7 Sep 2026)
 
-Full decision log in CLAUDE.md §Tier model + §Pricing model + §API feature gates.
-Key items not duplicated above:
+Full decision log in BRIDGE v8.5 §SW-Opus-2 decisions and §SW-Opus-3 decisions.
 
-**Deferred to SW-Opus-2:**
-- Sovereign Teams sizing (N-seat, shared pool, one bill, UI-only — packaging SKU on Sovereign, not a new tier)
-- Unit economics: sat figures per action, credit block sizes, GBP denomination boundary, BTC/GBP volatility treasury question
-- Rate-card v1.0 specific numbers
-- Keyset-versioned rate-lock for anonymous rail (optional extension, not v1)
-- Family office GTM: which firm, which use case, which decision-maker
+**SW-Opus-2 resolved:** rate-card v1.0 (10 sat/transfer + 100 sat/GB, £50k BTC peg), credit blocks (10k sat dust floor, v1 presets 10k/50k/200k/custom), Sovereign Teams (S/M/L bands £49/£89/£169, shared 100 GB pool), treasury policy (GBP in/out on identity rail, sats held in phoenixd), GTM reframe (Bitcoin-native HNW + accountant, warm intro only).
 
-**API whitepaper naming logged (not urgent):**
-- `refueler_capabilities`, `refueler_quote`/`refueler_balance` need London-register atom descriptors — vocabulary track item, allocate before B9 whitepaper.
+**SW-Opus-3 resolved:** identity-API £99 flat (Professional £249 defined-not-built, banded on service not allowance). DPA mandatory by default, Refueler provides standard Art. 28 addendum. GDPR framing: anonymous rail = controller-of-metadata, not "outside GDPR." AM role: onboarding, rail sign-off, DPA, incident notification, Raven canary explanation, quarterly review, rate-card notice — async/best-effort, no SLA. Four-surface disclosure wording locked (both rails), ecash → "signed digital tokens" in all client copy, bracketed placeholders slot at SW7. Identity-rail revenue planned as access-fee-only — metered sat component is abuse ceiling not billing meter. SW table in share-sessions.md corrected to match Master-Context. IT handover PDF dropped by intent.
+
+**Still open (allocate before B9):**
+- `refueler_capabilities`, `refueler_quote`/`refueler_balance` — London-register atom descriptors, vocabulary track
+- Keyset-versioned rate-lock for anonymous rail — optional v2 extension

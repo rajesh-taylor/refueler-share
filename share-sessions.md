@@ -362,25 +362,38 @@ Three-tier model locked (Citizen / Sovereign / API — Business + Enterprise dem
 
 ---
 
+## SW-Opus-2 · 7 Sep 2026 — Unit economics + rate card (Opus, uncounted)
+
+Rate-card v1.0 locked (10 sat/transfer, 100 sat/GB, permanent-record 20 sat, OTS webhook free, capability discovery free — reference peg £50k BTC). Credit blocks: 10k sat dust floor, presets 10k/50k/200k/custom. GBP invoicing on identity rail: fixed reference rate at card publication, never live spot. Sovereign Teams: S £49/M £89/L £169, shared 100 GB pool, 1/3/12 cadence (Mullvad rule). Treasury: GBP in/out on identity rail, sats held phoenixd, sweep to Sparrow on ops reserve breach. GTM reframe: Bitcoin-native HNW + accountant, warm intro only, Legend+Share bundle load-bearing. BRIDGE v8.4.
+
+---
+
+## SW-Opus-3 · 7 Sep 2026 — Identity-API commercial terms + SW build readiness (Opus, uncounted)
+
+Identity-API £99/mo flat. Professional £249/mo defined-not-built (banded on service level: priority support, custom webhook retry, AM time, bespoke DPA review). Both prices subject to upward review as Legend node costs attributed across products. Invoicing: access fee in advance + metered reconciliation same invoice in arrears — one invoice, two possible lines, second line £0.00 for virtually all v1 clients. Identity-rail revenue planned as access-fee-only; metered sat allowance = abuse ceiling not billing meter (realistic client: <£3/mo metered at v1.0 prices). DPA mandatory by default for all identity-rail clients; Refueler provides standard Art. 28 addendum; client-paper review gated to Professional band; engage solicitor before first identity-API client. GDPR: anonymous rail = controller-of-metadata under own privacy notice, not "outside UK GDPR." AM: founder for first 3–6 months; scope = onboarding, rail sign-off, DPA, incident notification, Raven canary explanation, quarterly review, rate-card notice; async/best-effort, no SLA; function named in agreement, personal name at onboarding only. Four-surface disclosure wording locked (both rails, eight blocks total); "ecash" → "signed digital tokens held by you" in all client copy; bracketed placeholders ([recovery credential], [anonymous standing-receive]) slot at SW7. Accountant-arrival rule: principal must declare rail before AP receives payment details. IT handover PDF session dropped by intent (folded into SW7). share-sessions.md SW table corrected to Master-Context. SW1 confirmed ready. BRIDGE v8.5.
+
+---
+
 ## SW block session plan — white-label + API build (post-TG-block + TH-series, pre-B7)
 
 | Session | Label | Scope |
 |---------|-------|-------|
 | SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. |
 | SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. |
-| SW3 | Badge + /wl/config | `GET /wl/config` by Host header. Fail-safe `badge: true`. Badge component Paper/Carbon. |
+| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rail declaration stored at issuance. |
+| SW3 | Capability discovery + badge | `GET /api/v1/capabilities` (tier, rail, feature set, rate-card version). `GET /wl/config` by Host header. Badge component Paper/Carbon. |
 | SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. |
+| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. OTS-confirmation webhook wired. |
 | SW4b | Webhooks III | Daily cron retry of dead-letter items. |
-| SW5 | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
-| SW5a | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. |
-| SW6 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. |
-| SW7 | IT handover PDF | Two-page branded PDF. Paper theme. Three substitution fields. |
+| SW5 | Receipts | Acceptance receipts + collection receipts. "Proof of delivery" phrase nowhere in code or copy. |
+| SW5a | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
+| SW5b | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. |
+| SW6 | Sandbox | `rfs_test_` keypairs. Model-B test-credits. Both rails. Non-anonymous notice. Credential limit enforcement. |
+| SW7 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. Rail declaration gate. Mandatory disclosure flow. Bracketed placeholders resolved. |
 | SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
 | SW9 | SW close | Snag sweep. TESTING.md additions. Context trim. B8 brief. Buffer review. |
 
-**Buffer pool (2 sessions):** SW2c · SW5b
+**Buffer pool (2 sessions):** SW2c · SW5c
 
 ---
 
