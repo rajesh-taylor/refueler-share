@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.5 | **Created:** 28 July 2026 | **Updated:** SW-Opus-3 · 2026-09-07
+> **Version:** 8.6 | **Created:** 28 July 2026 | **Updated:** Share-127 · 2026-09-08
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -860,7 +860,7 @@ Adds BLS12-381 pairing-based BDHKE as the v3 Cashu blind-signature protocol (key
 
 Gives Cashu tokens programmable spending conditions expressed as a Taproot-inspired Merkle tree of declarative condition leaves. Named **nutroot** (not taproot — commits structure only, none of Bitcoin's validation rules). Three leaf types: `threshold` (M-of-N), `after` (timelock), `hashlock`. No opcodes, no stack, no interpreter. Tree shape is deterministic from leaf count. Every v3 input signs a shared transaction transcript enabling atomic batch operations.
 
-**Critical scoping:** NUT-11 and NUT-14 are explicitly scoped to pre-v3 keysets. NUT-22 BATs (Blind Authentication Tokens) are the v3 equivalent of NUT-11 Mode 2 — a `02` BAT signs a full request transcript (method + target + body hash).
+**Critical scoping:** NUT-11 and NUT-14 are explicitly scoped to pre-v3 keysets. NUT-22 and NUT-11 Mode 2 are NOT interchangeable — they solve orthogonal problems. Mode 2 (P2PK keypair-binding): "only the holder of key K can spend this credential" — anti-theft, delegation, the Locke object, receiver-bound Silent Drop collection; keep on B8 slate. NUT-22 (blind authentication): "only a member of the authorised set, and I cannot tell which" — membership gating with in-set anonymity; Teams/Legend/Pass capability, ~B10. The transcript-signing property referenced in earlier notes belongs to nutroot v3 batch operations, not to NUT-22 BATs as specified. (Correction locked Share-127.)
 
 **Cross-product impact:**
 
@@ -868,7 +868,7 @@ Gives Cashu tokens programmable spending conditions expressed as a Taproot-inspi
 |---|---|---|
 | **Pass** | `threshold` (M-of-N entry, e.g. VIP+standard), `after` (time-gated access windows), `hashlock` (QR redemption gate = reveal preimage). Atomic batch issuance for event cohorts via transaction transcript. Keyset epoch timestamping composes with nutroot: sealing *when the spending conditions were fixed* makes them un-backdatable. **Hashlock preimage candidate: `SHA-256(blake3_root \|\| url_fragment_nonce)` from Share OTS committed value — see §Share×Pass×Legend forward note.** | High — design Pass architecture around nutroot leaves, not custom logic |
 | **Merchant** | NUT-18/26 delta: nutroot payment request option `(k, l, b)` in `creqB` under TLV `0x0b`. Conditional POS settlement (threshold: merchant confirm + customer spend; after: expiry). NUT-28 positional sender slots enable merchant attribution with customer privacy intact. | High — Note/Clearance model maps cleanly |
-| **Share** | `threshold` leaves replace planned FROST complexity for B12 M-of-N credential issuance. `after` leaves are the native primitive for "recovery window / pay-to-extend" (B9 §Future work). NUT-22 BATs may supersede NUT-11 Mode 2 planned implementation — **review NUT-22 spec before B8 design session is locked.** | Medium — NUT-11 Mode 1 unaffected |
+| **Share** | `threshold` leaves replace planned FROST complexity for B12 M-of-N credential issuance. `after` leaves are the native primitive for "recovery window / pay-to-extend" (B9 §Future work). NUT-22 does NOT supersede NUT-11 Mode 2 — orthogonal concerns (membership-anonymity vs keypair-binding); Mode 2 stays on B8 slate. NUT-24 (`u = "api"`, never `sat`) is the standardised form of Share's already-locked 402 backstop; regulatory hinge: `api` unit = capability redemption, `sat` unit = money transmission. NUT-24-alone may enter SW scope ahead of full Teams two-header combo — decide at SW-scoping session. Full decisions: `nut22-nut24-two-header-decisions.md` (Share-127). | Medium — NUT-11 Mode 1 unaffected |
 
 **Action:** Pass architecture planning session should treat nutroot `threshold`/`after`/`hashlock` as the foundational primitive. Re-read NUT-22 before B8 design lock. Target merge monitoring: Q4 2026 (author's pace + two independent POC implementations already passing shared test vectors suggest near-ready).
 
