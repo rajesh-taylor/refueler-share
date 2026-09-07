@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.1 | **Created:** 28 July 2026 | **Updated:** TH-0 · 2026-09-06
+> **Version:** 8.3 | **Created:** 28 July 2026 | **Updated:** SW-Opus-1 · 2026-09-07
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -152,29 +152,9 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 | Session | Repos touched | Notes |
 |---|---|---|
 | CSS-4 through CSS-7b | refueler-io | CSS rationalisation track — complete |
-| CC-84 through CC-103 | refueler-io, Supabase, numo-fork | See previous BRIDGE versions for detail. All complete. |
-| Pass-0 / Pass-1 | refueler-pass | Founding scope. Two-credential-class model locked. |
-| **Multi-[n]** | refueler-legend, refueler-share, refueler-pass, refueler-io | Share×Legend distress integration. Pass×Legend address watch. Recovery Coordination Layer v3. BRIDGE v5.0. |
-| **AD-HOC · 27 Aug 2026** | refueler-share, refueler-pass | Silent Drop spec + Stripe vs Lightning tier split + BOLT12-inspired Option A + NUT-00 v3 + NUT-10 v3 Nutroot secrets + Pass×Nutroot use cases. BRIDGE v5.1. |
-| **S73 · 28 Aug 2026** | refueler-share | Blink checklist. Blink discontinuing UK custodial Aug 31. BRIDGE v5.2. |
-| **pre-Opus-2 · 28 Aug 2026** | all repos | Lightning provider locked: LNbits on Hetzner. Boltz dead. BRIDGE v5.3. |
-| **Opus-2 · 29 Aug 2026** | refueler-share + all repos | B7 resequenced. NB-series. phoenixd confirmed. Instance topology. SD-block placement. SYNC-1 inserted. BRIDGE v5.4. |
-| **S73b / NB-1 · 29 Aug 2026** | refueler-share | Node bootstrap runbook locked. 5-phase NB-series. Wallet structure. Extension policy. API layering. Backup strategy. BRIDGE v5.5. |
-| **SYNC-1 · 31 Aug 2026** | refueler-share, refueler.io | Dual-repo asset sync resolved. Canonical: `refueler-share/frontend/`. Mirror: `refueler.io/src/share/assets/`. Sync tool: `bin/sync-share.sh`. GENERATED headers stamped in mirror. Zero dual-homing found in other repos. Embedded git repos (`refueler-app`, `terminals/numo-fork`) cleaned from `refueler.io`. BRIDGE v5.6. |
-| **AP-BRAND · 31 Aug 2026** | all repos | Brand vocabulary locked. London Thames geography canonical. Silent Drop product decisions locked. Harbourmaster dashboard spec. Merchant-issues-Quays feature named. Notification architecture (no email, ever). Two authentication paths. Dr Chen→Dr Okafor case study locked. Raven replaces canary. Legend under Tower of London. Tower Bridge tier metaphor. Port Authority replaces "mint" in product contexts. Quay/Key and Locke/Lock double-meanings confirmed. Westminster geography reserved for future products. BRIDGE v5.7. |
-| **AP-ARCH · 31 Aug 2026** | all repos | Three Liberties governance model locked. Three independent mints, seeds, Ravens. Port Authority (Share) · Guildhall (Pass) · Tower of London geography (Legend, mint name TBD Opus-3). Raven = warrant canaries only; mint health = status page plain language. Ceremony of the Keys = keyset rotation only. Locke = credential-as-object, P2PK bound, Deed recovery, passkey storage exception. Vocabulary matrix locked (four deployment contexts). Templar prior art argument locked for whitepaper. Reserved geography catalogued. Opus-3 scope defined. BRIDGE v5.8. |
-| **Opus-3 · 31 Aug 2026** | all repos | **Geographic reshuffle — four Liberties made literal, west to east.** Share → Tower of London + **Royal Mint** (mint). Pass → Westminster + Black Rod. Legend → City of London / Temple (Guildhall + St Paul's). Merchant → Royal Exchange + the Exchange. Port Authority repurposed → admission-control layer (denylist + rate-limit gate). Rotation ceremonies split per-Liberty: Warder/Ceremony of the Keys (Share) · Black Rod (Pass) · Silent Ceremony (Legend, confirmed) · The Proclamation / Common Crier (Merchant). Legend St Paul's landmarks: Whispering Gallery (metadata leak, w/ Temple of Mithras) · Triforium (deep ledger) · floating staircase (Merkle, WP+presentation only). St Paul's dome metaphor retired. Bank of England → whitepaper foil (use with care). Royal Exchange → Merchant home (the Exchange mint). Temple → unowned (Cashu spiritual home / Templar headwater / Legend brand ground). Status page: "Royal Mint: operational" replaces "Port Authority". Constitutional line updated to four stations west-to-east. BRIDGE v5.9. |
-| **Opus-3b · 31 Aug 2026** | all repos | Fourth rotation ceremony named: **The Proclamation** (Royal Exchange / Merchant), read by the Common Crier (optional colour). Platform whitepaper section outline locked — argument flow + geography placement, four Liberties, honest-claims boundary. Raven metaphor (canary→Raven etymology) locked for whitepaper §5. Raven governance extended to four Liberties. Rotation-ceremony admin changelog template + whitepaper §Key lifecycle language locked (four ceremonies). Constitutional line confirmed: Westminster → Temple → Royal Exchange → Tower. VPN recommendation locked (Mullvad named, multi-hop noted). "The pilgrim's society" held as future proper noun. Pass + Merchant vocabulary session flagged as a small Sonnet session (geographic terms for reward tokens / live melt path). BRIDGE v6.1. |
-| **Opus-3a · 1 Sep 2026** | all repos | **Liberty mint reconciliation — both provisional names resolved.** Pass mint: **Jewel Tower** (locked). Legend mint: **Guildhall** (locked). Temple Treasury retired completely. Melt-hygiene mnemonic locked. Four Liberties mint column fully locked. BRIDGE v6.2. |
-| **Pass-Vocab-1 · 1 Sep 2026** | all repos | **Pass geographic vocabulary locked.** Reward token UI name: **a Pass**. Live melt path event: **Redemption**. Integrity verification metaphor: **Trial of the Pyx**. BRIDGE v6.3. |
-| **Merchant-Vocab-1 · 1 Sep 2026** | all repos | **Merchant geographic vocabulary locked.** Reward stamp instrument: **a Note**. Live melt path event: **Clearance**. Mint name **the Exchange** locked. BRIDGE v6.4. |
-| **S89 · 3 Sep 2026** | all repos | **Tier rename locked.** Free → Citizen. Creative Premium retired. Production Max → Sovereign. Crown retires to brand/institutional vocabulary only. Rail model: both rails at Sovereign; identity-free features gated by Lightning rail, not tier. BRIDGE v6.8. |
-| **AD-HOC · 4 Sep 2026** | all repos | EIC promoted to named villain (whitepaper/closed-door only). Muscovy Company provenance clause added. Freedom of the City / impressment locked for §Compulsion argument. St. Peter ad Vincula locked as prose texture only. City Wall / Posterns locked as prose texture. The Tower walk locked as opening geography paragraph candidate. BRIDGE v6.9. |
-| **AP-10 · 3 Sep 2026** | refueler-share + all repos | Roadmap resequenced (no Hetzner required for TG-block, TH-series, SW, B8). Traitor's Gate, Tidal Window, Execution Dock, Three Tides, Dragon status vocabulary all locked. Editorial atoms locked. BRIDGE v6.7. |
-| **S-TG-4a/4b · 5 Sep 2026** | refueler-share, refueler-io | TG-4 complete: `handleExecutionDock` + `GET /admin/execution-dock` + `dock_index` KV write + `handleOwnerDelete`. Execution Dock KPI card in System Summary. BRIDGE v7.1. |
-| **S88 · 4 Sep 2026** | refueler-share | Silent Drop full design session (Opus). All SD-block decisions locked. BRIDGE v7.0. |
 | **TH-Opus-2 · 6 Sep 2026** | all repos | **Tower Hill — Legend price locked. Cross-product entitlement architecture locked. Legend native verifier design locked. Pass timestamping pattern locked. Monument / ti-fectar introduced.** See §TH-Opus-2 decisions below. BRIDGE v8.0. |
 | **TH-0 · 6 Sep 2026** | refueler-share | **OTS bundle spike — javascript-opentimestamps killed (601 KB gzipped, no fetch path). Hand-rolled approach confirmed GO.** Calendars reachable (2/2 from host; Cloudflare egress to confirm at TH-1 start). Round-trip clean. Committed-value construction identified as load-bearing for Legend verifier and Pass hashlock: `SHA-256(blake3_root \|\| url_fragment_nonce)`. Share×Pass×Legend three-product proof-of-receipt primitive identified — see §Share×Pass×Legend forward note. BRIDGE v8.1. |
+| **SW-Opus-1 · 7 Sep 2026** | refueler-share + all repos | **Platform API + white-label architecture locked.** Three-tier model confirmed (Citizen / Sovereign / API — Business + Enterprise demolished). Sovereign Teams → SW-Opus-2. Rail model extended to API tier: identity rail (Stripe/invoice) and anonymous rail (Lightning/sats) mutually exclusive per relationship; rail declared by principal at onboarding, never inferred from payment. Mandatory pre-payment disclosure of both irreversibles (account loss + prepaid balance loss) locked for four surfaces: user agreement, initial call/email, website. Model B (platform credit pool) selected — only model that survives the anonymous rail. Two substrates: identity rail = server ledger; anonymous rail = client-held bearer Cashu credit tokens. Rate card versioned per product. Term protection = identity-rail feature only. API v1 features: capability discovery, OTS-confirmation webhook, acceptance + collection receipts. "Proof of delivery" retired as a phrase. API v2 features gated per dependency. MCP v1 tools: `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote` — MCP runs in agent's trust domain, handles ciphertext only (invariant). Policy-encoded transfers locked as Nutroot three-product forward commitment. BOLT12 locked as B9+ forward commitment; credit-issuance contract must accept arbitrary-amount pay-then-mint. Sandbox: credential-limited, no time cap, both rails, `rfs_test_` prefix. BRIDGE v8.3. |
 
 ---
 
@@ -197,7 +177,10 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 - **[Legend]** UC-9 Opus session — Recovery Coordination Layer. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
 - **[Legend] Create Stripe product/price objects for Legend: £50/mo + £480/yr** — at Legend subscription flow build session.
 - **[Share] Add `LEGEND_ENTITLEMENT_PUBKEY` Worker secret** — at Legend cross-product entitlement build session (post-Legend subscription flow live).
-- **[Share] Run TH-Opus-3a + TH-Opus-3b (Opus, Share project)** before TH-1 build session — stress-test committed-value construction, Pass hashlock forward note, privacy model, whitepaper treatment. Two sessions. See §Share×Pass×Legend forward note.
+- ~~**[Share] Run TH-Opus-3a + TH-Opus-3b**~~ ✅ TH-series complete · 6 Sep 2026.
+- **[Share] Run SW-Opus-2** before SW build sessions — unit economics, rate-card numbers, Sovereign Teams sizing, family office GTM. See SW-Opus-1 decisions in CLAUDE.md.
+- **[Share / AM] Pre-payment disclosure — four surfaces.** Mandatory plain-language disclosure of both irreversibles (account loss + prepaid balance loss on anonymous rail) must appear in: (1) user agreement docs; (2) initial client call/meeting (Rajesh/AM); (3) follow-up email; (4) website. Coordinate before first API client relationship opens. Rail is declared by principal before AP handoff — AP never touches the product decision.
+- **[Share vocabulary track] API/MCP whitepaper atom descriptors.** , / need London-register naming before B9 whitepaper. Not urgent — allocate at a naming session.
 
 ---
 
@@ -251,17 +234,17 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 
 ---
 
-## TH-Opus-2 decisions — locked 6 Sep 2026
+## TH-Opus-2 decisions — locked 6 Sep 2026; pricing updated 6 Sep 2026
 
-### Legend pricing (locked)
+### Legend pricing (locked — starting price, will reprice upward before Legend goes live)
 
 | Plan | Price | Notes |
 |---|---|---|
 | **Legend free** | £0 | Public block explorer surface. Private-query layer, native verifier, Share entitlement — all behind paywall. |
 | **Legend paid (monthly)** | **£50/mo** | Private-query layer + native OTS verifier + Sovereign Share entitlement (100 GB, no API). |
-| **Legend paid (annual)** | **£480/yr** | Ten months for twelve — framed as the annual price, **never as "savings" or a discount** (per no-discount-framing rule). |
+| **Legend paid (annual)** | **£600/yr** | Twelve months at the monthly rate. No discount framing, no savings framing — this is the annual price. Per no-discount-ever rule. |
 
-**Rationale (locked):** Legend priced as the senior product that includes Share, not Share with an explorer bolt-on. The private-query layer, native verifier, BOLT12 primitives (B9+), and OTS primitives (TH-series) justify significant daylight above Sovereign (£24/mo). £50 creates room for future features without repricing. Sovereign Share subscribers do not receive Legend access — the entitlement is one-directional only (Legend → Share).
+**Rationale (locked):** Legend priced as the senior product that includes Share, not Share with an explorer bolt-on. The private-query layer, native verifier, BOLT12 primitives (B9+), and OTS primitives (TH-series) justify significant daylight above Sovereign (£24/mo). £50/mo is a starting price — it will only increase as features are added before Legend goes live. Legend infrastructure (Hetzner node, full Bitcoin node, block scanning) carries real running costs that justify future price increases. Sovereign Share subscribers do not receive Legend access — the entitlement is one-directional only (Legend → Share).
 
 ### Cross-product entitlement architecture (locked)
 
@@ -582,6 +565,94 @@ Friend-group soft launch: founder + 2–3 close contacts, 7-day observation wind
 **Concept (not yet locked — hold for Refill app scoping session):** Four equal rectangles on the Refill homescreen — Pass, Legend, Share, Refill. Products illuminate as they ship; unbuilt ones are visually present but dimmed (lower contrast, not hidden, not "coming soon" badged). User sees the shape of the whole ecosystem from day one. As each product ships, it comes alive.
 
 This is a stronger story than revealing products sequentially — it tells the user they are early. Carry as a founding constraint into the Refill app scoping session. Do not impose on SD-block or any current build sessions.
+
+---
+
+## SW-Opus-1 decisions — locked 7 Sep 2026
+
+### Tier model
+
+**Three tiers confirmed: Citizen / Sovereign / API.** Business and Enterprise demolished entirely. API tier IS the business tier — no separate label.
+
+**Sovereign** ships in two SKUs:
+- **Sovereign** — single-seat, UI-only, no API.
+- **Sovereign Teams** — N-seat, shared pool, one bill, UI-only, no API. Sizing → SW-Opus-2.
+
+**API ⊃ UI** (one-directional): API key holder may also use the web interface. **Sovereign ⊅ API**: Sovereign subscribers never get API access. Price-enforced — API sits clearly above Sovereign.
+
+**API tier is invoiceable** — preserves PO/invoice path for firms that cannot pay by card or Lightning.
+
+### Rail model extended to API tier
+
+Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship — same physics as the consumer tier split.
+
+- **Identity rail:** recoverable credentials, invoice, DPA, accounts-payable-friendly. No identity-free features. No anonymous Silent Drop provisioning.
+- **Anonymous rail:** unlocks Silent Drop provisioning and anonymous machine-to-machine primitives. No recovery beyond the Deed, no invoice (an invoice is an identity artefact).
+- **Rail is declared by the client's principal at onboarding** — not inferred from how payment happened. Payment habit can never silently reconfigure the product.
+- **DO NOT add Supabase row or email field to anonymous-rail API credentials** — same invariant as Lightning consumer path.
+
+**Mandatory pre-payment disclosure** of both irreversibles (aimed at principal, before AP handoff): identity rail forecloses identity-free features; anonymous rail has no recovery and prepaid balance loss is permanent. Disclosure appears in: user agreement, initial call/meeting, email, and website — four surfaces.
+
+### Pricing model
+
+**Model B (platform credit pool).** Models A and C rejected — neither survives the anonymous rail.
+
+**Two substrates, one rate card:**
+- Identity rail: server-held recovering ledger, auditable, invoiceable, optional itemised view.
+- Anonymous rail: client-held bearer Cashu credit tokens (blind-signed, unlinkable, non-recoverable). Balance is a stack of ecash — not a server record. Losing the token stack = losing the balance, permanently.
+
+**Rate card versioned** (v1.0, v1.1…): action → sat cost per product. Product cost rises → new rate-card version for that product only; credit value unchanged.
+
+**Term protection is an identity-rail feature.** Annual prepay locked at purchase-version for 12 months; monthly gets 30 days' notice. Anonymous rail: current rate card always.
+
+**Deferred to SW-Opus-2:** unit economics (sat figures per action, credit block sizes), GBP denomination boundary, BTC/GBP volatility treasury question, keyset-versioned rate-lock for anonymous rail.
+
+### API features — v1 (buildable on current stack, ships in SW block)
+
+- `GET /api/v1/capabilities` — tier, rail, feature set, current rate-card version. Build first.
+- OTS-confirmation webhook — fires on `timestamp_state: pending → complete`. HMAC-signed via `rfs_whsec_`.
+- Acceptance receipts + collection receipts. **"Proof of delivery" retired as a phrase — unprovable, never claim it.**
+
+### API features — v2 (each with explicit gate)
+
+| Feature | Gate |
+|---|---|
+| Silent Drop provisioning via API | SD-block shipped (Hetzner) |
+| Agent-to-agent transfers | SD provisioning live |
+| Verifiable agent identity (NUT-11 Mode 2) | B8 — `bind_pubkey` field reserved in voucher now |
+| Batch credential issuance | Pass API (Q4) |
+| Composable receipts | v1 if free off credit-token work, else v2 |
+
+### API features — forward commitments (document, do not build)
+
+**Policy-encoded transfers** via the Nutroot three-product flow (gates: Nutroot PR #421 merge + B8 + Pass + B12). There is no honest Worker-side version — the Worker never holds keys. The policy is encoded in Pass Nutroot leaves, Legend verifies the block condition, the leaf satisfies. Document; do not fake.
+
+**Transfer chaining:** research direction. Not committed.
+
+### MCP v1 tool list
+
+| Tool | Purpose | Status |
+|---|---|---|
+| `refueler_capabilities` | Capability discovery — first call any agent makes | v1, build when API ships |
+| `refueler_send_file` | Encrypt and upload — runs in agent's trust domain, ciphertext only | v1 |
+| `refueler_check_transfer` | Poll transfer status | v1 |
+| `refueler_quote` | Action cost + current balance | v1 |
+
+Remaining tools (inbox, timestamp verify, Pass issuance, Legend query) locked as contracts; each ships the day its backing product comes online.
+
+**MCP architectural constraint (invariant):** MCP server runs in the agent's trust domain and handles ciphertext only. Never a Refueler-hosted plaintext endpoint.
+
+**Whitepaper naming:** `refueler_capabilities`, `refueler_quote`/`refueler_balance` need London-register atom descriptors. Vocabulary track item — not urgent.
+
+### BOLT12 / MCP agent payment — B9+ forward commitment
+
+phoenixd already supports BOLT12 — no new infrastructure. SW constraints that must not foreclose this:
+1. Credit-issuance contract accepts arbitrary-amount pay-then-mint (not blocks-only).
+2. MCP response envelope can carry `payment_required` + offer field without breaking change.
+
+### Sandbox spec
+
+Credential-limited, no time cap. Model-B test-credits; both rails walkable with real HMAC. `rfs_test_`-prefixed keys (never `rfs_live_` or `rfs_sign_` in test files — GitHub scanner). Non-anonymous by design (observable for debugging) — "do not send real cargo to the sandbox" stated plainly in the sandbox itself.
 
 ---
 
