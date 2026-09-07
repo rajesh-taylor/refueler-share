@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.1 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-JS-Refactor · 6 Sep 2026
+> **Version:** 2.2 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** SW-Opus-1 · 7 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -58,23 +58,58 @@ All five are `type="module"`. Do not collapse back into a single file.
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
 - DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
-- **Sovereign storage cap: 100 GB. Locked TH-Opus-1.** Business/API: 250 GB + pay-per-GB overage (invoiced). No legacy subscribers affected.
+- **Sovereign storage cap: 100 GB. Locked TH-Opus-1.**
+- **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.**
 - **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
 - **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
 - **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
 
-**API / white-label locked decisions (AP-2/AP-3a):**
+**Tier model (locked SW-Opus-1 · 7 Sep 2026):**
+- **Three tiers: Citizen / Sovereign / API.** Business and Enterprise demolished entirely.
+- **Sovereign** ships in two SKUs: single-seat and Teams (N-seat, shared pool, one bill, UI-only). Sovereign Teams sizing → SW-Opus-2.
+- **API ⊃ UI** (one-directional): an API key holder may also use the web interface. **Sovereign ⊅ API**: a Sovereign subscriber never gets API access. Price-enforced — API sits clearly above Sovereign.
+- **API tier is invoiceable** — preserves the PO/invoice path for firms that cannot pay by card or Lightning.
+- **The rail model extends to the API tier.** Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship.
+  - Identity rail: recoverable credentials, invoice, DPA path, accounts-payable-friendly. No identity-free features (no anonymous Silent Drop provisioning, no anonymous agent inboxes).
+  - Anonymous rail: unlocks Silent Drop provisioning and anonymous machine-to-machine primitives. No recovery beyond the Deed, no invoice — an invoice is an identity artefact.
+  - A single commercial relationship cannot straddle both rails. Physics, not policy.
+- **Rail is declared, not inferred from payment.** The client's principal declares the rail at onboarding; the permitted payment method follows. Payment habit can never silently reconfigure the product.
+- **Mandatory pre-payment disclosure of both irreversibles** (aimed at the principal, before AP handoff): (1) identity rail buys recovery and an invoice but forecloses identity-free features; (2) anonymous rail buys identity-free features but there is no recovery — lose the Deed and the firm loses the account. Prepaid balance loss on the anonymous rail must be named explicitly — not just account access. This disclosure appears in four places: user agreement, initial call/meeting (Rajesh/AM), follow-up email, and website.
+- **DO NOT add a Supabase row or email field to the anonymous-rail API credential path** — same invariant as the Lightning consumer path. Load-bearing for the anonymous rail's identity promises.
+
+**Pricing model (locked SW-Opus-1 · 7 Sep 2026):**
+- **Model B (platform credit pool).** Model A (per-product metering) and Model C (flat subscription) rejected — neither survives the anonymous rail.
+- **Two substrates, one rate card:**
+  - Identity rail: server-held recovering ledger, auditable, invoiceable, optional itemised view.
+  - Anonymous rail: client-held bearer Cashu credit tokens (blind-signed, unlinkable, non-recoverable). The "balance" is a stack of ecash, not a server record.
+- **Rate card versioned** (v1.0, v1.1…); maps action → sat cost per product. A product's cost rising → new rate-card version for that product's actions only; credit value unchanged.
+- **Term protection is an identity-rail feature.** Annual prepay locked at purchase-version for 12 months; monthly gets 30 days' notice. Anonymous rail transacts at the current rate card always — no lock. (The rail forgets you, including your discount. Consistent with "no recovery".)
+- Keyset-versioned rate-lock for anonymous rail: noted as optional SW-Opus-2 extension, not recommended for v1.
+- Unit economics, specific sat figures, credit block sizes, GBP-denomination boundary for identity-rail firms, and the BTC/GBP volatility treasury question → SW-Opus-2.
+
+**API / white-label locked decisions (AP-2/AP-3a + SW-Opus-1 · 7 Sep 2026):**
 - HMAC signing: every API request signed with HMAC-SHA256 over `method + path + timestamp + body_hash`.
-- Three credentials per commercial relationship: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, Business tier only).
+- Three credentials per commercial relationship: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, API tier only).
+- Test/sandbox credentials use `rfs_test_` prefix — never `rfs_live_` or `rfs_sign_` in test files. GitHub scanner pattern-matches these prefixes.
 - One API keypair per commercial relationship. No sub-keys. Rotation via `POST /api/v1/keys/rotate` (24h grace window). Multi-user = shared firm key + `transfer_ref` attribution + dashboard seats.
 - Webhooks are notification, never control flow. Credential issuance and transfer completion proceed identically whether the client webhook endpoint is up or down.
 - DO NOT use Cloudflare Queues, Durable Objects, or D1 for webhook delivery or any other purpose. `ctx.waitUntil` + KV dead-letter only.
 - Badge links to `refueler.io/share/`.
-- Business tier = invoiced. No Stripe subscription price object for Business — invoice template only, managed manually in Stripe dashboard, off-repo.
+- API tier invoiced manually via Stripe invoice template. No subscription price object for API tier — invoice template only, managed manually in Stripe dashboard, off-repo.
 - `X-Email` header dropped from upload path entirely.
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
 - `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html`.
 - `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Never produce index.njk as a download — always edit via sed directly on `refueler-io/src/share/index.njk`.
+
+**API feature gates (locked SW-Opus-1 · 7 Sep 2026):**
+- **v1 (buildable on current stack, ships in SW block):** capability discovery (`GET /api/v1/capabilities`), OTS-confirmation webhook, acceptance receipts + collection receipts. "Proof of delivery" retired as a phrase — unprovable, never claim it.
+- **v2 (each with explicit gate):** Silent Drop provisioning via API (gate: SD-block shipped); agent-to-agent transfers (gate: SD provisioning live); verifiable agent identity NUT-11 Mode 2 (gate: B8, `bind_pubkey` field reserved in voucher now); batch credential issuance (gate: Pass API Q4); composable receipts (v1 if free off credit-token work, else v2).
+- **Flagship forward commitment (document, do not build, do not fake):** policy-encoded transfers via the Nutroot three-product flow (gates: Nutroot merge + B8 + Pass + B12). There is no honest Worker-side version — the Worker never holds keys. Transfer chaining: noted research direction, not committed.
+- **MCP v1 tools (build when API ships):** `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote`. Namespace and contracts for remaining tools locked; each tool ships the day its backing product comes online.
+- **MCP architectural constraint (invariant):** the MCP server runs in the agent's trust domain and handles ciphertext only. Never a Refueler-hosted plaintext endpoint — that recreates a readable server and breaks the core privacy claim.
+- **API whitepaper naming for MCP tools** (`refueler_capabilities`, `refueler_quote`/`refueler_balance` atom descriptors): logged for vocabulary track. Not urgent.
+- **BOLT12/MCP agent payment: B9+ forward commitment, phoenixd-native.** SW constraints: credit-issuance contract accepts arbitrary-amount pay-then-mint (not blocks-only); MCP envelope can carry `payment_required` + offer. Documented, not built.
+- **Sandbox:** credential-limited, no time cap. Model-B test-credits, both rails walkable with real HMAC and `rfs_test_` prefix. Non-anonymous by design (observable for debugging) — "do not send real cargo to the sandbox" stated plainly in the sandbox itself.
 
 **BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
 Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
@@ -101,11 +136,12 @@ Session count is a guide not a constraint — split early, never overload. Plann
 - TH-2 ✓ — Permanent-record toggle UI, `seal_nonce`, `blake3PlaintextRoot`, `runPermanentRecord()`, download OTS offer, `GET /timestamp/seal/:uuid`. Deployed `53e3c7fb`.
 - Share-JS-Refactor ✓ — `share.js` split into `crypto.js` / `upload.js` / `download.js` / entry `share.js`. Deployed `45a4d3b3`. 324 tests passing.
 
-**Next: naming/copy session** — tier names on plans page, upgrade page, any residual old-tier-name references, "Burns after reading" copy decision.
-**Then: Stripe objects session** — price object description updates to match Citizen/Sovereign.
-**Then: SW white-label block** — HMAC signing, credential issuance endpoint, webhook delivery.
+**SW-Opus-1 ✓ complete (7 Sep 2026)** — three-tier model locked, rail model extended to API tier, Model B credit pool, API v1 feature gates, MCP v1 tool list, BOLT12 commitment, sandbox spec. BRIDGE v8.3.
+**SW-Opus-2 queued** — Sovereign Teams sizing, unit economics, rate-card numbers, keyset-versioned rate-lock, family office GTM.
 
-Locked block sequence (AP-10): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series ✓ → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
+**Next: SW build block (SW1–SW9)** — HMAC signing, credential issuance endpoint, webhook delivery, capability discovery, OTS webhook, acceptance/collection receipts.
+
+Locked block sequence (AP-10 + SW-Opus-1): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series ✓ → SW-Opus-1 ✓ → SW-Opus-2 → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
