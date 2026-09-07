@@ -356,6 +356,11 @@ Full SD-block design session. All decisions locked. Key outcomes: opaque token a
 - DO NOT use the word "anonymous" for Stripe-rail Silent Drop — it is private, not anonymous
 
 ---
+## SW-Opus-1 · 7 Sep 2026 — Platform API + white-label architecture (Opus, uncounted)
+
+Three-tier model locked (Citizen / Sovereign / API — Business + Enterprise demolished). Sovereign Teams flagged to SW-Opus-2. Rail model extended to API tier: identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) mutually exclusive per relationship; rail declared by principal, not inferred from payment method. Mandatory pre-payment disclosure of both irreversibles (account loss + prepaid balance loss) locked for four surfaces: user agreement, initial call/email, website. Model B (platform credit pool) selected — only pricing model that survives the anonymous rail. Two substrates: identity rail = server ledger; anonymous rail = client-held bearer Cashu credit tokens. Rate card versioned per product; term protection is identity-rail-only feature. API v1 features locked: capability discovery, OTS-confirmation webhook, acceptance + collection receipts ("proof of delivery" retired). API v2 features gated per dependency. MCP v1 tools locked: `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote` — agent-trust-domain constraint locked (MCP server handles ciphertext only, never plaintext). Policy-encoded transfers locked as Nutroot three-product forward commitment (not buildable Worker-side). BOLT12 locked as B9+ forward commitment; credit-issuance contract must accept arbitrary-amount pay-then-mint from day one. Sandbox: credential-limited, no time cap, both rails, `rfs_test_` prefix, non-anonymous with explicit "no real cargo" warning. BRIDGE v8.3.
+
+---
 
 ## SW block session plan — white-label + API build (post-TG-block + TH-series, pre-B7)
 
@@ -433,5 +438,19 @@ blake3_root re-derived by Legend (never shipped). Hashlock: x = commitment, H = 
 two-phase `after` (real anchor height, no estimation). Upgrade path moves to Legend — amends
 TH-Opus-1, drops GET /timestamp/upgrade from Share Worker. No TH-Opus-3b. TH-1 = 3
 confirmations (fragment wiring, calendar egress, .ots byte layout).
+
+## SW-Opus-2 — Unit economics + Sovereign Teams + GTM (7 Sep 2026)
+Mode: Opus · No code · BRIDGE v8.4
+
+**Locked:**
+- Rate card v1.0: sat figures per action across Share / Legend / Pass. OTS webhook bundled free.
+- Rate-card governance: £100k BTC 30-day trailing average = first mandatory review; ±40% GBP drift = re-version trigger.
+- GBP invoicing policy: fixed reference rate at version publication, client never sees sats, no conversion exposure.
+- Credit blocks: 10k/50k/200k sats + Custom (≥10k); 10k sat dust floor on top-up only; arbitrary-amount contract invariant confirmed.
+- Margin model: identity-API minimum £99/mo access fee + metered. Pure metered not viable for identity rail.
+- Treasury: hold sats, pay GBP from GBP, sweep above ops reserve only. CGT review with accountant ongoing.
+- Sovereign Teams: shared 100 GB pool, three bands (S/M/L), cross-product Opus in refueler.io project before build (SW-Teams-1).
+- GTM: HNW + accountant (not "family office"), warm-intro only, Legend+Share bundle, closed-door positioning.
+- Rate-card notification wording: both rails locked.
 
 *"Nothing stops this train."*

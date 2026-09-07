@@ -570,6 +570,92 @@ This is a stronger story than revealing products sequentially — it tells the u
 
 ## SW-Opus-1 decisions — locked 7 Sep 2026
 
+| **SW-Opus-2 · 7 Sep 2026** | all repos | **Unit economics, rate-card v1.0, GBP invoicing policy, credit blocks, margin model, treasury policy, Sovereign Teams structure, GTM reframe, rate-card notification wording. BRIDGE v8.4.** |
+
+## SW-Opus-2 decisions — locked 7 Sep 2026
+
+### Rate card v1.0
+
+| Action | Product | Sat cost |
+|---|---|---|
+| File transfer — base | Share | 10 / transfer |
+| File transfer — volume | Share | +100 / GB |
+| Permanent record (OTS anchor) | Share | 20 / transfer |
+| OTS confirmation webhook | Share | 0 (bundled — never gate a notification on a transfer already paid for) |
+| Legend private query | Legend | 10 / lookup |
+| Pass credential issuance | Pass | 50 / credential |
+| Capability discovery (`GET /capabilities`) | All | 0 (free — discovery must never be gated) |
+
+**Reference peg:** v1.0 issued at £50k BTC reference. Stated on the rate card.
+
+**Rate-card governance (locked):**
+- Mandatory review when 30-day trailing average BTC/GBP crosses a checkpoint.
+- First review trigger: **£100k BTC**. Subsequent: each doubling (£200k, £400k…) or halving (£30k, £20k…).
+- At review: if the GBP-equivalent of flagship actions has drifted >±40% from the issue-date band, publish a new version.
+- Direction of drift determines direction of revision: BTC appreciation → sat cost cut (credit stretches further, early holders rewarded); BTC crash → sat cost rise (abuse friction maintained).
+- Rate-card re-versioning does **not** break the anonymous rail's "no term lock" rule — current card always applies. Identity-rail term-locked clients are unaffected until their term expires.
+
+### GBP invoicing on identity rail
+
+Sat costs are the internal accounting unit. The GBP figure on an identity-rail invoice is derived once, at rate-card-version publication, using a fixed reference rate Refueler sets — never live spot. The client never sees a sat figure and never carries BTC volatility. Annual terms lock that GBP figure for 12 months; monthly gets 30 days' notice. This is costless to give: all identity-rail costs are GBP, all identity-rail revenue is GBP, no conversion exposure exists.
+
+### Credit block sizes (anonymous rail)
+
+**Contract:** accepts arbitrary-amount pay-then-mint above a 10,000-sat dust floor. BOLT12 forward-commitment invariant — blocks cannot be enforced in the contract.
+**Dust floor:** 10,000 sats minimum top-up. Applies to top-up only, not per-action spend.
+**v1 UI presets:** 10k · 50k · 200k sats + Custom (≥10k). Arbitrary amounts accepted.
+
+### Margin model
+
+Identity-rail API tier: **access fee of £99/mo minimum** (covers DPA, invoice, AM relationship, support overhead), with metered usage layered above. Metered-only is not viable for identity-rail — usage at typical law-firm/clinic volume (£10–15/mo metered) cannot sustain the commercial relationship. Access fee is the real revenue; metering captures genuine heavy users.
+
+Anonymous rail: pure prepaid-metered, no access fee, no relationship by design.
+
+**Contribution margin estimates (£40/mo fixed platform cost):**
+- 10 identity-rail API @ £99 access + light metered: ~£1,030/mo
+- 50 anonymous-rail API @ ~£25 credit avg: ~£1,190/mo
+- 100 Sovereign single-seat @ £24: ~£2,300/mo
+
+**Break-even:** Hetzner = one anonymous top-up. All fixed costs = two Sovereign subs.
+**First meaningful milestone: £1k MRR** (~40 Sovereign subs or 10 identity-API clients).
+
+### Treasury / volatility policy (locked)
+
+- Identity rail → GBP in, GBP costs out. No conversion, no exposure.
+- Anonymous rail + Lightning Sovereign → sats held in phoenixd, swept to cold storage (Sparrow, Payjoin v2) only when balance exceeds ops reserve.
+- GBP revenue (even 2 Sovereign subs) covers all GBP platform costs — never liquidate sats to pay opex.
+- Each sweep = CGT disposal event under current UK treatment. Review with crypto accountant regularly.
+- No fixed sweep %, no mandatory liquidation schedule. Sweeps are treasury moves only.
+
+### Sovereign Teams — structure locked, build deferred to cross-product Opus
+
+**Storage:** shared 100 GB pool per firm (not per-seat). Storage packs sold separately for genuine volume.
+**Seat definition:** one Locke keypair + one Sovereign entitlement per seat, all under one firm Stripe customer. Flat seats under one firm account for v1.
+**Pricing bands (UI-only, no API):**
+
+| SKU | Seats | Price/mo | Effective/seat |
+|---|---|---|---|
+| Teams S | up to 5 | £49 | £9.80 |
+| Teams M | up to 10 | £89 | £8.90 |
+| Teams L | up to 20 | £169 | £8.45 |
+| Beyond 20 | — | API / custom | — |
+
+1/3/12 cadence at identical per-month rate (Mullvad rule holds). Annual benefit = term-lock, not discount.
+**Stripe:** separate price objects per band (share-teams-s-monthly etc.), not a quantity field.
+**Build session:** SW-Teams-1 — scoped in a **cross-product Opus in the `refueler.io` project**, not a Share-only session. Seat/delegation is a cross-product primitive (same shape as Pass organiser → cohort, Merchant owner → staff tills, Legend firm → shared sub). Share Teams is its first consumer. Master-Locke-issues-sub-Lockes deferred to B12 (nutroot `threshold` leaves).
+
+### GTM reframe — HNW + accountant
+
+"Family office" (US term) dropped. UK reframe: **Bitcoin-native high-net-worth individuals and their accountants.** The accountant is both the sensitive-document counterparty and the warm-intro vector. Use case: "send this to my accountant privately" — one person's financial privacy end to end. Legend + Share bundle (£50/mo carries Share entitlement). Positioning stays closed-door — not on the website, not in the public whitepaper section. Outreach: warm intro only, via BHODL co-founder or Bitcoin-policy contacts. First outreach = a real Silent Drop link, not a deck.
+
+### Rate-card update notification wording (locked)
+
+**Identity rail** (user agreement, invoice, website, call):
+> "Your pricing is fixed for the length of your term. Monthly plans receive at least 30 days' written notice of any rate-card change before it takes effect; annual plans are locked to the rate-card version in force on the day you subscribe, for the full twelve months."
+
+**Anonymous rail** (credit-purchase surface — also discharges bearer/non-recoverable disclosure):
+> "Top up your credit and spend as you go. It's held by you, not in a recoverable account. If you lose it, we can't refund it. Buy what you plan to use soon."
+
 ### Tier model
 
 **Three tiers confirmed: Citizen / Sovereign / API.** Business and Enterprise demolished entirely. API tier IS the business tier — no separate label.

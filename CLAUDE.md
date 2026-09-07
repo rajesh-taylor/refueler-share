@@ -137,11 +137,11 @@ Session count is a guide not a constraint — split early, never overload. Plann
 - Share-JS-Refactor ✓ — `share.js` split into `crypto.js` / `upload.js` / `download.js` / entry `share.js`. Deployed `45a4d3b3`. 324 tests passing.
 
 **SW-Opus-1 ✓ complete (7 Sep 2026)** — three-tier model locked, rail model extended to API tier, Model B credit pool, API v1 feature gates, MCP v1 tool list, BOLT12 commitment, sandbox spec. BRIDGE v8.3.
-**SW-Opus-2 queued** — Sovereign Teams sizing, unit economics, rate-card numbers, keyset-versioned rate-lock, family office GTM.
+**SW-Opus-2 ✓ complete (7 Sep 2026)** — Rate card v1.0 locked. GBP invoicing policy locked. Credit blocks locked. Margin model locked (identity-API: £99/mo access fee + metered). Treasury policy locked (hold sats, pay GBP from GBP, sweep above ops reserve only). Sovereign Teams structure locked (shared 100 GB pool, three bands £49/£89/£169, cross-product Opus in refueler.io project before build). GTM reframe locked (HNW + accountant, warm-intro only, closed-door positioning). Rate-card notification wording locked (both rails). Rate-card governance: first review at £100k BTC 30-day trailing average. BRIDGE v8.4.
 
-**Next: SW build block (SW1–SW9)** — HMAC signing, credential issuance endpoint, webhook delivery, capability discovery, OTS webhook, acceptance/collection receipts.
+**Next: SW-Opus-3** — identity-API access-fee detail, then SW build block (SW1–SW9).
 
-Locked block sequence (AP-10 + SW-Opus-1): `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series ✓ → SW-Opus-1 ✓ → SW-Opus-2 → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
+Locked block sequence: `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series ✓ → SW-Opus-1 ✓ → SW-Opus-2 ✓ → SW-Opus-3 → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
 
 Session numbering convention (B7 onwards): single-scope sessions use plain numbers (e.g. S78).
 Sessions split by complexity use lettered suffixes (e.g. S73, S73a, S73b). Plain number is always
