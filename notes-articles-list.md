@@ -1,5 +1,5 @@
 # notes-articles-list.md — refueler.io /notes/ pipeline
-> **Version:** 1.1 | **Created:** AP-1 · 29 July 2026 | **Updated:** AP-7 · 2 Aug 2026
+> **Version:** 1.2 | **Created:** AP-1 · 29 July 2026 | **Updated:** Share-127 · 8 Seppt 2026
 > Editorial planning document. Lives in `refueler-share/` alongside CLAUDE.md and TESTING.md.
 > Load when in an editorial planning or article build session. Not by default.
 > Publishing platform: `refueler.io/notes/` (main domain, not share subdomain).
@@ -204,6 +204,23 @@ the articles are context, not a campaign.
 
 ---
 
+## Article 13 — Transmitting evidence when your witness cannot travel
+**Status:** Planned — scope at article 7 draft session
+**Audience:** Legal professionals, human rights organisations, ICC practitioners, asylum case workers
+**Product dependency:** None — but draft after article 7 (Susie conversation may shape angle)
+**Note:** Confined witnesses, endangered sources, asylum cases, ICC evidence, human rights documentation. Sender may be under surveillance; recipient in different jurisdiction; content must arrive intact and unreadable to intermediaries. Recorded video works today (encrypted chunks, fragment URL as key, server blind). Range request support needed for streaming large video — post-B9 engineering task; note the caveat honestly. Re-surface at article 7 draft session.
+
+---
+
+## Article 14 — The metadata leak nobody talks about: what querying a public block explorer tells the world
+**Status:** Planned — unlocks post-B9 (requires refueler-multi-core infrastructure operational)
+**Audience:** Bitcoin-native professionals, enterprise clients, privacy-conscious developers
+**Product dependency:** **B9 node live + refueler-multi-core operational before publishing**
+**Opening line (locked):** "Every time you look up a Bitcoin address on a public block explorer, you're telling that server exactly what you own and what you're watching. Here's what we built instead, and why it matters for our clients."
+**Note:** Every public Mempool.space/Blockstream query reveals what addresses you're watching — own node leaks nothing. The article that introduces Legend to the professional audience. Do not publish before refueler-multi-core is operational.
+
+---
+
 ## Full pipeline at a glance
 
 | # | Title (short) | Publish order | Dependency | Outreach hook |
@@ -220,6 +237,8 @@ the articles are context, not a campaign.
 | 10 | Case study (video editor) | Last | Real user + history | Social proof — alpha |
 | 11 | API / white-label notes | After API built | AP-2/AP-3 + build | IT decision-makers |
 | 12 | API technical integration / Nostr auth | After API built | AP-2/AP-3 + build | Developers at firms |
+| 13 | Witness evidence transmission | After article 7 | Susie conversation first | Legal/human rights orgs |
+| 14 | Block explorer metadata leak | Post-B9 | refueler-multi-core live | Bitcoin-native professionals |
 
 ---
 
