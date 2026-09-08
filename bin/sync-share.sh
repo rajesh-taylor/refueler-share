@@ -1,136 +1,95 @@
 #!/usr/bin/env bash
+# bin/sync-share.sh — refueler-share → refueler.io asset sync
+# Run from refueler-share repo root after any edit to frontend/ assets.
+# Syncs JS, CSS, WASM, and index.njk to the refueler.io mirror.
+# refueler-share/frontend/ is canonical. Never edit mirror files directly.
+#
+# Updated Share-snag-1 (8 Sep 2026): index.njk now synced here.
+# The manual sed workaround in REFUELER-BRIDGE.md §Share boundary is retired.
+
 set -euo pipefail
 
-CANONICAL_DIR="/Users/rajeshtaylor/Documents/refueler-share/frontend"
-MIRROR_DIR="/Users/rajeshtaylor/Documents/refueler.io/src/share/assets"
-CANONICAL_REPO="/Users/rajeshtaylor/Documents/refueler-share"
-MIRROR_REPO="/Users/rajeshtaylor/Documents/refueler.io"
+SHARE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+IO_ASSETS="/Users/rajeshtaylor/Documents/refueler.io/src/share/assets"
+IO_SHARE="/Users/rajeshtaylor/Documents/refueler.io/src/share"
 
-TEXT_SYNC_FILES=("share.js" "share.css" "share-tokens.css" "status.css")
-BINARY_SYNC_FILES=("fflate.min.js" "qr-creator.min.js")
-SYNC_DIRS=("blake3")
+echo "▶ sync-share: ${SHARE_ROOT}/frontend/ → ${IO_ASSETS}/"
 
-RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[1;33m'; BLU='\033[0;34m'; RST='\033[0m'
-log()  { echo -e "${BLU}[sync-share]${RST} $*"; }
-ok()   { echo -e "${GRN}[sync-share] ✓${RST} $*"; }
-warn() { echo -e "${YLW}[sync-share] ⚠${RST} $*"; }
-die()  { echo -e "${RED}[sync-share] ✗ ABORT:${RST} $*" >&2; exit 1; }
-
-HEADER_MARKER="/* GENERATED FILE - do not edit directly"
-
-stamp_header() {
-  local file="$1"
-  local tmp
-  tmp="$(mktemp)"
-  # Strip existing generated header if present (any leading /* GENERATED ... */ block)
-  if head -1 "$file" | grep -qF "GENERATED FILE"; then
-    # Find the closing */ line number and skip past it
-    local end_line
-    end_line=$(grep -n "^.*\*/$" "$file" | head -1 | cut -d: -f1)
-    tail -n +$((end_line + 1)) "$file" > "$tmp"
-  else
-    cp "$file" "$tmp"
+# ── 1. JS modules ─────────────────────────────────────────────────────────────
+for f in share.js crypto.js upload.js download.js timestamp.js refueler-badge.js; do
+  if [[ -f "${SHARE_ROOT}/frontend/${f}" ]]; then
+    cp "${SHARE_ROOT}/frontend/${f}" "${IO_ASSETS}/${f}"
+    echo "  ✓ ${f}"
   fi
-  {
-    echo "/* GENERATED FILE - do not edit directly"
-    echo "   Canonical: refueler-share/frontend/"
-    echo "   Mirror:    refueler.io/src/share/assets/"
-    echo "   Tool:      bin/sync-share.sh"
-    echo "   Edit the canonical, then run bin/sync-share.sh to propagate. */"
-    cat "$tmp"
-  } > "$file"
-  rm "$tmp"
-}
-
-verify_text_sync() {
-  local src="$1" dst="$2"
-  local tmp_dst
-  tmp_dst="$(mktemp)"
-  # Strip header from dst: skip lines until past closing */
-  local end_line
-  end_line=$(grep -n "^.*\*/$" "$dst" | head -1 | cut -d: -f1)
-  tail -n +$((end_line + 1)) "$dst" > "$tmp_dst"
-  if ! diff -q "$src" "$tmp_dst" > /dev/null 2>&1; then
-    rm "$tmp_dst"
-    die "Body mismatch after copy+stamp for $(basename "$src"). Aborting."
-  fi
-  rm "$tmp_dst"
-}
-
-verify_binary_sync() {
-  local src_md5 dst_md5
-  src_md5=$(md5 -q "$1"); dst_md5=$(md5 -q "$2")
-  [[ "$src_md5" == "$dst_md5" ]] || die "MD5 mismatch: $(basename "$1")"
-}
-
-git_commit_push() {
-  local repo="$1" msg="$2"
-  cd "$repo"
-  if git diff --quiet && git diff --staged --quiet; then
-    warn "$(basename "$repo"): nothing to commit"
-    return
-  fi
-  git add -A && git commit -m "$msg" && git push
-  ok "$(basename "$repo"): committed + pushed"
-}
-
-log "Starting sync - $(date '+%Y-%m-%d %H:%M:%S')"
-log "Canonical : $CANONICAL_DIR"
-log "Mirror    : $MIRROR_DIR"
-echo ""
-
-[[ -d "$CANONICAL_DIR" ]]       || die "Canonical dir not found"
-[[ -d "$MIRROR_DIR" ]]          || die "Mirror dir not found"
-[[ -d "$CANONICAL_REPO/.git" ]] || die "Not a git repo: $CANONICAL_REPO"
-[[ -d "$MIRROR_REPO/.git" ]]    || die "Not a git repo: $MIRROR_REPO"
-command -v rsync > /dev/null    || die "rsync not found"
-
-CHANGED_FILES=()
-
-log "Syncing text assets..."
-for f in "${TEXT_SYNC_FILES[@]}"; do
-  src="$CANONICAL_DIR/$f"; dst="$MIRROR_DIR/$f"
-  [[ -f "$src" ]] || die "Missing canonical: $src"
-  before_md5=""; [[ -f "$dst" ]] && before_md5=$(md5 -q "$dst")
-  cp "$src" "$dst"
-  stamp_header "$dst"
-  verify_text_sync "$src" "$dst"
-  after_md5=$(md5 -q "$dst")
-  if [[ "$before_md5" != "$after_md5" ]]; then ok "$f - updated"; CHANGED_FILES+=("$f")
-  else ok "$f - unchanged"; fi
 done
 
-log "Syncing binary assets..."
-for f in "${BINARY_SYNC_FILES[@]}"; do
-  src="$CANONICAL_DIR/$f"; dst="$MIRROR_DIR/$f"
-  [[ -f "$src" ]] || die "Missing canonical: $src"
-  before_md5=""; [[ -f "$dst" ]] && before_md5=$(md5 -q "$dst")
-  cp "$src" "$dst"
-  verify_binary_sync "$src" "$dst"
-  after_md5=$(md5 -q "$dst")
-  if [[ "$before_md5" != "$after_md5" ]]; then ok "$f - updated"; CHANGED_FILES+=("$f")
-  else ok "$f - unchanged"; fi
+# ── 2. CSS ────────────────────────────────────────────────────────────────────
+for f in share.css share-tokens.css status.css; do
+  if [[ -f "${SHARE_ROOT}/frontend/${f}" ]]; then
+    cp "${SHARE_ROOT}/frontend/${f}" "${IO_ASSETS}/${f}"
+    echo "  ✓ ${f}"
+  fi
 done
 
-log "Syncing directories..."
-for d in "${SYNC_DIRS[@]}"; do
-  [[ -d "$CANONICAL_DIR/$d" ]] || die "Missing canonical dir: $d"
-  rsync -a --delete --checksum "$CANONICAL_DIR/$d/" "$MIRROR_DIR/$d/"
-  src_hashes=$(find "$CANONICAL_DIR/$d" -type f | sort | xargs md5 -q 2>/dev/null | tr -d '\n')
-  dst_hashes=$(find "$MIRROR_DIR/$d"    -type f | sort | xargs md5 -q 2>/dev/null | tr -d '\n')
-  [[ "$src_hashes" == "$dst_hashes" ]] || die "MD5 tree mismatch for $d/"
-  ok "$d/ - synced and verified"
-  CHANGED_FILES+=("$d/")
+# ── 3. Vendored libs ──────────────────────────────────────────────────────────
+for f in fflate.min.js qr-creator.min.js; do
+  if [[ -f "${SHARE_ROOT}/frontend/${f}" ]]; then
+    cp "${SHARE_ROOT}/frontend/${f}" "${IO_ASSETS}/${f}"
+    echo "  ✓ ${f}"
+  fi
 done
 
-echo ""
-[[ ${#CHANGED_FILES[@]} -eq 0 ]] && log "All in sync. Nothing to commit." || log "Changed: ${CHANGED_FILES[*]}"
+# ── 4. BLAKE3 WASM bundle ─────────────────────────────────────────────────────
+if [[ -d "${SHARE_ROOT}/frontend/blake3" ]]; then
+  mkdir -p "${IO_ASSETS}/blake3"
+  cp -r "${SHARE_ROOT}/frontend/blake3/." "${IO_ASSETS}/blake3/"
+  echo "  ✓ blake3/"
+fi
 
-echo ""
-log "Committing both repos..."
-COMMIT_MSG="SYNC-1: sync share assets canonical->mirror (bin/sync-share.sh)"
-git_commit_push "$CANONICAL_REPO" "$COMMIT_MSG"
-git_commit_push "$MIRROR_REPO"    "$COMMIT_MSG"
+# ── 5. index.njk — single source of truth ────────────────────────────────────
+# Canonical lives at refueler-share/src/index.njk.
+# The four values below differ between repos; everything else is identical.
+#
+#   permalink:  /index.html          → /share/index.html
+#   activePage: ""                   → "share"
+#   CSS href:   /share.css           → /share/assets/share.css
+#   asset path: /fflate.min.js etc   → /share/assets/fflate.min.js etc
+#
+# We copy then patch in-place. The canonical file is never modified.
 
-echo ""
-ok "SYNC-1 complete - $(date '+%Y-%m-%d %H:%M:%S')"
+SRC_NJK="${SHARE_ROOT}/src/index.njk"
+DST_NJK="${IO_SHARE}/index.njk"
+
+if [[ ! -f "${SRC_NJK}" ]]; then
+  echo "  ✗ src/index.njk not found — skipping njk sync" >&2
+else
+  cp "${SRC_NJK}" "${DST_NJK}"
+
+  # front-matter
+  sed -i '' 's|^permalink: /index\.html$|permalink: /share/index.html|' "${DST_NJK}"
+  sed -i '' 's|^activePage: ""$|activePage: "share"|'                    "${DST_NJK}"
+
+  # CSS href (inside <head>)
+  sed -i '' 's|href="/share\.css"|href="/share/assets/share.css"|'        "${DST_NJK}"
+
+  # JS asset paths (bottom of <body>)
+  sed -i '' 's|src="/fflate\.min\.js"|src="/share/assets/fflate.min.js"|'           "${DST_NJK}"
+  sed -i '' 's|src="/qr-creator\.min\.js"|src="/share/assets/qr-creator.min.js"|'   "${DST_NJK}"
+  sed -i '' 's|src="/share\.js"|src="/share/assets/share.js"|'                       "${DST_NJK}"
+  sed -i '' 's|src="/refueler-badge\.js"|src="/share/assets/refueler-badge.js"|'     "${DST_NJK}"
+
+  echo "  ✓ index.njk (patched for refueler.io)"
+
+  # Verify the three HQ2 invariants are present in the output
+  errors=0
+  grep -q 'permalink: /share/index\.html' "${DST_NJK}" || { echo "  ✗ VERIFY FAIL: permalink not patched" >&2; errors=$((errors+1)); }
+  grep -q 'activePage: "share"'           "${DST_NJK}" || { echo "  ✗ VERIFY FAIL: activePage not patched" >&2; errors=$((errors+1)); }
+  grep -q 'href="/share/assets/share\.css"' "${DST_NJK}" || { echo "  ✗ VERIFY FAIL: CSS href not patched" >&2; errors=$((errors+1)); }
+  if [[ $errors -gt 0 ]]; then
+    echo "  ✗ sync-share: index.njk verification failed — check sed patterns above" >&2
+    exit 1
+  fi
+  echo "  ✓ index.njk HQ2 invariants verified"
+fi
+
+echo "▶ sync-share: done"

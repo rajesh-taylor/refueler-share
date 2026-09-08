@@ -45,11 +45,10 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 - CSS href: `/share/assets/share.css` — never `/share.css` (CSS lives at `/share/assets/`, not root)
 - `activePage: "share"` — never `""` (nav conditionals for PLANS/STATUS depend on this)
 
-**After placing any version of `refueler-io/src/share/index.njk`, always run this sed pass:**
-```bash
-sed -i '' 's/activePage: ""/activePage: "share"/' /Users/rajeshtaylor/Documents/refueler.io/src/share/index.njk && sed -i '' 's|href="/share.css"|href="/share/assets/share.css"|' /Users/rajeshtaylor/Documents/refueler.io/src/share/index.njk && sed -i '' 's|permalink: /index.html|permalink: /share/index.html|' /Users/rajeshtaylor/Documents/refueler.io/src/share/index.njk
-```
-Never place a Claude-generated `index.njk` without running this pass. Template changes (*.njk) go to `refueler-io/src/share/` only — never `refueler-share/src/`.
+**`index.njk` is synced by `bin/sync-share.sh`** — run it after any template change.
+The script patches the four repo-specific values (permalink, activePage, CSS href, asset
+paths) automatically and verifies the three HQ2 invariants on every run. Do not apply
+manual sed patches to `refueler.io/src/share/index.njk` — the script owns that file.
 
 ### Legend boundary
 | `refueler-io` | `refueler-legend` |
