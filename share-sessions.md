@@ -374,6 +374,30 @@ Identity-API £99/mo flat. Professional £249/mo defined-not-built (banded on se
 
 ---
 
+## SW4-Opus · 8 Sep 2026 — Webhook signing key architecture (Opus, uncounted)
+
+Options A/B/C/D evaluated against: KV-compromise resistance · anonymous-rail identity-freedom · dead-letter retry durability · implementation simplicity.
+
+**Option B chosen:** `rfs_whsec_ = HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)`. Encoded base58, prefixed `rfs_whsec_`. Issued once at registration. Re-derived statelessly at every delivery and cron retry. Never stored. `created_at` is rotation salt — re-registration produces a new whsec.
+
+**Options rejected:** A (encrypts secret-bearing ciphertext in KV, treated as permanently compromised; graceful-rotation advantage is precautionary-only for a notification key — not worth the posture cost). C (Worker never holds raw `rfs_sign_`; client-absent delivery/retry cannot sign — hard rejection). D (Option B plus redundant verify endpoint and client round-trip — no benefit).
+
+**Acknowledged costs:** Master-key rotation is fleet-disruptive (all clients re-register). Same consequence under Option A post-compromise — the only scenario that matters. `live_key` in dead-letter KV value is a documented exception to SW2c naming hardening (SW2c = key *names* in logs; values = opaque blobs; `rfs_live_` = semi-public handle, not a secret).
+
+**Decisions locked:**
+- New Worker secret: `WEBHOOK_SIGNING_MASTER_KEY`
+- `wh_config_` schema: `{ url, created_at, active }` — `whsec_hash` removed
+- Outbound header: `X-Refueler-Signature: t={unix_secs},v1={hmac_hex}`
+- Signed payload: `t + "." + raw_json_body`
+- Dead-letter key: `wh_dlq_{delivery_id}` (random UUID), TTL 7d, unsigned payload, re-sign at retry
+- SW4-patch required before SW4a: remove `whsec_hash`, wire derivation, scrub 5 BLAKE3 comment errors
+- SW5-Opus gate: receipt verifier audience (symmetric HMAC vs asymmetric Ed25519) mandatory before SW5 builds
+- Domain tag reserved: `"refueler.receipt.v1"` for SW5
+
+BRIDGE v8.8.
+
+---
+
 ## SW block session plan — white-label + API build (post-TG-block + TH-series, pre-B7)
 
 | Session | Label | Scope |
@@ -381,7 +405,8 @@ Identity-API £99/mo flat. Professional £249/mo defined-not-built (banded on se
 | SW1 | `9cb017d` | CF for SaaS setup — SaaS enablement, fallback origin, Worker route. |
 | SW2/SW2a | `1a1b518` | `api_auth.js` — HMAC-SHA256 + Option C sign-key hash. `POST /api/v1/credential/issue` — quota KV, 402 on exhaustion, AE logging, both rails, no Supabase row on anonymous rail. |
 | SW3 | `d223249` | `refueler-badge.js` — BLAKE3/Cashu/Bitcoin pill, Shadow DOM, Paper/Carbon aware, mounts via `data-refueler-badge`. Share-snag-1 prompted (index.njk drift). |
-| SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. |
+| SW4 | `452e7b8` | `webhook_reg.js` — POST/DELETE/GET `/api/v1/webhook/register`. `rfs_whsec_` issuance (32-byte base58, shown once). `wh_config_{sha256hex}` KV schema. URL validation (HTTPS-only, no localhost, no private/loopback/link-local IP). API tier only. 45 tests. **Requires SW4-patch before SW4a.** |
+| SW4-patch | TBD | `webhook_reg.js`: remove `whsec_hash` from KV writes; replace random-whsec generation with Option B HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`; scrub 5 BLAKE3 comment errors. Set `WEBHOOK_SIGNING_MASTER_KEY` Worker secret. Confirm zero live whsec recipients before landing. |
 | SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. OTS-confirmation webhook wired. |
 | SW4b | Webhooks III | Daily cron retry of dead-letter items. |
 | SW5 | Receipts | Acceptance receipts + collection receipts. "Proof of delivery" phrase nowhere in code or copy. |
@@ -391,6 +416,13 @@ Identity-API £99/mo flat. Professional £249/mo defined-not-built (banded on se
 | SW7 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. Rail declaration gate. Mandatory disclosure flow. Bracketed placeholders resolved. |
 | SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
 | SW9 | SW close | Snag sweep. TESTING.md additions. Context trim. B8 brief. Buffer review. |
+
+**SW block do-not-retry (SW4-Opus additions):**
+- DO NOT store `whsec_hash` in `wh_config_` KV — field removed at SW4-patch (Option B: derive, never store)
+- DO NOT derive `rfs_whsec_` without `created_at` in HMAC message — required rotation salt
+- DO NOT re-sign dead-letter retries with original `t` — fresh current timestamp at every retry
+- DO NOT conflate SW2c (KV key-name hardening) with KV value content — `live_key` in DLQ value is a documented exception
+- DO NOT begin SW5 build without SW5-Opus deciding receipt verifier audience
 
 **Buffer pool (2 sessions):** SW2c · SW5c
 

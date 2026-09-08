@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.5 | **Last updated:** SW-Opus-3 · 7 Sep 2026
+> **Version:** 7.6 | **Last updated:** SW4-Opus · 8 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -49,6 +49,8 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 `SUPABASE_SERVICE_KEY`, `STRIPE_SECRET_KEY` (sk_live_...ZehD),
 `STRIPE_WEBHOOK_SECRET` (rotated 21 Jul), `ADMIN_KEY`,
 `CF_ACCOUNT_ID` (fc4f3e5aeebe483677d14185daf544f5), `CF_AE_TOKEN` (Account Analytics Read).
+
+**Pending (set before SW4a):** `WEBHOOK_SIGNING_MASTER_KEY` — 32 bytes hex, `wrangler secret put WEBHOOK_SIGNING_MASTER_KEY`. Master for stateless webhook signing key derivation (SW4-Opus Option B). Do not rotate without cause — rotation requires fleet-wide client re-registration.
 
 ---
 
@@ -156,6 +158,10 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Template changes in `refueler-share/src/` | `*.njk` → `refueler-io/src/share/` · CSS/JS → `refueler-share/frontend/` + `bin/sync-share.sh` |
 | Edit files in `refueler.io/src/share/assets/` | GENERATED — edit in `refueler-share/frontend/` then sync |
 | Cloudflare Queues / Durable Objects / D1 for webhooks | `ctx.waitUntil` + KV dead-letter only |
+| Store `whsec_hash` in `wh_config_` KV | Field removed SW4-patch — Option B derives, never stores |
+| Derive `rfs_whsec_` without `created_at` in HMAC message | `created_at` is required rotation salt |
+| Re-sign dead-letter retries with original `t` | Always re-sign with fresh current timestamp at retry |
+| Begin SW5 build without SW5-Opus session | SW5-Opus must decide receipt verifier audience (symmetric HMAC vs asymmetric Ed25519) first |
 | Sub-keys per API user | One keypair per commercial relationship + `transfer_ref` attribution |
 | Require Turnstile on resume credential path | `resume: true` + `resume_uuid` + R2 HEAD check on chunk 0000 |
 | HTTP 409 on resume chunk PUT as generic 4xx | 409 = transfer already complete — clear IDB + "already completed" message + New Upload CTA |
@@ -173,7 +179,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**TH-series ✓ complete. SW-Opus-1 ✓ · SW-Opus-2 ✓ · SW-Opus-3 ✓ complete (7 Sep 2026). SW1 ready to run.**
+**TH-series ✓ complete. SW-Opus-1 ✓ · SW-Opus-2 ✓ · SW-Opus-3 ✓ · SW4-Opus ✓ complete. SW4-patch + SW4a next.**
 **TG-block ✓ · Share-JS-Refactor ✓ · 432 tests passing.**
 
 | Block | Commit | Summary |
@@ -187,6 +193,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | TG-block ✓ | `0e51385` | Destroy-after-download · tidal window · Execution Dock · owner DELETE. 432 tests. |
 | TH-series ✓ | `45a4d3b3` | OTS relay · permanent-record UI · JS refactor (5 modules). |
 | SW-Opus-1 ✓ | — | Three-tier model · rail model · Model B · API v1 features · MCP v1 tools · BOLT12 · sandbox. BRIDGE v8.3. |
+| SW4-Opus ✓ | — | Webhook signing architecture locked. Option B (stateless HMAC derivation). `WEBHOOK_SIGNING_MASTER_KEY` new secret. `whsec_hash` removed from KV schema. Dead-letter schema locked. BRIDGE v8.8. |
 
 ---
 

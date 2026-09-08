@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.7 | **Created:** 28 July 2026 | **Updated:** Pass-Vocab-2 · 2026-09-08
+> **Version:** 8.8 | **Created:** 28 July 2026 | **Updated:** SW4-Opus · 2026-09-08
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -143,6 +143,7 @@ manual sed patches to `refueler.io/src/share/index.njk` — the script owns that
 | **SW-Opus-1 · 7 Sep 2026** | all repos | **Platform API + white-label architecture locked.** Three-tier model (Citizen / Sovereign / API). Model B (platform credit pool). Rail model extended to API tier. MCP v1 tools locked. BOLT12 B9+ forward commitment. See §SW-Opus-1 decisions. BRIDGE v8.3. |
 | **SW-Opus-2 · 7 Sep 2026** | all repos | **Unit economics, rate-card v1.0, GBP invoicing policy, credit blocks, margin model, treasury policy, Sovereign Teams structure, GTM reframe, rate-card notification wording.** See §SW-Opus-2 decisions. BRIDGE v8.4. |
 | **SW-Opus-3 · 7 Sep 2026** | all repos | **Identity-API access fee locked (£99 flat / £249 Professional defined-not-built). DPA mandatory by default. GDPR framing narrowed. AM role defined. Four-surface pre-payment disclosure wording locked.** See §SW-Opus-3 decisions. BRIDGE v8.5. |
+| **SW4-Opus · 8 Sep 2026** | all repos | **Webhook signing key architecture locked. Option B (stateless HMAC derivation) chosen. `WEBHOOK_SIGNING_MASTER_KEY` new Worker secret. `whsec_hash` removed from `wh_config_` KV schema. Dead-letter schema locked. SW4-patch required before SW4a. SW5-Opus gate: receipt verifier audience decision mandatory before SW5 builds.** See §SW4-Opus decisions. BRIDGE v8.8. |
 | **Share-127 · 8 Sep 2026** | refueler-share | **NUT-22/NUT-24 Teams open items scoped. NUT-22 clear-auth = net-new infrastructure; scope in own Opus before any Teams block. NUT-24-alone may enter SW scope on anonymous API rail — decide at SW-scoping session. Full decisions: `nut22-nut24-two-header-decisions.md`.** BRIDGE v8.6. |
 | **Pass-Vocab-2 · 8 Sep 2026** | refueler-pass (vocabulary) | **Westminster vocabulary lock — five locations: St James's Square (organiser set / keyholder privacy), The Citadel (Deed / cold-storage recovery), Admiralty Arch (NUT-11 presentation threshold / tier gate), Buxton Memorial Fountain (architectural abolition of surveillance category / compulsion argument), Supreme Court UK (independent verifier / Legend separation / Miller II × Raven canary). Trinity House confirmed Share geography. All five: whitepaper + closed-door only.** BRIDGE v8.7. |
 
@@ -458,7 +459,7 @@ Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are m
 ### API features — v1 (buildable on current stack, ships in SW block)
 
 - `GET /api/v1/capabilities` — tier, rail, feature set, current rate-card version. Build first.
-- OTS-confirmation webhook — fires on `timestamp_state: pending → complete`. HMAC-signed via `rfs_whsec_`.
+- OTS-confirmation webhook — fires on `timestamp_state: pending → complete`. HMAC-signed via `rfs_whsec_` (Option B derivation — see §SW4-Opus decisions). Signing construction locked SW4-Opus.
 - Acceptance receipts + collection receipts. **"Proof of delivery" retired as a phrase — unprovable, never claim it.**
 
 ### API features — v2 (each with explicit gate)
@@ -677,6 +678,51 @@ No open architectural blockers for SW1–SW9. SW7 inputs (DPA wording, four-surf
 
 ---
 
+## SW4-Opus decisions — locked 8 Sep 2026
+
+### Webhook signing key architecture
+
+**Chosen: Option B — stateless HMAC derivation from master secret. No signing key material ever touches KV.**
+
+Options evaluated: A (encrypt whsec in KV with master), B (derive statelessly), C (reuse rfs_sign_), D (verify endpoint). A rejected: persists secret-bearing ciphertext in a store treated as permanently compromised; graceful-rotation advantage applies only to precautionary rotation of a notification-only key — not worth the posture cost. C rejected: Worker never holds raw `rfs_sign_`; client-absent delivery and retry cannot sign — hard rejection. D rejected: is Option B with an unnecessary client-round-trip verification endpoint bolted on; no benefit, clear costs.
+
+**Derivation:**
+```
+whsec = HMAC-SHA256(
+  key     = WEBHOOK_SIGNING_MASTER_KEY,
+  message = "refueler.webhook.v1" + "\n" + rfs_live_key + "\n" + created_at
+)
+```
+Encoded base58, prefixed `rfs_whsec_`. Issued once at POST `/api/v1/webhook/register`. Re-derived statelessly at every SW4a delivery and SW4b cron retry. Never stored in any form. `created_at` (from `wh_config_` KV record) acts as rotation salt — `DELETE` → re-register produces a genuinely different whsec.
+
+**New Worker secret:** `WEBHOOK_SIGNING_MASTER_KEY` (32 bytes hex, `wrangler secret put`). Rotation is fleet-disruptive (all clients must re-register) — generate strong, store in Cloudflare secrets, do not rotate without cause.
+
+**`wh_config_` KV schema (final):**
+- Active record (TTL 2y): `{ url, created_at, active: true }`
+- Tombstone after DELETE (TTL 7d): `{ url, created_at, active: false, deleted_at }`
+- `whsec_hash` field **removed** — no verification role under Option B.
+
+**Outbound signing construction (locked):**
+- Header: `X-Refueler-Signature: t={unix_secs},v1={hmac_hex}`
+- Also: `X-Refueler-Event: {event_type}` · `X-Refueler-Delivery: {delivery_id}`
+- Signed payload: `t + "." + raw_json_body`
+- HMAC: `HMAC-SHA256(UTF-8(rfs_whsec_string), UTF-8(signed_payload))`
+- Client replay window: reject if `abs(now - t) > 300s`, then constant-time compare
+
+Deliberate divergence from `api_auth.js` canonical string (which hashes the body first): outbound webhook payloads are small server-controlled JSON; Stripe-compatible construction lets integrators use existing verifier libraries unmodified. Both constructions are correct for their context.
+
+**Dead-letter KV record (SW4b):**
+- Key: `wh_dlq_{delivery_id}` (random UUID — never keyed by client identity), TTL 7d
+- Value: `{ live_key, created_at, url, event_type, delivery_id, payload (unsigned raw JSON), attempts, first_failed_at, next_retry_at }`
+- Payload stored unsigned; re-signed with fresh `t` at each retry (keeps client's 300s window tight even on day-7 retry)
+- `live_key` in KV value is a documented exception to SW2c (SW2c addressed KV key *names* and passive log leakage; values are opaque blobs, not indexed or logged; `rfs_live_` is the client's semi-public handle, not a secret)
+
+**SW4-patch required before SW4a:** remove `whsec_hash` from KV writes in `webhook_reg.js`; replace random-whsec generation with Option B derivation; scrub 5 comment lines that say "BLAKE3" when code uses `sha256Hex`. Confirm zero live whsec recipients before patch lands.
+
+**SW5-Opus gate (mandatory — do not skip):** before SW5 builds, a dedicated Opus session must decide receipt verifier audience. Symmetric (issuing client only) → HMAC, same master, domain tag `"refueler.receipt.v1"`. Asymmetric (third-party verifier) → Ed25519/secp256k1 over published Worker public key — materially different infrastructure. Domain tag `"refueler.receipt.v1"` reserved now; both doors remain open until SW5-Opus.
+
+---
+
 ## TH-Opus-2 decisions — locked 6 Sep 2026; pricing updated 6 Sep 2026
 
 ### Legend pricing (locked — starting price, will reprice upward before Legend goes live)
@@ -837,6 +883,7 @@ Adds BLS12-381 pairing-based BDHKE as the v3 Cashu blind-signature protocol (key
 - **Share:** No immediate impact. CDK pinned at 0.17.2 — do not unpin until stable release ships v3 support (est. 6–12 months post-merge).
 
 **Action:** Monitor merge. Do not upgrade CDK until a stable release ships v3. Flag at B8 design session.
+**CDK 0.18.0 released (Sep 2026).** Key changes relevant to Refueler: (1) `cdk-lnbits` first-class backend removed — no impact, Worker calls LNbits REST directly and does not use CDK as a payment backend. (2) NUT-12 deterministic DLEQ nonces landed with test vectors — favourable for B8 NUT-11 Mode 2. (3) NUT-20 deterministic quote signing keys — note for B8/B9 whitepaper. (4) NUT-25 BOLT12 offer descriptions landed — our B9+ forward commitment is now in a stable CDK release. (5) Mint private-key containers (`MintKeys`, `MintKeyPair`, `MintKeySet`) no longer implement `Serialize` — good security hardening, no impact on Worker-side usage. CDK pin remains 0.17.2 until B8 scoping session decides upgrade path.
 
 ---
 
