@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.6 | **Created:** 28 July 2026 | **Updated:** Share-127 · 2026-09-08
+> **Version:** 8.7 | **Created:** 28 July 2026 | **Updated:** Pass-Vocab-2 · 2026-09-08
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -12,28 +12,17 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 
 **Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant terminal (Fenchurch St line cafés and restaurants — tablet, counter/kitchen, landscape) · **Relay** (`io.refueler.merchant`, formerly NumoPay fork — in-venue order entry, Android phone, floor/waiter staff, portrait) · Refueler Pass (Lightning-native ticketing and venue access — own repo + Claude project) · **Refill** (consumer app, React Native, LNbits Lightning — commuter pre-orders + Legend + Pass)
 
-**Product names locked CC-103:** Floor staff Android app = Relay ("Relay by Refueler"). Consumer app = Refill. Both names tie to the Refueler ecosystem without requiring explanation.
+**Product names locked CC-103:** Floor staff Android app = Relay ("Relay by Refueler"). Consumer app = Refill.
 
 **North star (internal only):** *Come for privacy, stay for Bitcoin.*
 
-**Merchant profile (locked TDP-A):** Small, family-run independent businesses — cafés, coffee shops, delis, local restaurants. Community relationships, care over throughput. Not multi-national franchises. Not high-volume kitchens. Not competing with Square/Toast/Lightspeed. First merchants likely in Essex (Southend, Leigh-on-Sea, Westcliff) before London corridor.
+**Merchant profile (locked TDP-A):** Small, family-run independent businesses — cafés, coffee shops, delis, local restaurants. Community relationships, care over throughput. Not multi-national franchises. Not competing with Square/Toast/Lightspeed. First merchants likely in Essex (Southend, Leigh-on-Sea, Westcliff) before London corridor.
 
 **Local paths:** Main site + POS: `/Users/rajeshtaylor/Documents/refueler.io/` · Share: `/Users/rajeshtaylor/Documents/refueler-share/` · Legend: `/Users/rajeshtaylor/Documents/refueler-legend/` · NumoPay fork: `/Users/rajeshtaylor/Documents/refueler.io/terminals/numo-fork/` · Pass: `/Users/rajeshtaylor/Documents/refueler-pass/`
 
 **GitHub:** `github.com/rajesh-taylor`
 
----
-
-## Product architecture — confirmed CC-83
-
-| Product | Repo | Audience | Form factor |
-|---|---|---|---|
-| Consumer app | `refueler-app` | Customers | Mobile (portrait) |
-| Merchant terminal | `refueler-io/src/merchant/` | Counter/kitchen staff | Tablet, landscape + portrait |
-| NumoPay fork | `numo-fork` (cashubtc/Numo v1.8 base) | Waiter/floor staff | Android phone, portrait |
-| Command Centre | `refueler-io/src/command-centre/` | Franchise HQ / admin | Desktop |
-
-**Order flow:** consumer app places order → merchant terminal receives → NumoPay handles in-venue fulfilment and payment.
+**Order flow (CC-83):** Consumer app places order → merchant terminal receives → Relay handles in-venue fulfilment and payment.
 
 ---
 
@@ -86,6 +75,10 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 |---|---|
 | Merchant terminal receives pre-orders from consumer app via Supabase | In-venue order entry, floor staff payment processing |
 | Supabase shared schema — `orders`, `merchant_orders`, `venue_partners` | Android app code, NumoPay-specific UI, item catalogue (local → Supabase in NumoPay-A) |
+
+**ADR:** `numo-fork/NUMO-PAY-A-ADR.md` and `refueler-io/docs/NUMO-PAY-A-ADR.md`
+
+**Relay build state (CC-103):** BUILD SUCCESSFUL. Commit `54b15de`. Installed on Pixel 9a. Next: Web-Touch-1 → Icon-B (Relay app icon, Android only). S-numo-v31 (numo_navy refs) pending.
 
 ---
 
@@ -141,29 +134,25 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 
 ---
 
-## NumoPay fork — architecture decisions (NumoPay-A, CC-99)
-
-**ADR:** `numo-fork/NUMO-PAY-A-ADR.md` and `refueler-io/docs/NUMO-PAY-A-ADR.md`
-
----
-
 ## Session references — cross-repo
 
 | Session | Repos touched | Notes |
 |---|---|---|
 | CSS-4 through CSS-7b | refueler-io | CSS rationalisation track — complete |
 | **TH-Opus-2 · 6 Sep 2026** | all repos | **Tower Hill — Legend price locked. Cross-product entitlement architecture locked. Legend native verifier design locked. Pass timestamping pattern locked. Monument / ti-fectar introduced.** See §TH-Opus-2 decisions below. BRIDGE v8.0. |
-| **TH-0 · 6 Sep 2026** | refueler-share | **OTS bundle spike — javascript-opentimestamps killed (601 KB gzipped, no fetch path). Hand-rolled approach confirmed GO.** Calendars reachable (2/2 from host; Cloudflare egress to confirm at TH-1 start). Round-trip clean. Committed-value construction identified as load-bearing for Legend verifier and Pass hashlock: `SHA-256(blake3_root \|\| url_fragment_nonce)`. Share×Pass×Legend three-product proof-of-receipt primitive identified — see §Share×Pass×Legend forward note. BRIDGE v8.1. |
-| **SW-Opus-1 · 7 Sep 2026** | refueler-share + all repos | **Platform API + white-label architecture locked.** Three-tier model confirmed (Citizen / Sovereign / API — Business + Enterprise demolished). Sovereign Teams → SW-Opus-2. Rail model extended to API tier: identity rail (Stripe/invoice) and anonymous rail (Lightning/sats) mutually exclusive per relationship; rail declared by principal at onboarding, never inferred from payment. Mandatory pre-payment disclosure of both irreversibles (account loss + prepaid balance loss) locked for four surfaces: user agreement, initial call/email, website. Model B (platform credit pool) selected — only model that survives the anonymous rail. Two substrates: identity rail = server ledger; anonymous rail = client-held bearer Cashu credit tokens. Rate card versioned per product. Term protection = identity-rail feature only. API v1 features: capability discovery, OTS-confirmation webhook, acceptance + collection receipts. "Proof of delivery" retired as a phrase. API v2 features gated per dependency. MCP v1 tools: `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote` — MCP runs in agent's trust domain, handles ciphertext only (invariant). Policy-encoded transfers locked as Nutroot three-product forward commitment. BOLT12 locked as B9+ forward commitment; credit-issuance contract must accept arbitrary-amount pay-then-mint. Sandbox: credential-limited, no time cap, both rails, `rfs_test_` prefix. BRIDGE v8.3. |
-| **SW-Opus-2 · 7 Sep 2026** | all repos | **Unit economics, rate-card v1.0, GBP invoicing policy, credit blocks, margin model, treasury policy, Sovereign Teams structure, GTM reframe, rate-card notification wording. BRIDGE v8.4.** |
-| **SW-Opus-3 · 7 Sep 2026** | all repos | **Identity-API access fee locked (flat £99 / Professional £249 defined-but-unbuilt, banded on service level not allowance, both prices subject to review). DPA mandatory for all identity-rail clients by default; Refueler provides standard Art. 28 addendum; client-paper review gated to Professional band. GDPR framing narrowed: anonymous rail = controller-of-metadata, not "outside GDPR." AM role defined: onboarding call, rail-declaration sign-off, DPA coordination, security-incident notification, Raven canary explanation, quarterly usage review, rate-card change notification; AM function named in agreement, personal name at onboarding only, no SLA. Four-surface pre-payment disclosure wording locked (both rails, bracketed placeholders slot at SW7). SW table in share-sessions.md overwritten to match Master-Context. IT handover PDF session dropped by intent. SW1 confirmed ready. BRIDGE v8.5.** |
+| **TH-0 · 6 Sep 2026** | refueler-share | **OTS bundle spike — javascript-opentimestamps killed (601 KB gzipped, no fetch path). Hand-rolled approach confirmed GO.** Calendars reachable (2/2 from host; Cloudflare egress to confirm at TH-1 start). Committed-value construction: `SHA-256(blake3_root \|\| url_fragment_nonce)`. Share×Pass×Legend three-product proof-of-receipt primitive identified. BRIDGE v8.1. |
+| **SW-Opus-1 · 7 Sep 2026** | all repos | **Platform API + white-label architecture locked.** Three-tier model (Citizen / Sovereign / API). Model B (platform credit pool). Rail model extended to API tier. MCP v1 tools locked. BOLT12 B9+ forward commitment. See §SW-Opus-1 decisions. BRIDGE v8.3. |
+| **SW-Opus-2 · 7 Sep 2026** | all repos | **Unit economics, rate-card v1.0, GBP invoicing policy, credit blocks, margin model, treasury policy, Sovereign Teams structure, GTM reframe, rate-card notification wording.** See §SW-Opus-2 decisions. BRIDGE v8.4. |
+| **SW-Opus-3 · 7 Sep 2026** | all repos | **Identity-API access fee locked (£99 flat / £249 Professional defined-not-built). DPA mandatory by default. GDPR framing narrowed. AM role defined. Four-surface pre-payment disclosure wording locked.** See §SW-Opus-3 decisions. BRIDGE v8.5. |
+| **Share-127 · 8 Sep 2026** | refueler-share | **NUT-22/NUT-24 Teams open items scoped. NUT-22 clear-auth = net-new infrastructure; scope in own Opus before any Teams block. NUT-24-alone may enter SW scope on anonymous API rail — decide at SW-scoping session. Full decisions: `nut22-nut24-two-header-decisions.md`.** BRIDGE v8.6. |
+| **Pass-Vocab-2 · 8 Sep 2026** | refueler-pass (vocabulary) | **Westminster vocabulary lock — five locations: St James's Square (organiser set / keyholder privacy), The Citadel (Deed / cold-storage recovery), Admiralty Arch (NUT-11 presentation threshold / tier gate), Buxton Memorial Fountain (architectural abolition of surveillance category / compulsion argument), Supreme Court UK (independent verifier / Legend separation / Miller II × Raven canary). Trinity House confirmed Share geography. All five: whitepaper + closed-door only.** BRIDGE v8.7. |
 
 ---
 
 ## Active action items (Rajesh)
 
 - **[Lightning — ALL projects] LNbits on Hetzner CAX21 LOCKED.** Next: NB-2 (provision + phoenixd + Cloudflare Tunnel — refueler-share project).
-- **[All products] Remove all Blink references** from merchant handover docs, Worker secrets, and config files. Replace `BLINK_API_KEY` / `BLINK_SHARE_API_KEY` with `LNBITS_URL` / `LNBITS_API_KEY`. Execute at NB-5 for refueler-io; at B7-S74 for Share Worker. ✅ Dashboard button label updated to `phoenixd (future)` · S-TG-4b. Remaining: Worker secrets + `LIGHTNING_STATE_LABELS` display text in `dashboard.js` (update at B7-S74 when node live).
+- **[All products] Remove all Blink references** from merchant handover docs, Worker secrets, and config files. Replace `BLINK_API_KEY` / `BLINK_SHARE_API_KEY` with `LNBITS_URL` / `LNBITS_API_KEY`. Execute at NB-5 for refueler-io; at B7-S74 for Share Worker. Remaining: Worker secrets + `LIGHTNING_STATE_LABELS` display text in `dashboard.js` (update at B7-S74 when node live).
 - **[Share] Run `bin/sync-share.sh`** after every edit to any shared frontend asset.
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant).
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns (Ops wallet created at NB-3).
@@ -172,35 +161,22 @@ Never place a Claude-generated `index.njk` without running this pass. Template c
 - Rotate Anthropic API key before csuite briefing reuse.
 - Football-data.org API key held by Rajesh — ready for Events intelligence layer session.
 - Commission rate planning conversation before first real merchant.
-- **[Pass + Merchant] Geographic vocabulary — COMPLETE · 1 Sep 2026.** Pass-Vocab-1 + Merchant-Vocab-1 both locked. All four Liberties fully named.
+- **[Pass + Merchant] Geographic vocabulary — COMPLETE.** Pass-Vocab-1 + Merchant-Vocab-1 locked 1 Sep 2026. Pass-Vocab-2 locked 8 Sep 2026. Full Westminster vocabulary now in BRIDGE.
 - **[Pass]** Solicitor briefing brief to draft before appointment.
 - **[Pass]** P0 spike: cross-merchant redemption unlinkability (NUT-29 → Nutroot) before v2 build.
 - **[All products]** Remove all Blink ops wallet references from merchant handover docs before first real merchant.
 - **[Legend]** UC-9 Opus session — Recovery Coordination Layer. Load: CLAUDE.md · SESSIONS.md · MASTER.md · legend-use-cases.md.
 - **[Legend] Create Stripe product/price objects for Legend: £50/mo + £480/yr** — at Legend subscription flow build session.
 - **[Share] Add `LEGEND_ENTITLEMENT_PUBKEY` Worker secret** — at Legend cross-product entitlement build session (post-Legend subscription flow live).
-- ~~**[Share] Run TH-Opus-3a + TH-Opus-3b**~~ ✅ TH-series complete · 6 Sep 2026.
-- **[Share] Run SW-Opus-2** before SW build sessions — unit economics, rate-card numbers, Sovereign Teams sizing, family office GTM. See SW-Opus-1 decisions in CLAUDE.md.
-- **[Share / AM] Pre-payment disclosure — four surfaces. ✅ Wording locked SW-Opus-3.** Both rails. Bracketed placeholders ([recovery credential], [anonymous standing-receive]) slot at SW7. Principal must declare rail before AP is involved — one-way door. Anonymous rail: "signed digital tokens held by client," never "ecash" in client-facing copy.
 - **[Share / AM] Accountant-arrival disclosure.** Add to identity-rail initial-call talking points and follow-up email: principal must declare rail before sharing payment details with accounts team. Fiat payment arriving after rail is locked does not flip the rail — but creates a paper trail pointing at an anonymous-intent service. Decision sequencing is the privacy protection.
 - **[All products / Legend] Legend node costs.** When Legend infrastructure is scoped: attribute a share of node operating costs to Share and Pass, both of which depend on Legend for OTS verification and block queries. Accounting convention for margin model — resolve at Legend scoping Opus.
-- **[Legend / pricing] Pleb-Bitcoiner design principle.** Free tier must be genuinely useful, not a nag screen. Sovereign tier priced for Bitcoin conviction, not compliance budget. API is where commercial weight sits. Lock formally at Legend planning session and Pass-Vocab-2.
+- **[Legend / pricing] Pleb-Bitcoiner design principle.** Free tier must be genuinely useful, not a nag screen. Sovereign tier priced for Bitcoin conviction, not compliance budget. API is where commercial weight sits. Lock formally at Legend planning session.
 - **[Share] Engage solicitor for standard Art. 28 DPA addendum** before first identity-API client. Priority review items: §4 (no-uptime SLA) and §5 (DPA). Client-paper review (bespoke DPA) is a Professional-band service, not included at £99.
-- **[Share] SW table in share-sessions.md** — overwrite to Master-Context version. ✅ Confirmed SW-Opus-3.
-- **[Share vocabulary track] API/MCP whitepaper atom descriptors.** , / need London-register naming before B9 whitepaper. Not urgent — allocate at a naming session.
+- **[Share vocabulary track] API/MCP whitepaper atom descriptors.** `refueler_capabilities` / `refueler_quote` / `refueler_balance` need London-register naming before B9 whitepaper. Not urgent — allocate at a naming session.
 
 ---
 
-## Relay (numo-fork) — context
-
-**Name locked CC-103:** Relay ("Relay by Refueler"). Floor/waiter staff. Android phone, portrait.
-**Base:** cashubtc/Numo v1.8. **Fork:** `rajesh-taylor/numo-fork`. Package: `io.refueler.merchant`. Hardening phases 1–3 complete.
-**Build state (CC-103):** BUILD SUCCESSFUL. Commit `54b15de`. Installed on Pixel 9a.
-**Next:** Web-Touch-1 → Icon-B (Relay app icon, Android only). S-numo-v31 (numo_navy refs) pending.
-
----
-
-## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1 + AP-10 + TH-Opus-2)
+## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1 + AP-10 + TH-Opus-2 + Pass-Vocab-2)
 
 The Refueler product ecosystem is anchored in London geography — specifically the Thames corridor from Westminster eastward to the Pool of London. This is not decorative: it reflects where Refueler is built, by a Londoner, and the institutions drawn on performed real historical versions of what these products do. The vocabulary is coherent, earned, and novel in both senses of the word.
 
@@ -238,152 +214,15 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | **a Note** | The reward stamp instrument issued by the Exchange — the Merchant equivalent of "a Pass". The Exchange issues Notes; Notes accumulate silently per fulfilled order (`✦` glyph); Notes clear at the Exchange. Pre-Bank-of-England provenance: Royal Exchange merchants issued promissory notes before the Bank existed (1694). The instrument belongs to the Exchange, not the Bank. Whitepaper provenance sentence: "the Exchange issued scrip; the Exchange still does." | UI / product / professional copy / whitepaper |
 | **Clearance** | The live melt path event at the Exchange — the moment a Note is presented and value received. "Your Note has cleared." The Exchange was the venue where bills were cleared — presented, verified, paid. LCH (London Clearing House) is its direct descendant. Completely distinct from Redemption (Pass). | UI / product / professional copy / whitepaper |
 | **The Monument — ti-fectar** | The Monument to the Great Fire of London (Candlewick / Bridge Ward boundary). Designed by Hooke, consultation by Wren. Simultaneously: a memorial, a zenith telescope, and a ward boundary marker — three functions, one structure, invisible to the casual observer. **Whitepaper / closed-door use only**: the platform metaphor for the Refueler ecosystem as a whole — four products, one coherent structure, each doing a different thing in plain sight. "The Monument was built to stand at a ward boundary, function as a scientific instrument, and serve as a memorial — simultaneously, invisibly. The Liberties were designed the same way." Pairs with the Pileus quote. Geography credit: Candlewick Ward = Merchant territory — the fire was a mercantile catastrophe, the rebuilding a mercantile act. The Monument belongs to the Exchange, not to Share. The Cibber frieze (Liberty holds the pileus) is already locked as whitepaper preamble. | Whitepaper §Four Liberties / platform structure · closed-door pitch — never product UI, never website copy |
+| **St James's Square** | A private garden in the centre of Westminster, maintained for keyholders only — no announcement is made of who holds one. Surrounded by institutions dealing in intelligence and strategic analysis (Chatham House, The London Library, East India Club). The central garden is invisible to those without the key; so is the keyholder list. **Refueler mapping:** the organiser's credential set in Pass — who has been issued a Pass, who has not, is a decision made inside the garden. Presentation reveals nothing about the issuer or the other keyholders. "St James's Square does not announce its members. Neither does the Jewel Tower." Whitepaper §permission model; closed-door framing for enterprise Pass organiser set management. | Whitepaper / closed-door |
+| **The Citadel (Horseguards Road)** | The WWII Admiralty bombproof communications bunker, completed 1941 — six-foot concrete walls, self-contained power and water, integrated with the Cabinet War Rooms by tunnel. Still operational (MOD). Covered in Boston ivy since construction: planted to soften its appearance, maintained ever since, quietly impenetrable on the most-walked route between Parliament and Trafalgar Square, unremarkable to almost everyone who passes it. **Refueler mapping:** the Deed and cold-storage recovery architecture. Designed to survive everything that destroys normal infrastructure — a server failure, a key compromise, a compulsion event. Printed on paper, held by you, outside any system that can be seized. "If everything else falls, the Deed holds." The Citadel is ivy-covered and unmarked. The Deed is a piece of paper. Both are hardened. Forward: The Citadel earns a professional-copy column entry once Pass is live and the Deed is explained to clients — the phrase does the work. | Whitepaper §recovery architecture / closed-door — never product UI |
+| **Admiralty Arch** | The 1912 ceremonial gateway between The Mall and Trafalgar Square. Three arches: the central, largest arch is sealed except for State processions — it opens for the sovereign's passage and closes again. The left and right arches carry ordinary traffic. Hidden detail: a stone nose at nose-height in the right arch wall, placed by an unknown sculptor — widely understood as a joke on Napoleon, there since 1912, noticed by almost no one. **Refueler mapping:** the NUT-11 P2PK credential presentation threshold — the gate that opens for the right key and holds for any other. Citizen-tier passes through the side arches; the central arch is sealed to all but the Sovereign credential. The nose: a reminder that the architecture can contain a joke visible only to those who know to look. Reserve the nose for the whitepaper as a footnote — the kind of detail that rewards the careful reader. Whitepaper §permission model / credential verification. | Whitepaper / closed-door |
+| **Buxton Memorial Fountain** | Gothic Revival drinking fountain, Victoria Tower Gardens, yards from the Houses of Parliament. Commissioned 1865 by Charles Buxton to commemorate the 1834 Slavery Abolition Act and the work of his father Thomas Fowell Buxton and William Wilberforce. Eight carved panels of British monarchs — the reigns in which successive liberties were established. The 1834 Act did not merely restrict the ownership of persons; it removed the legal category under which such ownership had been possible. Parliament passed the law here; the memorial stands here; the architecture the law created cannot be undone by passing another law, because the category has gone. **Refueler mapping:** the architectural abolition of the surveillance data category. Ecash does not merely make tracking harder — it removes the data structure that makes surveillance possible. Not privacy as policy (reversible); privacy as architecture (not reversible). The Deed, once issued, has no back door to legislate against. Pairs with Penn/Bushel's Case (conscience) in whitepaper §compulsion argument. | Whitepaper §compulsion / closed-door — never product UI |
+| **Supreme Court UK** | Established 2009 in the former Middlesex Guildhall, Parliament Square. Separated from Parliament by the Constitutional Reform Act 2005 — previously the final court of appeal sat inside the House of Lords, meaning the legislature was also the highest judicial authority. The separation was architectural: one institution moved across the square. Justices wear suits, not wigs — ceremony does not confer authority; the reasoning does. The court cannot strike down primary legislation but can rule on the limits of executive power — as in Miller II, finding that prorogation to avoid Parliamentary scrutiny was unlawful. The architecture of the state resisted compulsion by the executive. **Refueler mapping:** Legend as the independent verifier. A verifier housed inside the product it verifies is no verifier. Legend is architecturally separated from Share (the issuer), as the Supreme Court is separated from Parliament (the lawmaker). Miller II maps to the Raven canary: an architectural signal that cannot be faked, and that the state cannot suppress without the absence itself becoming the signal. "Legend verifies what Share issued. They are separate by design — as all final arbiters must be." | Whitepaper §verifier architecture / closed-door |
 
 ---
 
-## TH-Opus-2 decisions — locked 6 Sep 2026; pricing updated 6 Sep 2026
-
-### Legend pricing (locked — starting price, will reprice upward before Legend goes live)
-
-| Plan | Price | Notes |
-|---|---|---|
-| **Legend free** | £0 | Public block explorer surface. Private-query layer, native verifier, Share entitlement — all behind paywall. |
-| **Legend paid (monthly)** | **£50/mo** | Private-query layer + native OTS verifier + Sovereign Share entitlement (100 GB, no API). |
-| **Legend paid (annual)** | **£600/yr** | Twelve months at the monthly rate. No discount framing, no savings framing — this is the annual price. Per no-discount-ever rule. |
-
-**Rationale (locked):** Legend priced as the senior product that includes Share, not Share with an explorer bolt-on. The private-query layer, native verifier, BOLT12 primitives (B9+), and OTS primitives (TH-series) justify significant daylight above Sovereign (£24/mo). £50/mo is a starting price — it will only increase as features are added before Legend goes live. Legend infrastructure (Hetzner node, full Bitcoin node, block scanning) carries real running costs that justify future price increases. Sovereign Share subscribers do not receive Legend access — the entitlement is one-directional only (Legend → Share).
-
-### Cross-product entitlement architecture (locked)
-
-**Model: one signed bearer voucher, two issuance triggers.**
-
-When a Legend subscription settles (Stripe rail or Lightning rail), Legend issues a signed bearer entitlement voucher:
-
-```json
-{
-  "product_origin": "legend",
-  "tier": "sovereign",
-  "cap_gb": 100,
-  "api": false,
-  "period_end": "<unix_timestamp>",
-  "voucher_id": "<random>",
-  "bind_pubkey": null,
-  "sig": "<Legend issuer secp256k1 signature>"
-}
-```
-
-**Share-side acceptance (locked):**
-- Worker secret: `LEGEND_ENTITLEMENT_PUBKEY` — Legend's issuer public key.
-- At Share credential-issue path: verify sig against `LEGEND_ENTITLEMENT_PUBKEY`, check `period_end > now()`, check `product_origin === 'legend'`.
-- **Hard clamp regardless of voucher fields:** any voucher with `product_origin: 'legend'` is clamped to 100 GB cap and `api: false` on the Share side. A buggy or compromised Legend issuer cannot escalate to Business/API tier by signing a rogue voucher. Defence in depth.
-- On valid voucher: mint Sovereign transfer credential exactly as Stripe/Lightning path — downstream flow unchanged.
-
-**Rail-agnostic by design:**
-- Stripe rail: Legend re-issues voucher on `customer.subscription.updated` / portal re-fetch.
-- Lightning rail: credential stored in browser memory (same model as Share Lightning credentials). Deed recovery (B8 Locke) is the recovery path.
-- Share implements one acceptance path — it does not know or care which rail Legend used.
-
-**Identity invariant preserved:** voucher rides in browser memory only. No Supabase row. No email field. Load-bearing for Silent Drop — do not break.
-
-**Blast radius mitigation:**
-- Period-boxing: `period_end` is the hard expiry. A leaked voucher has one billing cycle of blast radius at most.
-- Future binding (B8): once Locke / NUT-11 Mode 2 exists, the voucher grows its `bind_pubkey` field — token becomes useless without the keypair. Format carries the field now (null) to avoid a breaking format change at B8. Do not implement binding in the current build.
-
-**No per-voucher byte counter:** this reintroduces transfer-linkability. Accepted trade-off: one billing cycle of theoretical sharing for a privacy-preserving credential model.
-
-**Build dependency:** Legend must have a subscription flow before the Share-side acceptor has anything to accept. Format and clamp are locked now and buildable in Share independently. The acceptor is dormant until `LEGEND_ENTITLEMENT_PUBKEY` is set as a Worker secret. This is a BRIDGE-propagated decision, not a Share build session in the current block.
-
-**Rotation:** Legend issuer key rotation follows the same discipline as API key rotation — `POST /api/v1/keys/rotate` equivalent, 24h grace window. Share Worker secret updated at rotation.
-
-### Legend native verifier design (locked)
-
-**Principle:** verification is client-side in Legend throughout — the file never leaves the browser at any step.
-
-**Verification flow (post-TH-1):**
-1. Recipient imports three items from the downloaded bundle: the decrypted file (or content hash), the nonce, and the raw `.ots` proof.
-2. Legend recomputes the committed value (nonced SHA-256 digest — exact construction locked at TH-0/TH-1; do not over-specify here).
-3. Parses the `.ots` Merkle path to the Bitcoin attestation.
-4. Confirms the attested block against **Legend's own block data** — no third-party explorer, no public calendar server call at this step.
-5. Reports: *"These exact bytes existed on or before block [N] — [date]. Verified against Legend. This does not prove authorship, delivery, or that the contents are true."* Honest scope stated in UI, every time.
-
-**Two states:**
-- **Complete:** block seal shown as above.
-- **Pending:** *"Submitted [time], awaiting Bitcoin confirmation — typically a few hours."* Upgrade offered through Legend's own blind relay (same `/timestamp/upgrade` opaque-byte pattern as Share Worker) — never by having the browser hit a public calendar directly. The pending upgrade relay is the non-leak at the last step.
-
-**Share surface:** on a transfer carrying a date seal, the download UI shows *"Verify this date seal in Legend →"*. Handoff is manual — recipient downloads bundle and imports into Legend. No automatic cross-product file transmission (would be a leak). Manual handoff keeps bytes local.
-
-**No verify view in Share v1.** Legend is the sole verifier at launch.
-
-### Pass credential issuance timestamping (locked)
-
-**What gets stamped (locked):**
-- **Keyset / epoch seal (default for events):** Pass seals a commitment to the issuance keyset when a batch is minted. Keyset public keys are already public (NUT-01/02) — zero privacy loss, scale-free. Proves every credential in the batch existed by date Y. One seal per batch, not per holder.
-- **Per-credential seal (opt-in, high-value one-offs):** for single authorisations, estate documents, board resolutions issued as Pass credentials — mirrors Share's per-transfer Sovereign opt-in exactly.
-
-**Legend verifies Pass seals** using the same flow as Share seals. Westminster issues, Temple verifies, Tower stamps — one verifier, three sources.
-
-**OTS relay architecture (locked):**
-- **Product-agnostic relay, deployed per-product.** Each product's Worker carries its own `/timestamp/submit` + `/timestamp/upgrade`. Share's relay and Pass's relay are separate deployments of the same stateless pattern.
-- The relay sees only opaque nonced 32-byte SHA-256 digests — cannot distinguish a Share digest from a Pass one by design.
-- No runtime cross-product relay calls. Products remain independently deployable. No single relay becomes a cross-product correlation surface.
-- Build once in Share (TH-1), document the pattern, propagate to Pass Worker at Pass timestamp build session.
-- Pass pricing and timeline remain out of scope (Q4 Pass planning session).
-
-### Composes with Nutroot (forward note)
-
-The keyset epoch seal composes naturally with Nutroot (NUT-10 v3 PR #421): timestamping an epoch seals *when the spending conditions were fixed*, making them un-backdatable. Design to compose when Nutroot ships — do not take a dependency on it. Monitor status at B8 design session.
-
----
-
-## Share × Pass × Legend — Nutroot hashlock forward note (TH-0 · 6 Sep 2026)
-
-**Status: not a build item. B8/B12 territory, gates on Nutroot PR #421 merge + NUT-11 Mode 2 live.**
-
-The OTS committed value chosen at TH-1 — `SHA-256(blake3_root || url_fragment_nonce)` — is structurally identical to a Nutroot `hashlock` leaf preimage. This is not a coincidence. It is the correct design revealing itself from three directions simultaneously: privacy (opaque to non-URL-holders), integrity (BLAKE3 root composes with OTS into one receipt), and interoperability (preimage shape matches Nutroot hashlock).
-
-**The three-product proof-of-receipt flow:**
-
-1. **Share** stamps the transfer: computes `commitment = SHA-256(blake3_root || url_fragment_nonce)`, submits to OTS calendar via Worker relay, stores pending `.ots` in R2. Also issues a Pass credential (Nutroot token) with two leaves:
-   - `hashlock` leaf: lock = `SHA-256(commitment)`. Spendable only by whoever reveals `commitment` itself.
-   - `after` leaf: minimum Bitcoin block height for confirmation (e.g. current tip + ~6 blocks ≈ 1 hour forward).
-
-2. **Legend** verifies the OTS proof. When the Bitcoin block seal is confirmed, Legend has traversed the Merkle path from `commitment` to the attested block. It returns the `commitment` value to the credential holder (who already knows it — it's derived from their file + URL). The `hashlock` is satisfied. The `after` leaf is satisfied once the block height is met.
-
-3. **Pass** accepts the credential with both leaves satisfied and executes whatever the policy specifies: unlock a document vault, release a payment, grant access, countersign a certificate. The Refill app surfaces the credential state to the holder — locked until Legend confirms, then unlocked.
-
-**The concrete use case:** a barrister sends a settlement agreement via Share. The OTS proof is issued as a Pass credential with policy encoded in Nutroot leaves: binding only if the counterparty demonstrates receipt before the settlement deadline block height. No notary. No DocuSign. Verified against Bitcoin. The recipient's Refill app shows the credential as locked pending Legend's confirmation. On confirmation: the credential unlocks and the policy executes. Westminster passes it. Temple verifies it. The Tower stamped it. Three products, one flow, no intermediary.
-
-**Why this matters for TH-1:** the committed value construction `SHA-256(blake3_root || url_fragment_nonce)` must not be changed after TH-1 without re-evaluating this entire flow. If TH-1 chooses `SHA-256(raw_file)` instead, the privacy model breaks (file content linkable) and the hashlock preimage no longer derives from something the recipient uniquely holds (the URL nonce). The construction is load-bearing for all three products.
-
-**Build dependency chain:** TH-1 locks the preimage shape → B8 builds NUT-11 Mode 2 (Locke) → Pass planning session (Q4 2026) designs Nutroot credential with hashlock using this preimage shape → B12 builds FROST + Nutroot → three-product flow becomes operational.
-
-**Whitepaper treatment (B9):** §Future work. One paragraph. Do not claim it is built. State the primitive and the dependency chain honestly.
-
-**Do not raise this in Pass planning session without first confirming Nutroot PR #421 status.** If Nutroot has not merged by Q4 Pass planning, the hashlock leaf is theoretical — note it, do not design around it.
-
----
-
-## Locke — credential-as-key design (locked AP-ARCH · 31 Aug 2026)
-
-**Locke is the name of the mechanism and the object** — the credential that unlocks the Harbourmaster dashboard. NUT-11 Mode 2 P2PK in its full form (B8). The name is operational: it is a Locke (not a lock), and it is a Locke (John, philosopher of consent — "no one can be put out of his estate, and subjected to the political power of another, without his own consent"). Both readings are correct.
-
-**Locke lifecycle:**
-- **Issued:** at Harbourmaster onboarding. One Lightning payment → one Deed (BIP-39 mnemonic) → one Locke (secp256k1 keypair, secure enclave storage on device).
-- **Presented:** at every Harbourmaster login. Challenge-response (NUT-11 Mode 2). No password. No email.
-- **Rotated:** on device change, Deed recovery, or voluntary rotation. Old Locke retired; new Locke authorised against the KV pubkey set.
-- **Revoked:** Refueler can remove a pubkey from the KV authorised set — this is the one compulsion surface (stated plainly in whitepaper §threat model). Cannot impersonate a Harbourmaster. Cannot decrypt cargo. The cargo key is in the URL fragment, which Refueler never sees.
-
-**Multi-device:** account holds a set of authorised pubkeys. Each device holds its own Locke. Add a device: present valid existing Locke, authorise new pubkey, mint new Locke. Remove: drop pubkey from set.
-
-**Recovery:** Primary — the Deed (recovery Locke, offline keypair, generated at onboarding). Firm path — FROST social recovery (B12). Informed cliff: loss of all devices without the Deed = loss of access. Stated plainly at onboarding.
-
-**Key storage exception:** Locke private keys stored in platform passkey / secure enclave. Documented exception to credentials-in-browser-memory-only rule. Applies to Locke only.
-
-**Locke is separate from the subscription credential.** Subscription = entitlement. Locke = access. Two separate objects from one payment event.
-
----
-
-## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026; AP-10 · 3 Sep 2026; TH-Opus-2 · 6 Sep 2026)
+## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026; AP-10 · 3 Sep 2026; TH-Opus-2 · 6 Sep 2026; Pass-Vocab-2 · 8 Sep 2026)
 
 | Term | Website / UI | Professional copy | Whitepaper / docs | Closed door / internal |
 |---|---|---|---|---|
@@ -436,6 +275,11 @@ The OTS committed value chosen at TH-1 — `SHA-256(blake3_root || url_fragment_
 | Cleopatra's Needle | — | — | — | ✓ (held — attestation monument) |
 | Pall Mall | — | — | — | ✓ (held — Enterprise register) |
 | **Monument / ti-fectar** | — | — | ✓ (platform structure metaphor — WP §Four Liberties) | ✓ (closed-door pitch) |
+| St James's Square | — | — | ✓ (WP §permission model) | ✓ (organiser set — closed-door) |
+| The Citadel (Horseguards Rd) | — | — | ✓ (WP §recovery architecture) | ✓ (Deed / cold-storage framing) |
+| Admiralty Arch | — | — | ✓ (WP §permission model / credential verification) | ✓ (tier threshold — closed-door) |
+| Buxton Memorial Fountain | — | — | ✓ (WP §compulsion argument) | ✓ (closed-door only) |
+| Supreme Court UK | — | — | ✓ (WP §verifier architecture) | ✓ (closed-door) |
 
 **Rule:** if a term is not in the Website/UI column, it does not appear on `refueler.io` outside of the whitepaper and notes articles. Harbourmaster, Quay, "a Pass", "a Note", and "Clearance" are the only geography/product terms that have passed the website test.
 
@@ -577,7 +421,89 @@ This is a stronger story than revealing products sequentially — it tells the u
 
 ## SW-Opus-1 decisions — locked 7 Sep 2026
 
-| **SW-Opus-2 · 7 Sep 2026** | all repos | **Unit economics, rate-card v1.0, GBP invoicing policy, credit blocks, margin model, treasury policy, Sovereign Teams structure, GTM reframe, rate-card notification wording. BRIDGE v8.4.** |
+### Platform model
+
+**Three tiers: Citizen / Sovereign / API.** Business and Enterprise demolished entirely. API tier IS the business tier — no separate label.
+
+**Sovereign** ships in two SKUs:
+- **Sovereign** — single-seat, UI-only, no API.
+- **Sovereign Teams** — N-seat, shared pool, one bill, UI-only, no API. Build: SW-Teams-1 (cross-product Opus in `refueler.io` project — not a Share-only session).
+
+**API ⊃ UI** (one-directional): API key holder may also use the web interface. **Sovereign ⊅ API**: Sovereign subscribers never get API access.
+
+**API tier is invoiceable** — preserves PO/invoice path for firms that cannot pay by card or Lightning.
+
+### Rail model extended to API tier
+
+Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship — same physics as the consumer tier split.
+
+- **Identity rail:** recoverable credentials, invoice, DPA, accounts-payable-friendly. No identity-free features. No anonymous Silent Drop provisioning.
+- **Anonymous rail:** unlocks Silent Drop provisioning and anonymous machine-to-machine primitives. No recovery beyond the Deed, no invoice (an invoice is an identity artefact).
+- **Rail is declared by the client's principal at onboarding** — not inferred from how payment happened. Payment habit can never silently reconfigure the product.
+- **DO NOT add Supabase row or email field to anonymous-rail API credentials** — same invariant as Lightning consumer path.
+
+**Mandatory pre-payment disclosure** of both irreversibles (aimed at principal, before AP handoff): identity rail forecloses identity-free features; anonymous rail has no recovery and prepaid balance loss is permanent. Disclosure appears in: user agreement, initial call/meeting, email, and website — four surfaces.
+
+### Pricing model
+
+**Model B (platform credit pool).** Models A and C rejected — neither survives the anonymous rail.
+
+**Two substrates, one rate card:**
+- Identity rail: server-held recovering ledger, auditable, invoiceable, optional itemised view.
+- Anonymous rail: client-held bearer Cashu credit tokens (blind-signed, unlinkable, non-recoverable). Balance is a stack of ecash — not a server record. Losing the token stack = losing the balance, permanently.
+
+**Rate card versioned** (v1.0, v1.1…): action → sat cost per product. Product cost rises → new rate-card version for that product only; credit value unchanged.
+
+**Term protection is an identity-rail feature.** Annual prepay locked at purchase-version for 12 months; monthly gets 30 days' notice. Anonymous rail: current rate card always.
+
+### API features — v1 (buildable on current stack, ships in SW block)
+
+- `GET /api/v1/capabilities` — tier, rail, feature set, current rate-card version. Build first.
+- OTS-confirmation webhook — fires on `timestamp_state: pending → complete`. HMAC-signed via `rfs_whsec_`.
+- Acceptance receipts + collection receipts. **"Proof of delivery" retired as a phrase — unprovable, never claim it.**
+
+### API features — v2 (each with explicit gate)
+
+| Feature | Gate |
+|---|---|
+| Silent Drop provisioning via API | SD-block shipped (Hetzner) |
+| Agent-to-agent transfers | SD provisioning live |
+| Verifiable agent identity (NUT-11 Mode 2) | B8 — `bind_pubkey` field reserved in voucher now |
+| Batch credential issuance | Pass API (Q4) |
+| Composable receipts | v1 if free off credit-token work, else v2 |
+
+### API features — forward commitments (document, do not build)
+
+**Policy-encoded transfers** via the Nutroot three-product flow (gates: Nutroot PR #421 merge + B8 + Pass + B12). There is no honest Worker-side version — the Worker never holds keys. The policy is encoded in Pass Nutroot leaves, Legend verifies the block condition, the leaf satisfies. Document; do not fake.
+
+**Transfer chaining:** research direction. Not committed.
+
+### MCP v1 tool list
+
+| Tool | Purpose | Status |
+|---|---|---|
+| `refueler_capabilities` | Capability discovery — first call any agent makes | v1, build when API ships |
+| `refueler_send_file` | Encrypt and upload — runs in agent's trust domain, ciphertext only | v1 |
+| `refueler_check_transfer` | Poll transfer status | v1 |
+| `refueler_quote` | Action cost + current balance | v1 |
+
+Remaining tools (inbox, timestamp verify, Pass issuance, Legend query) locked as contracts; each ships the day its backing product comes online.
+
+**MCP architectural constraint (invariant):** MCP server runs in the agent's trust domain and handles ciphertext only. Never a Refueler-hosted plaintext endpoint.
+
+**Whitepaper naming:** `refueler_capabilities`, `refueler_quote`/`refueler_balance` need London-register atom descriptors. Vocabulary track item — not urgent.
+
+### BOLT12 / MCP agent payment — B9+ forward commitment
+
+phoenixd already supports BOLT12 — no new infrastructure. SW constraints that must not foreclose this:
+1. Credit-issuance contract accepts arbitrary-amount pay-then-mint (not blocks-only).
+2. MCP response envelope can carry `payment_required` + offer field without breaking change.
+
+### Sandbox spec
+
+Credential-limited, no time cap. Model-B test-credits; both rails walkable with real HMAC. `rfs_test_`-prefixed keys (never `rfs_live_` or `rfs_sign_` in test files — GitHub scanner). Non-anonymous by design (observable for debugging) — "do not send real cargo to the sandbox" stated plainly in the sandbox itself.
+
+---
 
 ## SW-Opus-2 decisions — locked 7 Sep 2026
 
@@ -663,91 +589,8 @@ Anonymous rail: pure prepaid-metered, no access fee, no relationship by design.
 **Anonymous rail** (credit-purchase surface — also discharges bearer/non-recoverable disclosure):
 > "Top up your credit and spend as you go. It's held by you, not in a recoverable account. If you lose it, we can't refund it. Buy what you plan to use soon."
 
-### Tier model
-
-**Three tiers confirmed: Citizen / Sovereign / API.** Business and Enterprise demolished entirely. API tier IS the business tier — no separate label.
-
-**Sovereign** ships in two SKUs:
-- **Sovereign** — single-seat, UI-only, no API.
-- **Sovereign Teams** — N-seat, shared pool, one bill, UI-only, no API. Sizing → SW-Opus-2.
-
-**API ⊃ UI** (one-directional): API key holder may also use the web interface. **Sovereign ⊅ API**: Sovereign subscribers never get API access. Price-enforced — API sits clearly above Sovereign.
-
-**API tier is invoiceable** — preserves PO/invoice path for firms that cannot pay by card or Lightning.
-
-### Rail model extended to API tier
-
-Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship — same physics as the consumer tier split.
-
-- **Identity rail:** recoverable credentials, invoice, DPA, accounts-payable-friendly. No identity-free features. No anonymous Silent Drop provisioning.
-- **Anonymous rail:** unlocks Silent Drop provisioning and anonymous machine-to-machine primitives. No recovery beyond the Deed, no invoice (an invoice is an identity artefact).
-- **Rail is declared by the client's principal at onboarding** — not inferred from how payment happened. Payment habit can never silently reconfigure the product.
-- **DO NOT add Supabase row or email field to anonymous-rail API credentials** — same invariant as Lightning consumer path.
-
-**Mandatory pre-payment disclosure** of both irreversibles (aimed at principal, before AP handoff): identity rail forecloses identity-free features; anonymous rail has no recovery and prepaid balance loss is permanent. Disclosure appears in: user agreement, initial call/meeting, email, and website — four surfaces.
-
-### Pricing model
-
-**Model B (platform credit pool).** Models A and C rejected — neither survives the anonymous rail.
-
-**Two substrates, one rate card:**
-- Identity rail: server-held recovering ledger, auditable, invoiceable, optional itemised view.
-- Anonymous rail: client-held bearer Cashu credit tokens (blind-signed, unlinkable, non-recoverable). Balance is a stack of ecash — not a server record. Losing the token stack = losing the balance, permanently.
-
-**Rate card versioned** (v1.0, v1.1…): action → sat cost per product. Product cost rises → new rate-card version for that product only; credit value unchanged.
-
-**Term protection is an identity-rail feature.** Annual prepay locked at purchase-version for 12 months; monthly gets 30 days' notice. Anonymous rail: current rate card always.
-
-**Deferred to SW-Opus-2:** unit economics (sat figures per action, credit block sizes), GBP denomination boundary, BTC/GBP volatility treasury question, keyset-versioned rate-lock for anonymous rail.
-
-### API features — v1 (buildable on current stack, ships in SW block)
-
-- `GET /api/v1/capabilities` — tier, rail, feature set, current rate-card version. Build first.
-- OTS-confirmation webhook — fires on `timestamp_state: pending → complete`. HMAC-signed via `rfs_whsec_`.
-- Acceptance receipts + collection receipts. **"Proof of delivery" retired as a phrase — unprovable, never claim it.**
-
-### API features — v2 (each with explicit gate)
-
-| Feature | Gate |
-|---|---|
-| Silent Drop provisioning via API | SD-block shipped (Hetzner) |
-| Agent-to-agent transfers | SD provisioning live |
-| Verifiable agent identity (NUT-11 Mode 2) | B8 — `bind_pubkey` field reserved in voucher now |
-| Batch credential issuance | Pass API (Q4) |
-| Composable receipts | v1 if free off credit-token work, else v2 |
-
-### API features — forward commitments (document, do not build)
-
-**Policy-encoded transfers** via the Nutroot three-product flow (gates: Nutroot PR #421 merge + B8 + Pass + B12). There is no honest Worker-side version — the Worker never holds keys. The policy is encoded in Pass Nutroot leaves, Legend verifies the block condition, the leaf satisfies. Document; do not fake.
-
-**Transfer chaining:** research direction. Not committed.
-
-### MCP v1 tool list
-
-| Tool | Purpose | Status |
-|---|---|---|
-| `refueler_capabilities` | Capability discovery — first call any agent makes | v1, build when API ships |
-| `refueler_send_file` | Encrypt and upload — runs in agent's trust domain, ciphertext only | v1 |
-| `refueler_check_transfer` | Poll transfer status | v1 |
-| `refueler_quote` | Action cost + current balance | v1 |
-
-Remaining tools (inbox, timestamp verify, Pass issuance, Legend query) locked as contracts; each ships the day its backing product comes online.
-
-**MCP architectural constraint (invariant):** MCP server runs in the agent's trust domain and handles ciphertext only. Never a Refueler-hosted plaintext endpoint.
-
-**Whitepaper naming:** `refueler_capabilities`, `refueler_quote`/`refueler_balance` need London-register atom descriptors. Vocabulary track item — not urgent.
-
-### BOLT12 / MCP agent payment — B9+ forward commitment
-
-phoenixd already supports BOLT12 — no new infrastructure. SW constraints that must not foreclose this:
-1. Credit-issuance contract accepts arbitrary-amount pay-then-mint (not blocks-only).
-2. MCP response envelope can carry `payment_required` + offer field without breaking change.
-
-### Sandbox spec
-
-Credential-limited, no time cap. Model-B test-credits; both rails walkable with real HMAC. `rfs_test_`-prefixed keys (never `rfs_live_` or `rfs_sign_` in test files — GitHub scanner). Non-anonymous by design (observable for debugging) — "do not send real cargo to the sandbox" stated plainly in the sandbox itself.
-
 ---
+
 ## SW-Opus-3 decisions — locked 7 Sep 2026
 
 ### Identity-API access fee
@@ -831,7 +674,150 @@ At rate-card v1.0 (£50k BTC reference peg): 1 sat = £0.00050. Metered usage fo
 
 ### SW build block — confirmed ready
 
-No open architectural blockers for SW1–SW9. SW7 inputs (DPA wording, four-surface disclosure, rail-declaration gate) locked in this session. Sandbox spec (SW6) unchanged from SW-Opus-1. IT handover PDF session dropped by intent — folded into SW7 onboarding flow. share-sessions.md SW table overwritten to match Master-Context (authoritative). SW-Teams-1 correctly scoped to refueler.io project as cross-product Opus — not part of SW1–SW9. SW1 prompt confirmed ready to run.
+No open architectural blockers for SW1–SW9. SW7 inputs (DPA wording, four-surface disclosure, rail-declaration gate) locked in this session. Sandbox spec (SW6) unchanged from SW-Opus-1. IT handover PDF session dropped by intent — folded into SW7 onboarding flow. SW-Teams-1 correctly scoped to refueler.io project as cross-product Opus — not part of SW1–SW9. SW1 prompt confirmed ready to run.
+
+---
+
+## TH-Opus-2 decisions — locked 6 Sep 2026; pricing updated 6 Sep 2026
+
+### Legend pricing (locked — starting price, will reprice upward before Legend goes live)
+
+| Plan | Price | Notes |
+|---|---|---|
+| **Legend free** | £0 | Public block explorer surface. Private-query layer, native verifier, Share entitlement — all behind paywall. |
+| **Legend paid (monthly)** | **£50/mo** | Private-query layer + native OTS verifier + Sovereign Share entitlement (100 GB, no API). |
+| **Legend paid (annual)** | **£600/yr** | Twelve months at the monthly rate. No discount framing, no savings framing — this is the annual price. Per no-discount-ever rule. |
+
+**Rationale (locked):** Legend priced as the senior product that includes Share, not Share with an explorer bolt-on. The private-query layer, native verifier, BOLT12 primitives (B9+), and OTS primitives (TH-series) justify significant daylight above Sovereign (£24/mo). £50/mo is a starting price — it will only increase as features are added before Legend goes live. Legend infrastructure (Hetzner node, full Bitcoin node, block scanning) carries real running costs that justify future price increases. Sovereign Share subscribers do not receive Legend access — the entitlement is one-directional only (Legend → Share).
+
+### Cross-product entitlement architecture (locked)
+
+**Model: one signed bearer voucher, two issuance triggers.**
+
+When a Legend subscription settles (Stripe rail or Lightning rail), Legend issues a signed bearer entitlement voucher:
+
+```json
+{
+  "product_origin": "legend",
+  "tier": "sovereign",
+  "cap_gb": 100,
+  "api": false,
+  "period_end": "<unix_timestamp>",
+  "voucher_id": "<random>",
+  "bind_pubkey": null,
+  "sig": "<Legend issuer secp256k1 signature>"
+}
+```
+
+**Share-side acceptance (locked):**
+- Worker secret: `LEGEND_ENTITLEMENT_PUBKEY` — Legend's issuer public key.
+- At Share credential-issue path: verify sig against `LEGEND_ENTITLEMENT_PUBKEY`, check `period_end > now()`, check `product_origin === 'legend'`.
+- **Hard clamp regardless of voucher fields:** any voucher with `product_origin: 'legend'` is clamped to 100 GB cap and `api: false` on the Share side. A buggy or compromised Legend issuer cannot escalate to Business/API tier by signing a rogue voucher. Defence in depth.
+- On valid voucher: mint Sovereign transfer credential exactly as Stripe/Lightning path — downstream flow unchanged.
+
+**Rail-agnostic by design:**
+- Stripe rail: Legend re-issues voucher on `customer.subscription.updated` / portal re-fetch.
+- Lightning rail: credential stored in browser memory (same model as Share Lightning credentials). Deed recovery (B8 Locke) is the recovery path.
+- Share implements one acceptance path — it does not know or care which rail Legend used.
+
+**Identity invariant preserved:** voucher rides in browser memory only. No Supabase row. No email field. Load-bearing for Silent Drop — do not break.
+
+**Blast radius mitigation:**
+- Period-boxing: `period_end` is the hard expiry. A leaked voucher has one billing cycle of blast radius at most.
+- Future binding (B8): once Locke / NUT-11 Mode 2 exists, the voucher grows its `bind_pubkey` field — token becomes useless without the keypair. Format carries the field now (null) to avoid a breaking format change at B8. Do not implement binding in the current build.
+
+**No per-voucher byte counter:** this reintroduces transfer-linkability. Accepted trade-off: one billing cycle of theoretical sharing for a privacy-preserving credential model.
+
+**Build dependency:** Legend must have a subscription flow before the Share-side acceptor has anything to accept. Format and clamp are locked now and buildable in Share independently. The acceptor is dormant until `LEGEND_ENTITLEMENT_PUBKEY` is set as a Worker secret.
+
+**Rotation:** Legend issuer key rotation follows the same discipline as API key rotation — `POST /api/v1/keys/rotate` equivalent, 24h grace window. Share Worker secret updated at rotation.
+
+### Legend native verifier design (locked)
+
+**Principle:** verification is client-side in Legend throughout — the file never leaves the browser at any step.
+
+**Verification flow (post-TH-1):**
+1. Recipient imports three items from the downloaded bundle: the decrypted file (or content hash), the nonce, and the raw `.ots` proof.
+2. Legend recomputes the committed value (nonced SHA-256 digest — exact construction locked at TH-0/TH-1).
+3. Parses the `.ots` Merkle path to the Bitcoin attestation.
+4. Confirms the attested block against **Legend's own block data** — no third-party explorer, no public calendar server call at this step.
+5. Reports: *"These exact bytes existed on or before block [N] — [date]. Verified against Legend. This does not prove authorship, delivery, or that the contents are true."* Honest scope stated in UI, every time.
+
+**Two states:**
+- **Complete:** block seal shown as above.
+- **Pending:** *"Submitted [time], awaiting Bitcoin confirmation — typically a few hours."* Upgrade offered through Legend's own blind relay (same `/timestamp/upgrade` opaque-byte pattern as Share Worker) — never by having the browser hit a public calendar directly.
+
+**Share surface:** on a transfer carrying a date seal, the download UI shows *"Verify this date seal in Legend →"*. Handoff is manual — recipient downloads bundle and imports into Legend. No automatic cross-product file transmission. Manual handoff keeps bytes local.
+
+**No verify view in Share v1.** Legend is the sole verifier at launch.
+
+### Pass credential issuance timestamping (locked)
+
+**What gets stamped (locked):**
+- **Keyset / epoch seal (default for events):** Pass seals a commitment to the issuance keyset when a batch is minted. Keyset public keys are already public (NUT-01/02) — zero privacy loss, scale-free. Proves every credential in the batch existed by date Y. One seal per batch, not per holder.
+- **Per-credential seal (opt-in, high-value one-offs):** for single authorisations, estate documents, board resolutions issued as Pass credentials — mirrors Share's per-transfer Sovereign opt-in exactly.
+
+**Legend verifies Pass seals** using the same flow as Share seals. Westminster issues, Temple verifies, Tower stamps — one verifier, three sources.
+
+**OTS relay architecture (locked):**
+- **Product-agnostic relay, deployed per-product.** Each product's Worker carries its own `/timestamp/submit` + `/timestamp/upgrade`. Share's relay and Pass's relay are separate deployments of the same stateless pattern.
+- The relay sees only opaque nonced 32-byte SHA-256 digests — cannot distinguish a Share digest from a Pass one by design.
+- No runtime cross-product relay calls. Products remain independently deployable.
+- Build once in Share (TH-1), document the pattern, propagate to Pass Worker at Pass timestamp build session.
+
+### Composes with Nutroot (forward note)
+
+The keyset epoch seal composes naturally with Nutroot (NUT-10 v3 PR #421): timestamping an epoch seals *when the spending conditions were fixed*, making them un-backdatable. Design to compose when Nutroot ships — do not take a dependency on it.
+
+---
+
+## Share × Pass × Legend — Nutroot hashlock forward note (TH-0 · 6 Sep 2026)
+
+**Status: not a build item. B8/B12 territory, gates on Nutroot PR #421 merge + NUT-11 Mode 2 live.**
+
+The OTS committed value chosen at TH-1 — `SHA-256(blake3_root || url_fragment_nonce)` — is structurally identical to a Nutroot `hashlock` leaf preimage. This is the correct design revealing itself from three directions: privacy (opaque to non-URL-holders), integrity (BLAKE3 root composes with OTS into one receipt), and interoperability (preimage shape matches Nutroot hashlock).
+
+**The three-product proof-of-receipt flow:**
+
+1. **Share** stamps the transfer: computes `commitment = SHA-256(blake3_root || url_fragment_nonce)`, submits to OTS calendar via Worker relay, stores pending `.ots` in R2. Also issues a Pass credential (Nutroot token) with two leaves:
+   - `hashlock` leaf: lock = `SHA-256(commitment)`. Spendable only by whoever reveals `commitment` itself.
+   - `after` leaf: minimum Bitcoin block height for confirmation (e.g. current tip + ~6 blocks ≈ 1 hour forward).
+
+2. **Legend** verifies the OTS proof. When the Bitcoin block seal is confirmed, Legend has traversed the Merkle path from `commitment` to the attested block. It returns the `commitment` value to the credential holder (who already knows it — it's derived from their file + URL). The `hashlock` is satisfied. The `after` leaf is satisfied once the block height is met.
+
+3. **Pass** accepts the credential with both leaves satisfied and executes whatever the policy specifies: unlock a document vault, release a payment, grant access, countersign a certificate. The Refill app surfaces the credential state to the holder — locked until Legend confirms, then unlocked.
+
+**The concrete use case:** a barrister sends a settlement agreement via Share. The OTS proof is issued as a Pass credential with policy encoded in Nutroot leaves: binding only if the counterparty demonstrates receipt before the settlement deadline block height. No notary. No DocuSign. Verified against Bitcoin. Westminster passes it. Temple verifies it. The Tower stamped it. Three products, one flow, no intermediary.
+
+**Why this matters for TH-1:** the committed value construction `SHA-256(blake3_root || url_fragment_nonce)` must not be changed after TH-1 without re-evaluating this entire flow. The construction is load-bearing for all three products.
+
+**Build dependency chain:** TH-1 locks the preimage shape → B8 builds NUT-11 Mode 2 (Locke) → Pass planning session (Q4 2026) designs Nutroot credential with hashlock using this preimage shape → B12 builds FROST + Nutroot → three-product flow becomes operational.
+
+**Whitepaper treatment (B9):** §Future work. One paragraph. Do not claim it is built. State the primitive and the dependency chain honestly.
+
+**Do not raise this in Pass planning session without first confirming Nutroot PR #421 status.** If Nutroot has not merged by Q4 Pass planning, the hashlock leaf is theoretical — note it, do not design around it.
+
+---
+
+## Locke — credential-as-key design (locked AP-ARCH · 31 Aug 2026)
+
+**Locke is the name of the mechanism and the object** — the credential that unlocks the Harbourmaster dashboard. NUT-11 Mode 2 P2PK in its full form (B8). The name is operational: it is a Locke (not a lock), and it is a Locke (John, philosopher of consent — "no one can be put out of his estate, and subjected to the political power of another, without his own consent"). Both readings are correct.
+
+**Locke lifecycle:**
+- **Issued:** at Harbourmaster onboarding. One Lightning payment → one Deed (BIP-39 mnemonic) → one Locke (secp256k1 keypair, secure enclave storage on device).
+- **Presented:** at every Harbourmaster login. Challenge-response (NUT-11 Mode 2). No password. No email.
+- **Rotated:** on device change, Deed recovery, or voluntary rotation. Old Locke retired; new Locke authorised against the KV pubkey set.
+- **Revoked:** Refueler can remove a pubkey from the KV authorised set — this is the one compulsion surface. Cannot impersonate a Harbourmaster. Cannot decrypt cargo. The cargo key is in the URL fragment, which Refueler never sees.
+
+**Multi-device:** account holds a set of authorised pubkeys. Each device holds its own Locke. Add a device: present valid existing Locke, authorise new pubkey, mint new Locke. Remove: drop pubkey from set.
+
+**Recovery:** Primary — the Deed (recovery Locke, offline keypair, generated at onboarding). Firm path — FROST social recovery (B12). Informed cliff: loss of all devices without the Deed = loss of access. Stated plainly at onboarding.
+
+**Key storage exception:** Locke private keys stored in platform passkey / secure enclave. Documented exception to credentials-in-browser-memory-only rule. Applies to Locke only.
+
+**Locke is separate from the subscription credential.** Subscription = entitlement. Locke = access. Two separate objects from one payment event.
+
+---
 
 ## Upstream protocol monitoring — Cashu
 
