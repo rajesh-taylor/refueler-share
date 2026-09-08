@@ -4,13 +4,22 @@
 //
 // Credential scheme (locked SW-Opus-1):
 //   rfs_live_{32b base58} — identification key (KV lookup handle, semi-public)
-//   rfs_sign_{32b base58} — signing secret (Option C: KV stores BLAKE3 hash only)
+//   rfs_sign_{32b base58} — signing secret (Option C: KV stores SHA-256 hash only)
 //
 // Option C key security invariant:
-//   KV stores BLAKE3( rfs_sign_ ) — never the raw secret.
+//   KV stores SHA-256( rfs_sign_ ) — never the raw secret.
 //   The presented rfs_sign_ is hashed at verify-time and compared to the stored hash.
-//   A KV compromise yields hashes, not secrets. Forgery requires preimage of BLAKE3.
+//   A KV compromise yields hashes, not secrets. Forgery requires preimage of SHA-256.
 //   The raw presented value is used as the HMAC key only after hash-comparison passes.
+//
+// KV lookup key hardening (SW2c):
+//   KV key = api_client_{ SHA-256( rfs_live_key ) }  — NOT api_client_{rfs_live_key}
+//   Rationale: the live key appears in the Authorization header on every request and
+//   could surface in Cloudflare dashboard logs, AE events, or console.error paths.
+//   Hashing the lookup key means KV key names never contain a recognisable rfs_live_
+//   string. An attacker who knows the live key can still compute the KV lookup key
+//   (SHA-256 is not a secret), but the key does not leak passively into infrastructure
+//   logs. sha256Hex() is exported so onboarding (SW7) writes the same hashed key.
 //
 // Signature construction (locked SW-Opus-1):
 //   HMAC-SHA256( rfs_sign_, canonical_string )
@@ -23,8 +32,8 @@
 //   Authorization: HMAC-SHA256 key=rfs_live_{...}, sig=hex(...), ts={unix_seconds}
 //
 // KV schema:
-//   api_client_{rfs_live_key} → JSON {
-//     sign_key_hash:       hex string  — BLAKE3 hash of rfs_sign_ secret
+//   api_client_{ sha256hex(rfs_live_key) } → JSON {
+//     sign_key_hash:       hex string  — SHA-256 hash of rfs_sign_ secret
 //     rail:                'identity' | 'anonymous'
 //     tier:                'api'
 //     transfer_ref_prefix: string      — client's attribution prefix
@@ -32,10 +41,14 @@
 //     active:              boolean
 //   }
 //
-//   api_quota_{rfs_live_key} → JSON {
+//   api_quota_{ sha256hex(rfs_live_key) } → JSON {   ← identity rail only
 //     remaining: number   — credits remaining in pool
 //     updated_at: number  — unix seconds
 //   }
+//
+//   Anonymous rail has NO api_quota_ KV record. Quota is client-held bearer
+//   Cashu tokens (blind-signed capability atoms). The spent-token ledger
+//   (api_spent_tokens Supabase table) tracks consumption. No server-side balance.
 
 'use strict';
 
@@ -44,6 +57,66 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CLOCK_WINDOW_SECONDS = 300; // ±5 minutes
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sha256Hex(input: string | Uint8Array) → Promise<string>
+//
+// SHA-256 one-way hash, returned as lowercase hex.
+// Used for:
+//   - KV lookup key derivation: sha256Hex(rfs_live_key)
+//   - sign_key_hash storage:    sha256Hex(rfs_sign_key)
+//   - body hash in HMAC canonical string
+//
+// Exported for use at onboarding (SW7) to write KV records under the same
+// hashed key format that lookupApiClient() uses at verify-time.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sha256Hex(input) {
+  const bytes = typeof input === 'string'
+    ? new TextEncoder().encode(input)
+    : input;
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// hashSignKey(rawSignKey: string) → Promise<string>
+//
+// SHA-256 one-way commitment of the rfs_sign_ secret.
+// Stored in KV as sign_key_hash. Never reversed.
+// Module-private — callers use generateSignKeyHash() export below.
+// ─────────────────────────────────────────────────────────────────────────────
+async function hashSignKey(rawSignKey) {
+  return sha256Hex(rawSignKey);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// kvClientKey(apiKey: string) → Promise<string>
+//
+// Derives the KV lookup key for a given rfs_live_ key.
+// KV key = "api_client_" + sha256Hex(apiKey)
+//
+// Used by lookupApiClient() at verify-time and by SW7 onboarding at write-time.
+// Exported so onboarding tooling can produce the correct key without duplicating
+// the derivation logic.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function kvClientKey(apiKey) {
+  return `api_client_${await sha256Hex(apiKey)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// kvQuotaKey(apiKey: string) → Promise<string>
+//
+// Derives the KV quota key for a given rfs_live_ key.
+// KV key = "api_quota_" + sha256Hex(apiKey)
+//
+// Identity rail only. Anonymous rail has no quota KV record.
+// Exported for onboarding tooling and admin top-up scripts.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function kvQuotaKey(apiKey) {
+  return `api_quota_${await sha256Hex(apiKey)}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // parseHmacCredentials(request) → { apiKey, sig, ts } | null
@@ -57,7 +130,7 @@ export function parseHmacCredentials(request) {
 
   const parts = authHeader.slice('HMAC-SHA256 '.length);
 
-  // Parse comma-separated key=value pairs — values may contain base58/hex chars only,
+  // Parse comma-separated key=value pairs — values contain base58/hex chars only,
   // no quoting needed. Trim whitespace around both key and value.
   const map = {};
   for (const segment of parts.split(',')) {
@@ -68,9 +141,9 @@ export function parseHmacCredentials(request) {
     map[k] = v;
   }
 
-  const apiKey = map['key']  ?? null;
-  const sig    = map['sig']  ?? null;
-  const ts     = map['ts']   ?? null;
+  const apiKey = map['key'] ?? null;
+  const sig    = map['sig'] ?? null;
+  const ts     = map['ts']  ?? null;
 
   if (!apiKey || !sig || !ts) return null;
   if (!apiKey.startsWith('rfs_live_') && !apiKey.startsWith('rfs_test_')) return null;
@@ -79,41 +152,7 @@ export function parseHmacCredentials(request) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// blake3Hex(data: Uint8Array, env) → Promise<string>
-//
-// BLAKE3 hash of data, returned as lowercase hex.
-// Uses the Worker's existing BLAKE3 WASM binding (blake3.js / verifyChunkHash).
-// We can't import blake3.js directly here without a circular dep risk, so we
-// re-implement the raw hash call using the same WASM path.
-//
-// Workers runtime does not expose BLAKE3 natively — we use the WASM module.
-// The WASM module is initialised in blake3.js at startup. To avoid coupling,
-// we use SubtleCrypto SHA-256 for the sign_key_hash (a one-way commitment,
-// not a content-integrity hash). This is a deliberate layering decision:
-//
-//   BLAKE3 = chunk integrity (content, internal to transfer pipeline)
-//   SHA-256 = sign_key_hash (one-way commitment for auth secret storage)
-//
-// Using SHA-256 here keeps api_auth.js free of the WASM import graph and
-// consistent with the commitment pattern already used in credential issuance
-// (computeCommitment uses SHA-256). The security property is identical: preimage
-// resistance of SHA-256 is sufficient to protect the stored sign_key_hash.
-//
-// Named blake3Hex internally for clarity of intent; implemented via SHA-256
-// for this specific auth storage use-case. See architectural note above.
-// ─────────────────────────────────────────────────────────────────────────────
-async function hashSignKey(rawSignKey) {
-  // SHA-256 one-way commitment of the rfs_sign_ secret.
-  // Stored in KV. Never reversed. Preimage resistance is the only requirement.
-  const bytes = new TextEncoder().encode(rawSignKey);
-  const hash  = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// verifyHmacSignature(request, rawBody, presentedSignKey) → Promise<boolean>
+// verifyHmacSignature(request, rawBody, presentedSignKey, ts) → Promise<boolean>
 //
 // Verifies the HMAC-SHA256 signature in the Authorization header.
 //
@@ -132,15 +171,12 @@ export async function verifyHmacSignature(request, rawBody, presentedSignKey, ts
 
   // ── Body hash ─────────────────────────────────────────────────────────────
   const bodyBytes  = rawBody instanceof Uint8Array ? rawBody : new Uint8Array(rawBody);
-  const bodyDigest = await crypto.subtle.digest('SHA-256', bodyBytes);
-  const bodyHash   = Array.from(new Uint8Array(bodyDigest))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const bodyHash   = await sha256Hex(bodyBytes);
 
   // ── Canonical string ──────────────────────────────────────────────────────
-  const url    = new URL(request.url);
-  const method = request.method.toUpperCase();
-  const path   = url.pathname;
+  const url       = new URL(request.url);
+  const method    = request.method.toUpperCase();
+  const path      = url.pathname;
   const canonical = `${method}\n${path}\n${ts}\n${bodyHash}`;
 
   // ── HMAC-SHA256 ───────────────────────────────────────────────────────────
@@ -154,15 +190,14 @@ export async function verifyHmacSignature(request, rawBody, presentedSignKey, ts
     ['sign']
   );
 
-  const sigBytes = await crypto.subtle.sign('HMAC', cryptoKey, msgBytes);
+  const sigBytes    = await crypto.subtle.sign('HMAC', cryptoKey, msgBytes);
   const computedSig = Array.from(new Uint8Array(sigBytes))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
   // ── Constant-time comparison ──────────────────────────────────────────────
-  // Presented sig from Authorization header
-  const authHeader = request.headers.get('Authorization') ?? '';
-  const sigMatch   = authHeader.match(/sig=([0-9a-f]+)/i);
+  const authHeader   = request.headers.get('Authorization') ?? '';
+  const sigMatch     = authHeader.match(/sig=([0-9a-f]+)/i);
   const presentedSig = sigMatch ? sigMatch[1] : '';
 
   if (computedSig.length !== presentedSig.length) return false;
@@ -171,8 +206,7 @@ export async function verifyHmacSignature(request, rawBody, presentedSignKey, ts
   try {
     return crypto.subtle.timingSafeEqual(computedBytes, presentedBytes);
   } catch {
-    // timingSafeEqual not available in this runtime version — fall back to
-    // character-by-character XOR accumulator (still constant-time per string length).
+    // timingSafeEqual not available in this runtime version — XOR accumulator fallback.
     let diff = 0;
     for (let i = 0; i < computedBytes.length; i++) {
       diff |= computedBytes[i] ^ presentedBytes[i];
@@ -184,13 +218,15 @@ export async function verifyHmacSignature(request, rawBody, presentedSignKey, ts
 // ─────────────────────────────────────────────────────────────────────────────
 // lookupApiClient(env, apiKey) → Promise<client | null>
 //
-// KV fetch on api_client_{apiKey}.
+// KV fetch on api_client_{ sha256Hex(apiKey) }.
+// The KV key is a hash of the live key — never the raw rfs_live_ string.
 // Returns the parsed client record or null if not found / inactive.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function lookupApiClient(env, apiKey) {
+  const key = await kvClientKey(apiKey);
   let record;
   try {
-    record = await env.STATUS_KV.get(`api_client_${apiKey}`, { type: 'json' });
+    record = await env.STATUS_KV.get(key, { type: 'json' });
   } catch (e) {
     console.error('api_auth: KV client lookup failed:', e);
     return null;
@@ -206,9 +242,14 @@ export async function lookupApiClient(env, apiKey) {
 // Composes parseHmacCredentials → lookupApiClient → hashSignKey → verifyHmacSignature.
 // Throws a Response on any failure — caller returns the thrown response directly.
 //
+// Returns { client, apiKey } on success.
+//   client.rail  → 'identity' | 'anonymous'  — caller branches on this
+//   client.tier  → 'api'
+//   client.*     → full KV record
+//
 // Option C flow:
 //   1. Parse Authorization header → { apiKey, sig, ts }
-//   2. KV lookup → client record (contains sign_key_hash)
+//   2. KV lookup on hashed key → client record (contains sign_key_hash)
 //   3. Hash the presented rfs_sign_ → compare to stored hash (constant-time)
 //   4. If hash matches, use presented rfs_sign_ as HMAC key for signature verify
 //   5. Clock window checked inside verifyHmacSignature
@@ -218,30 +259,32 @@ export async function requireApiAuth(request, rawBody, env) {
   const creds = parseHmacCredentials(request);
   if (!creds) {
     throw new Response(
-      JSON.stringify({ error: 'Missing or malformed Authorization header. Expected: HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}' }),
+      JSON.stringify({
+        error: 'Missing or malformed Authorization header. Expected: HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}',
+      }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
 
   const { apiKey, ts } = creds;
 
-  // Require a second header carrying the presented sign key.
-  // The sign key does NOT go in the Authorization header (that would expose it in logs).
-  // It travels in X-Api-Sign-Key, used only for HMAC verification — never stored,
-  // never logged. After this function returns, the raw value is discarded.
+  // The sign key travels in X-Api-Sign-Key, NOT in Authorization.
+  // Authorization is logged by proxies and dashboards; the sign key must not appear there.
   const presentedSignKey = request.headers.get('X-Api-Sign-Key') ?? '';
-  if (!presentedSignKey.startsWith('rfs_sign_') && !presentedSignKey.startsWith('rfs_test_sign_')) {
+  if (
+    !presentedSignKey.startsWith('rfs_sign_') &&
+    !presentedSignKey.startsWith('rfs_test_sign_')
+  ) {
     throw new Response(
       JSON.stringify({ error: 'Missing or invalid X-Api-Sign-Key header' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
 
-  // ── Step 2: KV lookup ─────────────────────────────────────────────────────
+  // ── Step 2: KV lookup (hashed key) ───────────────────────────────────────
   const client = await lookupApiClient(env, apiKey);
   if (!client) {
-    // Constant-time-ish: don't reveal whether the key exists vs is inactive.
-    // Small artificial delay mirrors the hash-compare cost on a hit.
+    // Constant-time-ish: artificial delay mirrors hash-compare cost on a hit.
     await new Promise(r => setTimeout(r, 5));
     throw new Response(
       JSON.stringify({ error: 'Invalid API credentials' }),
@@ -254,14 +297,13 @@ export async function requireApiAuth(request, rawBody, env) {
   const storedHash    = client.sign_key_hash ?? '';
 
   if (!storedHash) {
-    console.error('api_auth: client record missing sign_key_hash for key:', apiKey);
+    console.error('api_auth: client record missing sign_key_hash');
     throw new Response(
       JSON.stringify({ error: 'Invalid API credentials' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
 
-  // Constant-time comparison of hashes
   const presentedHashBytes = new TextEncoder().encode(presentedHash);
   const storedHashBytes    = new TextEncoder().encode(storedHash);
   let hashMatch = false;
@@ -285,7 +327,7 @@ export async function requireApiAuth(request, rawBody, env) {
   }
 
   // ── Step 4: HMAC signature verify ─────────────────────────────────────────
-  // Now safe to use presentedSignKey as the HMAC key — hash has been verified.
+  // Safe to use presentedSignKey as HMAC key — hash verified above.
   const sigValid = await verifyHmacSignature(request, rawBody, presentedSignKey, ts);
   if (!sigValid) {
     throw new Response(
@@ -300,9 +342,10 @@ export async function requireApiAuth(request, rawBody, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // generateSignKeyHash(rawSignKey) → Promise<string>
 //
-// Exported utility for use at onboarding (SW7): generate the hash to store in KV.
+// Exported utility for onboarding (SW7): generate the hash to store in KV.
 // Called once when the keypair is created — the raw rfs_sign_ is shown to the
-// client once, then only this hash is stored. Recovery path: key rotation.
+// client once, then only this hash is stored server-side.
+// Recovery path: key rotation via POST /api/v1/keys/rotate.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateSignKeyHash(rawSignKey) {
   return hashSignKey(rawSignKey);

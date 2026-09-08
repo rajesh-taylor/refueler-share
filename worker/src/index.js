@@ -13,7 +13,8 @@ import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot } from './handlers/admin.js';
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
-import { requireApiAuth } from './api_auth.js';
+import { requireApiAuth, kvQuotaKey } from './api_auth.js';
+import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -203,18 +204,14 @@ export default {
         return timed('api_credential_issue', () => handleApiCredentialIssue(request, env).then(r => addCors(r, request)));
       }
 
-      if (request.method === 'POST' && path === '/credential/issue') {
-        // Rate limit: 10 requests / 60s per IP — prevents token farming and Turnstile abuse
+            if (request.method === 'GET' && path === '/api/v1/capabilities') {
         const ip = getClientIp(request);
-        const rl = await checkRateLimit(env, ip, 'credential_issue', 10, 60);
+        const rl = await checkRateLimit(env, ip, 'api_capabilities', 30, 60);
         if (rl.limited) {
-          logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          logEvent(env, { endpoint: 'api_capabilities', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
-        const cloned = request.clone();
-        let credTier = 'free';
-        try { const b = await cloned.json(); credTier = b.tier ?? 'free'; } catch {}
-        return timed('credential_issue', () => handleCredentialIssue(request, env).then(r => addCors(r, request)), { tier: credTier, httpProtocol: request.cf?.httpProtocol ?? '' });
+        return timed('api_capabilities', () => handleApiCapabilities(request, env).then(r => addCors(r, request)));
       }
 
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
@@ -463,9 +460,40 @@ async function handleLogError(request, env) {
 //   Authorization: HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}
 //   X-Api-Sign-Key: rfs_sign_{...}
 // ─────────────────────────────────────────────────────────────────────────────
+// API credential issuance — POST /api/v1/credential/issue  (SW2a, updated SW2c)
+//
+// HMAC-authenticated API-tier endpoint. Both rails.
+//
+// Identity rail:
+//   - Quota tracked in KV under hashed key: api_quota_{ sha256(rfs_live_key) }
+//   - 402 if pool exhausted. Decrement after successful issuance.
+//   - Supabase row created at onboarding (SW7) — never here.
+//
+// Anonymous rail (SW2c):
+//   - NO KV quota record. NO Supabase row. Ever.
+//   - Client presents X-Cashu-Token: a blind-signed capability-atom token
+//     issued from the API keyset (MINT_API_PRIVATE_KEY).
+//   - Worker verifies the token against the API keyset, checks api_spent_tokens
+//     for double-spend, marks spent, then issues the credential.
+//   - The "balance" is the client's local token stack. The server is blind to it.
+//
+// Request body:
+//   { blinded_message, tier?, transfer_ref? }
+//   tier: 'api' only — other values rejected.
+//   transfer_ref: optional attribution string. Logged to AE only, max 128 chars.
+//
+// Response:
+//   { signed_point, mint_pubkey, allocation_bytes, uuid, issued_tier,
+//     commitment, expires_at, quota_remaining }
+//   quota_remaining: number (identity rail) | null (anonymous rail)
+//
+// Auth headers required:
+//   Authorization:  HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}
+//   X-Api-Sign-Key: rfs_sign_{...}
+//   X-Cashu-Token:  <capability-atom token>  — anonymous rail only
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleApiCredentialIssue(request, env) {
-  // ── Read body first (needed for HMAC body-hash verification) ─────────────
-  // Clone: requireApiAuth needs the raw bytes; we need JSON.
+  // ── Read body (needed for HMAC body-hash verification) ───────────────────
   let rawBody;
   let body;
   try {
@@ -475,8 +503,7 @@ async function handleApiCredentialIssue(request, env) {
     return err(400, 'Invalid JSON body');
   }
 
-  // ── HMAC auth (Option C) ──────────────────────────────────────────────────
-  // requireApiAuth throws a Response on failure — catch and return it.
+  // ── HMAC auth ─────────────────────────────────────────────────────────────
   let client, apiKey;
   try {
     ({ client, apiKey } = await requireApiAuth(request, rawBody, env));
@@ -486,78 +513,202 @@ async function handleApiCredentialIssue(request, env) {
     return err(500, 'Authentication error');
   }
 
-  // ── Validate request body ─────────────────────────────────────────────────
+  const rail = client.rail ?? 'identity';
+
+  // ── Validate body ─────────────────────────────────────────────────────────
   const { blinded_message, transfer_ref } = body;
   if (!blinded_message) return err(400, 'Missing blinded_message');
 
-  // Sanitise transfer_ref — logged to AE only, never stored.
   const safeTransferRef = transfer_ref
     ? String(transfer_ref).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
     : null;
 
-  // ── Quota check ───────────────────────────────────────────────────────────
-  // Read from KV — quota pool for this API key.
-  // 402 if exhausted. Decrement happens after successful issuance (below).
-  const quotaKey = `api_quota_${apiKey}`;
-  let quotaRecord;
-  try {
-    quotaRecord = await env.STATUS_KV.get(quotaKey, { type: 'json' });
-  } catch (e) {
-    console.error('api_credential_issue: KV quota read failed:', e);
-    return err(502, 'Quota check unavailable — please retry');
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Rail-specific quota gate
+  // ─────────────────────────────────────────────────────────────────────────
 
-  const remaining = quotaRecord?.remaining ?? 0;
-  if (remaining <= 0) {
-    logEvent(env, {
-      endpoint: 'api_credential_issue',
-      tier:     'api',
-      status:   402,
-      errorMsg: 'quota_exhausted',
-    });
-    return new Response(
-      JSON.stringify({
-        error:     'Credit pool exhausted',
-        code:      'quota_exhausted',
-        remaining: 0,
-      }),
-      { status: 402, headers: { 'Content-Type': 'application/json' } }
+  let quotaRemaining = null; // Returned in response. null = anonymous rail.
+
+  if (rail === 'identity') {
+    // ── Identity rail: KV pool check ────────────────────────────────────────
+    const quotaKey = await kvQuotaKey(apiKey);
+    let quotaRecord;
+    try {
+      quotaRecord = await env.STATUS_KV.get(quotaKey, { type: 'json' });
+    } catch (e) {
+      console.error('api_credential_issue: KV quota read failed:', e);
+      return err(502, 'Quota check unavailable — please retry');
+    }
+
+    const remaining = quotaRecord?.remaining ?? 0;
+    if (remaining <= 0) {
+      logEvent(env, {
+        endpoint: 'api_credential_issue',
+        tier:     'api',
+        status:   402,
+        errorMsg: 'quota_exhausted',
+      });
+      return new Response(
+        JSON.stringify({
+          error:     'Credit pool exhausted',
+          code:      'quota_exhausted',
+          remaining: 0,
+        }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Store for decrement after issuance.
+    quotaRemaining = remaining;
+
+  } else {
+    // ── Anonymous rail: capability-atom token verification ──────────────────
+    //
+    // The client presents one blind-signed capability-atom token per issuance.
+    // Token is verified against the API keyset (MINT_API_PRIVATE_KEY).
+    // Double-spend check against api_spent_tokens Supabase table.
+    // On success, token serial is marked spent — atomic with issuance.
+    //
+    // If MINT_API_PRIVATE_KEY is not yet provisioned (pre-B7 bootstrap),
+    // the anonymous rail is unavailable and returns 503.
+
+    const cashuToken = request.headers.get('X-Cashu-Token') ?? '';
+    if (!cashuToken) {
+      return new Response(
+        JSON.stringify({
+          error: 'Anonymous rail requires X-Cashu-Token header (one capability-atom token per issuance)',
+          code:  'token_required',
+        }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!env.MINT_API_PRIVATE_KEY) {
+      console.error('api_credential_issue: MINT_API_PRIVATE_KEY not provisioned');
+      return new Response(
+        JSON.stringify({
+          error: 'Anonymous rail token issuance not yet available. Use identity rail or contact support.',
+          code:  'anon_rail_unavailable',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify the presented token was signed by the API keyset.
+    // verifyCredential() checks the blind signature against the mint public key.
+    // We pass the API private key so it derives the correct public key for verification.
+    let tokenSerial;
+    try {
+      const verified = await verifyCredential(cashuToken, env.MINT_API_PRIVATE_KEY);
+      if (!verified || !verified.serial) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid capability token', code: 'token_invalid' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      tokenSerial = verified.serial;
+    } catch (e) {
+      console.error('api_credential_issue: token verification error:', e);
+      return new Response(
+        JSON.stringify({ error: 'Invalid capability token', code: 'token_invalid' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Double-spend check — api_spent_tokens table.
+    // Separate from consumer spent_tokens to keep populations distinct in analytics.
+    const spendCheckRes = await supabaseFetch(
+      env, 'GET',
+      `/rest/v1/api_spent_tokens?serial=eq.${encodeURIComponent(tokenSerial)}&select=serial`,
+      null,
+      { 'Prefer': 'count=exact', 'Range': '0-0' }
     );
+
+    if (!spendCheckRes.ok) {
+      console.error('api_credential_issue: api_spent_tokens check failed:', await spendCheckRes.text());
+      return err(502, 'Token verification unavailable — please retry');
+    }
+
+    // Content-Range: 0-0/N — N > 0 means the serial exists (already spent).
+    const cr = spendCheckRes.headers.get('Content-Range') ?? '';
+    const crMatch = cr.match(/\/(\d+)$/);
+    const alreadySpent = crMatch ? parseInt(crMatch[1], 10) > 0 : false;
+
+    if (alreadySpent) {
+      // Log double-spend attempt — same pattern as consumer double_spend_attempts.
+      supabaseFetch(env, 'POST', '/rest/v1/api_double_spend_attempts', {
+        serial:       tokenSerial,
+        attempted_at: new Date().toISOString(),
+      }, { 'Prefer': 'return=minimal' }).catch(e =>
+        console.error('api_credential_issue: double_spend_attempt log failed:', e)
+      );
+
+      return new Response(
+        JSON.stringify({ error: 'Token already spent', code: 'token_spent' }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Mark token spent — insert into api_spent_tokens.
+    // This fires before credential issuance. If issuance fails after this point,
+    // the token is spent but no credential issued — the client loses one token.
+    // Acceptable at v1: the failure mode is an honest error, not an exploit path.
+    // NUT-19 cached-response retry would recover this; deferred to post-B7.
+    const markSpentRes = await supabaseFetch(
+      env, 'POST', '/rest/v1/api_spent_tokens',
+      { serial: tokenSerial, created_at: new Date().toISOString() },
+      { 'Prefer': 'return=minimal' }
+    );
+
+    if (!markSpentRes.ok) {
+      console.error('api_credential_issue: mark spent failed:', await markSpentRes.text());
+      return err(502, 'Token spend recording failed — please retry');
+    }
+
+    // quotaRemaining stays null — no server-side balance for anonymous rail.
   }
 
-  // ── Issue credential — same mint path as consumer ─────────────────────────
-  // API tier always uses 'max' expiry window (90 days). The issued_tier in the
-  // commitment is 'api' — distinct from consumer tiers in AE but resolves to
-  // the same storage cap (250 GB, enforced at upload time by manifest.tier check).
-  const API_EXPIRY_WINDOW = 90 * 24 * 3600; // 90 days, matching max consumer tier
-  const uuid       = crypto.randomUUID();
-  const issuedTier = 'api';
+  // ─────────────────────────────────────────────────────────────────────────
+  // Issue credential — same mint path as consumer
+  // ─────────────────────────────────────────────────────────────────────────
+  // API tier always uses 90-day expiry (matching 'max' consumer tier).
+  // issued_tier is 'api' — distinct from consumer tiers in AE.
+  // Signing key: MINT_PRIVATE_KEY (consumer keyset) for identity rail;
+  //              MINT_API_PRIVATE_KEY (API keyset) for anonymous rail.
+  // This keeps the two token populations cryptographically distinct.
+  const API_EXPIRY_WINDOW = 90 * 24 * 3600;
+  const uuid              = crypto.randomUUID();
+  const issuedTier        = 'api';
+  const mintKey           = rail === 'anonymous'
+    ? env.MINT_API_PRIVATE_KEY
+    : env.MINT_PRIVATE_KEY;
 
   const commitment = await computeApiCommitment(uuid, issuedTier, API_EXPIRY_WINDOW);
 
   let signedPoint, mintPubkey;
   try {
-    ({ signedPoint, mintPubkey } = await issueBlindSignature(blinded_message, env.MINT_PRIVATE_KEY));
+    ({ signedPoint, mintPubkey } = await issueBlindSignature(blinded_message, mintKey));
   } catch (e) {
     console.error('api_credential_issue: blind sig error:', e);
     return err(500, 'Credential issuance failed');
   }
 
-  // ── Decrement quota — fire-and-forget, log on failure ────────────────────
-  // Decrement after successful issuance only. If the write fails, quota drifts
-  // optimistically — acceptable at v1; a reconciliation sweep is B9 scope.
-  const newRemaining = remaining - 1;
-  const nowSeconds   = Math.floor(Date.now() / 1000);
-  env.STATUS_KV.put(
-    quotaKey,
-    JSON.stringify({ remaining: newRemaining, updated_at: nowSeconds }),
-  ).catch(e => console.error('api_credential_issue: KV quota decrement failed:', e));
+  const nowSeconds = Math.floor(Date.now() / 1000);
 
-  // ── AE event — api_credential_issue ──────────────────────────────────────
-  // Logs transfer_ref for attribution. Never logs apiKey, rail, or any PII.
-  // blob4 carries transfer_ref (reusing the http_protocol slot — AE has 4 blobs).
-  // This is intentional: api_credential_issue events are distinguished by
-  // endpoint (blob1), so the http_protocol slot can carry transfer_ref instead.
+  // ── Identity rail: decrement quota (fire-and-forget) ──────────────────────
+  if (rail === 'identity') {
+    const newRemaining = (quotaRemaining ?? 1) - 1;
+    const quotaKey     = await kvQuotaKey(apiKey);
+    env.STATUS_KV.put(
+      quotaKey,
+      JSON.stringify({ remaining: newRemaining, updated_at: nowSeconds }),
+    ).catch(e => console.error('api_credential_issue: KV quota decrement failed:', e));
+    quotaRemaining = newRemaining;
+  }
+
+  // ── AE event ──────────────────────────────────────────────────────────────
+  // Never logs apiKey, rail, or any PII.
+  // blob4 carries transfer_ref (reusing http_protocol slot — AE has 4 blobs).
   if (env.AE) {
     try {
       env.AE.writeDataPoint({
@@ -580,7 +731,7 @@ async function handleApiCredentialIssue(request, env) {
     issued_tier:      issuedTier,
     commitment,
     expires_at:       expiresAt,
-    quota_remaining:  newRemaining,
+    quota_remaining:  quotaRemaining, // number for identity rail, null for anonymous
   });
 }
 
