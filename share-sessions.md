@@ -378,10 +378,9 @@ Identity-API £99/mo flat. Professional £249/mo defined-not-built (banded on se
 
 | Session | Label | Scope |
 |---------|-------|-------|
-| SW1 | CF for SaaS setup | SaaS enablement, fallback origin, Worker route. |
-| SW2 | API auth I | `api_auth.js` — HMAC-SHA256 verify, key lookup, ±300s window. Unit tests. |
-| SW2a | API auth II | `POST /api/v1/credential/issue` + quota KV, 402 on exhaustion, AE `transfer_ref` logging. Rail declaration stored at issuance. |
-| SW3 | Capability discovery + badge | `GET /api/v1/capabilities` (tier, rail, feature set, rate-card version). `GET /wl/config` by Host header. Badge component Paper/Carbon. |
+| SW1 | `9cb017d` | CF for SaaS setup — SaaS enablement, fallback origin, Worker route. |
+| SW2/SW2a | `1a1b518` | `api_auth.js` — HMAC-SHA256 + Option C sign-key hash. `POST /api/v1/credential/issue` — quota KV, 402 on exhaustion, AE logging, both rails, no Supabase row on anonymous rail. |
+| SW3 | `d223249` | `refueler-badge.js` — BLAKE3/Cashu/Bitcoin pill, Shadow DOM, Paper/Carbon aware, mounts via `data-refueler-badge`. Share-snag-1 prompted (index.njk drift). |
 | SW4 | Webhooks I | Registration endpoints. `rfs_whsec_` issuance. `wh_config_` KV schema. URL validation. |
 | SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. OTS-confirmation webhook wired. |
 | SW4b | Webhooks III | Daily cron retry of dead-letter items. |
