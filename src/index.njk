@@ -327,7 +327,7 @@ function showMaintenanceModal(status) {
 <div class="http3-whisper">
   <span class="http3-whisper-text">Delivered over Cloudflare HTTP/3.</span>
 </div>
-
+<div data-refueler-badge="compact"></div>
 {% include "footer.njk" %}
 
 <!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked). Blocking scripts so  -->
@@ -335,7 +335,7 @@ function showMaintenanceModal(status) {
 <script src="/fflate.min.js"></script>
 <script src="/qr-creator.min.js"></script>
 <script type="module" src="/share.js"></script>
-
+<script type="module" src="/refueler-badge.js"></script>
 <script>
 // ── Share subnav hide on file select — HQ2 ───────────────────────────────────
 // Watches for options-card becoming visible (share.js removes 'hidden' class).
