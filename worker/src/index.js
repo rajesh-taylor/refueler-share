@@ -15,7 +15,7 @@ import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdmi
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
-
+import { handleWebhookRegister }        from './webhook_reg.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,6 +212,31 @@ export default {
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
         return timed('api_capabilities', () => handleApiCapabilities(request, env).then(r => addCors(r, request)));
+      }
+      // ── SW4: Webhook registration — POST / DELETE / GET /api/v1/webhook/register ─
+      // HMAC-authenticated, API tier only. See webhook_reg.js for KV schema.
+      if (path === '/api/v1/webhook/register' && ['POST', 'DELETE', 'GET'].includes(request.method)) {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'webhook_reg', 10, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'webhook_reg', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('webhook_reg', () => handleWebhookRegister(request, env).then(r => addCors(r, request)));
+      }
+      // Consumer credential issuance — POST /credential/issue
+      // Turnstile-gated, anonymous, issues Cashu blind signature + UUID + commitment.
+      // Resume path (body.resume === true) skips Turnstile, verifies R2 partial upload instead.
+      if (request.method === 'POST' && path === '/credential/issue') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'credential_issue', 10, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('credential_issue', () => handleCredentialIssue(request, env).then(r => addCors(r, request)), {
+          httpProtocol: request.cf?.httpProtocol ?? '',
+        });
       }
 
       const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
