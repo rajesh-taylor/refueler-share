@@ -45,3 +45,8 @@ id      = "5b1dca6a8f06423f98d0bbc4286e2968"
 [[analytics_engine_datasets]]
 binding  = "AE"
 dataset  = "share_events"
+
+# SW1: custom hostname routing — api.share.refueler.io → this Worker
+[[routes]]
+pattern = "api.share.refueler.io/*"
+zone_name = "refueler.io"

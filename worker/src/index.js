@@ -11,6 +11,7 @@ import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } 
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
+import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -169,6 +170,16 @@ export default {
     }
 
     try {
+      // SW1: CF for SaaS ownership challenge — must be first, no auth, no CORS needed
+      if (request.method === 'GET' && path.startsWith('/.well-known/cf-custom-hostname-challenge/')) {
+        const challengeResponse = handleCfChallenge(path);
+        if (challengeResponse) return challengeResponse;
+      }
+
+      // SW1: white-label config discovery
+      if (request.method === 'GET' && path === '/wl/config') {
+        return timed('wl_config', () => Promise.resolve(handleWlConfig(request)).then(r => addCors(r, request)));
+      }
       if (request.method === 'GET' && path === '/status') {
         return timed('status', () => handleStatus(request, env).then(r => addCors(r, request)));
       }
