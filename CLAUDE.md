@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.2 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** SW-Opus-1 · 7 Sep 2026
+> **Version:** 2.3 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** SW1 · 8 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -95,6 +95,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - Webhooks are notification, never control flow. Credential issuance and transfer completion proceed identically whether the client webhook endpoint is up or down.
 - DO NOT use Cloudflare Queues, Durable Objects, or D1 for webhook delivery or any other purpose. `ctx.waitUntil` + KV dead-letter only.
 - Badge links to `refueler.io/share/`.
+- **CF for SaaS enabled on `refueler.io` zone (SW1 · 8 Sep 2026).** Fallback origin: `fallback.share.refueler.io`. Custom hostname: `api.share.refueler.io`. hostname_id: `d1d04abe-854c-48a0-8afe-bca47dfb0c3b`. ssl_id: `a3bd125f-f48c-4226-9e7c-d26e77fbaa90`. API token: `refueler-share-saas` (Zone → SSL and Certificates → Edit, scoped to `refueler.io`). Worker route: `api.share.refueler.io/*` in `wrangler.toml`. `wl_config.js` is the host-lookup module — add new client hostnames to `WL_CONFIGS` there.
 - API tier invoiced manually via Stripe invoice template. No subscription price object for API tier — invoice template only, managed manually in Stripe dashboard, off-repo.
 - `X-Email` header dropped from upload path entirely.
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
@@ -139,7 +140,9 @@ Session count is a guide not a constraint — split early, never overload. Plann
 **SW-Opus-1 ✓ complete (7 Sep 2026)** — three-tier model locked, rail model extended to API tier, Model B credit pool, API v1 feature gates, MCP v1 tool list, BOLT12 commitment, sandbox spec. BRIDGE v8.3.
 **SW-Opus-2 ✓ complete (7 Sep 2026)** — Rate card v1.0 locked. GBP invoicing policy locked. Credit blocks locked. Margin model locked (identity-API: £99/mo access fee + metered). Treasury policy locked (hold sats, pay GBP from GBP, sweep above ops reserve only). Sovereign Teams structure locked (shared 100 GB pool, three bands £49/£89/£169, cross-product Opus in refueler.io project before build). GTM reframe locked (HNW + accountant, warm-intro only, closed-door positioning). Rate-card notification wording locked (both rails). Rate-card governance: first review at £100k BTC 30-day trailing average. BRIDGE v8.4.
 
-**Next: SW-Opus-3** — identity-API access-fee detail, then SW build block (SW1–SW9).
+**SW-block in progress:**
+- SW1 ✓ — CF for SaaS, `api.share.refueler.io`, `wl_config.js`, ownership challenge. Commit `9cb017d`.
+- **Next: SW2** — HMAC API key generation, `POST /api/v1/credential/issue`, quota in KV.
 
 Locked block sequence: `NB-1 → S89/S90 → snag sweeps → [S88 ✓] → TG-block ✓ → TH-series ✓ → SW-Opus-1 ✓ → SW-Opus-2 ✓ → SW-Opus-3 → SW → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
 
