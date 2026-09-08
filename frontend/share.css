@@ -593,3 +593,21 @@ main {
   color: var(--fg-subtle);
   font-size: 0.7rem;
 }
+
+/* ── HTTP/3 whisper + badge — below shell, above footer (HQ2) ───────── */
+.http3-whisper {
+  width: 100%;
+  text-align: center;
+  padding: 12px 20px 4px;
+}
+.http3-whisper-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-subtle);
+  letter-spacing: 0.04em;
+}
+[data-refueler-badge] {
+  display: flex;
+  justify-content: center;
+  padding: 4px 20px 16px;
+}
