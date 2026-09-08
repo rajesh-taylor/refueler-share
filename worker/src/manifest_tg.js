@@ -1,14 +1,20 @@
 /**
- * manifest_tg.js — Traitor's Gate manifest helpers
+ * manifest_tg.js — Traitor's Gate + Tower Hill manifest helpers
  *
  * Exports pure functions that operate on manifest objects.
  * No R2/KV I/O here — callers handle reads/writes.
  *
- * Four manifest fields added by TG-block:
- *   pending_destruction  — absent | false | true
- *   consumed             — bool, default false
+ * TG-block fields:
+ *   pending_destruction       — absent | false | true
+ *   consumed                  — bool, default false
  *   available_from_timestamp  — unix seconds, nullable, paid only
  *   available_until_timestamp — unix seconds, nullable, paid only
+ *
+ * TH-1 fields (Tower Hill / Permanent Record):
+ *   timestamp_state           — 'none' | 'pending' | 'complete'
+ *   timestamp_submitted_at    — unix seconds, nullable
+ *
+ * No digest, no calendar URLs stored in manifest — Worker is a blind byte-relay.
  */
 
 // ---------------------------------------------------------------------------
@@ -104,4 +110,49 @@ const PAID_TIERS = new Set(['sovereign', 'business', 'enterprise']);
 
 export function isTidalPermitted(credentialTier) {
   return PAID_TIERS.has((credentialTier ?? '').toLowerCase());
+}
+
+// ---------------------------------------------------------------------------
+// TH-1: Timestamp state helpers
+// ---------------------------------------------------------------------------
+
+// Valid timestamp_state values.
+export const TIMESTAMP_STATES = /** @type {const} */ (['none', 'pending', 'complete']);
+
+// Returns the current timestamp_state, defaulting to 'none' for legacy manifests.
+export function getTimestampState(manifest) {
+  const s = manifest.timestamp_state;
+  if (s === 'pending' || s === 'complete') return s;
+  return 'none';
+}
+
+// Returns a manifest patch that sets timestamp_state to 'pending'.
+// Caller merges this into the manifest and writes to R2.
+// Does NOT touch any other field — minimal write footprint.
+export function buildTimestampPendingPatch(nowSeconds) {
+  return {
+    timestamp_state:        'pending',
+    timestamp_submitted_at: nowSeconds,
+  };
+}
+
+// Returns a manifest patch that promotes timestamp_state from 'pending' to 'complete'.
+// Called when Legend (or any future verifier) confirms the Bitcoin attestation.
+// No GET /timestamp/upgrade in Share — upgrade path belongs to Legend.
+// This function exists so the data model is consistent across products.
+export function buildTimestampCompletePatch() {
+  return {
+    timestamp_state: 'complete',
+  };
+}
+
+// Guard: returns true if this manifest is eligible for timestamp submission.
+// Eligibility: upload complete, not consumed, timestamp_state === 'none'.
+// Tier check is the caller's responsibility (Sovereign+ gate in the handler).
+export function isTimestampEligible(manifest) {
+  return (
+    manifest.upload_complete === true  &&
+    manifest.consumed !== true         &&
+    getTimestampState(manifest) === 'none'
+  );
 }

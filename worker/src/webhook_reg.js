@@ -3,7 +3,7 @@
 // SW4 — Webhook registration endpoints (API tier only).
 //
 // Three endpoints:
-//   POST   /api/v1/webhook/register  — register a URL, issue rfs_whsec_, write wh_config_ KV
+//   POST   /api/v1/webhook/register  — register a URL, derive rfs_whsec_, write wh_config_ KV
 //   DELETE /api/v1/webhook/register  — deregister, remove wh_config_ KV entry
 //   GET    /api/v1/webhook/register  — inspect registration (URL redacted, whsec active flag)
 //
@@ -12,16 +12,18 @@
 //
 // KV schema:
 //   wh_config_{sha256hex(rfs_live_key)} →
-//     { url, whsec_hash, created_at, active }
+//     { url, created_at, active }
 //
 //   - url         : full validated HTTPS URL as supplied by client
-//   - whsec_hash  : BLAKE3 hex digest of the raw rfs_whsec_ key — never the raw value
-//   - created_at  : unix seconds
+//   - created_at  : unix seconds — also acts as rotation salt in HMAC derivation
 //   - active      : boolean — false after DELETE, before KV expiry or re-registration
 //
 // Security invariants:
 //   - rfs_whsec_ is returned ONCE at POST time only. Never again. No GET equivalent.
-//   - whsec_hash is BLAKE3(rfs_whsec_) — same BLAKE3 WASM used elsewhere in the Worker.
+//   - rfs_whsec_ is DERIVED, never stored: HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY,
+//       "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)
+//     encoded base58, prefixed rfs_whsec_. Stateless re-derivation at every delivery.
+//   - created_at is the rotation salt — re-registration produces a new whsec automatically.
 //   - KV key for wh_config_ is sha256hex(rfs_live_key) — same derivation as api_client_.
 //     An attacker who can enumerate KV sees hashes, not keys.
 //   - URL validation rejects: non-HTTPS, localhost, loopback, RFC1918 private ranges,
@@ -47,6 +49,9 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 // Deleted entries: set active: false, TTL 7 days (enough for any in-flight delivery).
 const WH_CONFIG_ACTIVE_TTL   = 2 * 365 * 24 * 3600; // 63,072,000 s
 const WH_CONFIG_INACTIVE_TTL = 7 * 24 * 3600;        //    604,800 s
+
+// HMAC domain tag — version-locked. Any change forces all clients to re-register.
+const WHSEC_DOMAIN_TAG = 'refueler.webhook.v1';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Private IP ranges blocked in URL validation.
@@ -118,23 +123,39 @@ export function validateWebhookUrl(raw) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// generateWhsec() → Promise<string>
+// deriveWhsec(masterKey: string, apiKey: string, createdAt: number) → Promise<string>
 //
-// Generates a new rfs_whsec_ signing key.
-//   32 bytes from crypto.getRandomValues → encoded to base58 → prefixed.
+// Option B deterministic derivation — SW4-Opus decision.
 //
-// 32 bytes = 256 bits of entropy. Base58 encoding: log2(58^43) ≈ 252 bits
-// in the 43-char output, which is the natural output length for 32 bytes.
-// The prefix 'rfs_whsec_' is cosmetic — does not contribute to entropy.
+// HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)
 //
-// Returned raw value is shown to the client once only. Caller stores only
-// BLAKE3(rfs_whsec_) in KV.
+// The HMAC output (32 bytes) is base58-encoded and prefixed rfs_whsec_.
+//
+// Properties:
+//   - Stateless: re-derived identically at every delivery attempt and cron retry.
+//   - Rotation-safe: created_at is the salt — re-registration at a new timestamp
+//     yields a new whsec without touching WEBHOOK_SIGNING_MASTER_KEY.
+//   - Never stored: the derived value is returned once at POST time only.
+//
+// masterKey must be the raw string value of WEBHOOK_SIGNING_MASTER_KEY env var.
+// createdAt is unix seconds (integer) — cast to string for HMAC message consistency.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function generateWhsec() {
-  const raw = new Uint8Array(32);
-  crypto.getRandomValues(raw);
-  const b58 = toBase58(raw);
-  return `rfs_whsec_${b58}`;
+export async function deriveWhsec(masterKey, apiKey, createdAt) {
+  const enc = new TextEncoder();
+
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(masterKey),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+
+  const message = `${WHSEC_DOMAIN_TAG}\n${apiKey}\n${createdAt}`;
+  const sigBuffer = await crypto.subtle.sign('HMAC', keyMaterial, enc.encode(message));
+  const sigBytes  = new Uint8Array(sigBuffer);
+
+  return `rfs_whsec_${toBase58(sigBytes)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,10 +193,6 @@ function toBase58(bytes) {
   return result;
 }
 
-// whsecHash uses sha256Hex (from api_auth.js, already imported) — same
-// primitive as sign_key_hash in Option C. Correct choice for a one-time
-// commitment of a 256-bit random key; BLAKE3 is reserved for chunk integrity.
-
 // ─────────────────────────────────────────────────────────────────────────────
 // kvWhConfigKey(apiKey: string) → Promise<string>
 //
@@ -211,14 +228,11 @@ export async function handleWebhookRegister(request, env) {
       rawBody,
       env,
     ));
-  } catch (res) {
-    // requireApiAuth throws Response objects on failure.
-    if (res instanceof Response) return res;
-    console.error('webhook_reg: unexpected auth error:', res);
-    return errJson(500, 'Internal error during authentication');
+  } catch (resp) {
+    return resp; // requireApiAuth throws a Response on failure
   }
 
-  // ── Tier gate: API only ───────────────────────────────────────────────────
+  // ── Tier gate ─────────────────────────────────────────────────────────────
   if (client.tier !== 'api') {
     return errJson(403, 'Webhook registration is only available on the API tier');
   }
@@ -242,9 +256,9 @@ export async function handleWebhookRegister(request, env) {
 //   1. Validate URL (HTTPS, no localhost, no private IP).
 //   2. Check for an existing active registration — reject with 409.
 //      Client must DELETE first to rotate.
-//   3. Generate rfs_whsec_ (32 bytes base58).
-//   4. BLAKE3-hash the raw whsec for KV storage.
-//   5. Write wh_config_{hash(apiKey)} → { url, whsec_hash, created_at, active: true }.
+//   3. Stamp created_at (unix seconds) — this is the HMAC rotation salt.
+//   4. Derive rfs_whsec_ via HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, domain + live_key + created_at).
+//   5. Write wh_config_{hash(apiKey)} → { url, created_at, active: true }.
 //   6. Return { url, whsec } — whsec is shown ONCE. No second chance.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleRegisterPost(request, env, client, apiKey, rawBody) {
@@ -278,29 +292,23 @@ async function handleRegisterPost(request, env, client, apiKey, rawBody) {
     return errJson(409, 'A webhook is already registered. DELETE /api/v1/webhook/register first to replace it.');
   }
 
-  // ── Generate rfs_whsec_ ───────────────────────────────────────────────────
+  // ── Stamp rotation salt ───────────────────────────────────────────────────
+  const createdAt = Math.floor(Date.now() / 1000);
+
+  // ── Derive rfs_whsec_ (Option B) ─────────────────────────────────────────
+  // HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, domain_tag + "\n" + live_key + "\n" + created_at)
+  // Never stored. Re-derived statelessly at every delivery attempt.
   let rawWhsec;
   try {
-    rawWhsec = await generateWhsec();
+    rawWhsec = await deriveWhsec(env.WEBHOOK_SIGNING_MASTER_KEY, apiKey, createdAt);
   } catch (e) {
-    console.error('webhook_reg: whsec generation failed:', e);
-    return errJson(500, 'Failed to generate signing key');
+    console.error('webhook_reg: whsec derivation failed:', e);
+    return errJson(500, 'Failed to derive signing key');
   }
 
-  // ── Hash for storage (BLAKE3) ─────────────────────────────────────────────
-  let whsecHash;
-  try {
-    whsecHash = await sha256Hex(rawWhsec);
-  } catch (e) {
-    console.error('webhook_reg: BLAKE3 hash failed:', e);
-    return errJson(500, 'Failed to hash signing key');
-  }
-
-  // ── Write KV ──────────────────────────────────────────────────────────────
-  const createdAt = Math.floor(Date.now() / 1000);
+  // ── Write KV (no whsec_hash) ──────────────────────────────────────────────
   const record = {
     url:        webhookUrl,
-    whsec_hash: whsecHash,
     created_at: createdAt,
     active:     true,
   };
@@ -318,10 +326,10 @@ async function handleRegisterPost(request, env, client, apiKey, rawBody) {
 
   // ── Respond — whsec shown once only ──────────────────────────────────────
   return jsonOk({
-    url:    webhookUrl,
-    whsec:  rawWhsec,   // raw value, one-time only
+    url:        webhookUrl,
+    whsec:      rawWhsec,   // derived value, one-time only
     created_at: createdAt,
-    note:   'Store whsec securely — it will not be retrievable again.',
+    note:       'Store whsec securely — it will not be retrievable again.',
   });
 }
 
@@ -351,9 +359,9 @@ async function handleRegisterDelete(env, apiKey) {
   }
 
   // Write tombstone with short TTL.
+  // whsec_hash absent by design — Option B derives on demand; nothing to tombstone.
   const tombstone = {
     url:        existing.url,
-    whsec_hash: existing.whsec_hash,
     created_at: existing.created_at,
     active:     false,
     deleted_at: Math.floor(Date.now() / 1000),
@@ -379,7 +387,7 @@ async function handleRegisterDelete(env, apiKey) {
 // Returns registration state without exposing the signing key or full URL.
 // URL is redacted to scheme + host only (path/query/fragment stripped).
 // whsec_active: true if a record exists with active: true.
-// whsec is never returned — not even a hash — to prevent offline hash cracking.
+// whsec is never returned — Option B re-derives at delivery; there is nothing to return.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleRegisterGet(env, apiKey) {
   const configKey = await kvWhConfigKey(apiKey);

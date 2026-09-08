@@ -114,6 +114,10 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
         }
       }
 
+      env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
+  console.error('TH-1: date-seal.ots.enc delete failed (confirm path):', e)
+);
+
       // Step 3: Overwrite with stripped tombstone.
       // On partial failure, tombstone still written — orphaned chunks TTL out.
       const tombstone = buildTombstone(nowSeconds);

@@ -555,3 +555,41 @@ main {
   margin-top: 8px;
   line-height: 1.5;
 }
+
+/* ── Info card dismiss button ────────────────────────────────────────── */
+.info-card-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-subtle);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 0 0 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: color 0.2s;
+}
+.info-card-dismiss:hover { color: var(--fg); }
+
+/* ── Share subnav — Plans · Status below drop zone (HQ2) ─────────────── */
+.share-subnav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.share-subnav-link {
+  font-family: var(--display);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.share-subnav-link:hover { color: var(--fg); }
+.share-subnav-dot {
+  color: var(--fg-subtle);
+  font-size: 0.7rem;
+}

@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Config — single source of truth, consumed by upload.js and download.js
 // ─────────────────────────────────────────────────────────────────────────────
-export const WORKER_URL  = 'https://refueler-share.rt-fc4.workers.dev';
+export const WORKER_URL  = 'https://api.share.refueler.io';
 export const CHUNK_SIZE  = 8 * 1024 * 1024;         // 8 MB
 export const FREE_CAP    = 4 * 1024 * 1024 * 1024;  // 4 GB
 export const FREE_EXPIRY = 7 * 24 * 60 * 60;        // 7 days in seconds
