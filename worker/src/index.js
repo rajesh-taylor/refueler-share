@@ -12,6 +12,7 @@ import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPer
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
+import { requireApiAuth } from './api_auth.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
@@ -102,7 +103,7 @@ function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Api-Sign-Key, X-Transfer-Ref',
     'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp',
   };
 }
@@ -188,6 +189,19 @@ export default {
         return timed('admin_status', () => handleAdminStatus(request, env).then(r => addCors(r, request)));
       }
 
+      // ── SW2a: API credential issuance — POST /api/v1/credential/issue ─────
+      // HMAC-authenticated. Both rails. No Supabase row on anonymous rail.
+      // Quota tracked in KV only. Rate-limited under credential_issue bucket.
+      if (request.method === 'POST' && path === '/api/v1/credential/issue') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'credential_issue', 10, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'api_credential_issue', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('api_credential_issue', () => handleApiCredentialIssue(request, env).then(r => addCors(r, request)));
+      }
+
       if (request.method === 'POST' && path === '/credential/issue') {
         // Rate limit: 10 requests / 60s per IP — prevents token farming and Turnstile abuse
         const ip = getClientIp(request);
@@ -271,7 +285,7 @@ export default {
         return timed('delete_transfer', () => handleDeleteTransfer(request, env, uuid).then(r => addCors(r, request)));
       }
 
-            const confirmMatch = path.match(/^\/confirm\/([0-9a-f-]{36})$/i);
+      const confirmMatch = path.match(/^\/confirm\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && confirmMatch) {
         const uuid = confirmMatch[1];
         if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
@@ -470,6 +484,169 @@ async function handleAdminStatus(request, env) {
   }
 
   return json({ ok: true, status: updated });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API credential issuance — POST /api/v1/credential/issue  (SW2a)
+//
+// HMAC-authenticated API-tier endpoint.
+//
+// Issues a standard Cashu blind-signature credential via the existing mint
+// path — identical credential format to the consumer flow. The API layer adds
+// quota enforcement, transfer_ref logging, and rail-aware KV handling on top.
+//
+// Both rails:
+//   Identity rail — client has a Supabase row (created at onboarding, SW7).
+//                   Quota tracked in KV. AE event logged with transfer_ref.
+//   Anonymous rail — NO Supabase row, ever. Quota tracked in KV only.
+//                    No email, no identity. Same invariant as Lightning consumer path.
+//
+// Quota KV schema:
+//   api_quota_{rfs_live_key} → JSON { remaining: number, updated_at: number }
+//   Decremented after successful issuance. 402 if remaining === 0.
+//   Top-up is a KV write at onboarding/renewal (SW7).
+//
+// Request body:
+//   { blinded_message, tier?, transfer_ref? }
+//   tier:         'api' only — other values rejected. Credential is always API tier.
+//   transfer_ref: optional attribution string (client's own reference). Logged to AE.
+//                 Max 128 chars. Truncated silently. Never stored in KV or Supabase.
+//
+// Response:
+//   { signed_point, mint_pubkey, allocation_bytes, uuid, issued_tier, commitment, expires_at }
+//   expires_at: unix seconds (= now + expiry_window) — convenience for API clients.
+//
+// Auth headers required:
+//   Authorization: HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}
+//   X-Api-Sign-Key: rfs_sign_{...}
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleApiCredentialIssue(request, env) {
+  // ── Read body first (needed for HMAC body-hash verification) ─────────────
+  // Clone: requireApiAuth needs the raw bytes; we need JSON.
+  let rawBody;
+  let body;
+  try {
+    rawBody = await request.arrayBuffer();
+    body    = JSON.parse(new TextDecoder().decode(rawBody));
+  } catch {
+    return err(400, 'Invalid JSON body');
+  }
+
+  // ── HMAC auth (Option C) ──────────────────────────────────────────────────
+  // requireApiAuth throws a Response on failure — catch and return it.
+  let client, apiKey;
+  try {
+    ({ client, apiKey } = await requireApiAuth(request, rawBody, env));
+  } catch (authErr) {
+    if (authErr instanceof Response) return authErr;
+    console.error('api_credential_issue: unexpected auth error:', authErr);
+    return err(500, 'Authentication error');
+  }
+
+  // ── Validate request body ─────────────────────────────────────────────────
+  const { blinded_message, transfer_ref } = body;
+  if (!blinded_message) return err(400, 'Missing blinded_message');
+
+  // Sanitise transfer_ref — logged to AE only, never stored.
+  const safeTransferRef = transfer_ref
+    ? String(transfer_ref).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
+    : null;
+
+  // ── Quota check ───────────────────────────────────────────────────────────
+  // Read from KV — quota pool for this API key.
+  // 402 if exhausted. Decrement happens after successful issuance (below).
+  const quotaKey = `api_quota_${apiKey}`;
+  let quotaRecord;
+  try {
+    quotaRecord = await env.STATUS_KV.get(quotaKey, { type: 'json' });
+  } catch (e) {
+    console.error('api_credential_issue: KV quota read failed:', e);
+    return err(502, 'Quota check unavailable — please retry');
+  }
+
+  const remaining = quotaRecord?.remaining ?? 0;
+  if (remaining <= 0) {
+    logEvent(env, {
+      endpoint: 'api_credential_issue',
+      tier:     'api',
+      status:   402,
+      errorMsg: 'quota_exhausted',
+    });
+    return new Response(
+      JSON.stringify({
+        error:     'Credit pool exhausted',
+        code:      'quota_exhausted',
+        remaining: 0,
+      }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // ── Issue credential — same mint path as consumer ─────────────────────────
+  // API tier always uses 'max' expiry window (90 days). The issued_tier in the
+  // commitment is 'api' — distinct from consumer tiers in AE but resolves to
+  // the same storage cap (250 GB, enforced at upload time by manifest.tier check).
+  const API_EXPIRY_WINDOW = 90 * 24 * 3600; // 90 days, matching max consumer tier
+  const uuid       = crypto.randomUUID();
+  const issuedTier = 'api';
+
+  const commitment = await computeApiCommitment(uuid, issuedTier, API_EXPIRY_WINDOW);
+
+  let signedPoint, mintPubkey;
+  try {
+    ({ signedPoint, mintPubkey } = await issueBlindSignature(blinded_message, env.MINT_PRIVATE_KEY));
+  } catch (e) {
+    console.error('api_credential_issue: blind sig error:', e);
+    return err(500, 'Credential issuance failed');
+  }
+
+  // ── Decrement quota — fire-and-forget, log on failure ────────────────────
+  // Decrement after successful issuance only. If the write fails, quota drifts
+  // optimistically — acceptable at v1; a reconciliation sweep is B9 scope.
+  const newRemaining = remaining - 1;
+  const nowSeconds   = Math.floor(Date.now() / 1000);
+  env.STATUS_KV.put(
+    quotaKey,
+    JSON.stringify({ remaining: newRemaining, updated_at: nowSeconds }),
+  ).catch(e => console.error('api_credential_issue: KV quota decrement failed:', e));
+
+  // ── AE event — api_credential_issue ──────────────────────────────────────
+  // Logs transfer_ref for attribution. Never logs apiKey, rail, or any PII.
+  // blob4 carries transfer_ref (reusing the http_protocol slot — AE has 4 blobs).
+  // This is intentional: api_credential_issue events are distinguished by
+  // endpoint (blob1), so the http_protocol slot can carry transfer_ref instead.
+  if (env.AE) {
+    try {
+      env.AE.writeDataPoint({
+        blobs:   ['api_credential_issue', issuedTier, '', safeTransferRef ?? ''],
+        doubles: [0, 200, 0, 0, 0],
+        indexes: ['api_credential_issue'],
+      });
+    } catch (e) {
+      console.error('AE write failed (api_credential_issue):', e);
+    }
+  }
+
+  const expiresAt = nowSeconds + API_EXPIRY_WINDOW;
+
+  return json({
+    signed_point:     signedPoint,
+    mint_pubkey:      mintPubkey,
+    allocation_bytes: 250 * 1024 * 1024 * 1024, // 250 GB API tier cap
+    uuid,
+    issued_tier:      issuedTier,
+    commitment,
+    expires_at:       expiresAt,
+    quota_remaining:  newRemaining,
+  });
+}
+
+// computeApiCommitment — same pattern as consumer computeCommitment.
+// Kept separate to avoid confusion with the consumer EXPIRY_WINDOWS map.
+async function computeApiCommitment(uuid, tier, expiryWindow) {
+  const input = new TextEncoder().encode(`${uuid}:${tier}:${expiryWindow}`);
+  const hash  = await crypto.subtle.digest('SHA-256', input);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -762,16 +939,26 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 401, errorMsg: 'credential_commitment_missing' });
       return err(401, 'Missing credential commitment');
     }
-    const canonicalTier   = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
-    const expectedWindow  = EXPIRY_WINDOWS[canonicalTier];
-    const expectedCommitment = await computeCommitment(uuid, canonicalTier, expectedWindow);
+
+    // API-tier credentials use computeApiCommitment (90-day window, 'api' tier string).
+    // Consumer credentials use computeCommitment (EXPIRY_WINDOWS map).
+    // Distinguish by issuedTier value — 'api' is never in EXPIRY_WINDOWS.
+    let expectedCommitment;
+    if (issuedTier === 'api') {
+      const API_EXPIRY_WINDOW = 90 * 24 * 3600;
+      expectedCommitment = await computeApiCommitment(uuid, 'api', API_EXPIRY_WINDOW);
+    } else {
+      const canonicalTier  = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
+      const expectedWindow = EXPIRY_WINDOWS[canonicalTier];
+      expectedCommitment   = await computeCommitment(uuid, canonicalTier, expectedWindow);
+    }
+
     // Constant-time comparison — commitment is not secret but avoids timing oracle on hex strings.
     const commitmentBytes         = new TextEncoder().encode(commitment);
     const expectedCommitmentBytes = new TextEncoder().encode(expectedCommitment);
     const commitmentMatch = commitmentBytes.length === expectedCommitmentBytes.length &&
       crypto.subtle.timingSafeEqual
         ? await (async () => {
-            // timingSafeEqual available in Workers runtime
             try { return crypto.subtle.timingSafeEqual(commitmentBytes, expectedCommitmentBytes); }
             catch { return commitment === expectedCommitment; }
           })()
@@ -799,10 +986,12 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     //   free:     7 days  (604,800s)
     //   creative: 30 days (2,592,000s)
     //   max:      90 days (7,776,000s)
+    //   api:      90 days (7,776,000s) — same as max
     const EXPIRY_MAX_SECONDS = {
       free:     7  * 24 * 3600,  //  7 days
       creative: 30 * 24 * 3600,  // 30 days
       max:      90 * 24 * 3600,  // 90 days
+      api:      90 * 24 * 3600,  // 90 days
     };
     const nowSeconds  = Math.floor(Date.now() / 1000);
     const maxWindow   = EXPIRY_MAX_SECONDS[resolvedTier] ?? EXPIRY_MAX_SECONDS.free;
@@ -1048,7 +1237,7 @@ async function handleAuth(request, env, uuid) {
     return err(401, 'Incorrect passphrase');
   }
 
-const token = await issueDownloadToken(uuid, env.MINT_PRIVATE_KEY, manifest.expiry_timestamp);
+  const token = await issueDownloadToken(uuid, env.MINT_PRIVATE_KEY, manifest.expiry_timestamp);
   return json({ token });
 }
 
@@ -1062,7 +1251,7 @@ async function handleMeta(request, env, uuid) {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
   }
-return new Response(JSON.stringify({
+  return new Response(JSON.stringify({
     file_name:                manifest.file_name               ?? null,
     total_bytes:              manifest.total_bytes             ?? null,
     total_chunks:             manifest.total_chunks            ?? null,
@@ -1542,7 +1731,7 @@ async function handleCheckout(request, env) {
   const { price_id, email } = body;
   if (!price_id || !email) return err(400, 'Missing price_id or email');
 
- const validPriceIds = [
+  const validPriceIds = [
     // live
     "price_1Ts7lsGlctwiB9U3hdtgChU2",
     "price_1Ts7sqGlctwiB9U3YRloCFfi",
