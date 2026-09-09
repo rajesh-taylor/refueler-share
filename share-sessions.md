@@ -406,8 +406,8 @@ BRIDGE v8.8.
 | SW2/SW2a | `1a1b518` | `api_auth.js` — HMAC-SHA256 + Option C sign-key hash. `POST /api/v1/credential/issue` — quota KV, 402 on exhaustion, AE logging, both rails, no Supabase row on anonymous rail. |
 | SW3 | `d223249` | `refueler-badge.js` — BLAKE3/Cashu/Bitcoin pill, Shadow DOM, Paper/Carbon aware, mounts via `data-refueler-badge`. Share-snag-1 prompted (index.njk drift). |
 | SW4 | `452e7b8` | `webhook_reg.js` — POST/DELETE/GET `/api/v1/webhook/register`. `rfs_whsec_` issuance (32-byte base58, shown once). `wh_config_{sha256hex}` KV schema. URL validation (HTTPS-only, no localhost, no private/loopback/link-local IP). API tier only. 45 tests. **Requires SW4-patch before SW4a.** |
-| SW4-patch | TBD | `webhook_reg.js`: remove `whsec_hash` from KV writes; replace random-whsec generation with Option B HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`; scrub 5 BLAKE3 comment errors. Set `WEBHOOK_SIGNING_MASTER_KEY` Worker secret. Confirm zero live whsec recipients before landing. |
-| SW4a | Webhooks II | Delivery via `ctx.waitUntil`. Dead-letter KV (7-day TTL). AE log per attempt. OTS-confirmation webhook wired. |
+| SW4-patch | `9ba1ceb` | `webhook_reg.js`: removed `whsec_hash` from KV writes; replaced random-whsec generation with Option B HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`; switched derivation input to `apiKeyHash` (SIGN_DOMAIN_TAG → `refueler.webhook.v1.sign`); removed `deriveWhsec` and `toBase58` functions (superseded by `webhook_delivery.js`). `WEBHOOK_SIGNING_MASTER_KEY` Worker secret set. |
+| SW4a | `9ba1ceb` | Webhook delivery engine. `webhook_delivery.js` — `deliverWebhook` / `deliverWebhookInline` / `findApiKeyHashForUuid` / `deriveWhsecFromHash`. Dead-letter KV (7-day TTL). AE log per attempt. OTS + confirm triggers wired. `WEBHOOK_SIGNING_MASTER_KEY` set. whsec derivation switched to apiKeyHash (SIGN_DOMAIN_TAG bumped to `refueler.webhook.v1.sign`). |
 | SW4b | Webhooks III | Daily cron retry of dead-letter items. |
 | SW5 | Receipts | Acceptance receipts + collection receipts. "Proof of delivery" phrase nowhere in code or copy. |
 | SW5a | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
@@ -423,6 +423,9 @@ BRIDGE v8.8.
 - DO NOT re-sign dead-letter retries with original `t` — fresh current timestamp at every retry
 - DO NOT conflate SW2c (KV key-name hardening) with KV value content — `live_key` in DLQ value is a documented exception
 - DO NOT begin SW5 build without SW5-Opus deciding receipt verifier audience
+- DO NOT use patch files or find-and-replace instructions — always produce complete replacement files
+- DO NOT call deliverWebhook (ctx.waitUntil) from inside an existing waitUntil block — use deliverWebhookInline instead
+- SIGN_DOMAIN_TAG is 'refueler.webhook.v1.sign' — never revert to 'refueler.webhook.v1'
 
 **Buffer pool (2 sessions):** SW2c · SW5c
 

@@ -49,8 +49,8 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 `SUPABASE_SERVICE_KEY`, `STRIPE_SECRET_KEY` (sk_live_...ZehD),
 `STRIPE_WEBHOOK_SECRET` (rotated 21 Jul), `ADMIN_KEY`,
 `CF_ACCOUNT_ID` (fc4f3e5aeebe483677d14185daf544f5), `CF_AE_TOKEN` (Account Analytics Read).
-
-**Pending (set before SW4a):** `WEBHOOK_SIGNING_MASTER_KEY` — 32 bytes hex, `wrangler secret put WEBHOOK_SIGNING_MASTER_KEY`. Master for stateless webhook signing key derivation (SW4-Opus Option B). Do not rotate without cause — rotation requires fleet-wide client re-registration.
+`WEBHOOK_SIGNING_MASTER_KEY` (SW4a, stateless webhook signing master).
+`WEBHOOK_SIGNING_MASTER_KEY` set (SW4a). Do not rotate without cause — rotation requires fleet-wide client re-registration.
 
 ---
 
