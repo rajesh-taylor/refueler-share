@@ -19,7 +19,10 @@ import { handleWebhookRegister }        from './webhook_reg.js';
 import { findApiKeyHashForUuid, deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
 // SW5: acceptance + collection receipts
 import { buildSignedReceipt, emitReceipt, handleApiReceipt } from './receipts.js';
-
+import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
+// SW5b: webhook status + hostname health cards
+import { handleWebhookStatus }  from './handlers/webhook_status.js';
+import { handleHostnameHealth } from './handlers/hostname_health.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,6 +185,8 @@ export default {
         const challengeResponse = handleCfChallenge(path);
         if (challengeResponse) return challengeResponse;
       }
+      if (method === 'OPTIONS' && path === '/api/v1/auth/ping') return handleAuthPingOptions();
+      if (method === 'GET'     && path === '/api/v1/auth/ping') return handleAuthPing(request, env);
 
       // SW1: white-label config discovery
       if (request.method === 'GET' && path === '/wl/config') {
@@ -253,6 +258,30 @@ export default {
           const response = await handleApiReceipt(request, env, receiptMatch[1], receiptMatch[2]);
           return addCors(response, request);
         });
+      }
+
+      // ── SW5b: Webhook status — GET /api/v1/webhooks/status ─────────────────
+      // HMAC-authenticated. Returns registration state + DLQ depth for caller.
+      if (request.method === 'GET' && path === '/api/v1/webhooks/status') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_webhook_status', 20, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'api_webhook_status', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('api_webhook_status', () => handleWebhookStatus(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── SW5b: Hostname health — GET /api/v1/hostname/health ─────────────────
+      // HMAC-authenticated. Returns WL_CONFIGS entry for the caller's hostname.
+      if (request.method === 'GET' && path === '/api/v1/hostname/health') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_hostname_health', 20, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'api_hostname_health', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('api_hostname_health', () => handleHostnameHealth(request, env).then(r => addCors(r, request)));
       }
 
       // Consumer credential issuance — POST /credential/issue
