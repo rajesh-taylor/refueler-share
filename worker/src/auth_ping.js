@@ -44,7 +44,11 @@ export async function handleAuthPing(request, env) {
   try {
     ({ client, apiKey } = await requireApiAuth(request, new ArrayBuffer(0), env));
   } catch (e) {
-    if (e instanceof Response) return e;
+    if (e instanceof Response) {
+      const h = new Headers(e.headers);
+      h.set("Access-Control-Allow-Origin", "https://refueler.io");
+      return new Response(e.body, { status: e.status, headers: h });
+    }
     return jsonError(500, 'auth_check_failed', 'Internal error during auth verification.');
   }
 
