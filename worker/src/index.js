@@ -16,6 +16,7 @@ import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleWebhookRegister }        from './webhook_reg.js';
+import { findApiKeyHashForUuid, deliverWebhookInline } from './webhook_delivery.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1572,6 +1573,24 @@ async function handleTimestampSubmit(request, env, ctx) {
     tier:     manifestTier,
     status:   200,
   });
+
+  // SW4a: fire 'transfer.timestamp_submitted' webhook for API-tier transfers.
+  // ctx is already in scope (passed from router). Non-blocking.
+  ctx.waitUntil(
+    (async () => {
+      try {
+        const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
+        if (apiKeyHash) {
+          await deliverWebhookInline(env, apiKeyHash, {
+            type: 'transfer.timestamp_submitted',
+            uuid,
+          });
+        }
+      } catch (e) {
+        console.error('timestamp_submit: webhook delivery error:', e);
+      }
+    })()
+  );
 
   return json({ ok: true, timestamp_state: 'pending' });
 }

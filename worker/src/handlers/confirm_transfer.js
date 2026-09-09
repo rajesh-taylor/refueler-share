@@ -18,11 +18,17 @@
  *   401/403                               — auth failure on passphrase-protected transfer
  *   404                                   — transfer not found
  *   410                                   — already consumed (idempotent)
+ *
+ * SW4a: fires 'transfer.confirmed' webhook for API-tier transfers inside the
+ * existing ctx.waitUntil block. Consumer transfers (no api_key_hash in
+ * dock_index) are silently skipped. deliverWebhookInline is used (not
+ * deliverWebhook) because we are already inside waitUntil — cannot nest.
  */
 
-import { getManifest, putManifest } from '../manifest.js';
-import { buildTombstone }           from '../manifest_tg.js';
-import { verifyDownloadToken }      from '../nut11.js';
+import { getManifest, putManifest }                          from '../manifest.js';
+import { buildTombstone }                                    from '../manifest_tg.js';
+import { verifyDownloadToken }                               from '../nut11.js';
+import { findApiKeyHashForUuid, deliverWebhookInline }       from '../webhook_delivery.js';
 
 const MANIFEST_SIZE_MAX = 64 * 1024;
 
@@ -33,10 +39,10 @@ function chunkKey(uuid, index) {
 
 export async function handleConfirmTransfer(request, env, ctx, uuid) {
   // ── Auth — mirrors download handler ──────────────────────────────────────
-  // Read manifest first to know whether auth is required.
-const _obj = await env.BUCKET.head(`${uuid}/manifest.json`).catch(() => null);
-const oversize = _obj && (_obj.size ?? 0) > MANIFEST_SIZE_MAX;
-const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
+  const _obj    = await env.BUCKET.head(`${uuid}/manifest.json`).catch(() => null);
+  const oversize = _obj && (_obj.size ?? 0) > MANIFEST_SIZE_MAX;
+  const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
+
   if (oversize) {
     return _err(502, 'Transfer manifest exceeds size limit.');
   }
@@ -66,44 +72,26 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
   }
 
   // ── Not a destroy-after-download transfer — idempotent no-op ─────────────
-  // pending_destruction absent or never set means sender did not arm this transfer.
   if (manifest.pending_destruction !== true && manifest.pending_destruction !== false) {
     return _json({ destroyed: false });
   }
   if (manifest.pending_destruction === false) {
-    // Armed but final chunk not yet served.
     return _err(409, 'Transfer not yet fully downloaded.');
   }
 
   // pending_destruction === true: final chunk was served, sender armed it.
-  // This is the destruction trigger.
-
-  // ── 409: final chunk not yet served ──────────────────────────────────────
-  // pending_destruction flips from false → true only after the final chunk
-  // is served by the download handler. If it is still false here, the
-  // recipient is calling confirm before completing the download.
-  // (Handled above in the false branch — kept explicit for clarity.)
 
   // ── Fail-closed deletion sequence ─────────────────────────────────────────
-  // 1. Write consumed marker first. If R2 chunk deletes fail, transfer is
-  //    still marked gone — chunks expire via R2 lifecycle TTL.
-  // 2. Delete chunks.
-  // 3. Overwrite manifest with stripped tombstone.
-  //
-  // All R2 puts/deletes fire inside ctx.waitUntil so the 200 response
-  // is returned immediately; the recipient does not wait for chunk deletion.
-
-  const nowSeconds   = Math.floor(Date.now() / 1000);
-  const totalChunks  = manifest.total_chunks ?? 0;
+  const nowSeconds  = Math.floor(Date.now() / 1000);
+  const totalChunks = manifest.total_chunks ?? 0;
 
   // Step 1: consumed marker — synchronous write before returning 200.
-  // This ensures the transfer is marked gone even if the waitUntil work fails.
   await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
 
-  // Steps 2 + 3: chunk deletion + tombstone — fire-and-forget via waitUntil.
-  // Caller receives 200 immediately; deletion runs in the background.
+  // Steps 2–5: fire-and-forget via waitUntil. Caller receives 200 immediately.
   ctx.waitUntil(
     (async () => {
+      // ── Step 2: Delete chunks ─────────────────────────────────────────────
       const deleteErrors = [];
       for (let i = 0; i < totalChunks; i++) {
         try {
@@ -114,12 +102,13 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
         }
       }
 
+      // TH-1: delete encrypted .ots blob if present — load-bearing on all
+      // deletion paths. No-op if timestamp_state was 'none'.
       env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
-  console.error('TH-1: date-seal.ots.enc delete failed (confirm path):', e)
-);
+        console.error('TH-1: date-seal.ots.enc delete failed (confirm path):', e)
+      );
 
-      // Step 3: Overwrite with stripped tombstone.
-      // On partial failure, tombstone still written — orphaned chunks TTL out.
+      // ── Step 3: Overwrite with stripped tombstone ──────────────────────────
       const tombstone = buildTombstone(nowSeconds);
       try {
         await putManifest(env.BUCKET, uuid, tombstone);
@@ -127,9 +116,7 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
         console.error('confirm: tombstone write failed:', e);
       }
 
-      // Step 4: Mark collected in Execution Dock KV index.
-      // Updates dock_index:{uuid} so the sent-transfers view shows 'collected'.
-      // Fire-and-forget — a failed write self-corrects on next dashboard refresh.
+      // ── Step 4: Mark collected in Execution Dock KV index ─────────────────
       try {
         const dockRaw = await env.STATUS_KV.get(`dock_index:${uuid}`, { type: 'json' });
         if (dockRaw) {
@@ -140,14 +127,32 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
               collected:    true,
               collected_at: nowSeconds,
             }),
-            { expirationTtl: 86400 * 7 } // 7-day tail after collection then self-cleans
+            { expirationTtl: 86400 * 7 },
           );
         }
       } catch (e) {
         console.error('confirm: dock_index collected update failed:', e);
       }
 
-      // AE log — fire-and-forget inside waitUntil.
+      // ── Step 5: Webhook — 'transfer.confirmed' (SW4a) ────────────────────
+      // API-tier transfers only. findApiKeyHashForUuid returns null for
+      // consumer transfers; deliverWebhookInline is a no-op on null.
+      // We use deliverWebhookInline (not deliverWebhook) because we are
+      // already inside waitUntil — nested waitUntil is not permitted.
+      // Webhook failure never affects deletion outcome.
+      try {
+        const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
+        if (apiKeyHash) {
+          await deliverWebhookInline(env, apiKeyHash, {
+            type: 'transfer.confirmed',
+            uuid,
+          });
+        }
+      } catch (e) {
+        console.error('confirm: webhook delivery error:', e);
+      }
+
+      // ── AE log ────────────────────────────────────────────────────────────
       if (env.AE) {
         try {
           env.AE.writeDataPoint({
@@ -165,7 +170,7 @@ const manifest = oversize ? null : await getManifest(env.BUCKET, uuid);
   return _json({ destroyed: true });
 }
 
-// ── Response helpers (local, no shared dep) ───────────────────────────────
+// ── Response helpers ──────────────────────────────────────────────────────────
 
 function _json(data, status = 200) {
   return new Response(JSON.stringify(data), {

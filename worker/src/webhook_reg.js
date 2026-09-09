@@ -36,7 +36,8 @@
 
 'use strict';
 
-import { requireApiAuth, sha256Hex } from './api_auth.js';
+import { requireApiAuth, sha256Hex }       from './api_auth.js';
+import { deriveWhsecFromHash }             from './webhook_delivery.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -51,7 +52,10 @@ const WH_CONFIG_ACTIVE_TTL   = 2 * 365 * 24 * 3600; // 63,072,000 s
 const WH_CONFIG_INACTIVE_TTL = 7 * 24 * 3600;        //    604,800 s
 
 // HMAC domain tag — version-locked. Any change forces all clients to re-register.
-const WHSEC_DOMAIN_TAG = 'refueler.webhook.v1';
+// SW4a: bumped to 'refueler.webhook.v1.sign' — derivation now uses
+// sha256hex(apiKey) as HMAC input, matching delivery engine.
+// Old tag 'refueler.webhook.v1' invalidated (no live clients pre-launch).
+const WHSEC_DOMAIN_TAG = 'refueler.webhook.v1.sign';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Private IP ranges blocked in URL validation.
@@ -120,77 +124,6 @@ export function validateWebhookUrl(raw) {
   }
 
   return { ok: true, url: parsed };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// deriveWhsec(masterKey: string, apiKey: string, createdAt: number) → Promise<string>
-//
-// Option B deterministic derivation — SW4-Opus decision.
-//
-// HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)
-//
-// The HMAC output (32 bytes) is base58-encoded and prefixed rfs_whsec_.
-//
-// Properties:
-//   - Stateless: re-derived identically at every delivery attempt and cron retry.
-//   - Rotation-safe: created_at is the salt — re-registration at a new timestamp
-//     yields a new whsec without touching WEBHOOK_SIGNING_MASTER_KEY.
-//   - Never stored: the derived value is returned once at POST time only.
-//
-// masterKey must be the raw string value of WEBHOOK_SIGNING_MASTER_KEY env var.
-// createdAt is unix seconds (integer) — cast to string for HMAC message consistency.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function deriveWhsec(masterKey, apiKey, createdAt) {
-  const enc = new TextEncoder();
-
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(masterKey),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  const message = `${WHSEC_DOMAIN_TAG}\n${apiKey}\n${createdAt}`;
-  const sigBuffer = await crypto.subtle.sign('HMAC', keyMaterial, enc.encode(message));
-  const sigBytes  = new Uint8Array(sigBuffer);
-
-  return `rfs_whsec_${toBase58(sigBytes)}`;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// toBase58(bytes: Uint8Array) → string
-//
-// Standard base58 encoding (Bitcoin alphabet, no check).
-// Leading zero bytes → leading '1' characters.
-// ─────────────────────────────────────────────────────────────────────────────
-function toBase58(bytes) {
-  // Count leading zeroes
-  let leadingZeroes = 0;
-  for (const b of bytes) {
-    if (b !== 0) break;
-    leadingZeroes++;
-  }
-
-  // Convert to big-endian integer via array of digits in base 58
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i++) {
-      carry += digits[i] << 8;
-      digits[i] = carry % 58;
-      carry = Math.floor(carry / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-
-  // Map to alphabet and reverse (digits are little-endian)
-  const result = '1'.repeat(leadingZeroes) +
-    digits.reverse().map(d => BASE58_ALPHABET[d]).join('');
-  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,9 +231,12 @@ async function handleRegisterPost(request, env, client, apiKey, rawBody) {
   // ── Derive rfs_whsec_ (Option B) ─────────────────────────────────────────
   // HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, domain_tag + "\n" + live_key + "\n" + created_at)
   // Never stored. Re-derived statelessly at every delivery attempt.
+  // SW4a: derive from sha256hex(apiKey) — consistent with delivery engine.
+  // deriveWhsecFromHash is exported from webhook_delivery.js.
   let rawWhsec;
   try {
-    rawWhsec = await deriveWhsec(env.WEBHOOK_SIGNING_MASTER_KEY, apiKey, createdAt);
+    const apiKeyHash = await sha256Hex(apiKey);
+    rawWhsec = await deriveWhsecFromHash(env.WEBHOOK_SIGNING_MASTER_KEY, apiKeyHash, createdAt);
   } catch (e) {
     console.error('webhook_reg: whsec derivation failed:', e);
     return errJson(500, 'Failed to derive signing key');
