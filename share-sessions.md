@@ -426,6 +426,8 @@ BRIDGE v8.8.
 - DO NOT use patch files or find-and-replace instructions — always produce complete replacement files
 - DO NOT call deliverWebhook (ctx.waitUntil) from inside an existing waitUntil block — use deliverWebhookInline instead
 - SIGN_DOMAIN_TAG is 'refueler.webhook.v1.sign' — never revert to 'refueler.webhook.v1'
+**SW block open snags (resolve at SW9):**
+- `confirm` error messages use trailing full stops; `index.js` `err()` helper does not — normalise at SW9
 
 **Buffer pool (2 sessions):** SW2c · SW5c
 
