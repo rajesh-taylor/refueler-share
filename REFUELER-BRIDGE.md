@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 8.8 | **Created:** 28 July 2026 | **Updated:** SW4-Opus · 2026-09-08
+> **Version:** 8.9 | **Created:** 28 July 2026 | **Updated:** SW5-Opus · 2026-09-09
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -146,6 +146,7 @@ manual sed patches to `refueler.io/src/share/index.njk` — the script owns that
 | **SW4-Opus · 8 Sep 2026** | all repos | **Webhook signing key architecture locked. Option B (stateless HMAC derivation) chosen. `WEBHOOK_SIGNING_MASTER_KEY` new Worker secret. `whsec_hash` removed from `wh_config_` KV schema. Dead-letter schema locked. SW4-patch required before SW4a. SW5-Opus gate: receipt verifier audience decision mandatory before SW5 builds.** See §SW4-Opus decisions. BRIDGE v8.8. |
 | **Share-127 · 8 Sep 2026** | refueler-share | **NUT-22/NUT-24 Teams open items scoped. NUT-22 clear-auth = net-new infrastructure; scope in own Opus before any Teams block. NUT-24-alone may enter SW scope on anonymous API rail — decide at SW-scoping session. Full decisions: `nut22-nut24-two-header-decisions.md`.** BRIDGE v8.6. |
 | **Pass-Vocab-2 · 8 Sep 2026** | refueler-pass (vocabulary) | **Westminster vocabulary lock — five locations: St James's Square (organiser set / keyholder privacy), The Citadel (Deed / cold-storage recovery), Admiralty Arch (NUT-11 presentation threshold / tier gate), Buxton Memorial Fountain (architectural abolition of surveillance category / compulsion argument), Supreme Court UK (independent verifier / Legend separation / Miller II × Raven canary). Trinity House confirmed Share geography. All five: whitepaper + closed-door only.** BRIDGE v8.7. |
+| **SW5-Opus · 9 Sep 2026** | all repos | **Receipt verifier architecture locked. Symmetric HMAC chosen over Ed25519 — asymmetric evidence stays with OTS/Legend. Per-product master key, namespaced domain tag convention (`refueler.{product}.{artefact}.v{n}`) adopted as ecosystem-wide signing standard. Receipt schema locked: `receipt_type: "acceptance"\|"collection"`, `event: "cargo.accepted"\|"cargo.discharged"`. Detached `sig`, no replay window. `cargo.in_bond` reserved-not-built for Execution Dock / Three Tides 48h grace. South-bank geography reserved: Greenwich Observatory (authoritative time / timestamping primitive), The Clink (compulsion surface / Liberty-that-is-a-gaol), Deptford (shipbuilder's yard / API + white-label build layer). London Stone on Cannon Street reserved (the civic anchor / the record that survived). See §SW5-Opus decisions.** BRIDGE v8.9. |
 
 ---
 
@@ -176,7 +177,7 @@ manual sed patches to `refueler.io/src/share/index.njk` — the script owns that
 
 ---
 
-## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1 + AP-10 + TH-Opus-2 + Pass-Vocab-2)
+## Refueler brand vocabulary — London geography (locked AP-BRAND · 31 Aug 2026; extended Opus-3 + Opus-3b + Pass-Vocab-1 + Merchant-Vocab-1 + AP-10 + TH-Opus-2 + Pass-Vocab-2 + SW5-Opus)
 
 The Refueler product ecosystem is anchored in London geography — specifically the Thames corridor from Westminster eastward to the Pool of London. This is not decorative: it reflects where Refueler is built, by a Londoner, and the institutions drawn on performed real historical versions of what these products do. The vocabulary is coherent, earned, and novel in both senses of the word.
 
@@ -190,7 +191,7 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | **Port Authority** | The admission-control layer at the upload boundary — Content-Type denylist + rate-limiting gate. Every transfer passes it, as every vessel passed the Port of London Authority to enter the Pool. An authority that controls what enters, not an issuer. | Docs / internal |
 | **Quay** | A named individual intake point issued to a specific client or sender. Quay/Key double-meaning: a bitcoiner reads one, a consultant reads the other. | Professional users |
 | **Harbourmaster** | The admin dashboard — the account holder who controls their drops, views the receipt ledger, manages Quays | Everyone |
-| **Cargo** | The encrypted file bundle in transit. Used in API event names (`cargo_received`), webhook payloads, and developer docs. Not used in patient-facing or professional UI copy — use "documents" there. | Docs / API / webhooks |
+| **Cargo** | The encrypted file bundle in transit. Used in API event names (`cargo.accepted` / `cargo.discharged` / `cargo.in_bond` reserved), webhook payloads, and developer docs. Not used in patient-facing or professional UI copy — use "documents" there. | Docs / API / webhooks |
 | **Locke** | The credential-as-key mechanism — presented to access Harbourmaster. Locke/Lock double-meaning. Named in whitepaper and docs; not necessarily surfaced to end users. | Whitepaper / docs |
 | **Raven** | The warrant canary system — replaces "canary" across all products. Ravens signal safety by presence, not by dying. Absence = compromise signal. Architecturally more accurate than the canary metaphor. One Raven per Liberty — four total. | Whitepaper / docs / public |
 | **Dragon** | The operational status indicator — presence-based system health signal, distinct from Raven (absence-based legal warrant canary). "The Dragon holds" = all systems operational. "The Dragon sleeps" = degraded / partial outage. "The Dragon has fallen" = critical failure or maintenance. The Dragon is the wall; the Raven is the alarm. Internal vocabulary and status page only. Never conflated with City of London boundary bollard dragons. | Internal / status page |
@@ -218,11 +219,15 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | **The Citadel (Horseguards Road)** | The WWII Admiralty bombproof communications bunker, completed 1941 — six-foot concrete walls, self-contained power and water, integrated with the Cabinet War Rooms by tunnel. Still operational (MOD). Covered in Boston ivy since construction: planted to soften its appearance, maintained ever since, quietly impenetrable on the most-walked route between Parliament and Trafalgar Square, unremarkable to almost everyone who passes it. **Refueler mapping:** the Deed and cold-storage recovery architecture. Designed to survive everything that destroys normal infrastructure — a server failure, a key compromise, a compulsion event. Printed on paper, held by you, outside any system that can be seized. "If everything else falls, the Deed holds." The Citadel is ivy-covered and unmarked. The Deed is a piece of paper. Both are hardened. Forward: The Citadel earns a professional-copy column entry once Pass is live and the Deed is explained to clients — the phrase does the work. | Whitepaper §recovery architecture / closed-door — never product UI |
 | **Admiralty Arch** | The 1912 ceremonial gateway between The Mall and Trafalgar Square. Three arches: the central, largest arch is sealed except for State processions — it opens for the sovereign's passage and closes again. The left and right arches carry ordinary traffic. Hidden detail: a stone nose at nose-height in the right arch wall, placed by an unknown sculptor — widely understood as a joke on Napoleon, there since 1912, noticed by almost no one. **Refueler mapping:** the NUT-11 P2PK credential presentation threshold — the gate that opens for the right key and holds for any other. Citizen-tier passes through the side arches; the central arch is sealed to all but the Sovereign credential. The nose: a reminder that the architecture can contain a joke visible only to those who know to look. Reserve the nose for the whitepaper as a footnote — the kind of detail that rewards the careful reader. Whitepaper §permission model / credential verification. | Whitepaper / closed-door |
 | **Buxton Memorial Fountain** | Gothic Revival drinking fountain, Victoria Tower Gardens, yards from the Houses of Parliament. Commissioned 1865 by Charles Buxton to commemorate the 1834 Slavery Abolition Act and the work of his father Thomas Fowell Buxton and William Wilberforce. Eight carved panels of British monarchs — the reigns in which successive liberties were established. The 1834 Act did not merely restrict the ownership of persons; it removed the legal category under which such ownership had been possible. Parliament passed the law here; the memorial stands here; the architecture the law created cannot be undone by passing another law, because the category has gone. **Refueler mapping:** the architectural abolition of the surveillance data category. Ecash does not merely make tracking harder — it removes the data structure that makes surveillance possible. Not privacy as policy (reversible); privacy as architecture (not reversible). The Deed, once issued, has no back door to legislate against. Pairs with Penn/Bushel's Case (conscience) in whitepaper §compulsion argument. | Whitepaper §compulsion / closed-door — never product UI |
+| **Greenwich Observatory** | The Prime Meridian — the point from which the world agreed what time it is. Established 1675 by Charles II at Flamsteed's proposal; the 1884 International Meridian Conference fixed it as the world reference for longitude and time. Every time zone is an offset from this south-bank hilltop. **Refueler mapping:** the timestamping primitive's conceptual anchor — not the Tower Hill act of sealing (that is Share's territory), but the prior idea: authoritative time itself. "Before the seal, there must be a meridian." The Observatory is where the clock starts; the Tower is where it is applied. Whitepaper §timestamping / closed-door only. | Whitepaper / closed-door |
+| **The Clink (Liberty of the Clink, Southwark)** | One of the ancient Liberties of Southwark — a jurisdiction outside the City's reach, on the south bank. Owned by the Bishops of Winchester, who licensed the stews (brothels) and maintained the Clink prison within the same Liberty. A Liberty that held a gaol: the most honest map of the compulsion problem. You are outside the City's walls; you are not beyond all reach. **Refueler mapping:** the single compulsion surface — KV pubkey revocation. Refueler holds the authorised pubkey set and could be compelled to modify it. It cannot impersonate a Harbourmaster or decrypt cargo, but it holds the one gate. "The Liberty of the Clink was a Liberty that held a prison. We state this plainly." Named in whitepaper §threat model only. Never in product copy. | Whitepaper / closed-door |
+| **Deptford Royal Dockyard** | Henry VIII's royal dockyard, established 1513, where the ships of the English fleet were built — not where cargo moved. Drake was knighted aboard the Golden Hind here in 1581. The dockyard created the capacity to trade; the Pool moved the cargo. The shipbuilder's yard is upstream of the exchange. **Refueler mapping:** the API and white-label layer (the SW-block). API clients don't carry cargo — they build the instruments that do. "Deptford built the fleet. Refueler's API builds the fleet that carries your cargo." Closed-door / whitepaper §API architecture only. | Whitepaper / closed-door |
+| **London Stone (Cannon Street, EC4)** | A limestone block, origin Roman (believed milliarium — the central marker from which all road distances across Britannia were measured), set into the wall of 111 Cannon Street. Mentioned since at least the 12th century. Survived the Great Fire and the Blitz. Jack Cade struck it with his staff in 1450 and declared himself Lord of the City. The stone does not move. Everything is measured from it. **Refueler mapping:** the civic anchor — the fixed reference point beneath all measurement. Paired with Cleopatra's Needle (the Needle predates the city; the Stone anchors it). Where the Needle says "permanence", the Stone says "origin." Together in whitepaper §permanence: two objects that neither the Fire nor the bombs moved. Closed-door / whitepaper only. | Whitepaper / closed-door |
 | **Supreme Court UK** | Established 2009 in the former Middlesex Guildhall, Parliament Square. Separated from Parliament by the Constitutional Reform Act 2005 — previously the final court of appeal sat inside the House of Lords, meaning the legislature was also the highest judicial authority. The separation was architectural: one institution moved across the square. Justices wear suits, not wigs — ceremony does not confer authority; the reasoning does. The court cannot strike down primary legislation but can rule on the limits of executive power — as in Miller II, finding that prorogation to avoid Parliamentary scrutiny was unlawful. The architecture of the state resisted compulsion by the executive. **Refueler mapping:** Legend as the independent verifier. A verifier housed inside the product it verifies is no verifier. Legend is architecturally separated from Share (the issuer), as the Supreme Court is separated from Parliament (the lawmaker). Miller II maps to the Raven canary: an architectural signal that cannot be faked, and that the state cannot suppress without the absence itself becoming the signal. "Legend verifies what Share issued. They are separate by design — as all final arbiters must be." | Whitepaper §verifier architecture / closed-door |
 
 ---
 
-## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026; AP-10 · 3 Sep 2026; TH-Opus-2 · 6 Sep 2026; Pass-Vocab-2 · 8 Sep 2026)
+## Vocabulary matrix (locked AP-ARCH · 31 Aug 2026; updated Pass-Vocab-1 + Merchant-Vocab-1 · 1 Sep 2026; AP-10 · 3 Sep 2026; TH-Opus-2 · 6 Sep 2026; Pass-Vocab-2 · 8 Sep 2026; SW5-Opus · 9 Sep 2026)
 
 | Term | Website / UI | Professional copy | Whitepaper / docs | Closed door / internal |
 |---|---|---|---|---|
@@ -280,6 +285,10 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | Admiralty Arch | — | — | ✓ (WP §permission model / credential verification) | ✓ (tier threshold — closed-door) |
 | Buxton Memorial Fountain | — | — | ✓ (WP §compulsion argument) | ✓ (closed-door only) |
 | Supreme Court UK | — | — | ✓ (WP §verifier architecture) | ✓ (closed-door) |
+| Greenwich Observatory | — | — | ✓ (WP §timestamping — authoritative time) | ✓ (held — closed-door) |
+| The Clink (Liberty of the Clink) | — | — | ✓ (WP §compulsion surface / §threat model) | ✓ (held — closed-door) |
+| Deptford Royal Dockyard | — | — | ✓ (WP §API layer) | ✓ (held — closed-door) |
+| London Stone (Cannon Street) | — | — | ✓ (WP §permanence / §anchoring) | ✓ (held — alongside Cleopatra's Needle) |
 
 **Rule:** if a term is not in the Website/UI column, it does not appear on `refueler.io` outside of the whitepaper and notes articles. Harbourmaster, Quay, "a Pass", "a Note", and "Clearance" are the only geography/product terms that have passed the website test.
 
@@ -359,6 +368,10 @@ Locked editorial atoms for whitepaper, articles, and presentations. None of thes
 | Execution Dock (Wapping foreshore) | Pirates hanged at the low water mark, left for Three Tides (~48h). Prisoners occupied the jurisdictional gap between land and maritime law. Last execution 1830. Captain Kidd, 1701. | **Execution Dock**: Harbourmaster dashboard card for uncollected-transfer queue. Three Tides = 48h grace. The word "Wapping" not used in copy (poor local reputation, means marshy place). |
 | Three city-states | London (finance), Washington (military), Vatican (religion) | International scale — available when Refueler operates across jurisdictions. Whitepaper future work gesture only. |
 | Mark Lane / Tower Hill station | Original 1884 Metropolitan District Railway station (renamed Tower Hill). Old terracotta surface building still visible at Tower Hill / Byward Street corner. New Tower Hill station opened 1967, ~100m west. Original tunnels' current use undocumented publicly. | Legend article: infrastructure persisting beneath the visible city. Urban exploration record exists but not verified. |
+| **Greenwich Observatory** | The Prime Meridian — the point from which the world agreed what time it is. All longitude and all authoritative time reference from this single fixed point on the south bank. The Observatory is the source; the Tower does the stamping. **Reserved south-bank.** | Whitepaper §timestamping primitive. Not the Tower Hill act of sealing — the prior concept: authoritative time itself. "Before the seal, there must be a meridian." Closed-door / whitepaper only. |
+| **The Clink (Liberty of the Clink, Southwark)** | The Liberty of the Clink was a real Liberty of Southwark — and it contained a prison. Owned by the Bishops of Winchester, who also licensed the brothels in the same Liberty. A jurisdiction that was simultaneously a Liberty and a gaol; the Bishop extracted rent from both. The Clink is a prison in a Liberty, on the south bank, outside the City's reach — and it is the one place in the Refueler geography where the state's reach does extend inward. **Reserved south-bank.** | Whitepaper §threat model / §compulsion surface. Maps to the single compulsion surface: KV pubkey revocation. Refueler holds it, could be compelled to modify it. "The Liberty of the Clink was a Liberty that held a prison. The one compulsion surface is named accordingly." Closed-door / whitepaper only. Never in product UI. |
+| **Deptford Royal Dockyard** | Henry VIII's royal dockyard at Deptford, established 1513 — the yard where the ships of the English fleet were designed and built, not where cargo moved. Drake was knighted by Elizabeth I aboard the Golden Hind at Deptford, 1581. The dockyard built the vessels; the Pool of London moved the cargo. The shipbuilder's yard is where the capacity to trade was created, upstream of the exchange. **Reserved south-bank.** | Whitepaper §API and white-label layer. The SW-block in product geography — API clients don't carry cargo, they build the ships that do. "The dockyard at Deptford built the fleet. The API builds the instruments." Closed-door / whitepaper only. Not a product name. |
+| **London Stone (Cannon Street, EC4)** | A limestone block now set into the wall of 111 Cannon Street — believed to be a milliarium, the Roman central marker from which distances across Britannia were measured. Mentioned in records since at least the 12th century. Survived the Great Fire; survived the Blitz. Jack Cade struck it with his staff in 1450 and declared himself "Lord of this City." The stone does not move. Distances are measured from it. It predates almost everything around it and has no moving parts. **Reserved south-bank adjacent (Cannon Street, north bank — but the south-bank session prompted it).** | Whitepaper §permanence / §anchoring primitive. Not the OTS seal (which proves *when*) — the prior concept: the fixed point from which everything else is measured. The civic anchor. "Before any transfer is measured, there must be a stone." Candidate: whitepaper preamble alongside Cleopatra's Needle (the two permanent, pre-civic, immovable reference objects in the London corpus). Closed-door / whitepaper only. |
 
 ---
 
@@ -392,7 +405,7 @@ Defaults teach the mental model (permanent intake + disposable per-case Quays) w
 KV authorised pubkey set is the one compulsion surface: Refueler holds it, could be compelled to modify it, cannot impersonate a Harbourmaster. State explicitly in Share Raven and in whitepaper §threat model. Not in product copy.
 
 ### Notification at SD launch
-Polling (professional users) + Business webhook (`cargo_arrived` / `cargo_retrieved`, `rfs_whsec_` signed). SimpleX stub card in Harbourmaster dashboard, greyed, "available at B9." SimpleX arrives at B9 (Instance C).
+Polling (professional users) + Business webhook (`cargo.accepted` / `cargo.discharged`, `rfs_whsec_` signed, receipt schema per SW5-Opus). SimpleX stub card in Harbourmaster dashboard, greyed, "available at B9." SimpleX arrives at B9 (Instance C).
 
 ### Payment-layer threat model (confirmed S88)
 
@@ -719,7 +732,117 @@ Deliberate divergence from `api_auth.js` canonical string (which hashes the body
 
 **SW4-patch required before SW4a:** remove `whsec_hash` from KV writes in `webhook_reg.js`; replace random-whsec generation with Option B derivation; scrub 5 comment lines that say "BLAKE3" when code uses `sha256Hex`. Confirm zero live whsec recipients before patch lands.
 
-**SW5-Opus gate (mandatory — do not skip):** before SW5 builds, a dedicated Opus session must decide receipt verifier audience. Symmetric (issuing client only) → HMAC, same master, domain tag `"refueler.receipt.v1"`. Asymmetric (third-party verifier) → Ed25519/secp256k1 over published Worker public key — materially different infrastructure. Domain tag `"refueler.receipt.v1"` reserved now; both doors remain open until SW5-Opus.
+**SW5-Opus gate: CLEARED (9 Sep 2026).** Receipt verifier audience decided — see §SW5-Opus decisions. SW5 build may proceed.
+
+---
+
+## SW5-Opus decisions — locked 9 Sep 2026
+
+### Receipt verifier architecture
+
+**Chosen: symmetric HMAC reusing `rfs_whsec_`. Ed25519 / published Worker key rejected.**
+
+Ed25519 was rejected on three grounds: (1) asymmetric evidence is already provided by OTS/Legend (the chain + an architecturally-separated verifier) — a second independently-verifiable Refueler-signed primitive competes with that and muddies which artefact is the real evidence; (2) a publicly-checkable, non-repudiable collection receipt is a stronger claim than we can honestly make and smuggles back the banned "proof of delivery" framing in cryptographic dress; (3) it manufactures attestation surface hostile to the anonymous rail — a published Worker key signing collection events with recipient-associated metadata is worse for unlinkability than a private HMAC only the client can read.
+
+Both rails (`rfs_whsec_` already held by anonymous-rail clients, derived identity-free) behave identically. No Supabase row. No PII in any receipt. Same invariant as the Lightning credential path — locked here permanently.
+
+### Ecosystem-wide signing convention (all products)
+
+**Standard:** symmetric HMAC, per-product master key, namespaced domain tag.
+
+```
+refueler.{product}.{artefact}.v{n}
+```
+
+Examples: `refueler.receipt.v1` (Share receipts) · `refueler.webhook.v1` (Share webhooks) · `refueler.pass.receipt.v1` (Pass, when built) · `refueler.legend.confirm.v1` (Legend, when built).
+
+**Rule: no shared `WEBHOOK_SIGNING_MASTER_KEY` across products.** Each product Worker holds its own master. One product's key compromise cannot forge another product's signatures. Same discipline as the OTS relay — same stateless pattern, deployed per-product.
+
+### Receipt signing construction
+
+```
+receipt_sig = HMAC-SHA256(
+  key = UTF-8(rfs_whsec_string),
+  msg = UTF-8("refueler.receipt.v1\n") || <raw bytes of the "receipt" member exactly as serialised>
+)
+```
+
+- **Detached `sig` field.** No `t`. No replay window. The receipt is a keepsake the client re-checks months later, long after any webhook delivery window is dead.
+- **Webhook envelope sig unchanged** (SW4a construction): `X-Refueler-Signature: t=…,v1=…` over `t + "." + raw_body`. Transport auth and receipt auth are separate concerns.
+- **Stable across retries.** Receipt sig is computed once at issuance, stored in the DLQ payload unsigned (per SW4b pattern), re-delivered with the same sig on cron retry. Client dedup works on the sig. Envelope `t` changes per delivery; receipt `sig` never does.
+
+### Receipt wire schema
+
+**Acceptance receipt (`cargo.accepted`):**
+```json
+{
+  "receipt": {
+    "receipt_version": "refueler.receipt.v1",
+    "receipt_type": "acceptance",
+    "event": "cargo.accepted",
+    "live_key": "rfs_live_…",
+    "uuid": "…",
+    "transfer_ref": "client-ref-or-null",
+    "size_bytes": 0,
+    "chunk_count": 0,
+    "issued_at": 0,
+    "accepted_at": 0,
+    "expiry_timestamp": 0
+  },
+  "sig": "v1=<hmac_hex>"
+}
+```
+
+**Collection receipt (`cargo.discharged`):**
+```json
+{
+  "receipt": {
+    "receipt_version": "refueler.receipt.v1",
+    "receipt_type": "collection",
+    "event": "cargo.discharged",
+    "live_key": "rfs_live_…",
+    "uuid": "…",
+    "transfer_ref": "client-ref-or-null",
+    "size_bytes": 0,
+    "chunk_count": 0,
+    "issued_at": 0,
+    "collected_at": 0
+  },
+  "sig": "v1=<hmac_hex>"
+}
+```
+
+### Field discipline (load-bearing)
+
+- **No BLAKE3 root in any receipt.** Merkle root verification blocked until B9. `chunk_count` + `size_bytes` only. An acceptance receipt attests "we hold N chunks totalling B bytes" — never "the file is intact end-to-end."
+- **No recipient metadata — ever.** No IP, no UA, nothing about who collected. A receipt goes to the sender; recipient metadata in it is a surveillance instrument. AE may log it; receipts never carry it.
+- **Fires once.** Acceptance: at manifest-write transition (a 409 resume-of-complete does not re-emit). Collection: at first complete download co-located with `pending_destruction` transition — subsequent re-downloads emit nothing (re-download count is a behavioural side-channel back to the sender).
+
+### Event vocabulary (wire events vs client nouns)
+
+| Wire event | Client noun | Notes |
+|---|---|---|
+| `cargo.accepted` | "acceptance receipt" | Emitted at upload-complete / manifest-write |
+| `cargo.discharged` | "collection receipt" | Emitted at first complete download / `pending_destruction` flip |
+| `cargo.in_bond` | — | **Reserved-not-built.** Natural home: Execution Dock / Three Tides 48h grace — "in the warehouse, clock ticking." Credit-exhaustion-accept-then-hold rejected (abuse surface); refuse-at-door is the locked policy. Reserve the string; home decided at quota session. |
+
+**"Discharged" not "collected":** describes only the Worker's action (released from the hold) — zero claim about who picked it up or whether a human ever saw it. Consistent with the honest-scope line. Legal double-meaning (a duty discharged) sits beside Locke and Deed.
+
+**Honest-scope string (dev docs and SDK):** *"'Discharged' means the download endpoint served the complete object at this time. It does not identify who collected it, nor prove that any person received or opened the contents."*
+
+### Build pattern (inherits SW4b discipline)
+
+- `emitReceipt(env, ctx, …)` — live path, returns void, wired via `ctx.waitUntil`. Receipts are notification, never control flow.
+- `buildSignedReceipt(env, fields)` — pure, returns signed receipt object. Used by authenticated `GET` pull endpoint, by `emitReceipt`, and by any future cron re-emit. Returns a value, no side-effects.
+- Delivery reuses `wh_config_{apiKeyHash}` KV lookup for `url` + `created_at` (needed to re-derive `rfs_whsec_`). No new index. No new secret.
+
+### Do-not-retry (SW5 additions)
+
+- Never Ed25519, never a published Worker key for receipts
+- Never Supabase row on the receipt path
+- Never recipient metadata (IP, UA, network) in any receipt field
+- Never re-emit a collection receipt on re-download — one emission per transfer
+- Never omit `cargo.in_bond` string from the reserved-events list when adding future event types
 
 ---
 
