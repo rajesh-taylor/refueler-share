@@ -5,10 +5,10 @@
  * Harbourmaster client dashboard on login. Returns the rail + tier for
  * the presenting API key so the dashboard can gate features correctly.
  *
- * Auth: reuses verifyApiRequest() from api_auth.js (canonical HMAC-SHA256
+ * Auth: requireApiAuth() from api_auth.js (canonical HMAC-SHA256
  * over method + path + timestamp + body_hash, rfs_sign_ signing key).
  *
- * KV lookup: api_key_{sha256hex(rfs_live_)} → { tier, rail, active, created_at }
+ * KV lookup: api_client_{sha256hex(rfs_live_)} → { tier, rail, active, created_at }
  * Written at credential issuance (POST /api/v1/credential/issue, SW2/SW2a).
  *
  * Response (200):
@@ -26,7 +26,7 @@
  *   - Never log rfs_live_ value to AE — log apiKeyHash only.
  */
 
-import { verifyApiRequest } from './api_auth.js';
+import { requireApiAuth, sha256Hex } from './api_auth.js';
 
 /**
  * handleAuthPing
@@ -37,30 +37,27 @@ import { verifyApiRequest } from './api_auth.js';
  */
 export async function handleAuthPing(request, env) {
   // ── 1. HMAC verification ────────────────────────────────────────────────
-  // verifyApiRequest resolves the rfs_live_ key from the Authorization header,
-  // derives the canonical signing string, and validates the HMAC.
-  // Returns { valid, apiKeyHash, liveKey } or { valid: false }.
-  let authResult;
+  // requireApiAuth throws a Response on any auth failure — malformed header,
+  // unknown key, bad sign-key hash, invalid HMAC, or stale timestamp.
+  // On success returns { client, apiKey }.
+  let client, apiKey;
   try {
-    authResult = await verifyApiRequest(request, env);
+    ({ client, apiKey } = await requireApiAuth(request, new ArrayBuffer(0), env));
   } catch (e) {
+    if (e instanceof Response) return e;
     return jsonError(500, 'auth_check_failed', 'Internal error during auth verification.');
   }
 
-  if (!authResult.valid) {
-    return jsonError(401, 'unauthorized', 'Invalid or missing HMAC signature.');
-  }
+  const apiKeyHash = await sha256Hex(apiKey);
 
-  const { apiKeyHash } = authResult;
-
-  // ── 2. KV lookup ─────────────────────────────────────────────────────────
-  // Key written by POST /api/v1/credential/issue (SW2a).
-  // Shape: { tier, rail, active, created_at, quota_bytes }
+  // ── 2. Tier + active gate ─────────────────────────────────────────────────
+  // requireApiAuth already rejected inactive keys. We re-read the client record
+  // here only to enforce the API-tier gate — requireApiAuth does not check tier.
+  // KV key: api_client_{ sha256hex(rfs_live_) } — matches api_auth.js schema.
   let record;
   try {
-    const raw = await env.STATUS_KV.get(`api_key_${apiKeyHash}`);
+    const raw = await env.STATUS_KV.get(`api_client_${apiKeyHash}`);
     if (!raw) {
-      // Key hash not found — issued key that was never activated, or wrong env.
       return jsonError(401, 'key_not_found', 'API key not found.');
     }
     record = JSON.parse(raw);
