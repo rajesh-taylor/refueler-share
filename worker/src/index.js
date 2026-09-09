@@ -17,6 +17,9 @@ import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleWebhookRegister }        from './webhook_reg.js';
 import { findApiKeyHashForUuid, deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
+// SW5: acceptance + collection receipts
+import { buildSignedReceipt, emitReceipt, handleApiReceipt } from './receipts.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,6 +228,33 @@ export default {
         }
         return timed('webhook_reg', () => handleWebhookRegister(request, env).then(r => addCors(r, request)));
       }
+
+      // ── SW5: Receipt pull — GET /api/v1/receipt/:uuid/:type ───────────────
+      // HMAC-authenticated. Returns stored { receipt, sig } from KV.
+      // type: 'acceptance' | 'collection'
+      // 7-day TTL — client can pull keepsake receipt at any time within TTL.
+      // No re-computation: stored receipt is the canonical artefact.
+      const receiptMatch = path.match(/^\/api\/v1\/receipt\/([0-9a-f-]{36})\/(acceptance|collection)$/i);
+      if (request.method === 'GET' && receiptMatch) {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_receipt', 30, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'api_receipt', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('api_receipt', async () => {
+          // HMAC auth — reuse requireApiAuth (reads rawBody; GET has no body)
+          try {
+            await requireApiAuth(request, new ArrayBuffer(0), env);
+          } catch (authErr) {
+            if (authErr instanceof Response) return addCors(authErr, request);
+            return addCors(err(500, 'Authentication error'), request);
+          }
+          const response = await handleApiReceipt(request, env, receiptMatch[1], receiptMatch[2]);
+          return addCors(response, request);
+        });
+      }
+
       // Consumer credential issuance — POST /credential/issue
       // Turnstile-gated, anonymous, issues Cashu blind signature + UUID + commitment.
       // Resume path (body.resume === true) skips Turnstile, verifies R2 partial upload instead.
@@ -253,7 +283,7 @@ export default {
         const tier        = request.headers.get('X-Tier') ?? 'free';
         const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
         const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
-        return timed('upload', () => handleUpload(request, env, uploadMatch[1], chunkIndex).then(r => addCors(r, request)), {
+        return timed('upload', () => handleUpload(request, env, ctx, uploadMatch[1], chunkIndex).then(r => addCors(r, request)), {
           tier, chunkIndex,
           totalChunks:  chunkIndex === 0 ? totalChunks : 0,
           totalBytes:   chunkIndex === 0 ? totalBytes  : 0,
@@ -297,7 +327,7 @@ export default {
         }
         const chunkIndex = parseInt(downloadMatch[2], 10);
         return timed('download', async () => {
-          const response = await handleDownload(request, env, downloadMatch[1], chunkIndex);
+          const response = await handleDownload(request, env, ctx, downloadMatch[1], chunkIndex);
           return addCors(response, request);
         }, { chunkIndex });
       }
@@ -473,39 +503,6 @@ async function handleLogError(request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API credential issuance — POST /api/v1/credential/issue  (SW2a)
-//
-// HMAC-authenticated API-tier endpoint.
-//
-// Issues a standard Cashu blind-signature credential via the existing mint
-// path — identical credential format to the consumer flow. The API layer adds
-// quota enforcement, transfer_ref logging, and rail-aware KV handling on top.
-//
-// Both rails:
-//   Identity rail — client has a Supabase row (created at onboarding, SW7).
-//                   Quota tracked in KV. AE event logged with transfer_ref.
-//   Anonymous rail — NO Supabase row, ever. Quota tracked in KV only.
-//                    No email, no identity. Same invariant as Lightning consumer path.
-//
-// Quota KV schema:
-//   api_quota_{rfs_live_key} → JSON { remaining: number, updated_at: number }
-//   Decremented after successful issuance. 402 if remaining === 0.
-//   Top-up is a KV write at onboarding/renewal (SW7).
-//
-// Request body:
-//   { blinded_message, tier?, transfer_ref? }
-//   tier:         'api' only — other values rejected. Credential is always API tier.
-//   transfer_ref: optional attribution string (client's own reference). Logged to AE.
-//                 Max 128 chars. Truncated silently. Never stored in KV or Supabase.
-//
-// Response:
-//   { signed_point, mint_pubkey, allocation_bytes, uuid, issued_tier, commitment, expires_at }
-//   expires_at: unix seconds (= now + expiry_window) — convenience for API clients.
-//
-// Auth headers required:
-//   Authorization: HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}
-//   X-Api-Sign-Key: rfs_sign_{...}
-// ─────────────────────────────────────────────────────────────────────────────
 // API credential issuance — POST /api/v1/credential/issue  (SW2a, updated SW2c)
 //
 // HMAC-authenticated API-tier endpoint. Both rails.
@@ -641,8 +638,6 @@ async function handleApiCredentialIssue(request, env) {
     }
 
     // Verify the presented token was signed by the API keyset.
-    // verifyCredential() checks the blind signature against the mint public key.
-    // We pass the API private key so it derives the correct public key for verification.
     let tokenSerial;
     try {
       const verified = await verifyCredential(cashuToken, env.MINT_API_PRIVATE_KEY);
@@ -662,7 +657,6 @@ async function handleApiCredentialIssue(request, env) {
     }
 
     // Double-spend check — api_spent_tokens table.
-    // Separate from consumer spent_tokens to keep populations distinct in analytics.
     const spendCheckRes = await supabaseFetch(
       env, 'GET',
       `/rest/v1/api_spent_tokens?serial=eq.${encodeURIComponent(tokenSerial)}&select=serial`,
@@ -675,13 +669,11 @@ async function handleApiCredentialIssue(request, env) {
       return err(502, 'Token verification unavailable — please retry');
     }
 
-    // Content-Range: 0-0/N — N > 0 means the serial exists (already spent).
     const cr = spendCheckRes.headers.get('Content-Range') ?? '';
     const crMatch = cr.match(/\/(\d+)$/);
     const alreadySpent = crMatch ? parseInt(crMatch[1], 10) > 0 : false;
 
     if (alreadySpent) {
-      // Log double-spend attempt — same pattern as consumer double_spend_attempts.
       supabaseFetch(env, 'POST', '/rest/v1/api_double_spend_attempts', {
         serial:       tokenSerial,
         attempted_at: new Date().toISOString(),
@@ -695,11 +687,6 @@ async function handleApiCredentialIssue(request, env) {
       );
     }
 
-    // Mark token spent — insert into api_spent_tokens.
-    // This fires before credential issuance. If issuance fails after this point,
-    // the token is spent but no credential issued — the client loses one token.
-    // Acceptable at v1: the failure mode is an honest error, not an exploit path.
-    // NUT-19 cached-response retry would recover this; deferred to post-B7.
     const markSpentRes = await supabaseFetch(
       env, 'POST', '/rest/v1/api_spent_tokens',
       { serial: tokenSerial, created_at: new Date().toISOString() },
@@ -717,11 +704,6 @@ async function handleApiCredentialIssue(request, env) {
   // ─────────────────────────────────────────────────────────────────────────
   // Issue credential — same mint path as consumer
   // ─────────────────────────────────────────────────────────────────────────
-  // API tier always uses 90-day expiry (matching 'max' consumer tier).
-  // issued_tier is 'api' — distinct from consumer tiers in AE.
-  // Signing key: MINT_PRIVATE_KEY (consumer keyset) for identity rail;
-  //              MINT_API_PRIVATE_KEY (API keyset) for anonymous rail.
-  // This keeps the two token populations cryptographically distinct.
   const API_EXPIRY_WINDOW = 90 * 24 * 3600;
   const uuid              = crypto.randomUUID();
   const issuedTier        = 'api';
@@ -845,15 +827,10 @@ async function handleCredentialIssue(request, env) {
   if (!blinded_message) return err(400, 'Missing blinded_message');
 
   // ── Resume path (RU2c) ───────────────────────────────────────────────────
-  // Turnstile was already solved at the start of the original upload.
-  // Skip Turnstile + nonce entirely. Instead verify a real partial upload
-  // exists in R2 — chunk 0000 must exist, proving this is a legitimate resume
-  // rather than a Turnstile bypass for a new transfer.
   if (resume === true) {
     if (!resume_uuid || !UUID_RE.test(resume_uuid)) {
       return err(400, 'resume_uuid is required and must be a valid UUID');
     }
-    // HEAD check — chunk 0000 must exist in R2. Does not read the body.
     let chunkExists = false;
     try {
       const obj = await env.BUCKET.head(`${resume_uuid}/0000`);
@@ -866,7 +843,6 @@ async function handleCredentialIssue(request, env) {
       logEvent(env, { endpoint: 'credential_issue', tier: 'resume_rejected', status: 403, errorMsg: 'resume_no_partial_upload' });
       return err(403, 'No partial upload found for this transfer');
     }
-    // R2 confirmed — fall through to issuance, skipping Turnstile + nonce.
     logEvent(env, { endpoint: 'credential_issue', tier: tier === 'free' ? 'free' : tier, status: 200, errorMsg: 'resume' });
   } else {
     // ── Normal path — Turnstile required ──────────────────────────────────
@@ -877,12 +853,6 @@ async function handleCredentialIssue(request, env) {
     if (!turnstileOk) return err(403, 'Turnstile verification failed');
 
     // ── Turnstile nonce binding (S42d) ──────────────────────────────────────
-    // One Turnstile solve must produce at most one credential.
-    // Cloudflare expires tokens server-side after ~300s; we extend that to 600s
-    // (10 min) to cover clock skew and replay within the Cloudflare window.
-    // The token is hashed one-way before storage — cannot reverse to identify user.
-    // Key: tt_nonce:{sha256_hex}. Fails open on KV error (privacy over abuse prevention).
-    // 429 on second use of the same Turnstile token within the TTL window.
     const nonceHash = await (async () => {
       const bytes = new TextEncoder().encode(turnstile_token);
       const hash  = await crypto.subtle.digest('SHA-256', bytes);
@@ -894,28 +864,23 @@ async function handleCredentialIssue(request, env) {
       const existing = await env.STATUS_KV.get(nonceKey);
       nonceSeen = existing !== null;
     } catch (e) {
-      // KV read error — fail open. Privacy takes precedence; do not block on infra hiccup.
       console.error('Turnstile nonce KV read failed, proceeding:', e);
     }
     if (nonceSeen) {
       logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: 0, errorMsg: 'turnstile_nonce_replay' });
       return err(429, 'Turnstile token already used');
     }
-    // Store nonce — fire-and-forget, never block issuance on write failure.
     env.STATUS_KV.put(nonceKey, '1', { expirationTtl: 600 }).catch(e =>
       console.error('Turnstile nonce KV write failed:', e)
     );
   }
 
-  // Canonicalise tier — unknown values fall back to free silently.
   const issuedTier      = EXPIRY_WINDOWS[tier] !== undefined ? tier : 'free';
   const expiryWindow    = EXPIRY_WINDOWS[issuedTier];
   const allocationBytes = TIER_CAPS[issuedTier] ?? TIER_CAPS.free;
 
-  // Generate transfer UUID server-side. Client no longer calls crypto.randomUUID().
   const uuid = crypto.randomUUID();
 
-  // Compute commitment — binds this credential to exactly this uuid + tier + window.
   const commitment = await computeCommitment(uuid, issuedTier, expiryWindow);
 
   let signedPoint, mintPubkey;
@@ -939,27 +904,18 @@ async function handleCredentialIssue(request, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload — PUT /upload/:uuid/:chunk
 //
-// S39 changes:
-//   - X-Tier header no longer trusted. Tier resolved from Supabase subscribers
-//     table via X-Email header. Falls back to 'free' on any error or if no
-//     active subscriber found.
-//   - Per-chunk Content-Length hard cap: 10 MB → 413 if exceeded.
-//   - Cumulative byte tracking via STATUS_KV key `upload_bytes:{uuid}`.
-//     Before each chunk write: read counter + Content-Length. If sum exceeds
-//     tier cap → 413. Counter deleted on upload_complete.
-//   - All 413 rejections logged to AE.
-//
-// S40 changes:
-//   - Content-Type header checked against MIME_DENYLIST before any other
-//     processing. Missing Content-Type → 415. Denylisted type → 415.
-//   - Gate applies to chunk 0 only — subsequent chunks carry no meaningful
-//     Content-Type (they are raw ciphertext continuations).
-//   - All 415 rejections logged to AE with errorMsg: 'mime_denied' or
-//     'mime_missing'.
+// SW5 additions:
+//   - Reads X-Transfer-Ref header at chunk 0; stored in manifest as
+//     api_transfer_ref for API-tier transfers (used in acceptance receipt).
+//   - Reads X-Api-Live-Key header at chunk 0; stored in manifest as
+//     api_live_key for API-tier transfers (used in receipts).
+//   - After manifest-write (chunk 0 putManifest): emits cargo.accepted receipt
+//     via ctx.waitUntil for API-tier transfers with a registered webhook.
+//   - After upload_complete (subsequent chunks): receipt emission already
+//     happened at chunk 0 — no re-emit needed here.
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleUpload(request, env, uuid, chunkIndex) {
+async function handleUpload(request, env, ctx, uuid, chunkIndex) {
   // ── UUID format validation (S41) ──────────────────────────────────────────
-  // Fires before any R2, Supabase, or KV operation.
   if (!UUID_RE.test(uuid)) {
     logEvent(env, { endpoint: 'upload', status: 400, errorMsg: 'invalid_uuid' });
     return err(400, 'Invalid transfer ID');
@@ -968,12 +924,8 @@ async function handleUpload(request, env, uuid, chunkIndex) {
   const isFirstChunk = chunkIndex === 0;
 
   // ── MIME type gate (S40) — chunk 0 only ───────────────────────────────────
-  // Subsequent chunks are raw ciphertext continuations; Content-Type on those
-  // is not meaningful. Gate applies exclusively to the first chunk, which
-  // carries the file's declared type from the browser File API.
   if (isFirstChunk) {
     const rawContentType = request.headers.get('Content-Type') ?? '';
-    // Strip parameters (e.g. "application/x-sh; charset=utf-8" → "application/x-sh")
     const mimeType = rawContentType.split(';')[0].trim().toLowerCase();
 
     if (!mimeType) {
@@ -988,8 +940,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
   }
 
   // ── Chunk size hard cap ────────────────────────────────────────────────────
-  // Reject before reading body. Content-Length is required for PUT from our
-  // client; absence treated as 0 (actual body size is also checked after read).
   const declaredLength = parseInt(request.headers.get('Content-Length') ?? '0', 10);
   if (declaredLength > CHUNK_SIZE_MAX) {
     logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 413, errorMsg: 'chunk_too_large' });
@@ -997,8 +947,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
   }
 
   // ── Resolve tier from Supabase (S39) ──────────────────────────────────────
-  // X-Tier header is ignored. X-Email is used to look up an active subscriber.
-  // Falls back to 'free' on any Supabase error or missing/inactive subscriber.
   const email = (request.headers.get('X-Email') ?? '').trim().toLowerCase();
   let resolvedTier = 'free';
   if (email) {
@@ -1021,8 +969,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
   const tierCap = TIER_CAPS[resolvedTier] ?? TIER_CAPS.free;
 
   // ── Cumulative byte cap via KV (S39) ──────────────────────────────────────
-  // Read current byte counter for this UUID. Add Content-Length and check
-  // against tier cap before writing the chunk body to R2.
   const kvKey = `upload_bytes:${uuid}`;
   let bytesAlreadyWritten = 0;
   try {
@@ -1030,7 +976,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     bytesAlreadyWritten = stored ? parseInt(stored, 10) : 0;
   } catch (e) {
     console.error('KV byte counter read failed, proceeding:', e);
-    // Fail open — do not block upload on KV read error.
   }
 
   const projectedTotal = bytesAlreadyWritten + declaredLength;
@@ -1048,10 +993,17 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
     const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
     const rawFileName = request.headers.get('X-File-Name') ?? '';
-    // Strip path separators, null bytes, C0/C1 control characters (U+0000–U+001F, U+007F),
-    // and Unicode bidirectional override characters (U+202A–U+202E, U+2066–U+2069)
-    // that can spoof filenames in terminal or file-manager display.
-    // Truncate to 255 bytes (not chars) after sanitisation to respect FS limits.
+
+    // ── SW5: read transfer_ref and live_key for API-tier receipt emission ─
+    // X-Transfer-Ref: client attribution string (max 128 chars, sanitised).
+    // X-Api-Live-Key: rfs_live_… — identifies the API client for receipt sig.
+    // Both stored in manifest for API-tier transfers only. Never for consumer tier.
+    const rawTransferRef = request.headers.get('X-Transfer-Ref') ?? null;
+    const apiTransferRef = rawTransferRef
+      ? String(rawTransferRef).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
+      : null;
+    const apiLiveKey = request.headers.get('X-Api-Live-Key') ?? null;
+
     const sanitisedFileName = rawFileName
       .replace(/[/\\]/g, '')
       .replace(/[\u0000-\u001F\u007F]/g, '')
@@ -1070,19 +1022,11 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     }
 
     // ── UUID-bound commitment verification (S42c) ─────────────────────────
-    // Recompute H(uuid:issued_tier:expiry_window) and compare to the value
-    // the client echoed from the credential issue response. A farmed credential
-    // carries a commitment for a different UUID and will fail here.
-    // Fires before credential verification — avoids a Supabase call on farming
-    // attempts. Nothing is stored; the binding is in the commitment itself.
     if (!commitment) {
       logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 401, errorMsg: 'credential_commitment_missing' });
       return err(401, 'Missing credential commitment');
     }
 
-    // API-tier credentials use computeApiCommitment (90-day window, 'api' tier string).
-    // Consumer credentials use computeCommitment (EXPIRY_WINDOWS map).
-    // Distinguish by issuedTier value — 'api' is never in EXPIRY_WINDOWS.
     let expectedCommitment;
     if (issuedTier === 'api') {
       const API_EXPIRY_WINDOW = 90 * 24 * 3600;
@@ -1093,7 +1037,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
       expectedCommitment   = await computeCommitment(uuid, canonicalTier, expectedWindow);
     }
 
-    // Constant-time comparison — commitment is not secret but avoids timing oracle on hex strings.
     const commitmentBytes         = new TextEncoder().encode(commitment);
     const expectedCommitmentBytes = new TextEncoder().encode(expectedCommitment);
     const commitmentMatch = commitmentBytes.length === expectedCommitmentBytes.length &&
@@ -1109,8 +1052,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     }
 
     // ── Total chunks upper bound (S42) ────────────────────────────────────
-    // 10,000 chunks × 25 MB = 250 GB — covers Production Max with headroom.
-    // Rejects inflated values before any credential or storage operation.
     const TOTAL_CHUNKS_MAX = 10_000;
     if (totalChunks > TOTAL_CHUNKS_MAX) {
       logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'total_chunks_exceeded' });
@@ -1118,20 +1059,11 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     }
 
     // ── Expiry timestamp tier validation (S42) ────────────────────────────
-    // Server validates that the client-declared expiry falls within the
-    // maximum window permitted for the resolved tier. Client cannot extend
-    // its own expiry beyond tier entitlement by supplying a distant timestamp.
-    //
-    // Windows (seconds from now):
-    //   free:     7 days  (604,800s)
-    //   creative: 30 days (2,592,000s)
-    //   max:      90 days (7,776,000s)
-    //   api:      90 days (7,776,000s) — same as max
     const EXPIRY_MAX_SECONDS = {
-      free:     7  * 24 * 3600,  //  7 days
-      creative: 30 * 24 * 3600,  // 30 days
-      max:      90 * 24 * 3600,  // 90 days
-      api:      90 * 24 * 3600,  // 90 days
+      free:     7  * 24 * 3600,
+      creative: 30 * 24 * 3600,
+      max:      90 * 24 * 3600,
+      api:      90 * 24 * 3600,
     };
     const nowSeconds  = Math.floor(Date.now() / 1000);
     const maxWindow   = EXPIRY_MAX_SECONDS[resolvedTier] ?? EXPIRY_MAX_SECONDS.free;
@@ -1146,8 +1078,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     }
 
     // ── Early cap check against declared total (S39) ───────────────────────
-    // If the client's declared total already exceeds the tier cap, reject
-    // before credential verification to avoid burning a Cashu token.
     if (totalBytes > tierCap) {
       logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'declared_total_exceeds_cap' });
       return err(413, `Declared total ${totalBytes} bytes exceeds ${resolvedTier} tier cap of ${tierCap} bytes`);
@@ -1165,9 +1095,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     if (!spentRes.ok) return err(502, 'Ledger unavailable');
     const spent = await spentRes.json();
 
-    // ── Double-spend detected ────────────────────────────────────────────────
-    // Fire-and-forget audit write — never blocks the 409 response.
-    // On Supabase failure: log and continue (same pattern as NUT-07 melt).
     if (spent.length > 0) {
       supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
         serial,
@@ -1182,8 +1109,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     const chunkBody = await request.arrayBuffer();
 
-    // ── Actual body size guard (S39) ──────────────────────────────────────
-    // Body may differ from Content-Length header. Guard the real byte count.
     if (chunkBody.byteLength > CHUNK_SIZE_MAX) {
       logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'chunk_body_too_large' });
       return err(413, `Chunk body exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
@@ -1194,7 +1119,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
 
-    // ── Increment KV byte counter (S39) ───────────────────────────────────
     try {
       await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
     } catch (e) {
@@ -1202,9 +1126,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     }
 
     // ── TG: tidal header processing (chunk 0 only) ────────────────────────
-    // X-Destroy-After-Download: 1  — arms pending_destruction on this transfer
-    // X-Available-From: <unix>     — locks transfer until timestamp (paid only)
-    // X-Available-Until: <unix>    — expires transfer at timestamp (paid only)
     const destroyAfterDownload = request.headers.get('X-Destroy-After-Download') === '1';
     const availableFromHeader  = request.headers.get('X-Available-From');
     const availableUntilHeader = request.headers.get('X-Available-Until');
@@ -1230,7 +1151,7 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     const tidalInvariantError = validateTidalHeaders(
       availableFromTs,
       availableUntilTs,
-      Math.floor(Date.now() / 1000),  // created_at (manifest not yet written)
+      Math.floor(Date.now() / 1000),
       expiryTs
     );
     if (tidalInvariantError) {
@@ -1255,13 +1176,21 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     if (availableFromTs !== null)  manifest.available_from_timestamp  = availableFromTs;
     if (availableUntilTs !== null) manifest.available_until_timestamp = availableUntilTs;
 
+    // ── SW5: store API-tier receipt fields in manifest ────────────────────
+    // api_live_key and api_transfer_ref are stored for API-tier transfers only.
+    // They are needed when emitting the collection receipt at download time
+    // (manifest is the only durable store at that point).
+    // Consumer-tier manifests never carry these fields.
+    const manifestNowSeconds = Math.floor(Date.now() / 1000);
+    if (issuedTier === 'api' && apiLiveKey) {
+      manifest.api_live_key      = apiLiveKey;
+      manifest.api_accepted_at   = manifestNowSeconds;
+      if (apiTransferRef) manifest.api_transfer_ref = apiTransferRef;
+    }
+
     await putManifest(env.BUCKET, uuid, manifest);
 
     // ── Execution Dock: write dock_index KV entry (TG-4) ──────────────────
-    // Fire-and-forget. Records transfer in the dock index so the Harbourmaster
-    // dashboard can surface expired-but-uncollected transfers without R2 scans.
-    // Key: dock_index:{uuid}  Value: JSON { expiry_timestamp, tier, file_name, created_at }
-    // TTL: expiry + 48h Three Tides grace + 1h buffer.
     const dockTtl = (expiryTs - Math.floor(Date.now() / 1000)) + 48 * 3600 + 3600;
     env.STATUS_KV.put(
       `dock_index:${uuid}`,
@@ -1276,6 +1205,40 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
     if (!meltRes.ok) console.error('NUT-07 melt failed:', serial, await meltRes.text());
+
+    // ── SW5: emit cargo.accepted receipt ─────────────────────────────────
+    // Fired at manifest-write transition (chunk 0 putManifest above).
+    // API-tier only: we need a live_key + webhook registration to sign and deliver.
+    // A 409 resume-of-complete does not re-emit — this path only reached on
+    // fresh chunk-0 writes that are not resume paths (upload_complete guard).
+    // ctx.waitUntil — receipt is notification, never control flow.
+    if (issuedTier === 'api' && apiLiveKey) {
+      ctx.waitUntil(
+        (async () => {
+          try {
+            const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
+            if (apiKeyHash) {
+              emitReceipt(env, ctx, {
+                receipt_type:     'acceptance',
+                event:            'cargo.accepted',
+                live_key:         apiLiveKey,
+                uuid,
+                transfer_ref:     apiTransferRef,
+                size_bytes:       totalBytes,
+                chunk_count:      totalChunks,
+                issued_at:        manifestNowSeconds,
+                accepted_at:      manifestNowSeconds,
+                expiry_timestamp: expiryTs,
+                apiKeyHash,
+                // wh_created_at resolved inside emitReceipt via wh_config_ KV lookup
+              });
+            }
+          } catch (e) {
+            console.error('SW5 cargo.accepted emit error:', e);
+          }
+        })()
+      );
+    }
 
     return json({ ok: true, chunk: 0, uuid });
 
@@ -1297,7 +1260,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     const chunkBody = await request.arrayBuffer();
 
-    // ── Actual body size guard (S39) ──────────────────────────────────────
     if (chunkBody.byteLength > CHUNK_SIZE_MAX) {
       logEvent(env, { endpoint: 'upload', tier: manifest.tier ?? resolvedTier, status: 413, errorMsg: 'chunk_body_too_large' });
       return err(413, `Chunk body exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
@@ -1308,18 +1270,12 @@ async function handleUpload(request, env, uuid, chunkIndex) {
 
     await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
 
-    // ── Increment KV byte counter (S39) ───────────────────────────────────
-    // TTL refreshed on every chunk write — 24h from last activity.
     try {
       await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
     } catch (e) {
       console.error('KV byte counter write failed:', e);
     }
 
-    // ── Chunk count manipulation defence (S42b) ───────────────────────────
-    // Reject any chunk index ≥ declared total_chunks. Without this, an
-    // adversary could push indices beyond the declared ceiling, inflating
-    // chunks_received indefinitely and corrupting the completion check.
     if (chunkIndex >= manifest.total_chunks) {
       logEvent(env, { endpoint: 'upload', tier: manifest.tier ?? resolvedTier, status: 400, errorMsg: 'chunk_index_out_of_bounds' });
       return err(400, 'Chunk index exceeds declared total');
@@ -1328,7 +1284,6 @@ async function handleUpload(request, env, uuid, chunkIndex) {
     manifest.chunks_received.push(chunkIndex);
     if (manifest.chunks_received.length === manifest.total_chunks) {
       manifest.upload_complete = true;
-      // ── Delete KV counter on completion (S39) ─────────────────────────
       try {
         await env.STATUS_KV.delete(kvKey);
       } catch (e) {
@@ -1362,7 +1317,6 @@ async function handleAuth(request, env, uuid) {
   }
   if (!manifest) return err(404, 'Transfer not found');
 
-  // ── TG: consumed / tidal window checks (fire before passphrase gate) ──────
   const authNowSeconds = Math.floor(Date.now() / 1000);
   const authStatusCheck = checkTransferStatus(manifest, authNowSeconds);
   if (!authStatusCheck.ok) return err(authStatusCheck.status, authStatusCheck.body);
@@ -1400,26 +1354,29 @@ async function handleMeta(request, env, uuid) {
     pending_destruction:      manifest.pending_destruction     ?? false,
     available_from_timestamp: manifest.available_from_timestamp  ?? null,
     available_until_timestamp: manifest.available_until_timestamp ?? null,
-    // TH-1: timestamp state — 'none' | 'pending' | 'complete'. Legacy manifests default to 'none'.
     timestamp_state:          getTimestampState(manifest),
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Download — GET /download/:uuid/:chunk
+//
+// SW5 additions:
+//   - Emits cargo.discharged receipt at first complete download (last chunk
+//     served for the first time), guarded by a KV once-flag
+//     `receipt_discharged_guard:{uuid}`.
+//   - For destroy-after-download transfers: co-located with
+//     pending_destruction flip (same chunk — last chunk).
+//   - No re-emit on re-download — once-flag is permanent until 7-day TTL.
+//   - No recipient metadata (IP, UA, network) in any receipt field.
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleDownload(request, env, uuid, chunkIndex) {
+async function handleDownload(request, env, ctx, uuid, chunkIndex) {
   // ── UUID format validation (S41) ──────────────────────────────────────────
-  // Fires before any R2 or Supabase operation.
   if (!UUID_RE.test(uuid)) {
     logEvent(env, { endpoint: 'download', status: 400, errorMsg: 'invalid_uuid' });
     return err(400, 'Invalid transfer ID');
   }
 
-  // ── Chunk index bounds check (S41) ────────────────────────────────────────
-  // Router regex \d{4} structurally prevents negative values and 5+ digit
-  // numbers, but an explicit guard here makes the invariant visible and
-  // provides belt-and-braces defence against future router changes.
   if (chunkIndex < 0 || chunkIndex > 9999) {
     logEvent(env, { endpoint: 'download', status: 400, errorMsg: 'invalid_chunk_index' });
     return err(400, 'Invalid chunk index');
@@ -1432,7 +1389,6 @@ async function handleDownload(request, env, uuid, chunkIndex) {
   }
   if (!manifest) return err(404, 'Transfer not found');
 
-  // ── TG: consumed / tidal window checks (fire before expiry / passphrase checks) ─
   const dlNowSeconds = Math.floor(Date.now() / 1000);
   const dlStatusCheck = checkTransferStatus(manifest, dlNowSeconds);
   if (!dlStatusCheck.ok) return err(dlStatusCheck.status, dlStatusCheck.body);
@@ -1484,16 +1440,71 @@ async function handleDownload(request, env, uuid, chunkIndex) {
 
   const dlResponse = new Response(obj.body, { status, headers });
 
-  // ── TG: flip pending_destruction → true when last chunk of a destroy-after-download
-  // transfer is served. Advisory only — does not block re-fetches. DELETE /transfer/{uuid}
-  // performs actual chunk deletion when the recipient confirms.
-  // ctx not available here (fetch handler scope) — use waitUntil from outer timed() wrapper.
-  // Fire-and-forget via unhandled promise: if the write fails, the flip is retried on the
-  // next chunk download (flipPendingDestruction is idempotent once true).
+  // ── TG: flip pending_destruction → true on last chunk of a DAD transfer ───
   const updatedManifestForFlip = flipPendingDestruction(manifest, chunkIndex);
-  if (updatedManifestForFlip !== manifest) {
+  const pendingDestructionFlipped = updatedManifestForFlip !== manifest;
+  if (pendingDestructionFlipped) {
     putManifest(env.BUCKET, uuid, updatedManifestForFlip).catch(e =>
       console.error('TG: pending_destruction flip write failed:', e)
+    );
+  }
+
+  // ── SW5: emit cargo.discharged receipt ────────────────────────────────────
+  // Fired when the last chunk is served for the first time.
+  // Guards:
+  //   1. isLastChunk — only fire on the final chunk of the transfer.
+  //   2. once-flag KV key `receipt_discharged_guard:{uuid}` — prevents
+  //      re-emission on re-download. Set atomically (fire-and-forget) with
+  //      the receipt itself.
+  //   3. api_live_key in manifest — only API-tier transfers carry this; consumer
+  //      transfers do not emit receipts (no signing key available at download time).
+  //   4. No recipient metadata — manifest carries only sender-declared fields.
+  //
+  // Co-located with pending_destruction flip for DAD transfers. For non-DAD
+  // transfers, fires on last-chunk serve regardless of flip.
+  const isLastChunk = manifest.total_chunks > 0 && chunkIndex === manifest.total_chunks - 1;
+  if (isLastChunk && manifest.api_live_key) {
+    ctx.waitUntil(
+      (async () => {
+        try {
+          // Once-flag guard — set before emitting to prevent race on concurrent requests.
+          const guardKey  = `receipt_discharged_guard:${uuid}`;
+          let alreadyFired = false;
+          try {
+            const existing = await env.STATUS_KV.get(guardKey);
+            alreadyFired   = existing !== null;
+          } catch (e) {
+            console.error('SW5 discharge guard KV read failed:', e);
+            // Fail open — proceed; duplicate emission is less bad than silent drop.
+          }
+
+          if (!alreadyFired) {
+            // Set guard first — 7-day TTL matches receipt KV TTL.
+            env.STATUS_KV.put(guardKey, '1', { expirationTtl: 7 * 24 * 3600 }).catch(e =>
+              console.error('SW5 discharge guard KV write failed:', e)
+            );
+
+            const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
+            if (apiKeyHash) {
+              emitReceipt(env, ctx, {
+                receipt_type: 'collection',
+                event:        'cargo.discharged',
+                live_key:     manifest.api_live_key,
+                uuid,
+                transfer_ref: manifest.api_transfer_ref ?? null,
+                size_bytes:   manifest.total_bytes  ?? 0,
+                chunk_count:  manifest.total_chunks ?? 0,
+                issued_at:    Math.floor(Date.now() / 1000),
+                collected_at: Math.floor(Date.now() / 1000),
+                apiKeyHash,
+                // wh_created_at resolved inside emitReceipt via wh_config_ KV lookup
+              });
+            }
+          }
+        } catch (e) {
+          console.error('SW5 cargo.discharged emit error:', e);
+        }
+      })()
     );
   }
 
@@ -1502,73 +1513,37 @@ async function handleDownload(request, env, uuid, chunkIndex) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Timestamp submit — POST /timestamp/submit  (TH-1)
-//
-// Blind byte relay: Worker receives iv(12)‖ciphertext from the client,
-// stores it as {uuid}/date-seal.ots.enc, and sets timestamp_state: 'pending'.
-// Worker never sees plaintext — no OTS library in Worker.
-//
-// The client has already:
-//   1. Built commitment = SHA-256(blake3_root ‖ seal_nonce)
-//   2. POSTed commitment to both OTS calendars, received pending bodies
-//   3. Assembled the pending .ots file
-//   4. Encrypted it under the transfer's AES-GCM session key (AAD = "seal")
-//   5. Sent iv(12) ‖ ciphertext here
-//
-// Auth: X-Transfer-UUID header identifies the transfer. No credential required —
-// the sender already proved ownership via the upload credential on chunk-0.
-// The UUID identifies the R2 path; a forged UUID would find no manifest (404).
-// Rate-limited 10/60s per IP at the router layer.
-//
-// Tier gate: Sovereign+ only. Checked against manifest.tier (set at upload).
-// manifest.tier is authoritative — never trust a client-sent tier header here.
-//
-// Idempotency: if timestamp_state is already 'pending' or 'complete', return 409.
-// Callers should not retry unless recovering from a failed first attempt.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleTimestampSubmit(request, env, ctx) {
-  // ── UUID ──────────────────────────────────────────────────────────────────
   const uuid = request.headers.get('X-Transfer-UUID') ?? '';
   if (!UUID_RE.test(uuid)) return err(400, 'Invalid or missing X-Transfer-UUID');
 
-  // ── Read manifest ─────────────────────────────────────────────────────────
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize) return err(502, 'Transfer manifest exceeds size limit');
   if (!manifest) return err(404, 'Transfer not found');
 
-  // ── Tier gate: Sovereign+ only ────────────────────────────────────────────
-  // manifest.tier is set at upload (chunk-0 X-Issued-Tier, server-resolved).
-  // Citizen / free tier: 403 — no surface in UI, so this should never fire
-  // from a legitimate client. Belt-and-braces against direct API calls.
   const manifestTier = (manifest.tier ?? 'free').toLowerCase();
   if (manifestTier === 'free' || manifestTier === 'citizen') {
     return err(403, 'Permanent record requires a Sovereign subscription.');
   }
 
-  // ── Eligibility: upload complete, not consumed, state === 'none' ──────────
   if (!isTimestampEligible(manifest)) {
     const state = getTimestampState(manifest);
     if (manifest.consumed === true) return err(410, 'Transfer has been destroyed.');
     if (manifest.upload_complete !== true) return err(409, 'Upload not yet complete.');
-    // Already pending or complete — idempotent rejection.
     return err(409, `Timestamp already in state: ${state}`);
   }
 
-  // ── Read encrypted .ots blob from request body ────────────────────────────
   let otsBlob;
   try {
     const buf = await request.arrayBuffer();
     if (buf.byteLength < 13) return err(400, 'Timestamp blob too short (min 13 bytes: iv + ciphertext)');
-    // Sanity cap: pending .ots from two calendars is ~650 bytes; with AES-GCM overhead ~700.
-    // Hard cap at 8 KB — generous for future calendar additions, rejects garbage payloads.
     if (buf.byteLength > 8192) return err(413, 'Timestamp blob exceeds 8 KB limit');
     otsBlob = new Uint8Array(buf);
   } catch (e) {
     return err(400, 'Could not read request body');
   }
 
-  // ── Store encrypted blob to R2 ────────────────────────────────────────────
-  // Key: {uuid}/date-seal.ots.enc — joins all deletion paths (expiry, destroy-after-download,
-  // Execution Dock grace sweep, owner delete). Deletion is load-bearing — never omit.
   try {
     await env.BUCKET.put(`${uuid}/date-seal.ots.enc`, otsBlob, {
       httpMetadata: { contentType: 'application/octet-stream' },
@@ -1578,9 +1553,6 @@ async function handleTimestampSubmit(request, env, ctx) {
     return err(502, 'Failed to store timestamp blob');
   }
 
-  // ── Update manifest: timestamp_state → 'pending' ──────────────────────────
-  // Jittered delay (50–200ms) before manifest write for timing decorrelation.
-  // Prevents a calendar submit time from being inferred from the manifest write timestamp.
   const jitterMs = 50 + Math.floor(Math.random() * 150);
   await new Promise(r => setTimeout(r, jitterMs));
 
@@ -1594,8 +1566,6 @@ async function handleTimestampSubmit(request, env, ctx) {
     status:   200,
   });
 
-  // SW4a: fire 'transfer.timestamp_submitted' webhook for API-tier transfers.
-  // ctx is already in scope (passed from router). Non-blocking.
   ctx.waitUntil(
     (async () => {
       try {
@@ -1617,19 +1587,6 @@ async function handleTimestampSubmit(request, env, ctx) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Timestamp seal fetch — GET /timestamp/seal/:uuid  (TH-2)
-//
-// Returns the encrypted .ots blob (iv‖ciphertext) for the download-path offer.
-// The blob is AES-GCM encrypted under the transfer's session key (AAD = "seal").
-// It is meaningless without the session key, which lives in the URL fragment only.
-// No tier gate on the read — the encryption provides the access control.
-//
-// Guards:
-//   - UUID must be valid
-//   - Manifest must exist and not be consumed (tombstone)
-//   - timestamp_state must be 'pending' or 'complete'
-//   - R2 object must exist
-//
-// Rate limit: shares the download rate limit (300/60s per IP) — same endpoint family.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleTimestampSeal(request, env, uuid) {
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
@@ -1640,7 +1597,6 @@ async function handleTimestampSeal(request, env, uuid) {
   const state = getTimestampState(manifest);
   if (state === 'none') return err(404, 'No date seal for this transfer.');
 
-  // R2 read — {uuid}/date-seal.ots.enc
   let obj;
   try {
     obj = await env.BUCKET.get(`${uuid}/date-seal.ots.enc`);
@@ -1664,23 +1620,10 @@ async function handleTimestampSeal(request, env, uuid) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Delete transfer — DELETE /transfer/:uuid  (TG-block)
-//
-// Two auth paths:
-//   Recipient path — bearer token from POST /auth/{uuid} (live, TG-2)
-//   Owner path     — X-Admin-Key check (TG-4, replaces 501 stub)
-//
-// Deletion sequence (fail-closed, tombstone path A):
-//   1. Read manifest, authorise caller
-//   2. Flip consumed: true, write manifest back FIRST (fail-closed marker)
-//   3. Delete chunks {uuid}/0000 … {uuid}/{N-1}
-//   4. Overwrite manifest with stripped tombstone { consumed, consumed_at }
-//      — drops p2sh_secret_hash, expiry, tidal timestamps
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleDeleteTransfer(request, env, uuid) {
-  // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('Authorization') ?? '';
 
-  // Owner path — X-Admin-Key (TG-4)
   if (authHeader.startsWith('Bearer rfs_owner_')) {
     return handleOwnerDelete(request, env, uuid);
   }
@@ -1691,34 +1634,24 @@ async function handleDeleteTransfer(request, env, uuid) {
 
   const bearerToken = authHeader.slice(7);
 
-  // ── Read manifest ─────────────────────────────────────────────────────────
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize) return err(502, 'Transfer manifest exceeds size limit');
   if (!manifest) return err(404, 'Transfer not found');
 
-  // Already consumed — idempotent
   if (manifest.consumed === true) {
     return err(410, 'Transfer has already been destroyed.');
   }
 
-  // ── Authorise bearer ──────────────────────────────────────────────────────
-  // The bearer is a download token issued by POST /auth/{uuid}.
-  // verifyDownloadToken checks it was signed by our mint key and bound to this UUID.
-  // A token from a different transfer will fail the uuid check.
   const { valid, uuid: tokenUuid } = await verifyDownloadToken(bearerToken, env.MINT_PRIVATE_KEY);
   if (!valid || tokenUuid !== uuid) {
     return err(403, 'Not authorised to destroy this transfer.');
   }
 
-  // ── Fail-closed deletion sequence ─────────────────────────────────────────
   const nowSeconds = Math.floor(Date.now() / 1000);
   const totalChunks = manifest.total_chunks ?? 0;
 
-  // Step 2: Write consumed marker first — if chunk deletion fails, transfer
-  // is still marked gone. Clients get 410. Chunks expire via R2 lifecycle TTL.
   await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
 
-  // Step 3: Delete chunks
   const deleteErrors = [];
   for (let i = 0; i < totalChunks; i++) {
     try {
@@ -1729,14 +1662,10 @@ async function handleDeleteTransfer(request, env, uuid) {
     }
   }
 
-  // TH-1: Delete permanent record blob if present — load-bearing, joins every deletion path.
-  // Fire-and-forget: if the .ots blob was never written (timestamp_state === 'none'), delete
-  // is a no-op. If it was written, deletion is best-effort alongside chunk deletion.
   env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
     console.error('TH-1: date-seal.ots.enc delete failed (bearer path):', e)
   );
 
-  // Step 4: Overwrite with stripped tombstone
   const tombstone = buildTombstone(nowSeconds);
   await putManifest(env.BUCKET, uuid, tombstone);
 
@@ -1757,10 +1686,6 @@ async function handleDeleteTransfer(request, env, uuid) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Owner delete — admin-keyed forced deletion (TG-4)
-//
-// Harbourmaster can force-delete any transfer regardless of recipient auth.
-// Requires X-Admin-Key header matching env.ADMIN_KEY.
-// Used by the Execution Dock [Destroy now] button.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleOwnerDelete(request, env, uuid) {
   const adminKey = request.headers.get('X-Admin-Key');
@@ -1779,10 +1704,8 @@ async function handleOwnerDelete(request, env, uuid) {
   const nowSeconds  = Math.floor(Date.now() / 1000);
   const totalChunks = manifest.total_chunks ?? 0;
 
-  // Step 2: consumed marker first (fail-closed)
   await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
 
-  // Step 3: delete chunks
   const deleteErrors = [];
   for (let i = 0; i < totalChunks; i++) {
     try {
@@ -1793,16 +1716,13 @@ async function handleOwnerDelete(request, env, uuid) {
     }
   }
 
-  // TH-1: Delete permanent record blob — joins every deletion path.
   env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
     console.error('TH-1: date-seal.ots.enc delete failed (owner path):', e)
   );
 
-  // Step 4: tombstone
   const tombstone = buildTombstone(nowSeconds);
   await putManifest(env.BUCKET, uuid, tombstone);
 
-  // Remove from dock index — no longer needed
   env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
     console.error('Execution Dock KV delete failed:', e)
   );
@@ -1852,7 +1772,7 @@ async function handleStripeWebhook(request, env) {
       const sub        = event.data.object;
       const customerId = sub.customer;
       const tier       = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
-      const status = (sub.status === "active" || sub.status === "incomplete") ? "active" : "inactive";
+      const status = (sub.status === 'active' || sub.status === 'incomplete') ? 'active' : 'inactive';
       const periodEnd  = sub.current_period_end;
       let email = null;
       try {
@@ -1891,15 +1811,15 @@ async function handleCheckout(request, env) {
 
   const validPriceIds = [
     // live
-    "price_1Ts7lsGlctwiB9U3hdtgChU2",
-    "price_1Ts7sqGlctwiB9U3YRloCFfi",
-    "price_1Ts7vIGlctwiB9U3kb3NCLue",
-    "price_1Ts7xIGlctwiB9U3JyZB8Kwj",
+    'price_1Ts7lsGlctwiB9U3hdtgChU2',
+    'price_1Ts7sqGlctwiB9U3YRloCFfi',
+    'price_1Ts7vIGlctwiB9U3kb3NCLue',
+    'price_1Ts7xIGlctwiB9U3JyZB8Kwj',
     // test
-    "price_1TtnCEGlctwiB9U3tErRazp2",
-    "price_1TtnD0GlctwiB9U3UzFr27Zl",
-    "price_1TtnDVGlctwiB9U3BYGRnWl6",
-    "price_1TtnETGlctwiB9U3UJH3uaA"
+    'price_1TtnCEGlctwiB9U3tErRazp2',
+    'price_1TtnD0GlctwiB9U3UzFr27Zl',
+    'price_1TtnDVGlctwiB9U3BYGRnWl6',
+    'price_1TtnETGlctwiB9U3UJH3uaA',
   ];
   if (!validPriceIds.includes(price_id)) return err(400, 'Invalid price_id');
 
