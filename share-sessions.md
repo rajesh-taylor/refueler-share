@@ -408,10 +408,10 @@ BRIDGE v8.8.
 | SW4 | `452e7b8` | `webhook_reg.js` — POST/DELETE/GET `/api/v1/webhook/register`. `rfs_whsec_` issuance (32-byte base58, shown once). `wh_config_{sha256hex}` KV schema. URL validation (HTTPS-only, no localhost, no private/loopback/link-local IP). API tier only. 45 tests. **Requires SW4-patch before SW4a.** |
 | SW4-patch | `9ba1ceb` | `webhook_reg.js`: removed `whsec_hash` from KV writes; replaced random-whsec generation with Option B HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`; switched derivation input to `apiKeyHash` (SIGN_DOMAIN_TAG → `refueler.webhook.v1.sign`); removed `deriveWhsec` and `toBase58` functions (superseded by `webhook_delivery.js`). `WEBHOOK_SIGNING_MASTER_KEY` Worker secret set. |
 | SW4a | `9ba1ceb` | Webhook delivery engine. `webhook_delivery.js` — `deliverWebhook` / `deliverWebhookInline` / `findApiKeyHashForUuid` / `deriveWhsecFromHash`. Dead-letter KV (7-day TTL). AE log per attempt. OTS + confirm triggers wired. `WEBHOOK_SIGNING_MASTER_KEY` set. whsec derivation switched to apiKeyHash (SIGN_DOMAIN_TAG bumped to `refueler.webhook.v1.sign`). |
-| SW4b | Webhooks III | Daily cron retry of dead-letter items. |
-| SW5 | Receipts | Acceptance receipts + collection receipts. "Proof of delivery" phrase nowhere in code or copy. |
-| SW5a | Client dashboard I | `dashboard.share.refueler.io` scaffold. API-key auth. Transfers table from AE. |
-| SW5b | Client dashboard II | Capability gating. Webhook monitoring card. Hostname health card. Paper/Carbon. |
+| SW4b | `9392aad` | Daily cron DLQ retry. `retryDeadLetterQueue` + `_deliverForCron` in `webhook_delivery.js`. `scheduled()` in `index.js`. `[triggers]` cron 03:00 UTC in `wrangler.toml`. |
+| SW5 | `8640606` | `receipts.js` — `buildSignedReceipt` + `emitReceipt` + `handleApiReceipt`. `cargo.accepted` wired at manifest-write (chunk 0). `cargo.discharged` wired at last-chunk serve, once-flag guarded. `GET /api/v1/receipt/:uuid/:type` pull endpoint. No Supabase row. No recipient metadata. |
+| SW5a | `1c909c6` / `8c8d988` | Harbourmaster dashboard scaffold. Login gate with HMAC auth. Transfers table from AE. Receipt badges. Paper/Carbon tokens. |
+| SW5b | `870c0c4` / `f955b51` | Capability card, webhook monitoring, hostname health cards. Token alignment to global.css vocabulary. Theme cookie (`rs-theme`, 30-day). Standalone dashboard confirmed — no Eleventy dependency. Post-build fixes: `verifyApiRequest`→`requireApiAuth`, `method` undefined in router, CORS origin, HMAC key encoding, `X-Api-Sign-Key` passthrough. Dashboard live and authenticated. |
 | SW6 | Sandbox | `rfs_test_` keypairs. Model-B test-credits. Both rails. Non-anonymous notice. Credential limit enforcement. |
 | SW7 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. Rail declaration gate. Mandatory disclosure flow. Bracketed placeholders resolved. |
 | SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
@@ -426,6 +426,15 @@ BRIDGE v8.8.
 - DO NOT use patch files or find-and-replace instructions — always produce complete replacement files
 - DO NOT call deliverWebhook (ctx.waitUntil) from inside an existing waitUntil block — use deliverWebhookInline instead
 - SIGN_DOMAIN_TAG is 'refueler.webhook.v1.sign' — never revert to 'refueler.webhook.v1'
+- DO NOT re-emit cargo.discharged on re-download — receipt_discharged_guard:{uuid} KV once-flag is permanent
+- DO NOT add BLAKE3 root to any receipt field — Merkle verification blocked until B9
+- DO NOT use Ed25519 or a published Worker key for receipts — symmetric HMAC only, load-bearing for anonymous rail
+- api_live_key / api_accepted_at / api_transfer_ref stored in manifest for API-tier only — never consumer tier
+- DO NOT strip rfs_sign_ prefix before importing as HMAC key — Worker uses full string via TextEncoder; dashboard must match
+- DO NOT derive X-Api-Sign-Key from liveKey string replacement — pass the actual signKey from user input
+- DO NOT hardcode dashboard CORS origin as dashboard.share.refueler.io — dashboard lives at refueler.io
+- DO NOT use bare `method` variable in router before it is declared — use `request.method`
+
 **SW block open snags (resolve at SW9):**
 - `confirm` error messages use trailing full stops; `index.js` `err()` helper does not — normalise at SW9
 
