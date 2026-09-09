@@ -1,6 +1,7 @@
 // worker/src/webhook_delivery.js
 //
 // SW4a — Webhook delivery engine.
+// SW4b — Dead-letter retry (retryDeadLetterQueue, called from scheduled cron).
 //
 // Exports:
 //   deliverWebhook(env, ctx, apiKeyHash, event)
@@ -18,6 +19,11 @@
 //     → Re-exported for webhook_reg.js (SW4a): registration switches from
 //       raw apiKey to apiKeyHash as the HMAC message component so that
 //       registration and delivery share identical key material.
+//
+//   retryDeadLetterQueue(env) → Promise<{ retried, succeeded, failed }>
+//     → SW4b: lists all wh_dlq_* KV keys, retries each via _deliver with a
+//       fresh timestamp, deletes the KV entry on success. Called from the
+//       Worker's scheduled() handler (daily cron). Never re-uses original t.
 //
 // ── Signing model ─────────────────────────────────────────────────────────────
 //
@@ -146,6 +152,194 @@ export async function deliverWebhookInline(env, apiKeyHash, event) {
 export async function deriveWhsecFromHash(masterKey, apiKeyHash, createdAt) {
   const bytes = await _deriveSigningKeyBytes(masterKey, apiKeyHash, createdAt);
   return `rfs_whsec_${_toBase58(bytes)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// retryDeadLetterQueue(env) → Promise<{ retried, succeeded, failed }>
+//
+// SW4b — Daily cron retry of dead-letter items.
+//
+// Lists all wh_dlq_* KV keys (prefix scan, up to 1000 per page; KV list()
+// paginates automatically). For each entry:
+//   1. Parse the stored value to recover { event, uuid, api_key_hash }.
+//   2. Re-deliver via _deliver() with a fresh timestamp (NEVER the original t).
+//   3. On success (2xx from client endpoint): delete the KV key.
+//   4. On failure: leave in place — 7-day TTL handles natural expiry.
+//
+// Returns a summary object for AE logging in the scheduled handler.
+//
+// Design constraints (from SW4b do-not-retry rules):
+//   - DO NOT pass the original attemptTs to _deliver — _deliver builds its own t.
+//   - DO NOT delete on network error — leave for the next cron run.
+//   - DO NOT use ctx.waitUntil here — this is called from inside scheduled(),
+//     which itself runs to completion. Direct await is correct.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function retryDeadLetterQueue(env) {
+  let retried   = 0;
+  let succeeded = 0;
+  let failed    = 0;
+
+  let cursor;
+  do {
+    let listResult;
+    try {
+      listResult = await env.STATUS_KV.list({ prefix: 'wh_dlq_', cursor, limit: 1000 });
+    } catch (e) {
+      console.error('webhook_delivery/dlq: KV list failed:', e);
+      break;
+    }
+
+    for (const key of listResult.keys) {
+      retried++;
+      let record;
+
+      // ── Read the DLQ entry ─────────────────────────────────────────────────
+      try {
+        record = await env.STATUS_KV.get(key.name, { type: 'json' });
+      } catch (e) {
+        console.error(`webhook_delivery/dlq: KV get failed for ${key.name}:`, e);
+        failed++;
+        continue;
+      }
+
+      if (!record || !record.api_key_hash || !record.event || !record.uuid) {
+        // Malformed entry — delete it; it can never be retried successfully.
+        console.error(`webhook_delivery/dlq: malformed entry, deleting ${key.name}`);
+        try { await env.STATUS_KV.delete(key.name); } catch (_) {}
+        failed++;
+        continue;
+      }
+
+      // ── Re-deliver with fresh timestamp ────────────────────────────────────
+      // _deliver() builds its own `t = Math.floor(Date.now() / 1000)` internally.
+      // We reconstruct the event object from the stored record fields.
+      const event = { type: record.event, uuid: record.uuid };
+      let deliverySucceeded = false;
+
+      try {
+        deliverySucceeded = await _deliverForCron(env, record.api_key_hash, event);
+      } catch (e) {
+        console.error(`webhook_delivery/dlq: retry error for ${key.name}:`, e);
+      }
+
+      if (deliverySucceeded) {
+        succeeded++;
+        try {
+          await env.STATUS_KV.delete(key.name);
+        } catch (e) {
+          console.error(`webhook_delivery/dlq: KV delete failed for ${key.name}:`, e);
+        }
+      } else {
+        failed++;
+        // Leave in KV — 7-day TTL handles expiry naturally.
+      }
+    }
+
+    cursor = listResult.list_complete ? undefined : listResult.cursor;
+  } while (cursor);
+
+  // AE log — one summary point per cron run.
+  if (env.AE) {
+    try {
+      env.AE.writeDataPoint({
+        blobs:   ['webhook_dlq_cron', 'cron', retried > 0 ? 'ran' : 'idle', ''],
+        doubles: [retried, succeeded, failed, 0, 0],
+        indexes: ['webhook_dlq_cron'],
+      });
+    } catch (e) {
+      console.error('webhook_delivery/dlq: AE log failed:', e);
+    }
+  }
+
+  console.log(`webhook_delivery/dlq: retried=${retried} succeeded=${succeeded} failed=${failed}`);
+  return { retried, succeeded, failed };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _deliverForCron → Promise<boolean>
+//
+// Thin wrapper around _deliver that captures delivery success/failure as a
+// boolean return value for the cron caller, rather than relying on AE logging
+// (which is fire-and-forget). _deliver itself still logs to AE.
+//
+// Returns true if the client endpoint responded 2xx, false on any failure.
+// ─────────────────────────────────────────────────────────────────────────────
+async function _deliverForCron(env, apiKeyHash, event) {
+  // We need to intercept the outcome of _deliver, which currently returns void
+  // and signals success/failure only via AE. Rather than mutating _deliver's
+  // signature (it is used by the live request path), we read the wh_config_
+  // ourselves, call the underlying fetch logic, and return the boolean.
+  // This duplicates the config lookup but keeps _deliver's contract clean.
+
+  const configKey = `wh_config_${apiKeyHash}`;
+  let config;
+  try {
+    config = await env.STATUS_KV.get(configKey, { type: 'json' });
+  } catch (e) {
+    console.error('webhook_delivery/dlq: wh_config KV read failed:', e);
+    return false;
+  }
+
+  // Client deregistered or config missing — nothing to retry.
+  if (!config || config.active !== true) {
+    return true; // Treat as "resolved" — remove from DLQ, endpoint no longer registered.
+  }
+
+  const { url, created_at } = config;
+
+  const t       = Math.floor(Date.now() / 1000);
+  const payload = JSON.stringify({ event: event.type, uuid: event.uuid, t });
+
+  let signingKeyBytes;
+  try {
+    signingKeyBytes = await _deriveSigningKeyBytes(
+      env.WEBHOOK_SIGNING_MASTER_KEY,
+      apiKeyHash,
+      created_at,
+    );
+  } catch (e) {
+    console.error('webhook_delivery/dlq: signing key derivation failed:', e);
+    return false;
+  }
+
+  let sigHex;
+  try {
+    sigHex = await _signPayload(signingKeyBytes, t, payload);
+  } catch (e) {
+    console.error('webhook_delivery/dlq: payload signing failed:', e);
+    return false;
+  }
+
+  const signatureHeader = `t=${t},v0=${sigHex}`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
+
+    let fetchRes;
+    try {
+      fetchRes = await fetch(url, {
+        method:  'POST',
+        headers: {
+          'Content-Type':         'application/json',
+          'X-Refueler-Signature': signatureHeader,
+          'User-Agent':           'Refueler-Webhook/1.0',
+        },
+        body:   payload,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const ok = fetchRes.status >= 200 && fetchRes.status < 300;
+    _aeLog(env, event.type, ok ? 'success' : 'fail', String(fetchRes.status), fetchRes.status, 0);
+    return ok;
+  } catch (e) {
+    const errorClass = e?.name === 'AbortError' ? 'timeout' : 'network_error';
+    _aeLog(env, event.type, 'fail', errorClass, 0, 0);
+    return false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

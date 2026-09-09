@@ -46,6 +46,10 @@ id      = "5b1dca6a8f06423f98d0bbc4286e2968"
 binding  = "AE"
 dataset  = "share_events"
 
+# SW4b: daily dead-letter webhook retry — 03:00 UTC
+[triggers]
+crons = ["0 3 * * *"]
+
 # SW1: custom hostname routing — api.share.refueler.io → this Worker
 [[routes]]
 pattern = "api.share.refueler.io/*"

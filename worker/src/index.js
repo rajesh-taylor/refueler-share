@@ -16,7 +16,7 @@ import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleWebhookRegister }        from './webhook_reg.js';
-import { findApiKeyHashForUuid, deliverWebhookInline } from './webhook_delivery.js';
+import { findApiKeyHashForUuid, deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -397,6 +397,26 @@ export default {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(request) },
       });
+    }
+  },
+
+  // ── SW4b: Daily dead-letter webhook retry (cron: 0 3 * * *) ───────────────
+  //
+  // Reads all wh_dlq_* KV entries written by webhook_delivery.js on failed
+  // delivery. Re-attempts each with a fresh timestamp. Deletes on 2xx.
+  // Non-2xx entries remain in KV until 7-day TTL expires naturally.
+  //
+  // Cron fires at 03:00 UTC daily — quiet hour, well clear of SW8 hostname
+  // health checks (added later). ctx.waitUntil is not needed here: scheduled()
+  // runs until the handler resolves, so direct await is correct.
+  // ─────────────────────────────────────────────────────────────────────────
+  async scheduled(event, env, _ctx) {
+    if (event.cron === '0 3 * * *') {
+      try {
+        await retryDeadLetterQueue(env);
+      } catch (e) {
+        console.error('scheduled/dlq: unhandled error:', e);
+      }
     }
   },
 };
