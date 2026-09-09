@@ -113,7 +113,7 @@ function jsonError(status, code, message) {
 function corsHeaders() {
   return {
     'Content-Type':                 'application/json',
-    'Access-Control-Allow-Origin':  'https://dashboard.share.refueler.io',
+    'Access-Control-Allow-Origin':  'https://refueler.io',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, X-Refueler-Timestamp, X-Refueler-Key',
     'Cache-Control':                'no-store',
