@@ -185,8 +185,8 @@ export default {
         const challengeResponse = handleCfChallenge(path);
         if (challengeResponse) return challengeResponse;
       }
-      if (method === 'OPTIONS' && path === '/api/v1/auth/ping') return handleAuthPingOptions();
-      if (method === 'GET'     && path === '/api/v1/auth/ping') return handleAuthPing(request, env);
+      if (request.method === 'OPTIONS' && path === '/api/v1/auth/ping') return handleAuthPingOptions();
+      if (request.method === 'GET'     && path === '/api/v1/auth/ping') return handleAuthPing(request, env);
 
       // SW1: white-label config discovery
       if (request.method === 'GET' && path === '/wl/config') {
