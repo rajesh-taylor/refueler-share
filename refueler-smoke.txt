@@ -1,0 +1,12 @@
+Refueler Share — smoke test payload
+Version: 1.0
+Purpose: activation and integration testing only
+
+This file is public and known. It carries no sensitive content.
+Upload it to confirm your credentials and integration work end-to-end,
+then delete it via the owner-delete endpoint.
+
+Do not use real documents for smoke testing.
+Do not retain this file after the smoke test is complete.
+
+BLAKE3 reference (this file): verify your upload receipt matches.
