@@ -85,10 +85,16 @@ async function refreshAll() {
   clearInterval(refreshTimer);
   countdown = 60;
   updateCountdown();
-  const [m, ae, snap] = await Promise.all([fetchMetrics(), fetchAeMetrics(), fetchSnapshot()]);
+  const [m, ae, snap, hh] = await Promise.all([
+    fetchMetrics(),
+    fetchAeMetrics(),
+    fetchSnapshot(),
+    fetchHostnameHealth(),
+  ]);
   if (m)    { lastMetrics  = m;    renderMetrics(m); }
   if (ae)   { lastAe       = ae;   renderAeMetrics(ae); }
   if (snap) { lastSnapshot = snap; renderSnapshot(snap); }
+  if (hh)   { renderHostnameHealth(hh); }
   if (m || ae) renderFarming(lastMetrics, lastAe);
   const ts = new Date();
   setText('refreshed-at', `Refreshed ${ts.toLocaleTimeString('en-GB')}`);
@@ -116,6 +122,64 @@ async function fetchSnapshot() {
     if (!res.ok) { showError(`/admin/snapshot ${res.status}`); return null; }
     return res.json();
   } catch (e) { showError(`/admin/snapshot: ${e.message}`); return null; }
+}
+
+// ── SW8: Hostname health ──────────────────────────────────────────────────
+async function fetchHostnameHealth() {
+  try {
+    const res = await fetch(`${WORKER}/admin/hostname-health`, { headers: { 'X-Admin-Key': adminKey } });
+    if (!res.ok) { showError(`/admin/hostname-health ${res.status}`); return null; }
+    return res.json();
+  } catch (e) { showError(`/admin/hostname-health: ${e.message}`); return null; }
+}
+
+function renderHostnameHealth(data) {
+  // Summary badge
+  const countEl   = document.getElementById('hh-count');
+  const healthyEl = document.getElementById('hh-healthy');
+  const tsEl      = document.getElementById('hh-checked-at');
+
+  if (countEl)   countEl.textContent   = data.count   ?? 0;
+  if (healthyEl) {
+    const healthy = data.healthy ?? 0;
+    const count   = data.count   ?? 0;
+    healthyEl.textContent = `${healthy}/${count}`;
+    healthyEl.className   = 'card-value ' + (
+      count === 0         ? '' :
+      healthy < count     ? 'val-warn' : 'val-green'
+    );
+  }
+  if (tsEl) {
+    tsEl.textContent = data.checked_at
+      ? new Date(data.checked_at * 1000).toLocaleTimeString('en-GB', {
+          hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short',
+        })
+      : 'never';
+  }
+
+  // Row-level table
+  const tbody = document.getElementById('hh-tbody');
+  if (!tbody) return;
+
+  const results = Array.isArray(data.results) ? data.results : [];
+  if (results.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="hh-empty">No custom hostnames provisioned yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = results.map(r => {
+    const statusClass =
+      r.status === 'ok'      ? 'hh-ok'      :
+      r.status === 'timeout' ? 'hh-timeout' : 'hh-error';
+    const httpCol = r.http_status > 0 ? String(r.http_status) : '—';
+    const latCol  = r.latency_ms  > 0 ? `${r.latency_ms} ms` : '—';
+    return `<tr>
+      <td class="hh-host">${escHtml(r.hostname)}</td>
+      <td class="${statusClass}">${r.status}</td>
+      <td class="hh-http">${httpCol}</td>
+      <td class="hh-lat">${latCol}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Render: /admin/metrics ─────────────────────────────────────────────────

@@ -492,6 +492,13 @@ export default {
         return timed('admin_execution_dock', () => handleExecutionDock(request, env).then(r => addCors(r, request)));
       }
 
+      // ── SW8: Hostname health — GET /admin/hostname-health ──────────────────
+      // Admin-key gated. Returns latest hostname_health results from STATUS_KV.
+      // Written by the daily cron at 03:00 UTC (checkHostnameHealth). Pull-only.
+      if (request.method === 'GET' && path === '/admin/hostname-health') {
+        return timed('admin_hostname_health', () => handleAdminHostnameHealth(request, env).then(r => addCors(r, request)));
+      }
+
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
       return new Response('Not found', { status: 404 });
 
@@ -506,22 +513,36 @@ export default {
     }
   },
 
-  // ── SW4b: Daily dead-letter webhook retry (cron: 0 3 * * *) ───────────────
+  // ── SW4b + SW8: Daily cron (cron: 0 3 * * *) ─────────────────────────────
   //
-  // Reads all wh_dlq_* KV entries written by webhook_delivery.js on failed
-  // delivery. Re-attempts each with a fresh timestamp. Deletes on 2xx.
-  // Non-2xx entries remain in KV until 7-day TTL expires naturally.
+  // Task 1 (SW4b): dead-letter webhook retry.
+  //   Reads all wh_dlq_* KV entries, re-attempts each with a fresh timestamp.
+  //   Deletes on 2xx; non-2xx entries remain until 7-day TTL expires.
   //
-  // Cron fires at 03:00 UTC daily — quiet hour, well clear of SW8 hostname
-  // health checks (added later). ctx.waitUntil is not needed here: scheduled()
-  // runs until the handler resolves, so direct await is correct.
+  // Task 2 (SW8): hostname health checks.
+  //   Iterates all wh_config_* KV entries. For each active record that carries a
+  //   `hostname` field (written at SW7 onboarding), makes a HEAD request to
+  //   https://{hostname}/ with a 10s timeout. Logs one `hostname_health` AE
+  //   event per hostname. Persists a summary to STATUS_KV as
+  //   `hostname_health:latest` (24h TTL) for the dashboard pull endpoint.
+  //
+  // Tasks run sequentially — DLQ retry first, then hostname checks.
+  // scheduled() runs until the handler resolves; ctx.waitUntil is not used.
   // ─────────────────────────────────────────────────────────────────────────
   async scheduled(event, env, _ctx) {
     if (event.cron === '0 3 * * *') {
+      // Task 1 — DLQ retry
       try {
         await retryDeadLetterQueue(env);
       } catch (e) {
         console.error('scheduled/dlq: unhandled error:', e);
+      }
+
+      // Task 2 — Hostname health checks
+      try {
+        await checkHostnameHealth(env);
+      } catch (e) {
+        console.error('scheduled/hostname_health: unhandled error:', e);
       }
     }
   },
@@ -550,6 +571,164 @@ async function handleStatus(request, env) {
   }
 
   return json(current);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SW8: Hostname health check cron task
+//
+// Called from scheduled() at 03:00 UTC daily.
+// Iterates all wh_config_* KV keys via list(). For each active record that has
+// a `hostname` field (set at SW7 onboarding under wh_config_{apiKeyHash}),
+// fires a HEAD request to https://{hostname}/ with a 10-second abort timeout.
+//
+// AE event per hostname:
+//   blob1 = 'hostname_health'
+//   blob2 = hostname (e.g. 'share.acmecorp.com')
+//   blob3 = status string: 'ok' | 'error' | 'timeout'
+//   blob4 = HTTP status code as string, or '' on network error
+//   double1 = latency_ms (0 on timeout/error)
+//   double2 = http_status (0 on network error)
+//
+// AE writes are fire-and-forget (never awaited). Summary is persisted to
+// STATUS_KV as `hostname_health:latest` (24h TTL) for the dashboard.
+//
+// Limits: max 100 wh_config_ keys per run to avoid CPU overruns. Checks run
+// sequentially — parallel fanout would burst edge network from a single cron.
+// ─────────────────────────────────────────────────────────────────────────────
+async function checkHostnameHealth(env) {
+  const HOSTNAME_HEALTH_MAX = 100;
+  const REQUEST_TIMEOUT_MS  = 10_000;
+
+  let cursor;
+  const results = [];
+
+  // Page through all wh_config_ keys (KV list returns max 1000 per call).
+  outer: do {
+    let listResult;
+    try {
+      listResult = await env.STATUS_KV.list({ prefix: 'wh_config_', cursor });
+    } catch (e) {
+      console.error('hostname_health: KV list failed:', e);
+      break;
+    }
+
+    for (const key of listResult.keys) {
+      if (results.length >= HOSTNAME_HEALTH_MAX) break outer;
+
+      let record;
+      try {
+        record = await env.STATUS_KV.get(key.name, { type: 'json' });
+      } catch (e) {
+        console.error(`hostname_health: KV get failed for ${key.name}:`, e);
+        continue;
+      }
+
+      // Only check active records that have a hostname field (set at SW7).
+      if (!record || record.active !== true || !record.hostname) continue;
+
+      const { hostname } = record;
+      const url = `https://${hostname}/`;
+      const t0  = Date.now();
+      let httpStatus = 0;
+      let statusStr  = 'error';
+      let latencyMs  = 0;
+
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+        let res;
+        try {
+          res = await fetch(url, {
+            method:  'HEAD',
+            headers: { 'User-Agent': 'refueler-share-healthcheck/1.0' },
+            signal:  controller.signal,
+          });
+          latencyMs  = Date.now() - t0;
+          httpStatus = res.status;
+          statusStr  = res.ok ? 'ok' : 'error';
+        } catch (fetchErr) {
+          latencyMs = Date.now() - t0;
+          if (fetchErr.name === 'AbortError') {
+            statusStr = 'timeout';
+          } else {
+            statusStr = 'error';
+          }
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch (outerErr) {
+        latencyMs = Date.now() - t0;
+        statusStr = 'error';
+        console.error(`hostname_health: unexpected error for ${hostname}:`, outerErr);
+      }
+
+      // AE log — fire-and-forget, never await.
+      if (env.AE) {
+        try {
+          env.AE.writeDataPoint({
+            blobs:   ['hostname_health', hostname, statusStr, httpStatus ? String(httpStatus) : ''],
+            doubles: [latencyMs, httpStatus, 0, 0, 0],
+            indexes: ['hostname_health'],
+          });
+        } catch (aeErr) {
+          console.error('hostname_health: AE write failed:', aeErr);
+        }
+      }
+
+      results.push({ hostname, status: statusStr, http_status: httpStatus, latency_ms: latencyMs });
+      console.log(`hostname_health: ${hostname} → ${statusStr} (${httpStatus}) ${latencyMs}ms`);
+    }
+
+    cursor = listResult.list_complete ? undefined : listResult.cursor;
+  } while (cursor);
+
+  // Persist summary for dashboard pull.
+  const summary = {
+    checked_at: Math.floor(Date.now() / 1000),
+    count:      results.length,
+    healthy:    results.filter(r => r.status === 'ok').length,
+    results,
+  };
+
+  try {
+    await env.STATUS_KV.put(
+      'hostname_health:latest',
+      JSON.stringify(summary),
+      { expirationTtl: 24 * 3600 },
+    );
+  } catch (e) {
+    console.error('hostname_health: KV summary write failed:', e);
+  }
+
+  console.log(`hostname_health: checked ${results.length} hostnames, ${summary.healthy} healthy`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SW8: Admin hostname health pull — GET /admin/hostname-health
+//
+// X-Admin-Key gated. Reads `hostname_health:latest` from STATUS_KV and returns
+// the last cron run's summary. 404 if no cron has run yet.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAdminHostnameHealth(request, env) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) {
+    return err(401, 'Unauthorised');
+  }
+
+  let summary;
+  try {
+    summary = await env.STATUS_KV.get('hostname_health:latest', { type: 'json' });
+  } catch (e) {
+    console.error('handleAdminHostnameHealth: KV read failed:', e);
+    return err(502, 'KV read failed');
+  }
+
+  if (!summary) {
+    return json({ checked_at: null, count: 0, healthy: 0, results: [] }, 200);
+  }
+
+  return json(summary);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
