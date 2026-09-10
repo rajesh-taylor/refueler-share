@@ -137,9 +137,14 @@ function generateTestTokens(n) {
   for (let i = 0; i < n; i++) {
     const payload = {
       token: [{ mint: 'https://sandbox.refueler.io/mint', proofs: [{ amount: 1, id: 'rfs_test', secret: generateBase58Key(16), C: generateBase58Key(32) }] }],
-      memo: `Refueler sandbox token ${i + 1} of ${n} — not real ecash`,
+      memo: `Refueler sandbox token ${i + 1} of ${n} - not real ecash`,
     };
-    const encoded = btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    // Use TextEncoder + manual binary string for btoa — Workers runtime btoa()
+    // throws on any char > U+00FF (e.g. em-dash). This path is ASCII-safe.
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(payload));
+    let binary = '';
+    for (const byte of jsonBytes) binary += String.fromCharCode(byte);
+    const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     tokens.push(`cashuA${encoded}`);
   }
   return tokens;
