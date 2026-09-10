@@ -412,7 +412,8 @@ BRIDGE v8.8.
 | SW5 | `8640606` | `receipts.js` — `buildSignedReceipt` + `emitReceipt` + `handleApiReceipt`. `cargo.accepted` wired at manifest-write (chunk 0). `cargo.discharged` wired at last-chunk serve, once-flag guarded. `GET /api/v1/receipt/:uuid/:type` pull endpoint. No Supabase row. No recipient metadata. |
 | SW5a | `1c909c6` / `8c8d988` | Harbourmaster dashboard scaffold. Login gate with HMAC auth. Transfers table from AE. Receipt badges. Paper/Carbon tokens. |
 | SW5b | `870c0c4` / `f955b51` | Capability card, webhook monitoring, hostname health cards. Token alignment to global.css vocabulary. Theme cookie (`rs-theme`, 30-day). Standalone dashboard confirmed — no Eleventy dependency. Post-build fixes: `verifyApiRequest`→`requireApiAuth`, `method` undefined in router, CORS origin, HMAC key encoding, `X-Api-Sign-Key` passthrough. Dashboard live and authenticated. |
-| SW6 | Sandbox | `rfs_test_` keypairs. Model-B test-credits. Both rails. Non-anonymous notice. Credential limit enforcement. |
+| SW6 | `fb110b2` | `sandbox.js` — `rfs_test_` keypair issuance, 25 identity credits / 10 anonymous test tokens, sandbox KV namespace (`sandbox_client_` / `sandbox_quota_` / `sandbox_meta_`), credential limit enforcement, dashboard sandbox card. Both rails smoke tested. |
+| SW6-fix | `fb110b2` | `btoa` em-dash crash in `generateTestTokens` — replaced with TextEncoder binary string approach. |
 | SW7 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. Rail declaration gate. Mandatory disclosure flow. Bracketed placeholders resolved. |
 | SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
 | SW9 | SW close | Snag sweep. TESTING.md additions. Context trim. B8 brief. Buffer review. |
@@ -434,6 +435,9 @@ BRIDGE v8.8.
 - DO NOT derive X-Api-Sign-Key from liveKey string replacement — pass the actual signKey from user input
 - DO NOT hardcode dashboard CORS origin as dashboard.share.refueler.io — dashboard lives at refueler.io
 - DO NOT use bare `method` variable in router before it is declared — use `request.method`
+**SW6 do-not-retry:**
+- `btoa()` in Workers runtime is Latin-1 only — any char > U+00FF (em-dash, curly quotes, etc.) throws a runtime crash. Use TextEncoder → binary string → `btoa` for any JSON payload that might contain non-ASCII characters.
+- DO NOT use `workers.dev` URL for smoke tests in this repo — it routes to the Pages project (`refueler-share-site`), not the Worker. Always use `api.share.refueler.io`.
 
 **SW block open snags (resolve at SW9):**
 - `confirm` error messages use trailing full stops; `index.js` `err()` helper does not — normalise at SW9
