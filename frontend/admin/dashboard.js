@@ -755,3 +755,133 @@ window.smokeTest = async function() {
   console.groupEnd();
   return { pass, deferred, fail };
 };
+
+// ─── SW6: Sandbox card ────────────────────────────────────────────────────────
+
+const SANDBOX_TOKEN_COUNT = 10; // mirrors sandbox.js constant — update together
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function scrollToCard(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateSandboxState(label) {
+  const el = document.getElementById('sandbox-state');
+  if (!el) return;
+  el.textContent = label;
+  el.style.color = label === 'Active' ? 'var(--green,#5cb85c)' : label === 'Error' ? '#e05353' : '';
+}
+
+async function sandboxActivate() {
+  if (!adminKey) { alert('Not authenticated — unlock the dashboard first.'); return; }
+
+  const rail = document.getElementById('sandbox-rail-select').value;
+  const ref  = (document.getElementById('sandbox-ref-input').value || 'sandbox').trim();
+  const btn  = document.getElementById('btn-sandbox-activate');
+  btn.disabled = true; btn.textContent = 'Issuing…';
+
+  try {
+    const res  = await fetch(`${WORKER}/api/v1/sandbox/activate`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body:    JSON.stringify({ rail, transfer_ref_prefix: ref }),
+    });
+    const data = await res.json();
+    const resultEl = document.getElementById('sandbox-result');
+    resultEl.style.display = 'block';
+
+    if (!res.ok) {
+      resultEl.innerHTML = `<span style="color:#e05353">Error ${res.status}: ${escapeHtml(data.error ?? 'Unknown error')}</span>`;
+      updateSandboxState('Error');
+      return;
+    }
+
+    const lines = [
+      `<strong style="color:var(--fg,#F5F0E8)">✓ Sandbox client issued</strong>`,
+      ``,
+      `Rail:      <strong>${escapeHtml(data.rail)}</strong>`,
+      `Live key:  <span style="color:#C8A96E">${escapeHtml(data.live_key)}</span>`,
+      `Sign key:  <span style="color:#C8A96E">${escapeHtml(data.sign_key)}</span>  ← shown once`,
+      data.credits !== null
+        ? `Credits:   ${data.credits}`
+        : `Tokens:    ${data.test_tokens?.length ?? 0} test tokens issued`,
+      `Expires:   ${new Date(data.expires_at * 1000).toISOString()}`,
+      ``,
+      `<span style="opacity:.5;font-size:10px">Full response (copy before timer clears):</span>`,
+      `<span style="opacity:.7">${escapeHtml(JSON.stringify(data, null, 2))}</span>`,
+    ];
+    resultEl.innerHTML = lines.join('<br>');
+
+    updateSandboxState('Active');
+    document.getElementById('sandbox-sub').textContent =
+      `${data.rail} rail · ${data.credits !== null ? data.credits + ' credits' : SANDBOX_TOKEN_COUNT + ' test tokens'} · expires ${new Date(data.expires_at * 1000).toLocaleDateString()}`;
+
+    // Auto-clear after 5 minutes — keypair should be recorded by then
+    setTimeout(() => {
+      resultEl.innerHTML = '<span style="opacity:.4">Result cleared after 5 min — record credentials immediately next time.</span>';
+    }, 5 * 60 * 1000);
+
+  } catch (e) {
+    const resultEl = document.getElementById('sandbox-result');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `<span style="color:#e05353">Network error: ${escapeHtml(String(e))}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Issue keypair';
+  }
+}
+
+async function sandboxReset() {
+  if (!adminKey) { alert('Not authenticated — unlock the dashboard first.'); return; }
+
+  const liveKey = (document.getElementById('sandbox-reset-key-input').value ?? '').trim();
+  if (!liveKey.startsWith('rfs_test_live_')) {
+    alert('Paste an rfs_test_live_ key into the reset field first.');
+    return;
+  }
+
+  const btn = document.getElementById('btn-sandbox-reset');
+  btn.disabled = true; btn.textContent = 'Resetting…';
+
+  try {
+    const res  = await fetch(`${WORKER}/api/v1/sandbox/reset`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body:    JSON.stringify({ live_key: liveKey }),
+    });
+    const data     = await res.json();
+    const resultEl = document.getElementById('sandbox-result');
+    resultEl.style.display = 'block';
+
+    if (!res.ok) {
+      resultEl.innerHTML = `<span style="color:#e05353">Error ${res.status}: ${escapeHtml(data.error ?? 'Unknown error')}</span>`;
+      return;
+    }
+
+    const lines = [
+      `<strong style="color:var(--fg,#F5F0E8)">✓ Sandbox reset</strong>`,
+      `Rail:     ${escapeHtml(data.rail)}`,
+      data.credits !== null
+        ? `Credits reissued: ${data.credits}`
+        : `Test tokens reissued: ${data.test_tokens?.length ?? 0}`,
+      `Reset at: ${new Date(data.reset_at * 1000).toISOString()}`,
+    ];
+    if (data.test_tokens?.length) {
+      lines.push(``, `<span style="opacity:.7">${escapeHtml(JSON.stringify(data.test_tokens, null, 2))}</span>`);
+    }
+    resultEl.innerHTML = lines.join('<br>');
+
+  } catch (e) {
+    const resultEl = document.getElementById('sandbox-result');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `<span style="color:#e05353">Network error: ${escapeHtml(String(e))}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Reset credits';
+  }
+}

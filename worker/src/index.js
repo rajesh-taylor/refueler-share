@@ -23,6 +23,8 @@ import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
 // SW5b: webhook status + hostname health cards
 import { handleWebhookStatus }  from './handlers/webhook_status.js';
 import { handleHostnameHealth } from './handlers/hostname_health.js';
+// SW6: sandbox environment
+import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleSandboxSpend, isSandboxRequest, consumeSandboxCredit, lookupSandboxClient } from './sandbox.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload enforcement constants (S39)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +284,51 @@ export default {
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
         return timed('api_hostname_health', () => handleHostnameHealth(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── SW6: Sandbox endpoints — POST/GET /api/v1/sandbox/* ──────────────
+      // Admin-key protected (activate, reset). HMAC-authenticated (status, spend).
+      // All responses carry X-Refueler-Sandbox: true.
+      // Rate-limited under api_sandbox bucket — tighter than production to discourage
+      // using the sandbox as a free tier with a different name.
+      if (request.method === 'POST' && path === '/api/v1/sandbox/activate') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_sandbox', 5, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'sandbox_activate', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('sandbox_activate', () => handleSandboxActivate(request, env).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'POST' && path === '/api/v1/sandbox/reset') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_sandbox', 5, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'sandbox_reset', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('sandbox_reset', () => handleSandboxReset(request, env).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'GET' && path === '/api/v1/sandbox/status') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_sandbox', 20, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'sandbox_status', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('sandbox_status', () => handleSandboxStatus(request, env).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'POST' && path === '/api/v1/sandbox/spend') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'api_sandbox', 10, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'sandbox_spend', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('sandbox_spend', () => handleSandboxSpend(request, env).then(r => addCors(r, request)));
       }
 
       // Consumer credential issuance — POST /credential/issue
@@ -601,7 +648,39 @@ async function handleApiCredentialIssue(request, env) {
 
   let quotaRemaining = null; // Returned in response. null = anonymous rail.
 
-  if (rail === 'identity') {
+  // ── SW6: Sandbox routing ──────────────────────────────────────────────────
+  // rfs_test_ keys are routed to sandbox quota — never the production pool.
+  // Identity-rail sandbox: consume one test credit then jump straight to
+  // issuance (skipping the production KV quota gate below).
+  // Anonymous-rail sandbox: falls through to the X-Cashu-Token check — test
+  // tokens are structurally valid cashuA... strings but fail verifyCredential,
+  // which surfaces the correct 401 for integration test assertions.
+  if (isSandboxRequest(apiKey)) {
+    if (rail === 'identity') {
+      const sandboxCredit = await consumeSandboxCredit(env, apiKey);
+      if (!sandboxCredit.ok) {
+        const reason = sandboxCredit.reason;
+        if (reason === 'exhausted' || reason === 'no_quota_record') {
+          return new Response(
+            JSON.stringify({
+              error:     'Sandbox test credit limit reached. Call POST /api/v1/sandbox/reset.',
+              code:      'sandbox_quota_exhausted',
+              remaining: 0,
+              sandbox:   true,
+            }),
+            { status: 402, headers: { 'Content-Type': 'application/json', 'X-Refueler-Sandbox': 'true' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: 'Sandbox quota check failed', sandbox: true }),
+          { status: 500, headers: { 'Content-Type': 'application/json', 'X-Refueler-Sandbox': 'true' } }
+        );
+      }
+      // Credit consumed — skip production quota gate, proceed to issuance.
+      quotaRemaining = sandboxCredit.remaining;
+    }
+    // Anonymous-rail sandbox: fall through to X-Cashu-Token block below.
+  } else if (rail === 'identity') {
     // ── Identity rail: KV pool check ────────────────────────────────────────
     const quotaKey = await kvQuotaKey(apiKey);
     let quotaRecord;
@@ -753,7 +832,8 @@ async function handleApiCredentialIssue(request, env) {
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   // ── Identity rail: decrement quota (fire-and-forget) ──────────────────────
-  if (rail === 'identity') {
+  // Sandbox keys skip this — consumeSandboxCredit() already decremented in KV.
+  if (rail === 'identity' && !isSandboxRequest(apiKey)) {
     const newRemaining = (quotaRemaining ?? 1) - 1;
     const quotaKey     = await kvQuotaKey(apiKey);
     env.STATUS_KV.put(
