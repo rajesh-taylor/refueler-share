@@ -19,14 +19,14 @@
 | 12 | 13 Jul | — | Stripe Customer Portal, `/subscription/portal`, R2 lifecycle rules |
 | 13 | 14 Jul | — | `upgrade.html` rebuild: Paper/Carbon tokens, Stripe remount |
 | 14–15 | 14 Jul | `f52b55f` | Eleventy 3.x scaffold: `src/` → `frontend/`, partials. B1 complete. |
-| 16 | 14 Jul | grouped | KV status system: `refueler-share-kv` (binding `STATUS_KV`), `GET /status`, `POST /admin/status`, maintenance banner (`sessionStorage` dismiss) |
-| 17 | 14 Jul | grouped | `src/status.njk`: ops + crypto integrity sections, 60s auto-refresh, banner-linked only |
+| 16 | 14 Jul | grouped | KV status system: `refueler-share-kv`, `GET /status`, `POST /admin/status`, maintenance banner |
+| 17 | 14 Jul | grouped | `src/status.njk`: ops + crypto integrity sections, 60s auto-refresh |
 | 18 | 14 Jul | grouped | AE dataset `share_events` (binding `AE`), `logEvent()` helper, `timed()` router wrapper |
-| 19 | 14 Jul | grouped | `/admin/metrics`: MRR, subscribers_by_tier, paid_total, churn MTD. RLS deny-all on ledger tables. `cancelled_at` added to `subscribers` |
+| 19 | 14 Jul | grouped | `/admin/metrics`: MRR, subscribers_by_tier, paid_total, churn MTD. RLS deny-all. |
 | 20 | 14 Jul | grouped | `double_spend_attempts` table, `credential_uniqueness_rate` metric |
 | 21 | 14 Jul | grouped | `frontend/admin/dashboard.html` scaffold: password gate, live metric cards, 60s refresh |
 | 22 | 15 Jul | `d1bcb5a`+`f36e385` | `GET /admin/ae-metrics`: AE SQL proxy, CF_AE_TOKEN scoped. CORS `X-Admin-Key` fix. |
-| 23 | 15 Jul | `a4bc625` | AE SQL column syntax fix (`double1`/`blob1` not array syntax). p95/p99 latency + error rate cards. |
+| 23 | 15 Jul | `a4bc625` | AE SQL column syntax fix (`double1`/`blob1`). p95/p99 latency + error rate cards. |
 | 24 | 15 Jul | `5be5811` | `GET /admin/snapshot`, System Summary dashboard section (6 metric tiles) |
 | 25 | 15 Jul | `fc6cba9`+`99afaaa` | Free-to-paid conversion rate, dashboard restructure |
 | 26 | 15 Jul | — | B2 close. 10/13 metrics live. Context files updated to v2.1. |
@@ -37,28 +37,23 @@
 - `secp.Point` — removed in noble v2, use `secp.ProjectivePoint`
 - `binding = "R2"` in wrangler.toml — must be `BUCKET`
 - BLAKE3 for passphrase hash — must be SHA-256
-- `wrangler r2 bucket lifecycle set --rule` inline JSON — use `add` subcommand
 - AE SQL: use `double1`/`blob1` column names, not `doubles[N]`/`blob[N]` array syntax
 - DO NOT await `env.AE.writeDataPoint()` — fire-and-forget
 - DO NOT call AE SQL API from Worker — proxy via `/admin/ae-metrics` only
 - DO NOT use KV counter for double-spend tracking — race condition; Supabase table only
-- `spatial_ref_sys` RLS is false — PostGIS system table, leave alone
-- `sessionStorage` only for banner dismiss (not localStorage)
-- DO NOT add `/status` to nav — banner-linked only
 
 ---
 
-## Sessions 27–29 — B3 Stripe test coverage (16–20 July 2026)
+## Sessions 27–29 — B3 Stripe test coverage
 
 | # | Commit | Summary |
 |---|--------|---------|
-| 27 | `5f3cb8e` | Stripe CLI installed. 4 test prices created. Root cause of `client_secret` mismatch: `checkout/sessions ui_mode:embedded` incompatible with `stripe.elements()` |
+| 27 | `5f3cb8e` | Stripe CLI installed. Root cause of `client_secret` mismatch: `checkout/sessions ui_mode:embedded` incompatible with `stripe.elements()` |
 | 28 | `5f3cb8e` | Direct Subscription creation confirmed. 4242 card flow ✓. Webhook handler extended. |
-| 29 | `5d8c1ea` | `STRIPE_SECRET_KEY` rotated. Portal `resource_missing` confirmed correct. Cancellation code-complete. **B3 closed.** |
+| 29 | `5d8c1ea` | `STRIPE_SECRET_KEY` rotated. Portal `resource_missing` confirmed correct. **B3 closed.** |
 
 **B3 do-not-retry:**
 - DO NOT use `checkout/sessions ui_mode:embedded` — use direct Subscription + `expand[0]=latest_invoice.payment_intent`
-- DO NOT `decodeURIComponent` Stripe `client_secret` — already decoded
 - DO NOT attempt Customer Portal without active subscription — Stripe returns `resource_missing`
 
 ---
@@ -75,18 +70,8 @@
 | S39 | `ab4fc98` | Server-side tier enforcement. 10 MB chunk cap. KV byte counter. |
 | S40 | `c6f1a7a` | MIME denylist gate on chunk 0. 415 + AE log on miss. |
 | S41 | `b2a4ba0` | UUID validation (RFC 4122). Chunk bounds check. |
-| S42a–S42d | various | `handleLogError` fix. Filename sanitisation. Per-UUID auth rate limit. UUID-bound credential issuance. Turnstile nonce binding. |
-| S42e | — | Full B4 audit. Marketing claim rulings. UK regulatory language. B5 handoff. |
-| S43 | `5c54802` | DESIGN-TOKENS.md v1.0 applied to index, upgrade, status pages. |
-| S44–S45 | `b15f407`+`7187e41` | Dashboard design pass I+II: sidebar, token alignment, gold wordmark. |
-| S46a–S46b | `bbf271a`+`023dfcc` | Modal build: 14 modal keys, skeleton, focus trap. formatBytes, zero=green. |
-| S47a–S47d | various | FREE_EXPIRY fixed (5d→7d). QR 200px SVG (qr-creator). Receiver landing page. USP A/B test (Variant A/B, sessionStorage, AE logging). |
-| S48 | `0761f4c` | Maintenance modal. Theme cookie `rs-theme`. No FOUC. |
-| S48a | `0152aae` | FSAA streaming download. Per-chunk retry 1s/2s/4s. Blob fallback. |
-| S49a | `3598a65` | Carbon gold edging. `--inset-rule` throughout. |
-| S50 | `e3a4407` | Serif audit. 3 correct usages confirmed. |
-| S51 | `c182036` | File extraction: `frontend/share.css` (367L), `frontend/share.js` (899L), `frontend/upgrade.css` (419L). |
-| S52 | — | `TIER_EXPIRY_SECONDS.free` 5d→7d. Lightning ops plan. Context v4.0. B5 closed. |
+| S42a–S42e | various | `handleLogError` fix. Filename sanitisation. Per-UUID auth rate limit. UUID-bound credential issuance. Turnstile nonce binding. Full B4 audit. |
+| S43–S52 | various | B5 design full pass. DESIGN-TOKENS.md applied. Modal build. QR SVG. Receiver landing page. Theme cookie. FSAA streaming download. B5 closed. |
 
 ---
 
@@ -94,50 +79,32 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S53 | `b1d9855`+`ca1260c` | Folder upload I. fflate 0.8.2, client-side zip, zip progress UI. |
-| S54 | `c732abf` | Folder upload II. `sanitisePath`, depth limit 20, file count cap 500/2000. |
-| S55 | — | Folder upload III. Receiver UX: folder icon, zip-as-is decision locked. |
-| S56 | `6cf711d`+`7735787` | Folder upload smoke test. fflate + qr-creator self-hosted. Full round-trip ✓. |
-| S57 | — | Bearer TTL investigation. 900s hardcoded exp fatal for large transfers. Root cause identified. |
-| S58 | `f94a158` | Bearer TTL fix. Token exp = `manifest.expiry`. Smoke test ✓. |
-| S60 | `e59305c` | Unit tests I. Vitest 2 harness. ratelimit + manifest. 43 passing. |
-| S61–S62 | — | Unit tests II–III. nut00 BDHKE + blake3 + turnstile + stripe. 178 passing / 6 suites. |
-| S63–S64 | `def77b5` | Integration harness. wrangler dev --local. Full BDHKE in client.js. 181 passing. TESTING.md created. |
-| S65–S66 | `8dc8dce`+`344e32d` | Security regression suite I–II. MIME, UUID, chunk bounds, tier cap. 207 passing / 8 suites. |
-| S67–S69 | various | k6 architecture + load tests I–II. All thresholds green. |
-| S70–S72 | `731b571`+`93b2b86`+`319225f` | CI Level 1 green. Lightning admin toggle. Stripe webhook security tests. 212 passing / 0 skipped. |
-| S72a | — | B6 close. TESTING.md v0.5. Context trim. B7 brief. |
+| S53–S56 | `ca1260c` | Folder upload I–IV. fflate 0.8.2 streaming zip. `sanitisePath`. Smoke test ✓. |
+| S57–S58 | `f94a158` | Bearer TTL fix. Token exp = `manifest.expiry`. |
+| S60–S64 | `344e32d` | Unit tests I–V. Vitest 2 harness. BDHKE + blake3 + turnstile. Integration harness. 181 passing. |
+| S65–S69 | `319225f` | Security regression suite. k6 load tests. All thresholds green. 212 passing / 8 suites. |
+| S70–S72a | `319225f` | CI Level 1 green. Lightning admin toggle. Stripe webhook security tests. B6 closed. |
 
-**B6 do-not-retry (permanent):**
-- DO NOT use `[new Uint8Array(buf), { level: 0 }]` in fflate 0.8.x — bare `new Uint8Array(buf)` only
+**B6 do-not-retry:**
+- DO NOT use `fflate.zip()` (buffered) — OOM on large folders. `fflate.Zip` (streaming) only.
 - DO NOT load fflate or qr-creator from cdnjs — self-hosted only
-- DO NOT put file inputs inside the drop zone hit area — JS-triggered only
 - DO NOT hardcode 900s TTL for download tokens — pass `manifest.expiry_timestamp`
 - DO NOT call `client.putManifest()` in integration tests — manifest auto-written after final chunk
-- DO NOT send `X-P2SH-Secret-Hash` in a separate manifest PUT — must be chunk 0 upload header
-- DO NOT start Supabase mock in the test file — lifecycle owns it
-- DO NOT use a dummy blinded message in `issueCredential` test helper — real BDHKE unblinding required
 - DO NOT use `ProjectivePoint.subtract()` — noble v2. Use `.add(point.negate())`
 
 ---
 
-## AP-series — Architectural planning sessions (uncounted)
+## AP-series — Architectural planning sessions (uncounted, compact)
 
 | # | Date | Summary |
 |---|------|---------|
-| AP-0 | 29 Jul | Ad-hoc strategy. Article pipeline. API/white-label planning. Susie/BHODL contacts. |
-| AP-1 | 29 Jul | /notes/ article pipeline locked. Articles 2–5 structures confirmed. notes-articles-list.md created. |
-| AP-2 | 30 Jul | API architecture: HMAC signing, credential issuance, Stripe decoupling, renewal stacking. Locked. |
-| AP-3 | 30 Jul | White-label: custom hostname flow, badge config via KV, IT handover doc, five-tier structure. |
-| AP-3a | 30 Jul | Webhook spec locked. Single API keypair + rotation. OEM paragraph drafted. SW block (12+2) created. |
-| AP-4 | 1 Aug | Security + crypto strategy. Argon2id Enterprise (post-B8). ML-KEM B10. BIP-85/FROST B12. SimpleX B9+. |
-| AP-5 | 1 Aug | Incident response planning. `docs/incident-response.md` + `docs/security-breach.md` created. |
-| AP-6 | 2 Aug | Competitive analysis: DashBeam. Resumable upload gap confirmed. HTTP/3 + BLAKE3 positioning locked. |
-| AP-7 | 2 Aug | Two-axis framing locked: recipient problem + compulsion problem. Recovery window framing locked. Article 1 hold cleared. |
-| AP-8 | 4 Aug | Nav rewrite + `head.njk` theme script. `rs-theme` cookie scoped to `.refueler.io`. |
-| AP-9 | 27 Aug | B7 re-sequence. Lightning infra added. Silent Drop confirmed Sovereign only. B7 budget 25→50. |
-| AP-9a | 28 Aug | Lightning identity invariant added. Journalist/source-protection hero copy gating rule added. |
-| AP-10 | 3 Sep | Roadmap resequenced. TG-block, TH-series, SW, B8 require no Hetzner. Traitor's Gate internal vocab locked. Tower Hill / OpenTimestamps: 2–3 Opus scoping sessions. Execution Dock: 48h Three Tides grace. Dragon status vocabulary locked. BRIDGE v6.7, Master-Context v7.0. |
+| AP-0–1 | 29 Jul | Ad-hoc strategy. Article pipeline locked. |
+| AP-2–3a | 30 Jul | API architecture: HMAC, credential issuance, Stripe decoupling, webhook spec, SW block created. |
+| AP-4–5 | 1 Aug | Security + crypto strategy (Argon2id, ML-KEM, BIP-85/FROST). Incident response docs. |
+| AP-6–7 | 2 Aug | DashBeam competitive analysis. Two-axis framing locked. Article 1 hold cleared. |
+| AP-8 | 4 Aug | Nav rewrite + `head.njk` theme script. `rs-theme` cookie. |
+| AP-9–9a | 27–28 Aug | B7 re-sequence for LNbits/phoenixd. Lightning identity invariant added. |
+| AP-10 | 3 Sep | Roadmap resequenced. TG/TH/SW/B8 require no Hetzner. BRIDGE v6.7. |
 
 ---
 
@@ -145,332 +112,227 @@
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S73 | `4c95cf6` | ~~Pre-B7 Blink checklist.~~ **SUPERSEDED Opus-2 — Blink dead. Replaced by NB-series + LNbits.** |
-| S73a | `a19778c` | Dashboard: client errors modal fix. Strip `.modal-sparkline-stub` on open; hide static section titles + CSV btn; restore on close. Both themes confirmed. |
+| S73 | `4c95cf6` | ~~Pre-B7 Blink checklist.~~ **SUPERSEDED — Blink dead. Replaced by NB-series + LNbits.** |
+| S73a | `a19778c` | Dashboard: client errors modal fix. Both themes confirmed. |
 
 ---
 
-## AD-1 — Admin dashboard migration
-
-Share admin dashboard frontend migrated to `refueler-io` at `src/share/admin/`. Theme fixed to rs-theme cookie / dataset.theme. Worker endpoints unchanged.
-
----
-
-## RU0 — Large folder OOM fix (28 Aug 2026)
-
-| # | Commit | Summary |
-|---|--------|---------|
-| RU0 ✓ | `49915f2`→`4b223b1` | Streaming zip: replaced `fflate.zip()` (buffered, OOM on 1.5 GB+) with `fflate.Zip` streaming API. `ZipPassThrough` (STORED) for already-compressed types. `ZipDeflate` level 6 for compressible. **Smoke test PASSED: 1.72 GB JPEG folder.** |
-
-**RU0 do-not-retry:**
-- DO NOT use `fflate.zip()` (buffered) — OOM on large folders. `fflate.Zip` (streaming) only.
-- DO NOT use `ZipDeflate` with `{ level: 0 }` for already-compressed files — use `ZipPassThrough` (method=0, STORED).
-- DO NOT read multiple `arrayBuffer()` calls concurrently in the zip loop — one file at a time, yield via `setTimeout(0)`.
-
----
-
-## RU1 — Resumable uploads I (31 Aug 2026)
-
-| # | Commit | Summary |
-|---|--------|---------|
-| RU1 ✓ | `ae78b81`→`48ed213` | IndexedDB schema live — `idbOpen()`, `writeChunkState()` (every 200 ACK), `readResumeState()`, `clearResumeState()`. `checkResumeState()` on page load with 8-day stale guard. Resume card HTML in `index.njk`. Discard wired. |
-
----
-
-## RU1a — Resumable uploads II (1 Sep 2026)
-
-| # | Commit | Summary |
-|---|--------|---------|
-| RU1a ✓ | `9e255fa`/`f05583f` | `resumeUpload()` wired. AES key/IV restored from IDB. Re-credential path. File identity check. BLAKE3 re-hash of confirmed chunks. `fetchWithTimeout()` fixes Safari hang. 3× retry. Zip progress capped at 95%. 36/36 tests passing. |
-
-**RU1a do-not-retry:**
-- DO NOT use `var(--carbon)` for the active toggle knob — use `#E8E2D8` (Paper literal)
-- DO NOT store IDB records without `tier` and `expiryTimestamp`
-- DO NOT use bare `fetch()` for chunk uploads — always `fetchWithTimeout()` with `AbortController`
-
----
-
-## RU2–RU2e — Resumable uploads III–VII (Sep 2026)
-
-| # | Commit | Summary |
-|---|--------|---------|
-| RU2 | `9fce220` | Resume progress strings wired. Renewal banner deferred to SW-block. |
-| RU2a | — | IDB write verification confirmed. Resume card rendering confirmed. Mirror sync gap identified. |
-| RU2b | `bd48ad8` | Resume card HTML synced to `refueler-io/src/share/index.njk`. Turnstile never rendered on resume path — root cause. |
-| RU2c | `2f348cb`/Worker `0c216a5` | Resume credential uses `resume: true` + `resume_uuid`; Worker R2 HEAD check on chunk `0000`; no Turnstile. |
-| RU2d | `2e1604a`/`bc0d597`/`1030572` | Verification loop hang fixed. Resume button fix. CORS fix. WiFi-kill → card → resume → share card ✓. |
-| RU2e | `1e33ebe` | 409 detection: clear IDB, show "already completed", repurpose Discard as "New upload". **RU-block closed.** |
-
-**RU do-not-retry:**
-- DO NOT require Turnstile on the resume credential path — use `resume: true` + `resume_uuid` + R2 HEAD check
-- DO NOT treat HTTP 409 on resume chunk PUT as generic 4xx — it means transfer already complete
-
----
-
-## SYNC-1 — Dual-repo asset sync fix (31 Aug 2026)
-
-**Commits:** `refueler-share` `2d26587` · `refueler.io` `706fe65`+`ae6f9e1`
-
-- `bin/sync-share.sh` committed — guarded sync (copy → diff verify → commit+push both repos).
-- Embedded git repos (`refueler-app`, `terminals/numo-fork`) added to `.gitignore` in `refueler-io`.
-
-**Do-not-retry:**
-- DO NOT edit files in `refueler.io/src/share/assets/` directly — GENERATED header for a reason.
-- Always run `bin/sync-share.sh` after editing any shared asset in `refueler-share/frontend/`.
-
----
-
-## HQ-series — HTTP/3 + BLAKE3 integrity positioning
+## RU-block, SYNC-1, HQ-series (complete)
 
 | Session | Commit | Summary |
 |---------|--------|---------|
-| HQ1 ✓ | `b66d401` | `blob4` httpProtocol added to AE schema. "Hashing password" copy fix. Auth comment updated. |
-| HQ2 ✓ | `9cd2241` | BLAKE3 + HTTP/3 trust band (upgrade page). Plans + Status in share nav. activePage fix. |
+| RU0 | `4b223b1` | Streaming zip — `fflate.Zip` replaces buffered `fflate.zip()`. 1.72 GB smoke test ✓. |
+| RU1 | `48ed213` | IDB schema live. `writeChunkState()` / `readResumeState()` / `clearResumeState()`. Resume card HTML. |
+| RU1a | `f05583f` | `resumeUpload()` wired. AES key/IV from IDB. Re-credential path. 36/36 tests. |
+| RU2–RU2e | `1e33ebe` | Resume card sync. Turnstile-free resume path. WiFi-kill → resume ✓. 409 handling. **RU-block closed.** |
+| SYNC-1 | `2d26587` | `bin/sync-share.sh` committed. Embedded git repos gitignored. |
+| HQ1–HQ2 | `9cd2241` | HTTP/3 AE logging. BLAKE3 + HTTP/3 trust band. Plans + Status in nav. |
+
+**Do-not-retry (RU/SYNC):**
+- DO NOT use `fflate.zip()` — `fflate.Zip` streaming only
+- DO NOT require Turnstile on resume credential path — `resume: true` + `resume_uuid` + R2 HEAD check
+- DO NOT treat HTTP 409 on resume chunk PUT as generic 4xx — transfer already complete
+- DO NOT edit files in `refueler.io/src/share/assets/` directly — GENERATED; edit in `refueler-share/frontend/` then sync
+
+---
+
+## TG-block — Traitor's Gate (complete · 5 Sep 2026)
+
+| Session | Commit | Summary |
+|---------|--------|---------|
+| TG-1 | — | Design + manifest spec locked. |
+| TG-2 | `1c673b1` | Worker implementation. `manifest_tg.js`. 36 unit tests. 355 passing. Deployed `aaa8f521`. |
+| TG-3 | `b3b3226` | Frontend upload side: destroy toggle, tidal datetime pickers. |
+| TG-3a | `b3b3226` | Frontend download side: pre-download amber modal, post-download confirm gate, tidal countdown. |
+| TG-4 | `9258050` | Execution Dock dashboard card. `handleOwnerDelete`. `dock_index` KV write. |
+| TG-5 | `0e51385`+`18d2157` | Tests + smoke. 432 passing. **TG-block closed.** |
+
+**TG do-not-retry:**
+- DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation
+- DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
+- DO NOT compute `X-P2SH-Secret-Hash` with plain BLAKE3 in tests — use `hashSecret()` from `nut11.js`
+- `pending_destruction` flip not reliably observable in local wrangler — test via unit tests only
+
+---
+
+## TH-series — Tower Hill / Permanent Record (complete · 6 Sep 2026)
+
+| Session | Commit | Summary |
+|---------|--------|---------|
+| TH-Opus-1 | — | Tower Hill / Permanent Record scoped. |
+| TH-Opus-2 | — | Legend price locked (£50/mo). Cross-product entitlement. BRIDGE v8.0. |
+| TH-Opus-3a | — | Committed-value stress-test. Option B locked (SHA-256(blake3_root ‖ seal_nonce)). |
+| TH-1 | `a71f12fe` | Worker OTS relay. `POST /timestamp/submit`. `date-seal.ots.enc` on all deletion paths. |
+| TH-2 | `53e3c7fb` | Permanent-record toggle UI. `seal_nonce`. `blake3PlaintextRoot`. Download OTS offer. |
+| Share-JS-Refactor | `45a4d3b3` | 5-module split (share/crypto/upload/download/timestamp.js). 324 tests passing. |
 
 ---
 
 ## NB-series — node bootstrap (pre-B7, gates all B7 code)
 
-**NB-1 can proceed immediately (Opus, no server). NB-2 onwards requires Hetzner commitment.**
-
 | Session | Label | Scope |
 |---------|-------|-------|
-| NB-1 | Node runbook (Opus, no code) | OS hardening → phoenixd + seed backup → LNbits → cloudflared tunnel → Tor per-service .onion → backup + monitoring → failure modes. |
-| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. Verify phoenixd → bech32 on-chain send. **First Hetzner cost incurred here.** |
+| NB-1 | Node runbook (Opus, no code) | OS hardening → phoenixd + seed backup → LNbits → cloudflared → Tor .onion → backup + monitoring. |
+| NB-2 | Provision + execute | Provision Instance A (CAX21). Follow runbook. Verify phoenixd → bech32 on-chain send. **First Hetzner cost.** |
 | NB-3 | End-to-end test | LNbits invoice → pay → callback → GET re-verify → splice-out liquidation. |
-| NB-4 | Node live | Set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY`. Declare node live. B7 code may now start. Article pipeline unlocks. |
-
----
-
-## TG-block — Traitor's Gate (no Hetzner required)
-
-**Internal name: Traitor's Gate. UI label: "Destroy after download." All tiers for core; tidal window = paid only.**
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| TG-1 | Design + manifest spec | Manifest fields: `pending_destruction`, `consumed`, `available_from_timestamp`, `available_until_timestamp`. Tier gate, status matrix, deletion sequence all locked. Pre-code confirmation. |
-| TG-2 ✓ | Worker implementation | `DELETE /transfer/{uuid}`. `consumed`/tidal checks on `GET /download` + `POST /auth`. Tidal headers on chunk-0 upload. `manifest_tg.js` (5 pure fns). `destroy.test.js` (36 unit). Security integration tests (8 TG rows). **355 passing.** Commit `1c673b1`. Deployed `aaa8f521`. |
-| TG-3 ✓ | Frontend — upload side | Destroy after download toggle UI. Post-upload amber notice to sender. Tidal window datetime pickers (paid tier only). Commit `b3b3226`. |
-| TG-3a ✓ | Frontend — download side | Pre-download amber modal. Post-download confirm gate → [I've saved it] → `DELETE /transfer/{uuid}` (passphrase) or `POST /confirm/{uuid}` (open). Tidal countdown. Commit `b3b3226`. |
-| TG-4 ✓ | Execution Dock — dashboard | `handleExecutionDock` + `GET /admin/execution-dock`. `dock_index` KV write on chunk-0. `handleOwnerDelete` replacing 501 stub. Execution Dock KPI card in System Summary (amber count from `badge_count`). Commit `9258050`. |
-| TG-5 ✓ | Tests + smoke | `tg-round-trip.test.js` (16 integration tests). `supabase-mock.js` + `/_test/seed-subscriber` HTTP endpoint. `client.js` TG methods. `tg-smoke.sh` 10/10 production smoke. TESTING.md v0.7. **432 passing.** Commit `0e51385`. |
-
-**TG-block do-not-retry:**
-- DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation
-- DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
-- DO NOT compute `X-P2SH-Secret-Hash` with plain BLAKE3 in tests — use `hashSecret()` from `nut11.js`
-- Owner-scoped DELETE (TG-4) ✓ shipped — `handleOwnerDelete` live at commit `9258050`
-- `pending_destruction` flip is fire-and-forget unhandled promise — not reliably observable in local wrangler. Test via unit tests (`destroy.test.js`, `confirm_tg.test.js`), not integration. Production behaviour verified via smoke.
-- `available_from` must be >= `created_at` (Worker processing time) — use `nowSeconds() + 1` minimum in tests, never `nowSeconds() - N`
-- Supabase mock `seedSubscriber()` is only callable within the same process — use HTTP `POST /_test/seed-subscriber` from test files (globalSetup runs in a separate process)
-
----
-
-## TH-series — Tower Hill / Permanent Record (no Hetzner required)
-
-**All design locks in Share-Master-Context.md §TH-series.**
-**OTS wariness on record. TH-0 spike gates TH-1 build commitment.**
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| TH-Opus-1 ✓ | Share scoping | OTS mechanics. Proof format. Tier placement. Framing copy. Sovereign cap 250→100 GB locked. Legend entitlement model locked. Permanent record / date seal names locked. |
-| TH-Opus-2 | Pass + Legend scoping | Legend price setting. Cross-product entitlement architecture. Pass: credential issuance timestamps. Legend: native verifier design. 1–2 sessions. |
-| TH-Opus-3 | Build spec | Session plan. Relay endpoint design. Deletion-path integration with TG-block. TH-0 spike defined. TH-1/TH-2 split confirmed. |
-| TH-0 | Bundle spike | `javascript-opentimestamps` in-browser. Bundle size. Calendar endpoint paths. Go/no-go for TH-1. |
-| TH-1 | Share build | `POST /timestamp/submit` + `GET /timestamp/upgrade` relay. `date-seal.ots.enc` R2 write. Manifest fields. Deletion path integration. |
-| TH-2 | Frontend + tests | Opt-in toggle (Sovereign only). Proof in download bundle. Lazy upgrade on recipient download. Unit + integration tests. |
+| NB-4 | Node live | Set Worker secrets `LNBITS_URL` + `LNBITS_API_KEY`. Declare node live. B7 unlocks. Article pipeline unlocks. |
 
 ---
 
 ## S88 · 4 Sep 2026 — Silent Drop design (Opus, uncounted)
 
-Full SD-block design session. All decisions locked. Key outcomes: opaque token architecture confirmed; Lightning-only necessity established; Deed (one keypair, one recovery sheet) covers Locke + all Quays; payment-layer threat model analysed (subscription decouples payment from cargo — strong property); PTLCs and Payjoin v2 assessed (inherit/ops, not build sessions); submarine swaps ruled out for Share, flagged for Pass liquidation post-B9; mid-block and final audit gates written into plan.
+Full SD-block design. Opaque token architecture confirmed. Lightning-only necessity established. Deed (one keypair) covers Locke + all Quays. Subscription decouples payment from cargo. PTLCs and Payjoin v2 assessed. Submarine swaps ruled out for Share.
 
 ---
 
-## S89–S90 — Tier rename (Sep 2026)
+## S89–S90 — Tier rename
 
 | # | Commit | Summary |
 |---|--------|---------|
-| S89 | `1a0ac93` | Tier rename locked: Free → Citizen · Creative Premium retired · Production Max → Sovereign (two rails: Stripe + Lightning). Crown = brand/institutional only. |
-| S90 | — | Stripe product/price alignment with locked tier model. Archived old price objects. |
+| S89 | `1a0ac93` | Tier rename: Free → Citizen · Creative Premium retired · Production Max → Sovereign. |
+| S90 | — | Stripe product/price alignment. Old price objects archived. |
 
 ---
 
-## SD-block — Silent Drop (post-B8, post-NB-4)
+## Opus sessions — compact log (pre-SW block)
 
-**S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) in place — SD ships after B8, no temp auth builds.
-
-**Prerequisites:** B8 complete (Locke live). NB-4 (node live). Friend-group soft launch (7-day) gates public Sovereign access.
-
-**Locked design decisions (S88):**
-- Opaque intake token → KV inbox key. No stable identifier visible at any layer.
-- Lightning rail only. Stripe rail = private (not anonymous) — different product.
-- Lighthouse + up to 10 Sovereign Quays at launch. Primary Quay anchored visually. Ad-hoc Quays 2–10 default to 30-day expiry + Execution Dock on.
-- One Deed per Harbourmaster. One keypair covers Locke + all Quays. 12-word BIP-39. No copy button. Confirmed by checkbox.
-- Stripe Sovereign users get a recovery sheet too — offline backup independent of Stripe recovery.
-- Notification at SD launch: polling + Business webhook. SimpleX stub card greyed "available at B9."
-- Tabletop gate: 7-day soft launch before public Sovereign access.
-
-**Privacy threat model (locked S88):**
-- Application layer: fully blinded — opaque tokens, UUID isolation, no metadata.
-- Payment layer: subscription decouples payment from cargo. Amount = tier, not file size. State in whitepaper.
-- Network layer: Mullvad multi-hop recommended for sender-side correlation.
-- Payment graph: pseudonymous. BOLT12 blinded paths = B9 §Future work.
-- PTLCs: inherit when phoenixd/LND supports. B9 whitepaper §Future work, one sentence.
-- Payjoin v2: liquidation sweep hygiene, not a product feature. NB-4 ops note.
-- Submarine swaps: not applicable to Share. Flagged for Pass liquidation post-B9.
-
-**Privacy + security audit gates:** Mid-block at SD4b. Final at SD7a. Both mandatory before SD8 close.
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| SD1 | Lighthouse architecture | KV schema. Opaque token → inbox key. Worker endpoints: `POST /inbox/create` · `GET /inbox/{token}` · `POST /inbox/{token}/upload`. Unit tests. |
-| SD1a | Quay issuance | Up to 10 Quays per Sovereign Lightning credential. Primary Quay flag. Default lifecycle rules. KV Quay index per Harbourmaster. |
-| SD1b | Opaque token + UUID isolation | Token entropy audit. Mapping layer. Cargo UUID generated separately from upload credential UUID. |
-| SD2 | Sender upload flow | Worker validates token, issues one-time upload credential. Quota error deferred to upload attempt. Sender never learns recipient identity. |
-| SD2a | Sender upload UI | Minimal send page. File picker, optional passphrase. No sender-facing receipt. |
-| SD2b | Cargo arrived event | AE datapoint: `quay_id` (opaque), `cargo_size`, `arrived_at`. KV write: `cargo_{uuid}`. |
-| SD3 | Harbourmaster auth — Locke | NUT-11 Mode 2 P2PK login. Session token issued on success. No email, no password. |
-| SD3a | Deed generation — Lightning path | Keypair + BIP-39 mnemonic from `crypto.getRandomValues()`. Display only — no copy button. |
-| SD3b | Deed generation — Stripe path | Recovery sheet at Stripe Sovereign onboarding. Parallel flow to SD3a. |
-| SD3c | Deed recovery flow | 12 words → keypair reconstructed client-side → new Locke bound → old Locke retired. |
-| SD4 | Harbourmaster dashboard I | Receipt ledger. Storage bar per-Quay + total. |
-| SD4a | Harbourmaster dashboard II | Quay management. Create / label / set expiry / toggle Execution Dock. |
-| SD4b | Harbourmaster dashboard III + mid-block audit | Paper/Carbon tokens. Both themes. **Mid-block privacy + security audit.** |
-| SD5 | Notification architecture | Polling model. Business webhook: `cargo_arrived` + `cargo_retrieved`. SimpleX stub card. |
-| SD5a | Renewal warning banner | 7-day pre-expiry banner. SessionStorage-dismiss. |
-| SD6 | Soft launch gate | No code. 7-day friend-group observation window. |
-| SD6a | Soft launch findings | AE review. Fix any P0/P1 findings. |
-| SD7 | Journalist/source-protection copy | **Gated: SD shipped + blinded-relay reviewed + VPN scope stated.** |
-| SD7a | Final audit | Full privacy + security audit. Payment-layer threat model review. Whitepaper §threat model draft. |
-| SD8 | SD close | Snag sweep. TESTING.md additions. Context trim. B9 brief. Public Sovereign Lightning access enabled. |
-
-**Buffer pool (3 sessions):** SD1c · SD3d · SD4c
-
-**SD-block do-not-retry (seed list):**
-- DO NOT reuse upload credential UUID as cargo UUID — generate separately at Lighthouse layer
-- DO NOT return 402 at `GET /inbox/{token}` intake check — defer quota errors to upload attempt
-- DO NOT generate BIP-39 mnemonic from a separate entropy source to the keypair — same `crypto.getRandomValues()` call
-- DO NOT use Math.random() anywhere in Deed generation — `crypto.getRandomValues()` only
-- DO NOT use the word "anonymous" for Stripe-rail Silent Drop — it is private, not anonymous
-
----
-## SW-Opus-1 · 7 Sep 2026 — Platform API + white-label architecture (Opus, uncounted)
-
-Three-tier model locked (Citizen / Sovereign / API — Business + Enterprise demolished). Sovereign Teams flagged to SW-Opus-2. Rail model extended to API tier: identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) mutually exclusive per relationship; rail declared by principal, not inferred from payment method. Mandatory pre-payment disclosure of both irreversibles (account loss + prepaid balance loss) locked for four surfaces: user agreement, initial call/email, website. Model B (platform credit pool) selected — only pricing model that survives the anonymous rail. Two substrates: identity rail = server ledger; anonymous rail = client-held bearer Cashu credit tokens. Rate card versioned per product; term protection is identity-rail-only feature. API v1 features locked: capability discovery, OTS-confirmation webhook, acceptance + collection receipts ("proof of delivery" retired). API v2 features gated per dependency. MCP v1 tools locked: `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote` — agent-trust-domain constraint locked (MCP server handles ciphertext only, never plaintext). Policy-encoded transfers locked as Nutroot three-product forward commitment (not buildable Worker-side). BOLT12 locked as B9+ forward commitment; credit-issuance contract must accept arbitrary-amount pay-then-mint from day one. Sandbox: credential-limited, no time cap, both rails, `rfs_test_` prefix, non-anonymous with explicit "no real cargo" warning. BRIDGE v8.3.
+| Session | Date | Summary |
+|---------|------|---------|
+| Opus-2 | 29 Aug | B7 resequenced for LNbits/phoenixd. NB-series created. Blink cleanup. BRIDGE. |
+| SW-Opus-1 | 7 Sep | Three-tier model. Rail model. Model B. API v1 features. MCP v1 tools. Sandbox. BRIDGE v8.3. |
+| SW-Opus-2 | 7 Sep | Rate card v1.0. Credit blocks. £99/mo identity-API. Sovereign Teams. GTM reframe. BRIDGE v8.4. |
+| SW-Opus-3 | 7 Sep | DPA mandatory. AM role. Four-surface disclosure. GDPR framing. BRIDGE v8.5. |
+| SW4-Opus | 8 Sep | Webhook signing: Option B (stateless HMAC). `whsec_hash` removed. Dead-letter schema. BRIDGE v8.8. |
 
 ---
 
-## SW-Opus-2 · 7 Sep 2026 — Unit economics + rate card (Opus, uncounted)
+## SW block session plan — white-label + API build (complete SW1–SW8; SW9 next)
 
-Rate-card v1.0 locked (10 sat/transfer, 100 sat/GB, permanent-record 20 sat, OTS webhook free, capability discovery free — reference peg £50k BTC). Credit blocks: 10k sat dust floor, presets 10k/50k/200k/custom. GBP invoicing on identity rail: fixed reference rate at card publication, never live spot. Sovereign Teams: S £49/M £89/L £169, shared 100 GB pool, 1/3/12 cadence (Mullvad rule). Treasury: GBP in/out on identity rail, sats held phoenixd, sweep to Sparrow on ops reserve breach. GTM reframe: Bitcoin-native HNW + accountant, warm intro only, Legend+Share bundle load-bearing. BRIDGE v8.4.
+| Session | Commit | Summary |
+|---------|--------|---------|
+| SW1 | `9cb017d` | CF for SaaS — SaaS enablement, fallback origin, Worker route. |
+| SW2/SW2a | `1a1b518` | `api_auth.js` — HMAC-SHA256. `POST /api/v1/credential/issue` — quota KV, 402, both rails, no Supabase row on anonymous rail. |
+| SW3 | `d223249` | `refueler-badge.js` — BLAKE3/Cashu/Bitcoin pill, Shadow DOM, Paper/Carbon aware. |
+| SW4 | `452e7b8` | `webhook_reg.js` — POST/DELETE/GET `/api/v1/webhook/register`. `rfs_whsec_` issuance. 45 tests. |
+| SW4-patch | `9ba1ceb` | `whsec_hash` removed from KV; Option B HMAC derivation wired; `WEBHOOK_SIGNING_MASTER_KEY` set. |
+| SW4a | `9ba1ceb` | `webhook_delivery.js` — deliver + inline + DLQ + AE log + OTS/confirm triggers. |
+| SW4b | `9392aad` | Daily cron DLQ retry. `scheduled()` in `index.js`. `0 3 * * *` cron in `wrangler.toml`. |
+| SW5 | `8640606` | `receipts.js` — `cargo.accepted` + `cargo.discharged` (once-flag guarded). Pull endpoint. |
+| SW5a | `8c8d988` | Harbourmaster dashboard scaffold. Login gate. Transfers table from AE. Receipt badges. |
+| SW5b | `f955b51` | Capability card, webhook monitoring, hostname health cards. Dashboard live + authenticated. |
+| SW6 | `fb110b2` | `sandbox.js` — `rfs_test_` keypair, 25 identity / 10 anonymous test credits. Both rails smoke tested. |
+| SW6-fix | `fb110b2` | `btoa` em-dash crash — TextEncoder binary string fix. |
+| SW7 | `5adc573` | Per-client admin runbook. Rail declaration gate. Mandatory disclosure flow. Placeholders resolved. |
+| SW8 | `2894bab` | Daily hostname health check cron. `checkHostnameHealth()`. `hostname_health:latest` KV. Dashboard wired. |
+| SW9 | **next** | Snag sweep (`err()` trailing full-stop normalisation). TESTING.md additions. Context trim. B8 brief. Buffer review. |
 
----
-
-## SW-Opus-3 · 7 Sep 2026 — Identity-API commercial terms + SW build readiness (Opus, uncounted)
-
-Identity-API £99/mo flat. Professional £249/mo defined-not-built (banded on service level: priority support, custom webhook retry, AM time, bespoke DPA review). Both prices subject to upward review as Legend node costs attributed across products. Invoicing: access fee in advance + metered reconciliation same invoice in arrears — one invoice, two possible lines, second line £0.00 for virtually all v1 clients. Identity-rail revenue planned as access-fee-only; metered sat allowance = abuse ceiling not billing meter (realistic client: <£3/mo metered at v1.0 prices). DPA mandatory by default for all identity-rail clients; Refueler provides standard Art. 28 addendum; client-paper review gated to Professional band; engage solicitor before first identity-API client. GDPR: anonymous rail = controller-of-metadata under own privacy notice, not "outside UK GDPR." AM: founder for first 3–6 months; scope = onboarding, rail sign-off, DPA, incident notification, Raven canary explanation, quarterly review, rate-card notice; async/best-effort, no SLA; function named in agreement, personal name at onboarding only. Four-surface disclosure wording locked (both rails, eight blocks total); "ecash" → "signed digital tokens held by you" in all client copy; bracketed placeholders ([recovery credential], [anonymous standing-receive]) slot at SW7. Accountant-arrival rule: principal must declare rail before AP receives payment details. IT handover PDF session dropped by intent (folded into SW7). share-sessions.md SW table corrected to Master-Context. SW1 confirmed ready. BRIDGE v8.5.
-
----
-
-## SW4-Opus · 8 Sep 2026 — Webhook signing key architecture (Opus, uncounted)
-
-Options A/B/C/D evaluated against: KV-compromise resistance · anonymous-rail identity-freedom · dead-letter retry durability · implementation simplicity.
-
-**Option B chosen:** `rfs_whsec_ = HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)`. Encoded base58, prefixed `rfs_whsec_`. Issued once at registration. Re-derived statelessly at every delivery and cron retry. Never stored. `created_at` is rotation salt — re-registration produces a new whsec.
-
-**Options rejected:** A (encrypts secret-bearing ciphertext in KV, treated as permanently compromised; graceful-rotation advantage is precautionary-only for a notification key — not worth the posture cost). C (Worker never holds raw `rfs_sign_`; client-absent delivery/retry cannot sign — hard rejection). D (Option B plus redundant verify endpoint and client round-trip — no benefit).
-
-**Acknowledged costs:** Master-key rotation is fleet-disruptive (all clients re-register). Same consequence under Option A post-compromise — the only scenario that matters. `live_key` in dead-letter KV value is a documented exception to SW2c naming hardening (SW2c = key *names* in logs; values = opaque blobs; `rfs_live_` = semi-public handle, not a secret).
-
-**Decisions locked:**
-- New Worker secret: `WEBHOOK_SIGNING_MASTER_KEY`
-- `wh_config_` schema: `{ url, created_at, active }` — `whsec_hash` removed
-- Outbound header: `X-Refueler-Signature: t={unix_secs},v1={hmac_hex}`
-- Signed payload: `t + "." + raw_json_body`
-- Dead-letter key: `wh_dlq_{delivery_id}` (random UUID), TTL 7d, unsigned payload, re-sign at retry
-- SW4-patch required before SW4a: remove `whsec_hash`, wire derivation, scrub 5 BLAKE3 comment errors
-- SW5-Opus gate: receipt verifier audience (symmetric HMAC vs asymmetric Ed25519) mandatory before SW5 builds
-- Domain tag reserved: `"refueler.receipt.v1"` for SW5
-
-BRIDGE v8.8.
-
----
-
-## SW block session plan — white-label + API build (post-TG-block + TH-series, pre-B7)
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| SW1 | `9cb017d` | CF for SaaS setup — SaaS enablement, fallback origin, Worker route. |
-| SW2/SW2a | `1a1b518` | `api_auth.js` — HMAC-SHA256 + Option C sign-key hash. `POST /api/v1/credential/issue` — quota KV, 402 on exhaustion, AE logging, both rails, no Supabase row on anonymous rail. |
-| SW3 | `d223249` | `refueler-badge.js` — BLAKE3/Cashu/Bitcoin pill, Shadow DOM, Paper/Carbon aware, mounts via `data-refueler-badge`. Share-snag-1 prompted (index.njk drift). |
-| SW4 | `452e7b8` | `webhook_reg.js` — POST/DELETE/GET `/api/v1/webhook/register`. `rfs_whsec_` issuance (32-byte base58, shown once). `wh_config_{sha256hex}` KV schema. URL validation (HTTPS-only, no localhost, no private/loopback/link-local IP). API tier only. 45 tests. **Requires SW4-patch before SW4a.** |
-| SW4-patch | `9ba1ceb` | `webhook_reg.js`: removed `whsec_hash` from KV writes; replaced random-whsec generation with Option B HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`; switched derivation input to `apiKeyHash` (SIGN_DOMAIN_TAG → `refueler.webhook.v1.sign`); removed `deriveWhsec` and `toBase58` functions (superseded by `webhook_delivery.js`). `WEBHOOK_SIGNING_MASTER_KEY` Worker secret set. |
-| SW4a | `9ba1ceb` | Webhook delivery engine. `webhook_delivery.js` — `deliverWebhook` / `deliverWebhookInline` / `findApiKeyHashForUuid` / `deriveWhsecFromHash`. Dead-letter KV (7-day TTL). AE log per attempt. OTS + confirm triggers wired. `WEBHOOK_SIGNING_MASTER_KEY` set. whsec derivation switched to apiKeyHash (SIGN_DOMAIN_TAG bumped to `refueler.webhook.v1.sign`). |
-| SW4b | `9392aad` | Daily cron DLQ retry. `retryDeadLetterQueue` + `_deliverForCron` in `webhook_delivery.js`. `scheduled()` in `index.js`. `[triggers]` cron 03:00 UTC in `wrangler.toml`. |
-| SW5 | `8640606` | `receipts.js` — `buildSignedReceipt` + `emitReceipt` + `handleApiReceipt`. `cargo.accepted` wired at manifest-write (chunk 0). `cargo.discharged` wired at last-chunk serve, once-flag guarded. `GET /api/v1/receipt/:uuid/:type` pull endpoint. No Supabase row. No recipient metadata. |
-| SW5a | `1c909c6` / `8c8d988` | Harbourmaster dashboard scaffold. Login gate with HMAC auth. Transfers table from AE. Receipt badges. Paper/Carbon tokens. |
-| SW5b | `870c0c4` / `f955b51` | Capability card, webhook monitoring, hostname health cards. Token alignment to global.css vocabulary. Theme cookie (`rs-theme`, 30-day). Standalone dashboard confirmed — no Eleventy dependency. Post-build fixes: `verifyApiRequest`→`requireApiAuth`, `method` undefined in router, CORS origin, HMAC key encoding, `X-Api-Sign-Key` passthrough. Dashboard live and authenticated. |
-| SW6 | `fb110b2` | `sandbox.js` — `rfs_test_` keypair issuance, 25 identity credits / 10 anonymous test tokens, sandbox KV namespace (`sandbox_client_` / `sandbox_quota_` / `sandbox_meta_`), credential limit enforcement, dashboard sandbox card. Both rails smoke tested. |
-| SW6-fix | `fb110b2` | `btoa` em-dash crash in `generateTestTokens` — replaced with TextEncoder binary string approach. |
-| SW7 | Onboarding flow | Per-client admin runbook. CF custom-hostname → keypair → KV write → activation smoke test. Rail declaration gate. Mandatory disclosure flow. Bracketed placeholders resolved. |
-| SW8 | Daily cron | Hostname health checks → AE. `[triggers]` in wrangler.toml. |
-| SW9 | SW close | Snag sweep. TESTING.md additions. Context trim. B8 brief. Buffer review. |
-
-**SW block do-not-retry (SW4-Opus additions):**
-- DO NOT store `whsec_hash` in `wh_config_` KV — field removed at SW4-patch (Option B: derive, never store)
+**SW block do-not-retry:**
+- DO NOT store `whsec_hash` in `wh_config_` KV — Option B derives, never stores
 - DO NOT derive `rfs_whsec_` without `created_at` in HMAC message — required rotation salt
 - DO NOT re-sign dead-letter retries with original `t` — fresh current timestamp at every retry
-- DO NOT conflate SW2c (KV key-name hardening) with KV value content — `live_key` in DLQ value is a documented exception
-- DO NOT begin SW5 build without SW5-Opus deciding receipt verifier audience
-- DO NOT use patch files or find-and-replace instructions — always produce complete replacement files
-- DO NOT call deliverWebhook (ctx.waitUntil) from inside an existing waitUntil block — use deliverWebhookInline instead
-- SIGN_DOMAIN_TAG is 'refueler.webhook.v1.sign' — never revert to 'refueler.webhook.v1'
-- DO NOT re-emit cargo.discharged on re-download — receipt_discharged_guard:{uuid} KV once-flag is permanent
+- DO NOT call `deliverWebhook` (ctx.waitUntil) from inside an existing waitUntil block — use `deliverWebhookInline`
+- SIGN_DOMAIN_TAG is `refueler.webhook.v1.sign` — never revert to `refueler.webhook.v1`
+- DO NOT re-emit `cargo.discharged` on re-download — `receipt_discharged_guard:{uuid}` KV once-flag is permanent
 - DO NOT add BLAKE3 root to any receipt field — Merkle verification blocked until B9
 - DO NOT use Ed25519 or a published Worker key for receipts — symmetric HMAC only, load-bearing for anonymous rail
-- api_live_key / api_accepted_at / api_transfer_ref stored in manifest for API-tier only — never consumer tier
-- DO NOT strip rfs_sign_ prefix before importing as HMAC key — Worker uses full string via TextEncoder; dashboard must match
-- DO NOT derive X-Api-Sign-Key from liveKey string replacement — pass the actual signKey from user input
-- DO NOT hardcode dashboard CORS origin as dashboard.share.refueler.io — dashboard lives at refueler.io
-- DO NOT use bare `method` variable in router before it is declared — use `request.method`
-**SW6 do-not-retry:**
-- `btoa()` in Workers runtime is Latin-1 only — any char > U+00FF (em-dash, curly quotes, etc.) throws a runtime crash. Use TextEncoder → binary string → `btoa` for any JSON payload that might contain non-ASCII characters.
-- DO NOT use `workers.dev` URL for smoke tests in this repo — it routes to the Pages project (`refueler-share-site`), not the Worker. Always use `api.share.refueler.io`.
+- `api_live_key` / `api_accepted_at` / `api_transfer_ref` stored in manifest for API-tier only — never consumer tier
+- DO NOT strip `rfs_sign_` prefix before importing as HMAC key — Worker uses full string via TextEncoder
+- DO NOT derive `X-Api-Sign-Key` from liveKey string replacement — pass the actual signKey from user input
+- DO NOT hardcode dashboard CORS origin as `dashboard.share.refueler.io` — dashboard lives at `refueler.io`
+- `btoa()` in Workers runtime is Latin-1 only — use TextEncoder → binary string → `btoa` for non-ASCII
+- DO NOT use `workers.dev` URL for smoke tests — use `api.share.refueler.io`
 
-**SW block open snags (resolve at SW9):**
+**SW block open snag (resolve at SW9):**
 - `confirm` error messages use trailing full stops; `index.js` `err()` helper does not — normalise at SW9
 
 **Buffer pool (2 sessions):** SW2c · SW5c
 
 ---
 
-## B7 session plan — Lightning/LNbits + anonymous paid tier
+## SW-MCP-Opus-2 · 10 Sep 2026 (uncounted, planning)
 
-**All B7 sessions from S74 onwards gate on NB-4 (node live).**
+MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decisions O-6…O-11 locked; D-1 (filename) and O-2 (Teams × MCP) resolved. Key outcomes:
+
+- **Capabilities endpoint (O-6):** locked shape in spec §7.1. `credit_unit: "sat"`, `rails_available` = live state, `daily_reference_rate` block (floating, from KV), `rate_card` in integer credits, `limits` corrected to decimal GB. `schema_version: "cap.v1"`.
+- **Daily reference rate (O-8):** KV key `btc_ref_rate:current`, no TTL, staleness derived. Tier 1: manual + 3am CoinGecko + ±20% guard. Tier 2 (post-B7): 15-min node feed. Failure: serve last-good marked stale; never invent a rate; null `daily_reference_rate` block on cold start.
+- **Monthly allocation + reset (O-9):** lazy reset on next `credential/issue`. Identity-API 50k credits/mo + metered overage to ceiling → 402 `overage_ceiling`. Personal API 10k/mo hard stop → 402 `quota_exhausted`. Cancellation: cancel-at-period-end (default) or immediate zero (admin). Transfers persist to own `expiry_timestamp` regardless.
+- **Personal Sovereign API (O-7):** £49/mo, 10,000 credits/mo, hard stop, no webhook, no AM, DPA on request. KV plan value `personal_api`. Unlisted.
+- **D-1 filename fix (O-10):** Option B locked. `X-File-Name: "encrypted-payload"` constant placeholder to Worker. Real filename in URL fragment inside versioned base64url-JSON blob `{v,k,n,s}`. Applies to MCP send tool AND consumer upload/download in the same session (SW-MCP-4). Legacy fragment fallback during 90-day expiry window; remove after.
+- **Teams × MCP (O-2):** Sovereign Teams UI-only confirmed. Firms wanting MCP take a separate API credential relationship; their MCP server distributes internally. Refueler sees one key, one pool.
+- **Distribution (O-3):** npm package, Apache 2.0. Operator installs in own infrastructure, config via `.env`. No Anthropic marketplace.
+- **Anonymous balance copy (O-4):** `kind: "local_credits"`, `server_blind: true`. User copy: "You hold ~N credits locally — the server can't see this balance."
+- **Agent passphrase protocol (O-5):** sending agent computes `hashSecret()` locally, transmits hash only on a channel separate from `share_url`. Parity check: verify `hashSecret()` construction in `nut11.js` at SW-MCP-2 — do not assume bare SHA-256.
+- **Terminology (O-11):** "credits" in all user-facing output; precise terms (sats, ecash, Cashu, BDHKE) in implementation notes only. `_credits` suffix on all monetary output fields.
+- **Build sequence:** `SW9 → SW-MCP-W1 → SW-MCP-W2 → SW-MCP-1…8 → B8 → NB-2/NB-4 → B7 → SD-block`.
+- `refueler-mcp-spec-v1.md` deleted (superseded). `refueler-mcp-spec-v2.md` committed to repo root.
+
+---
+
+## SW-MCP block session plan
+
+| Session | Scope | Gate |
+|---------|-------|------|
+| **SW-MCP-W1** | Worker: `GET /api/v1/capabilities` locked shape; `btc_ref_rate:current` KV; Tier-1 manual override + 3am CoinGecko cron + ±20% guard; admin rate panel. | SW9 deployed |
+| **SW-MCP-W2** | Worker: monthly allocation + lazy reset; identity-API overage ceiling; Personal-API hard stop; `personal_api` plan value in KV. | SW-MCP-W1 |
+| **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. | SW-MCP-W1 |
+| **SW-MCP-2** | Local crypto module: chunk → AES-GCM → BLAKE3 → blinded; fragment grammar v1 helper; `hashSecret()` parity check; unit tests. | SW-MCP-1 |
+| **SW-MCP-3** | `refueler_quote` + `refueler_balance`; rate-card cache + degrade; credits vocabulary. | SW-MCP-2 |
+| **SW-MCP-4** | `refueler_send_file` E2E; D-1 filename fix for MCP AND consumer frontend (both in this session); full error matrix incl. `overage_ceiling`. | SW-MCP-2 (overage: W2) |
+| **SW-MCP-5** | `refueler_check_transfer`; state derivation; optional single re-check. | SW-MCP-4 |
+| **SW-MCP-6** | Demo hardening: scripted happy path, failure-mode rehearsal, on-stage honesty script. | SW-MCP-5 |
+| **SW-MCP-7** | Anonymous-rail send through the MCP (credit-block spend). | **B7 / NB-4** |
+| **SW-MCP-8** | npm package distribution, Apache 2.0; trust-boundary README; no Anthropic marketplace. | SW-MCP-5 |
+
+---
+
+## SD-block — Silent Drop (post-B8, post-NB-4)
+
+**S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) required — no temp auth builds.
+
+**Prerequisites:** B8 complete. NB-4 (node live). 7-day friend-group soft launch gates public Sovereign access.
 
 | Session | Label | Scope |
 |---------|-------|-------|
-| S74 | Lightning adapter | `worker/src/lightning.js` — `createInvoice()` / `getInvoiceStatus()` over LNbits REST. Unit tests. |
-| S74a–S74c | Invoice creation I–III | `POST /subscription/lightning`. LNbits BOLT11. KV write 25h TTL. Unit tests. Smoke test. |
-| S75–S75c | Webhook endpoint I–IV | `POST /webhook/lightning`. KV lookup. Re-verify via authenticated GET. Settled-flag dedup. Integration test. |
-| S76–S76d | Credential issuance I–V | NUT-00 BDHKE on settlement. KV 10-min TTL. Poll endpoint. Tier-cap enforcement. Unit tests. |
-| S77–S77b | Upgrade page rail split I–III | Two-rail structure. Lightning + Stripe cards visible. Visual parity. |
-| S78–S79a | Frontend Lightning flow I–VI | QR. BOLT11 copy. Countdown. Live GBP/sats rate. Credential poll. Receipt → browser memory. Error states. Smoke test. |
+| SD1–SD1b | Lighthouse architecture | KV schema. Opaque token → inbox key. Worker endpoints. UUID isolation. |
+| SD2–SD2b | Sender upload flow | Worker validates token, one-time credential, cargo arrived AE event. |
+| SD3–SD3c | Harbourmaster auth + Deed | NUT-11 Mode 2 login. Keypair + BIP-39 mnemonic. Recovery flow. |
+| SD4–SD4b | Harbourmaster dashboard I–III + mid-block audit | Receipt ledger. Quay management. **Mid-block privacy + security audit at SD4b.** |
+| SD5–SD5a | Notification + renewal | Polling + Business webhook. SimpleX stub card (B9). Renewal banner. |
+| SD6–SD6a | Soft launch + findings | 7-day friend-group observation. P0/P1 fixes. |
+| SD7–SD7a | Source-protection copy + final audit | Gated: SD shipped + VPN scope stated. Full privacy + security audit. |
+| SD8 | SD close | Snag sweep. Context trim. B9 brief. Public Sovereign Lightning access enabled. |
+
+**SD do-not-retry:**
+- DO NOT reuse upload credential UUID as cargo UUID — generate separately at Lighthouse layer
+- DO NOT return 402 at `GET /inbox/{token}` — defer quota errors to upload attempt
+- DO NOT use Math.random() in Deed generation — `crypto.getRandomValues()` only
+- DO NOT use "anonymous" for Stripe-rail Silent Drop — it is private, not anonymous
+
+**Buffer pool (3 sessions):** SD1c · SD3d · SD4c
+
+---
+
+## B7 session plan — Lightning/LNbits + anonymous paid tier
+
+**All B7 sessions from S74 gate on NB-4 (node live).**
+
+| Session | Label | Scope |
+|---------|-------|-------|
+| S74–S74c | Lightning adapter + Invoice creation I–III | `worker/src/lightning.js`. `POST /subscription/lightning`. LNbits BOLT11. KV 25h TTL. |
+| S75–S75c | Webhook endpoint I–IV | `POST /webhook/lightning`. KV lookup. Re-verify GET. Settled-flag dedup. Integration test. |
+| S76–S76d | Credential issuance I–V | NUT-00 BDHKE on settlement. KV 10-min TTL. Poll endpoint. Tier cap. Unit tests. |
+| S77–S77b | Upgrade page rail split I–III | Two-rail structure. Lightning + Stripe cards. Visual parity. |
+| S78–S79a | Frontend Lightning flow I–VI | QR. BOLT11 copy. Countdown. Live GBP/credits rate. Credential poll. Error states. |
 | S80–S80b | Payment privacy table I–III | JSON data. Eleventy partial. Collapsible on upgrade page. |
 | S81–S81b | Dashboard Lightning cards I–III | AE datapoint at settlement. Stub cards. Design pass. Unit tests. |
 | S82–S82a | KV Lightning admin toggle | `lightning_available` flag. Dashboard toggle. Graceful degradation. |
-| S83–S83b | Renewal banner + paid tier activation | 7-day pre-expiry banner. Stripe smoke. Lightning smoke. Both rails confirmed live. |
-| S84–S84d | B7 security audit I–V | Invoice expiry. KV races. Credential farming. Webhook replay. Double-issuance. Findings + claim rulings. |
-| S85 | LNbits ops verification | Post-node-live sanity: wallet API keys, cloudflared, Tor onions. |
-| S86 | LNURL-withdraw gift architecture | Design document only. No code. |
-| S87 | LNbits skinning scope | Keep/strip/brand decisions. Paper/Carbon token mapping. No code. |
-| S91–S91a | CI Level 2 I–II | Integration suite in GitHub Actions. Lightning mock. All passing in CI. |
-| S92 | Notes article 6 prep | "Paying anonymously for file transfer" — structure + copy. No code. Unlocks after node live. |
-| S93–S95 | B7 snag sweeps I–III | Theme toggle in modals. `receiver_ab` AE routing fix. Manifest-field minimalism. UUID/fragment entropy pre-audit. |
+| S83–S83b | Renewal banner + paid tier activation | 7-day pre-expiry banner. Both rails confirmed live. |
+| S84–S84d | B7 security audit I–V | Invoice expiry. KV races. Credential farming. Webhook replay. Double-issuance. |
+| S85–S87 | LNbits ops verification + LNURL-withdraw + LNbits skinning | Post-node sanity. Gift architecture design. Paper/Carbon decisions. |
+| S91–S92 | CI Level 2 + Article 6 prep | Integration suite in GitHub Actions. "Paying anonymously for file transfer" structure. |
+| S93–S95 | B7 snag sweeps I–III | Theme toggle in modals. `receiver_ab` AE routing fix. Manifest-field minimalism. |
 | S96 | Context file maintenance | `Share-Master-Context.md` split → working memory (≤350L) + `Share-Archive.md`. |
-| S100 | B7 close | Final snag sweep. Context files at target. B8 brief. SW block brief confirmed. |
+| S100 | B7 close | Final snag sweep. Context files at target. B8 brief. |
 
 **Buffer pool (5 sessions):** S74d · S76e · S84e · S85b · S100a
 
@@ -480,39 +342,10 @@ BRIDGE v8.8.
 
 ---
 
-## Locked block sequence (revised AP-10 · 3 Sep 2026)
+## Locked block sequence (updated Share-MCP-Opus-2 · 10 Sep 2026)
 
-`NB-1 → S89/S90 → snag sweeps → S88 → TG-block → TH-series → SW → B8 → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
+`SW9 → SW-MCP → B8 → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
 
-(SYNC-1, RU-block, HQ-series, S88, S89/S90 complete. TG-2 ✓ TG-3 ✓ TG-3a ✓ TG-4 ✓. Next: TG-5 — tests + smoke.)*
-
----
-
-## Opus-2 · 29 Aug 2026 (uncounted)
-
-B7 resequenced for LNbits/phoenixd. NB-series node bootstrap block created. S74–S76 rewritten for LNbits REST. Webhook model corrected (unsigned callback → authenticated GET re-verify). Phoenixd→LND trigger locked. Instance topology confirmed. SD-block placed post-HQ, pre-SW. SYNC-1 inserted. Blink cleanup checklist produced.
-
-## TH-Opus-3a · Sep 2026 (uncounted, design)
-
-Committed-value stress-test. Locked Option B: commitment = SHA-256(blake3_root ‖ seal_nonce).
-Dedicated 16-byte fragment seal_nonce chosen over reused AES-GCM IV (entanglement risk).
-blake3_root re-derived by Legend (never shipped). Hashlock: x = commitment, H = SHA-256(x);
-two-phase `after` (real anchor height, no estimation). Upgrade path moves to Legend — amends
-TH-Opus-1, drops GET /timestamp/upgrade from Share Worker. No TH-Opus-3b. TH-1 = 3
-confirmations (fragment wiring, calendar egress, .ots byte layout).
-
-## SW-Opus-2 — Unit economics + Sovereign Teams + GTM (7 Sep 2026)
-Mode: Opus · No code · BRIDGE v8.4
-
-**Locked:**
-- Rate card v1.0: sat figures per action across Share / Legend / Pass. OTS webhook bundled free.
-- Rate-card governance: £100k BTC 30-day trailing average = first mandatory review; ±40% GBP drift = re-version trigger.
-- GBP invoicing policy: fixed reference rate at version publication, client never sees sats, no conversion exposure.
-- Credit blocks: 10k/50k/200k sats + Custom (≥10k); 10k sat dust floor on top-up only; arbitrary-amount contract invariant confirmed.
-- Margin model: identity-API minimum £99/mo access fee + metered. Pure metered not viable for identity rail.
-- Treasury: hold sats, pay GBP from GBP, sweep above ops reserve only. CGT review with accountant ongoing.
-- Sovereign Teams: shared 100 GB pool, three bands (S/M/L), cross-product Opus in refueler.io project before build (SW-Teams-1).
-- GTM: HNW + accountant (not "family office"), warm-intro only, Legend+Share bundle, closed-door positioning.
-- Rate-card notification wording: both rails locked.
+*(SW-MCP anonymous-rail tail (SW-MCP-7) waits for B7/NB-4 — does not block B8.)*
 
 *"Nothing stops this train."*
