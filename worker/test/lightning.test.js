@@ -1,8 +1,11 @@
 /**
  * lightning.test.js — unit tests for worker/src/lightning.js
  *
+ * Updated SW9: Blink discontinued Aug 2026. All Blink tests replaced with
+ * LNbits equivalents. Backend default is now 'lnbits'.
+ *
  * Mocks: fetch (vi.stubGlobal), STATUS_KV (plain object stub)
- * No live network calls. No live Blink API.
+ * No live network calls. No live LNbits instance.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -16,13 +19,13 @@ const MOCK_BOLT11 =
   'lnbc1000n1pjktest0pp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdqqcqpjsp5yz';
 const MOCK_PAYMENT_HASH = 'aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344';
 
-/** Minimal env for Blink backend */
+/** Minimal env for LNbits backend */
 function makeEnv(overrides = {}) {
   const kvStore = new Map();
   return {
-    LIGHTNING_BACKEND: 'blink',
-    BLINK_WALLET_ID: 'test-wallet-id',
-    BLINK_API_KEY: 'test-api-key',
+    LIGHTNING_BACKEND: 'lnbits',
+    LNBITS_URL:        'https://lnbits.example.com',
+    LNBITS_API_KEY:    'test-lnbits-api-key',
     STATUS_KV: {
       get: vi.fn(async (key, type) => {
         const val = kvStore.get(key);
@@ -32,48 +35,39 @@ function makeEnv(overrides = {}) {
       put: vi.fn(async (key, value) => {
         kvStore.set(key, value);
       }),
-      _store: kvStore, // expose for assertions
+      _store: kvStore, // exposed for assertions
     },
     ...overrides,
   };
 }
 
-/** Build a Blink lnInvoiceCreate success response */
-function blinkCreateSuccess() {
+/** Build a successful LNbits POST /api/v1/payments response */
+function lnbitsCreateSuccess() {
   return {
-    data: {
-      lnInvoiceCreate: {
-        invoice: {
-          paymentRequest: MOCK_BOLT11,
-          paymentHash: MOCK_PAYMENT_HASH,
-        },
-        errors: [],
-      },
-    },
+    payment_hash:    MOCK_PAYMENT_HASH,
+    payment_request: MOCK_BOLT11,
+    checking_id:     MOCK_PAYMENT_HASH,
+    lnurl_response:  null,
   };
 }
 
-/** Build a Blink lnInvoiceCreate error response */
-function blinkCreateError(message = 'Insufficient balance') {
+/** Build a successful LNbits GET /api/v1/payments/{hash} response — paid */
+function lnbitsInvoicePaid() {
   return {
-    data: {
-      lnInvoiceCreate: {
-        invoice: null,
-        errors: [{ message }],
-      },
-    },
+    paid:         true,
+    payment_hash: MOCK_PAYMENT_HASH,
+    amount:       5000,
+    memo:         'Refueler Share — max monthly',
   };
 }
 
-/** Build a Blink lnInvoice query response */
-function blinkInvoiceQuery(paymentStatus = 'PAID') {
+/** Build a successful LNbits GET /api/v1/payments/{hash} response — pending */
+function lnbitsInvoicePending() {
   return {
-    data: {
-      lnInvoice: {
-        paymentHash: MOCK_PAYMENT_HASH,
-        paymentStatus,
-      },
-    },
+    paid:         false,
+    payment_hash: MOCK_PAYMENT_HASH,
+    amount:       5000,
+    memo:         'Refueler Share — max monthly',
   };
 }
 
@@ -85,6 +79,7 @@ function mockFetch(body, { ok = true, status = 200 } = {}) {
       ok,
       status,
       statusText: ok ? 'OK' : 'Bad Request',
+      text: async () => JSON.stringify(body),
       json: async () => body,
     })),
   );
@@ -99,12 +94,12 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// createInvoice — Blink backend
+// createInvoice — LNbits backend
 // ---------------------------------------------------------------------------
 
-describe('createInvoice (blink)', () => {
+describe('createInvoice (lnbits)', () => {
   it('returns { bolt11, paymentHash, expiresAt } on success', async () => {
-    mockFetch(blinkCreateSuccess());
+    mockFetch(lnbitsCreateSuccess());
     const env = makeEnv();
 
     const result = await createInvoice(
@@ -113,20 +108,19 @@ describe('createInvoice (blink)', () => {
     );
 
     expect(result).toMatchObject({
-      bolt11: MOCK_BOLT11,
+      bolt11:      MOCK_BOLT11,
       paymentHash: MOCK_PAYMENT_HASH,
     });
     expect(typeof result.expiresAt).toBe('string');
-    // expiresAt should be a valid ISO-8601 date in the future
     expect(new Date(result.expiresAt).getTime()).toBeGreaterThan(Date.now());
   });
 
   it('writes KV record keyed by paymentHash', async () => {
-    mockFetch(blinkCreateSuccess());
+    mockFetch(lnbitsCreateSuccess());
     const env = makeEnv();
 
     await createInvoice(
-      { tier: 'creative', period: '3month', amountSats: 2000, expirySeconds: 1800 },
+      { tier: 'sovereign', period: '3month', amountSats: 2000, expirySeconds: 1800 },
       env,
     );
 
@@ -134,19 +128,20 @@ describe('createInvoice (blink)', () => {
     const [key, value] = env.STATUS_KV.put.mock.calls[0];
     expect(key).toBe(`lightning:invoice:${MOCK_PAYMENT_HASH}`);
     const parsed = JSON.parse(value);
-    expect(parsed).toMatchObject({ tier: 'creative', period: '3month', settled: false });
+    expect(parsed).toMatchObject({ tier: 'sovereign', period: '3month', settled: false });
+    expect(typeof parsed.created_at).toBe('string');
   });
 
-  it('throws when Blink returns errors array', async () => {
-    mockFetch(blinkCreateError('Wallet not found'));
+  it('throws on non-200 HTTP response from LNbits', async () => {
+    mockFetch({ detail: 'Bad auth' }, { ok: false, status: 401 });
     const env = makeEnv();
 
     await expect(
       createInvoice({ tier: 'max', period: 'monthly', amountSats: 5000, expirySeconds: 3600 }, env),
-    ).rejects.toThrow('Wallet not found');
+    ).rejects.toThrow('401');
   });
 
-  it('throws on non-200 HTTP response from Blink', async () => {
+  it('throws on 503 from LNbits', async () => {
     mockFetch({}, { ok: false, status: 503 });
     const env = makeEnv();
 
@@ -155,8 +150,8 @@ describe('createInvoice (blink)', () => {
     ).rejects.toThrow('503');
   });
 
-  it('sends correct GraphQL mutation to Blink API URL', async () => {
-    mockFetch(blinkCreateSuccess());
+  it('sends correct POST to LNbits API with X-API-KEY header', async () => {
+    mockFetch(lnbitsCreateSuccess());
     const env = makeEnv();
 
     await createInvoice(
@@ -165,78 +160,95 @@ describe('createInvoice (blink)', () => {
     );
 
     const [url, options] = fetch.mock.calls[0];
-    expect(url).toBe('https://api.blink.sv/graphql');
+    expect(url).toBe('https://lnbits.example.com/api/v1/payments');
     expect(options.method).toBe('POST');
-    expect(options.headers['X-API-KEY']).toBe('test-api-key');
+    expect(options.headers['X-API-KEY']).toBe('test-lnbits-api-key');
+    expect(options.headers['Content-Type']).toBe('application/json');
 
     const sentBody = JSON.parse(options.body);
-    expect(sentBody.variables.input.walletId).toBe('test-wallet-id');
-    expect(sentBody.variables.input.amount).toBe(10000);
-    expect(sentBody.variables.input.expiresIn).toBe(7200);
+    expect(sentBody.out).toBe(false);
+    expect(sentBody.amount).toBe(10000);
+    expect(sentBody.expiry).toBe(7200);
+    expect(sentBody.memo).toContain('max');
+    expect(sentBody.memo).toContain('yearly');
+  });
+
+  it('throws when LNBITS_URL is missing', async () => {
+    const env = makeEnv({ LNBITS_URL: undefined });
+
+    await expect(
+      createInvoice({ tier: 'max', period: 'monthly', amountSats: 5000, expirySeconds: 3600 }, env),
+    ).rejects.toThrow('LNBITS_URL and LNBITS_API_KEY must be set');
+  });
+
+  it('throws when LNBITS_API_KEY is missing', async () => {
+    const env = makeEnv({ LNBITS_API_KEY: undefined });
+
+    await expect(
+      createInvoice({ tier: 'max', period: 'monthly', amountSats: 5000, expirySeconds: 3600 }, env),
+    ).rejects.toThrow('LNBITS_URL and LNBITS_API_KEY must be set');
   });
 });
 
 // ---------------------------------------------------------------------------
-// getInvoiceStatus — Blink backend
+// getInvoiceStatus — LNbits backend
 // ---------------------------------------------------------------------------
 
-describe('getInvoiceStatus (blink)', () => {
-  it('returns { settled: true, tier, period } when Blink reports PAID', async () => {
-    // Pre-populate KV as createInvoice would have done
+describe('getInvoiceStatus (lnbits)', () => {
+  it('returns { settled: true, tier, period } when LNbits reports paid', async () => {
     const env = makeEnv();
     await env.STATUS_KV.put(
       `lightning:invoice:${MOCK_PAYMENT_HASH}`,
       JSON.stringify({ tier: 'max', period: 'monthly', settled: false, created_at: new Date().toISOString() }),
     );
 
-    mockFetch(blinkInvoiceQuery('PAID'));
+    mockFetch(lnbitsInvoicePaid());
 
     const result = await getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env);
 
     expect(result).toEqual({ settled: true, tier: 'max', period: 'monthly' });
   });
 
-  it('returns { settled: false, tier, period } when Blink reports PENDING', async () => {
+  it('returns { settled: false, tier, period } when LNbits reports pending', async () => {
     const env = makeEnv();
     await env.STATUS_KV.put(
       `lightning:invoice:${MOCK_PAYMENT_HASH}`,
-      JSON.stringify({ tier: 'creative', period: '3month', settled: false, created_at: new Date().toISOString() }),
+      JSON.stringify({ tier: 'sovereign', period: '3month', settled: false, created_at: new Date().toISOString() }),
     );
 
-    mockFetch(blinkInvoiceQuery('PENDING'));
+    mockFetch(lnbitsInvoicePending());
 
     const result = await getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env);
 
-    expect(result).toEqual({ settled: false, tier: 'creative', period: '3month' });
+    expect(result).toEqual({ settled: false, tier: 'sovereign', period: '3month' });
   });
 
   it('returns null when paymentHash is not in KV', async () => {
     const env = makeEnv();
-    // KV empty — no fetch should happen
-    mockFetch(blinkInvoiceQuery('PAID'));
+    // KV empty — fetch should never be called
+    mockFetch(lnbitsInvoicePaid());
 
     const result = await getInvoiceStatus({ paymentHash: 'unknown-hash-000' }, env);
 
     expect(result).toBeNull();
-    // fetch should not have been called — we short-circuit on missing KV record
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('returns null when Blink returns no lnInvoice for this hash', async () => {
+  it('returns null when LNbits returns 404 for this hash', async () => {
     const env = makeEnv();
     await env.STATUS_KV.put(
       `lightning:invoice:${MOCK_PAYMENT_HASH}`,
       JSON.stringify({ tier: 'max', period: 'monthly', settled: false, created_at: new Date().toISOString() }),
     );
 
-    mockFetch({ data: { lnInvoice: null } });
+    mockFetch({ detail: 'Payment not found' }, { ok: false, status: 404 });
 
     const result = await getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env);
 
     expect(result).toBeNull();
   });
 
-  it('throws on non-200 HTTP response from Blink', async () => {
+  it('throws on non-200 non-404 HTTP response from LNbits', async () => {
     const env = makeEnv();
     await env.STATUS_KV.put(
       `lightning:invoice:${MOCK_PAYMENT_HASH}`,
@@ -248,6 +260,23 @@ describe('getInvoiceStatus (blink)', () => {
     await expect(
       getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env),
     ).rejects.toThrow('429');
+  });
+
+  it('sends GET to correct LNbits endpoint with X-API-KEY', async () => {
+    const env = makeEnv();
+    await env.STATUS_KV.put(
+      `lightning:invoice:${MOCK_PAYMENT_HASH}`,
+      JSON.stringify({ tier: 'max', period: 'monthly', settled: false, created_at: new Date().toISOString() }),
+    );
+
+    mockFetch(lnbitsInvoicePaid());
+
+    await getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe(`https://lnbits.example.com/api/v1/payments/${MOCK_PAYMENT_HASH}`);
+    expect(options.method).toBe('GET');
+    expect(options.headers['X-API-KEY']).toBe('test-lnbits-api-key');
   });
 });
 
@@ -274,23 +303,34 @@ describe('unknown LIGHTNING_BACKEND', () => {
 });
 
 // ---------------------------------------------------------------------------
-// LNbits stubs — confirm they throw, not silently fail
+// Missing secrets — both functions guard before any network call
 // ---------------------------------------------------------------------------
 
-describe('lnbits stubs', () => {
-  it('createInvoice throws "not yet implemented"', async () => {
-    const env = makeEnv({ LIGHTNING_BACKEND: 'lnbits' });
+describe('missing secrets guard', () => {
+  it('createInvoice throws before fetch when LNBITS_URL missing', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const env = makeEnv({ LNBITS_URL: undefined });
 
     await expect(
       createInvoice({ tier: 'max', period: 'monthly', amountSats: 5000, expirySeconds: 3600 }, env),
-    ).rejects.toThrow('LNbits backend not yet implemented');
+    ).rejects.toThrow('LNBITS_URL and LNBITS_API_KEY must be set');
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('getInvoiceStatus throws "not yet implemented"', async () => {
-    const env = makeEnv({ LIGHTNING_BACKEND: 'lnbits' });
+  it('getInvoiceStatus throws before fetch when LNBITS_API_KEY missing', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const env = makeEnv({ LNBITS_API_KEY: undefined });
+    // Put a KV record so we'd get past the null-check if secrets weren't guarded
+    await env.STATUS_KV.put(
+      `lightning:invoice:${MOCK_PAYMENT_HASH}`,
+      JSON.stringify({ tier: 'max', period: 'monthly', settled: false, created_at: new Date().toISOString() }),
+    );
 
     await expect(
       getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env),
-    ).rejects.toThrow('LNbits backend not yet implemented');
+    ).rejects.toThrow('LNBITS_URL and LNBITS_API_KEY must be set');
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

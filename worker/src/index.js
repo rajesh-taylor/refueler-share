@@ -2,7 +2,7 @@
 import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyCredential } from './nut00.js';
 import { verifyChunkHash } from './blake3.js';
-import { getManifest, putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
+import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 import { verifyStripeWebhook, createCheckoutSession } from './stripe.js';
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
@@ -25,99 +25,14 @@ import { handleWebhookStatus }  from './handlers/webhook_status.js';
 import { handleHostnameHealth } from './handlers/hostname_health.js';
 // SW6: sandbox environment
 import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleSandboxSpend, isSandboxRequest, consumeSandboxCredit, lookupSandboxClient } from './sandbox.js';
-// ─────────────────────────────────────────────────────────────────────────────
-// Upload enforcement constants (S39)
-// ─────────────────────────────────────────────────────────────────────────────
-const CHUNK_SIZE_MAX    = 10 * 1024 * 1024; // 10 MB hard cap per chunk
-const MANIFEST_SIZE_MAX = 64 * 1024;        // 64 KB manifest ceiling (S42)
+// SW9: shared utilities extracted from index.js
+import {
+  UUID_RE, CHUNK_SIZE_MAX, MANIFEST_SIZE_MAX, MIME_DENYLIST,
+  corsHeaders, safeGetManifest, supabaseFetch,
+  json, err, addCors, parseRange,
+} from './utils.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Manifest fetch with size cap (S42)
-//
-// getManifest() is imported from manifest.js and reads the raw R2 object.
-// An adversary-supplied or corrupted manifest larger than 64 KB would consume
-// unnecessary memory and could cause unbounded JSON.parse allocation.
-// This wrapper fetches the R2 object directly for a size check before delegating
-// to the imported helper, returning null (not found) or throwing on oversize.
-// ─────────────────────────────────────────────────────────────────────────────
-async function safeGetManifest(bucket, uuid, env) {
-  const key = `${uuid}/manifest.json`;
-  let obj;
-  try {
-    obj = await bucket.get(key);
-  } catch (e) {
-    console.error('R2 manifest get error:', e);
-    return { manifest: null, oversize: false };
-  }
-  if (!obj) return { manifest: null, oversize: false };
-
-  if ((obj.size ?? 0) > MANIFEST_SIZE_MAX) {
-    console.error(`Manifest oversize: ${obj.size} bytes for ${uuid}`);
-    return { manifest: null, oversize: true };
-  }
-
-  // Delegate to the authoritative helper for parsing and field normalisation.
-  const manifest = await getManifest(bucket, uuid);
-  return { manifest, oversize: false };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MIME type denylist (S40)
-//
-// Rejects upload requests whose Content-Type header declares an
-// execution-capable file type with no legitimate anonymous transfer use.
-//
-// This gate checks declared intent only — the Worker receives AES-GCM
-// ciphertext and cannot inspect payload content. A cooperative client
-// sets Content-Type correctly via the browser File API. A malicious client
-// can declare any header; the denylist is a signal gate, not a sandbox.
-//
-// Denylisted types:
-//   application/x-msdownload   — Windows PE executables (.exe, .dll)
-//   application/x-executable   — ELF binaries (Linux/macOS native executables)
-//   application/x-sh           — Shell scripts (.sh) — execution-capable on any Unix host
-//   application/x-bat          — Windows batch files (.bat, .cmd)
-//   text/x-shellscript         — Shell scripts (alternate MIME, same risk)
-//   application/x-php          — PHP source — execution-capable on any PHP host
-//
-// Permitted by deliberate decision:
-//   application/java-archive (.jar) — legitimate developer artefact;
-//   requires JVM invocation, not passive execution.
-// ─────────────────────────────────────────────────────────────────────────────
-const MIME_DENYLIST = new Set([
-  'application/x-msdownload',
-  'application/x-executable',
-  'application/x-sh',
-  'application/x-bat',
-  'text/x-shellscript',
-  'application/x-php',
-]);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// UUID validation (S41)
-//
-// RFC 4122 format: 8-4-4-4-12 lowercase hex groups separated by hyphens.
-// The router regex [0-9a-f-]{36} already blocks non-hex/non-hyphen chars and
-// enforces length, but accepts structurally invalid strings (e.g. all hyphens).
-// This stricter check ensures the captured group is a valid UUID before any
-// R2, Supabase, or KV operation is attempted.
-// ─────────────────────────────────────────────────────────────────────────────
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CORS
-// ─────────────────────────────────────────────────────────────────────────────
-function corsHeaders(request) {
-  const origin = request.headers.get('Origin') ?? '';
-  const allowed = ['https://refueler.io'];
-  const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
-  return {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Api-Sign-Key, X-Transfer-Ref',
-    'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp',
-  };
-}
+// MIME_DENYLIST, UUID_RE, corsHeaders — imported from ./utils.js
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Analytics Engine
@@ -917,7 +832,7 @@ async function handleApiCredentialIssue(request, env) {
       console.error('api_credential_issue: MINT_API_PRIVATE_KEY not provisioned');
       return new Response(
         JSON.stringify({
-          error: 'Anonymous rail token issuance not yet available. Use identity rail or contact support.',
+          error: 'Anonymous rail token issuance not yet available — use identity rail or contact support',
           code:  'anon_rail_unavailable',
         }),
         { status: 503, headers: { 'Content-Type': 'application/json' } }
@@ -1421,7 +1336,7 @@ async function handleUpload(request, env, ctx, uuid, chunkIndex) {
 
     if (hasTidalHeaders && !isTidalPermitted(resolvedTier)) {
       logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 403, errorMsg: 'tidal_tier_gate' });
-      return err(403, 'Availability scheduling requires a paid subscription.');
+      return err(403, 'Availability scheduling requires a paid subscription');
     }
 
     let availableFromTs = null;
@@ -1812,13 +1727,13 @@ async function handleTimestampSubmit(request, env, ctx) {
 
   const manifestTier = (manifest.tier ?? 'free').toLowerCase();
   if (manifestTier === 'free' || manifestTier === 'citizen') {
-    return err(403, 'Permanent record requires a Sovereign subscription.');
+    return err(403, 'Permanent record requires a Sovereign subscription');
   }
 
   if (!isTimestampEligible(manifest)) {
     const state = getTimestampState(manifest);
-    if (manifest.consumed === true) return err(410, 'Transfer has been destroyed.');
-    if (manifest.upload_complete !== true) return err(409, 'Upload not yet complete.');
+    if (manifest.consumed === true) return err(410, 'Transfer has been destroyed');
+    if (manifest.upload_complete !== true) return err(409, 'Upload not yet complete');
     return err(409, `Timestamp already in state: ${state}`);
   }
 
@@ -1880,19 +1795,19 @@ async function handleTimestampSeal(request, env, uuid) {
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize) return err(502, 'Transfer manifest exceeds size limit');
   if (!manifest) return err(404, 'Transfer not found');
-  if (manifest.consumed === true) return err(410, 'Transfer has been destroyed.');
+  if (manifest.consumed === true) return err(410, 'Transfer has been destroyed');
 
   const state = getTimestampState(manifest);
-  if (state === 'none') return err(404, 'No date seal for this transfer.');
+  if (state === 'none') return err(404, 'No date seal for this transfer');
 
   let obj;
   try {
     obj = await env.BUCKET.get(`${uuid}/date-seal.ots.enc`);
   } catch (e) {
     console.error('TH-2: R2 get date-seal.ots.enc failed:', e);
-    return err(502, 'Could not retrieve date seal.');
+    return err(502, 'Could not retrieve date seal');
   }
-  if (!obj) return err(404, 'Date seal not found.');
+  if (!obj) return err(404, 'Date seal not found');
 
   const buf = await obj.arrayBuffer();
 
@@ -1917,7 +1832,7 @@ async function handleDeleteTransfer(request, env, uuid) {
   }
 
   if (!authHeader.startsWith('Bearer ')) {
-    return err(401, 'Authorization required.');
+    return err(401, 'Authorization required');
   }
 
   const bearerToken = authHeader.slice(7);
@@ -1927,12 +1842,12 @@ async function handleDeleteTransfer(request, env, uuid) {
   if (!manifest) return err(404, 'Transfer not found');
 
   if (manifest.consumed === true) {
-    return err(410, 'Transfer has already been destroyed.');
+    return err(410, 'Transfer has already been destroyed');
   }
 
   const { valid, uuid: tokenUuid } = await verifyDownloadToken(bearerToken, env.MINT_PRIVATE_KEY);
   if (!valid || tokenUuid !== uuid) {
-    return err(403, 'Not authorised to destroy this transfer.');
+    return err(403, 'Not authorised to destroy this transfer');
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -1978,7 +1893,7 @@ async function handleDeleteTransfer(request, env, uuid) {
 async function handleOwnerDelete(request, env, uuid) {
   const adminKey = request.headers.get('X-Admin-Key');
   if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised.');
+    return err(401, 'Unauthorised');
   }
 
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
@@ -1986,7 +1901,7 @@ async function handleOwnerDelete(request, env, uuid) {
   if (!manifest) return err(404, 'Transfer not found');
 
   if (manifest.consumed === true) {
-    return err(410, 'Transfer has already been destroyed.');
+    return err(410, 'Transfer has already been destroyed');
   }
 
   const nowSeconds  = Math.floor(Date.now() / 1000);
@@ -2239,51 +2154,4 @@ async function upsertSubscriber(env, stripeCustomerId, email, tier, status, curr
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Supabase fetch
-// ─────────────────────────────────────────────────────────────────────────────
-async function supabaseFetch(env, method, path, body = null, extraHeaders = {}) {
-  const opts = {
-    method,
-    headers: {
-      'apikey':        env.SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type':  'application/json',
-      ...extraHeaders,
-    },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  return fetch(`${env.SUPABASE_URL}${path}`, opts);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Response helpers
-// ─────────────────────────────────────────────────────────────────────────────
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function err(status, message) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function addCors(response, request) {
-  const headers    = corsHeaders(request);
-  const newHeaders = new Headers(response.headers);
-  Object.entries(headers).forEach(([k, v]) => newHeaders.set(k, v));
-  return new Response(response.body, { status: response.status, headers: newHeaders });
-}
-
-function parseRange(rangeHeader) {
-  const m = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-  if (!m) return undefined;
-  const offset = parseInt(m[1], 10);
-  const end    = m[2] ? parseInt(m[2], 10) : undefined;
-  return { offset, length: end !== undefined ? end - offset + 1 : undefined };
-}
+// supabaseFetch, json, err, addCors, parseRange — imported from ./utils.js

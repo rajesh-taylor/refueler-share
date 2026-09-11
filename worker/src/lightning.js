@@ -1,8 +1,8 @@
 /**
  * lightning.js — Refueler Share Lightning payment adapter
  *
- * B9 migration seam. All Lightning backend calls route through this module.
- * Nothing else in the Worker calls Blink or LNbits directly.
+ * B7 migration seam. All Lightning backend calls route through this module.
+ * Nothing else in the Worker calls LNbits directly.
  *
  * Exports:
  *   createInvoice({ tier, period, amountSats, expirySeconds }, env)
@@ -11,80 +11,82 @@
  *   getInvoiceStatus({ paymentHash }, env)
  *     → { settled: boolean, tier: string, period: string } | null
  *
- * Backend routing: env.LIGHTNING_BACKEND (default: 'blink')
- * At B9: set LIGHTNING_BACKEND='lnbits', no other Worker code changes required.
+ * Backend routing: env.LIGHTNING_BACKEND (default: 'lnbits')
+ * Blink is dead (discontinued UK custodial accounts Aug 2026). Its functions
+ * are tombstoned below — do not re-enable.
  */
 
-const BLINK_API_URL = 'https://api.blink.sv/graphql';
-
 // ---------------------------------------------------------------------------
-// Blink — createInvoice
+// Blink — TOMBSTONED (discontinued Aug 2026, do not re-enable)
 // ---------------------------------------------------------------------------
 
-const BLINK_CREATE_INVOICE_MUTATION = `
-  mutation LnInvoiceCreate($input: LnInvoiceCreateInput!) {
-    lnInvoiceCreate(input: $input) {
-      invoice {
-        paymentRequest
-        paymentHash
-      }
-      errors {
-        message
-      }
-    }
+async function blinkCreateInvoice(_params, _env) {
+  throw new Error('Blink backend discontinued Aug 2026 — use lnbits');
+}
+
+async function blinkGetInvoiceStatus(_params, _env) {
+  throw new Error('Blink backend discontinued Aug 2026 — use lnbits');
+}
+
+// ---------------------------------------------------------------------------
+// LNbits — createInvoice
+//
+// POST {LNBITS_URL}/api/v1/payments
+// Headers: X-API-KEY: {LNBITS_API_KEY}
+// Body:    { out: false, amount: amountSats, memo, expiry: expirySeconds }
+// Returns: { payment_hash, payment_request }
+//
+// KV record keyed by payment_hash:
+//   { tier, period, settled: false, created_at }
+//   TTL: 25 hours — outlives the invoice; provides lookup window for webhooks.
+// ---------------------------------------------------------------------------
+
+async function lnbitsCreateInvoice({ tier, period, amountSats, expirySeconds }, env) {
+  if (!env.LNBITS_URL || !env.LNBITS_API_KEY) {
+    throw new Error('LNBITS_URL and LNBITS_API_KEY must be set as Worker secrets');
   }
-`;
 
-async function blinkCreateInvoice({ tier, period, amountSats, expirySeconds }, env) {
   const memo = `Refueler Share — ${tier} ${period}`;
 
   const body = JSON.stringify({
-    query: BLINK_CREATE_INVOICE_MUTATION,
-    variables: {
-      input: {
-        walletId: env.BLINK_WALLET_ID,
-        amount: amountSats,
-        memo,
-        expiresIn: expirySeconds,
-      },
-    },
+    out:    false,
+    amount: amountSats,
+    memo,
+    expiry: expirySeconds,
   });
 
-  const response = await fetch(BLINK_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': env.BLINK_API_KEY,
-    },
-    body,
-  });
+  let response;
+  try {
+    response = await fetch(`${env.LNBITS_URL}/api/v1/payments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY':    env.LNBITS_API_KEY,
+      },
+      body,
+    });
+  } catch (e) {
+    throw new Error(`LNbits network error on createInvoice: ${e.message}`);
+  }
 
   if (!response.ok) {
-    throw new Error(`Blink API HTTP error: ${response.status} ${response.statusText}`);
+    const text = await response.text().catch(() => '');
+    throw new Error(`LNbits createInvoice HTTP ${response.status}: ${text.slice(0, 200)}`);
   }
 
   const json = await response.json();
-  const result = json?.data?.lnInvoiceCreate;
+  const { payment_hash: paymentHash, payment_request: bolt11 } = json;
 
-  if (!result) {
-    throw new Error('Blink createInvoice: unexpected response shape — lnInvoiceCreate missing');
-  }
-
-  if (result.errors && result.errors.length > 0) {
-    const messages = result.errors.map((e) => e.message).join('; ');
-    throw new Error(`Blink createInvoice error: ${messages}`);
-  }
-
-  const { paymentRequest: bolt11, paymentHash } = result.invoice;
-
-  if (!bolt11 || !paymentHash) {
-    throw new Error('Blink createInvoice: invoice fields missing from response');
+  if (!paymentHash || !bolt11) {
+    throw new Error('LNbits createInvoice: payment_hash or payment_request missing from response');
   }
 
   const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
 
-  // Persist { tier, period } keyed by paymentHash so getInvoiceStatus can return them.
-  // 25h TTL — invoice itself is shorter-lived, but we want the record to outlive polling.
+  // Persist { tier, period } keyed by paymentHash so getInvoiceStatus can
+  // return them without a second LNbits call.
+  // 25h TTL — invoice itself is shorter-lived, but we want the record to
+  // outlive polling and the LNbits webhook delivery window.
   await env.STATUS_KV.put(
     `lightning:invoice:${paymentHash}`,
     JSON.stringify({ tier, period, settled: false, created_at: new Date().toISOString() }),
@@ -95,19 +97,21 @@ async function blinkCreateInvoice({ tier, period, amountSats, expirySeconds }, e
 }
 
 // ---------------------------------------------------------------------------
-// Blink — getInvoiceStatus
+// LNbits — getInvoiceStatus
+//
+// GET {LNBITS_URL}/api/v1/payments/{payment_hash}
+// Headers: X-API-KEY: {LNBITS_API_KEY}
+// Returns: { paid: boolean, ... }
+//
+// Returns null if the KV record is missing (unknown hash or TTL expired).
+// Returns null if LNbits 404s the hash (invoice not found on node).
 // ---------------------------------------------------------------------------
 
-const BLINK_GET_INVOICE_QUERY = `
-  query LnInvoice($paymentHash: PaymentHash!) {
-    lnInvoice(paymentHash: $paymentHash) {
-      paymentHash
-      paymentStatus
-    }
+async function lnbitsGetInvoiceStatus({ paymentHash }, env) {
+  if (!env.LNBITS_URL || !env.LNBITS_API_KEY) {
+    throw new Error('LNBITS_URL and LNBITS_API_KEY must be set as Worker secrets');
   }
-`;
 
-async function blinkGetInvoiceStatus({ paymentHash }, env) {
   // Retrieve stored tier/period — written at createInvoice time.
   const stored = await env.STATUS_KV.get(`lightning:invoice:${paymentHash}`, 'json');
   if (!stored) {
@@ -115,54 +119,36 @@ async function blinkGetInvoiceStatus({ paymentHash }, env) {
     return null;
   }
 
-  const body = JSON.stringify({
-    query: BLINK_GET_INVOICE_QUERY,
-    variables: { paymentHash },
-  });
-
-  const response = await fetch(BLINK_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': env.BLINK_API_KEY,
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Blink API HTTP error: ${response.status} ${response.statusText}`);
+  let response;
+  try {
+    response = await fetch(`${env.LNBITS_URL}/api/v1/payments/${encodeURIComponent(paymentHash)}`, {
+      method:  'GET',
+      headers: { 'X-API-KEY': env.LNBITS_API_KEY },
+    });
+  } catch (e) {
+    throw new Error(`LNbits network error on getInvoiceStatus: ${e.message}`);
   }
 
-  const json = await response.json();
-  const invoice = json?.data?.lnInvoice;
-
-  if (!invoice) {
-    // Blink doesn't know this hash either — treat as not found.
+  if (response.status === 404) {
+    // LNbits doesn't know this hash — treat as not found.
     return null;
   }
 
-  // Blink paymentStatus values: 'PENDING' | 'PAID' | 'EXPIRED'
-  const settled = invoice.paymentStatus === 'PAID';
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`LNbits getInvoiceStatus HTTP ${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  const json = await response.json();
+
+  // LNbits payment object: { paid: boolean, ... }
+  const settled = json.paid === true;
 
   return {
     settled,
-    tier: stored.tier,
+    tier:   stored.tier,
     period: stored.period,
   };
-}
-
-// ---------------------------------------------------------------------------
-// LNbits stubs — wire at B9
-// ---------------------------------------------------------------------------
-
-async function lnbitsCreateInvoice(_params, _env) {
-  // wire at B9 — POST /api/v1/payments
-  throw new Error('LNbits backend not yet implemented');
-}
-
-async function lnbitsGetInvoiceStatus(_params, _env) {
-  // wire at B9 — GET /api/v1/payments/{payment_hash}
-  throw new Error('LNbits backend not yet implemented');
 }
 
 // ---------------------------------------------------------------------------
@@ -176,16 +162,16 @@ async function lnbitsGetInvoiceStatus(_params, _env) {
  * @returns {{ bolt11: string, paymentHash: string, expiresAt: string }}
  */
 export async function createInvoice(params, env) {
-  const backend = env.LIGHTNING_BACKEND ?? 'blink';
+  const backend = env.LIGHTNING_BACKEND ?? 'lnbits';
 
   switch (backend) {
-    case 'blink':
-      return blinkCreateInvoice(params, env);
     case 'lnbits':
       return lnbitsCreateInvoice(params, env);
+    case 'blink':
+      return blinkCreateInvoice(params, env);
     default:
       throw new Error(
-        `Unknown LIGHTNING_BACKEND: "${backend}". Valid values: "blink" | "lnbits"`,
+        `Unknown LIGHTNING_BACKEND: "${backend}". Valid value: "lnbits"`,
       );
   }
 }
@@ -197,16 +183,16 @@ export async function createInvoice(params, env) {
  * @returns {{ settled: boolean, tier: string, period: string } | null}
  */
 export async function getInvoiceStatus(params, env) {
-  const backend = env.LIGHTNING_BACKEND ?? 'blink';
+  const backend = env.LIGHTNING_BACKEND ?? 'lnbits';
 
   switch (backend) {
-    case 'blink':
-      return blinkGetInvoiceStatus(params, env);
     case 'lnbits':
       return lnbitsGetInvoiceStatus(params, env);
+    case 'blink':
+      return blinkGetInvoiceStatus(params, env);
     default:
       throw new Error(
-        `Unknown LIGHTNING_BACKEND: "${backend}". Valid values: "blink" | "lnbits"`,
+        `Unknown LIGHTNING_BACKEND: "${backend}". Valid value: "lnbits"`,
       );
   }
 }
