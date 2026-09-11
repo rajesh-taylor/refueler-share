@@ -211,7 +211,7 @@ Full SD-block design. Opaque token architecture confirmed. Lightning-only necess
 | Block | Commit | Summary |
 |-------|--------|---------|
 | SW1–SW9 | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health · snag sweep · utils.js extraction. 484 tests passing (467 integration). |
-
+| SW9a | — | index.js Phases 2–3 split (stripe_sub.js · timestamp.js · delete_transfer.js) · webhook_reg test rewrite · admin.js lightning_available boolean fix · LIGHTNING_BACKEND="lnbits". 376 tests (17 webhook handler tests deferred — Vitest ESM vi.fn() factory limitation, not a source bug). |
 **SW block do-not-retry:**
 - DO NOT store `whsec_hash` in `wh_config_` KV — Option B derives, never stores
 - DO NOT derive `rfs_whsec_` without `created_at` in HMAC message — required rotation salt
@@ -225,7 +225,12 @@ Full SD-block design. Opaque token architecture confirmed. Lightning-only necess
 - DO NOT strip `rfs_sign_` prefix before importing as HMAC key — Worker uses full string via TextEncoder
 - `btoa()` in Workers runtime is Latin-1 only — use TextEncoder → binary string → `btoa` for non-ASCII
 - DO NOT use `workers.dev` URL for smoke tests — use `api.share.refueler.io`
-
+- DO NOT attempt to mock `requireApiAuth` as `vi.fn().mockResolvedValue()` outside a `vi.mock` factory — Vitest ESM hoisting puts it in the TDZ; define it inside the factory
+- DO NOT use `vi.importActual` in `webhook_reg.test.js` — poisons the module cache
+- DO NOT use dynamic `await import()` inside test bodies to get mock handles — use static imports only
+- DO NOT put `'use strict'` in ES module source files — redundant and interferes with Vitest's ESM transform
+- `vi.mock` factories run before ALL top-level const declarations — every helper used inside a factory must be defined inside that factory body
+- `test/` and `tests/unit/` both exist in the worker — `vitest.config.js` glob is `test/**` so always update `test/` as the canonical location; `tests/unit/` is a mirror
 **Buffer pool:** SW2c · SW5c — **both retired** (no carry-forward work documented against either).
 
 **SW9a carry-forward:**
@@ -270,7 +275,16 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 
 | Session | Scope | Gate |
 |---------|-------|------|
-| **SW-MCP-W1** | Worker: `GET /api/v1/capabilities` locked shape; `btc_ref_rate:current` KV; Tier-1 manual override + 3am CoinGecko cron + ±20% guard; admin rate panel. | SW9 deployed |
+## SW-MCP-W1 · 11 Sep 2026
+
+| Item | Detail |
+|------|--------|
+| Commit | `2fd37ce` |
+| Deployed | `api.share.refueler.io` · Version `5b5cd91d` |
+| Files | `worker/src/handlers/api_capabilities.js` (rewrite) · `worker/src/handlers/btc_rate.js` (new) · `worker/src/index.js` (3 patches) · `worker/test/btc_rate.test.js` (new, 50 tests) |
+| Summary | cap.v1 capabilities endpoint (locked §7.1 shape) + `btc_ref_rate:current` KV + manual admin override (`POST/GET /admin/btc-rate`) + CoinGecko cron Task 3 at 03:00 UTC + ±20% guard. 50 new tests passing. 409 total passing. |
+| Smoke | `POST /admin/btc-rate` → `ok: true, gbp_per_btc: 62000, set_by: manual` ✓ · `GET /admin/btc-rate` → `set: true, age_seconds: 29` ✓ |
+| Notes | ADMIN_KEY rotated during session (old value mismatched). `.dev.vars` must be updated locally. `webhook_reg.test.js` 17 failures pre-existing, not introduced here. |
 | **SW-MCP-W2** | Worker: monthly allocation + lazy reset; identity-API overage ceiling; Personal-API hard stop; `personal_api` plan value in KV. | SW-MCP-W1 |
 | **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. | SW-MCP-W1 |
 | **SW-MCP-2** | Local crypto module: chunk → AES-GCM → BLAKE3 → blinded; fragment grammar v1 helper; `hashSecret()` parity check; unit tests. | SW-MCP-1 |
