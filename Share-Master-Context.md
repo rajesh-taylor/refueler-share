@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.7 | **Last updated:** Share-MCP-Opus-2 · 10 Sep 2026
+> **Version:** 7.8 | **Last updated:** SW9 · 11 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -167,15 +167,14 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 ## Current state
 
-**SW-block functionally complete (SW1–SW8 ✓). SW9 (close session) not yet run. SW-MCP-Opus-2 ✓ complete. MCP spec v2 locked.**
+**SW-block ✓ complete (11 Sep 2026). SW-MCP-Opus-2 ✓ complete. MCP spec v2 locked. Next: SW-MCP-W1.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
-| B1–B6 ✓ | `319225f` | Foundation → security → design → testing → folder upload. 212 tests. |
 | TG-block ✓ | `0e51385` | Destroy-after-download · tidal window · Execution Dock · owner DELETE. 432 tests. |
 | TH-series ✓ | `45a4d3b3` | OTS relay · permanent-record UI · JS refactor (5 modules). |
-| SW1–SW8 ✓ | `2894bab` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health. |
-| SW-MCP-Opus-2 ✓ | — | MCP spec v2 locked. All O-6…O-11 resolved. D-1 filename fix approach locked (Option B, fragment grammar v1). Personal API path locked. Capabilities endpoint contract locked. |
+| SW1–SW9 ✓ | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health · utils.js extraction · trailing full-stop normalisation · lightning.js LNbits wired. 484 tests. |
+| SW-MCP-Opus-2 ✓ | — | MCP spec v2 locked. All O-6…O-11 resolved. D-1 filename fix locked (Option B). Personal API path locked. Capabilities endpoint contract locked. |
 
 ---
 
@@ -184,7 +183,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Order | Block / Session | Hetzner? | Notes |
 |---|---|---|---|
 | 1–8 | B1–TH-series ✓ | ❌ | Complete. |
-| 9 | SW block | ❌ | SW1–SW8 ✓. **SW9 next** (close session). |
+| 9 | SW block ✓ | ❌ | Complete. Commit `8b4b4a1`. SW9a carries index.js Phases 2–3 + test gaps. |
 | 10 | SW-MCP block | ❌ | W1+W2 (Worker contracts) then MCP-1…8. Full plan in `refueler-mcp-spec-v2.md` §6.3. |
 | 11 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
@@ -204,10 +203,10 @@ Full decision log: BRIDGE §SW-Opus-1/2/3/4 decisions and `refueler-mcp-spec-v2.
 - **SW-Opus-2:** Rate card v1.0 (10/transfer, 100/GB, 20/permanent-record). 1 credit = 1 sat. Credit blocks 10k/50k/200k/custom. £99/mo identity-API access fee. Sovereign Teams (S/M/L £49/£89/£169, UI-only). GTM reframe (HNW + accountant, warm intro). BRIDGE v8.4.
 - **SW-Opus-3:** DPA mandatory by default. AM = founder for first 3–6 months. Four-surface disclosure wording. "Ecash" → "signed digital tokens" in client copy. GDPR framing locked. BRIDGE v8.5.
 - **SW4-Opus:** Webhook signing: Option B (stateless HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`). `whsec_hash` removed from KV. Dead-letter schema locked. SIGN_DOMAIN_TAG = `refueler.webhook.v1.sign`. BRIDGE v8.8.
-- **Share-MCP-Opus-2 (this session):** Capabilities endpoint locked (§7.1). Daily reference-rate KV `btc_ref_rate:current` locked (§7.3). Monthly allocation + lazy reset locked (§7.4). Personal API (£49/mo, 10k credits, `personal_api` plan, hard stop) locked (§7.5). D-1 filename fix: Option B, fragment grammar v1 locked (§7.2). Sovereign Teams UI-only confirmed; firms wanting MCP take separate API credential relationship. npm distribution, Apache 2.0, no Anthropic marketplace. Terminology: "credits" everywhere user-facing. Transfer persistence past cancellation: explicit policy. `hashSecret()` parity check required at SW-MCP-2.
+- **Share-MCP-Opus-2:** Capabilities endpoint locked (§7.1). Daily reference-rate KV `btc_ref_rate:current` locked (§7.3). Monthly allocation + lazy reset locked (§7.4). Personal API (£49/mo, 10k credits, `personal_api` plan, hard stop) locked (§7.5). D-1 filename fix: Option B, fragment grammar v1 locked (§7.2). Sovereign Teams UI-only confirmed; firms wanting MCP take separate API credential relationship. npm distribution, Apache 2.0, no Anthropic marketplace. Terminology: "credits" everywhere user-facing. Transfer persistence past cancellation: explicit policy. `hashSecret()` parity check required at SW-MCP-2.
 
 ---
 
-**Buffer pool (2 sessions):** SW2c · SW5c
+**SW buffer pool:** SW2c · SW5c — **both retired** (no carry-forward work).
 
 *"Nothing stops this train."*

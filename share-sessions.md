@@ -206,25 +206,11 @@ Full SD-block design. Opaque token architecture confirmed. Lightning-only necess
 
 ---
 
-## SW block session plan — white-label + API build (complete SW1–SW8; SW9 next)
+## SW block — complete ✓ (11 Sep 2026)
 
-| Session | Commit | Summary |
-|---------|--------|---------|
-| SW1 | `9cb017d` | CF for SaaS — SaaS enablement, fallback origin, Worker route. |
-| SW2/SW2a | `1a1b518` | `api_auth.js` — HMAC-SHA256. `POST /api/v1/credential/issue` — quota KV, 402, both rails, no Supabase row on anonymous rail. |
-| SW3 | `d223249` | `refueler-badge.js` — BLAKE3/Cashu/Bitcoin pill, Shadow DOM, Paper/Carbon aware. |
-| SW4 | `452e7b8` | `webhook_reg.js` — POST/DELETE/GET `/api/v1/webhook/register`. `rfs_whsec_` issuance. 45 tests. |
-| SW4-patch | `9ba1ceb` | `whsec_hash` removed from KV; Option B HMAC derivation wired; `WEBHOOK_SIGNING_MASTER_KEY` set. |
-| SW4a | `9ba1ceb` | `webhook_delivery.js` — deliver + inline + DLQ + AE log + OTS/confirm triggers. |
-| SW4b | `9392aad` | Daily cron DLQ retry. `scheduled()` in `index.js`. `0 3 * * *` cron in `wrangler.toml`. |
-| SW5 | `8640606` | `receipts.js` — `cargo.accepted` + `cargo.discharged` (once-flag guarded). Pull endpoint. |
-| SW5a | `8c8d988` | Harbourmaster dashboard scaffold. Login gate. Transfers table from AE. Receipt badges. |
-| SW5b | `f955b51` | Capability card, webhook monitoring, hostname health cards. Dashboard live + authenticated. |
-| SW6 | `fb110b2` | `sandbox.js` — `rfs_test_` keypair, 25 identity / 10 anonymous test credits. Both rails smoke tested. |
-| SW6-fix | `fb110b2` | `btoa` em-dash crash — TextEncoder binary string fix. |
-| SW7 | `5adc573` | Per-client admin runbook. Rail declaration gate. Mandatory disclosure flow. Placeholders resolved. |
-| SW8 | `2894bab` | Daily hostname health check cron. `checkHostnameHealth()`. `hostname_health:latest` KV. Dashboard wired. |
-| SW9 | **next** | Snag sweep (`err()` trailing full-stop normalisation). TESTING.md additions. Context trim. B8 brief. Buffer review. |
+| Block | Commit | Summary |
+|-------|--------|---------|
+| SW1–SW9 | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health · snag sweep · utils.js extraction. 484 tests passing (467 integration). |
 
 **SW block do-not-retry:**
 - DO NOT store `whsec_hash` in `wh_config_` KV — Option B derives, never stores
@@ -237,15 +223,27 @@ Full SD-block design. Opaque token architecture confirmed. Lightning-only necess
 - DO NOT use Ed25519 or a published Worker key for receipts — symmetric HMAC only, load-bearing for anonymous rail
 - `api_live_key` / `api_accepted_at` / `api_transfer_ref` stored in manifest for API-tier only — never consumer tier
 - DO NOT strip `rfs_sign_` prefix before importing as HMAC key — Worker uses full string via TextEncoder
-- DO NOT derive `X-Api-Sign-Key` from liveKey string replacement — pass the actual signKey from user input
-- DO NOT hardcode dashboard CORS origin as `dashboard.share.refueler.io` — dashboard lives at `refueler.io`
 - `btoa()` in Workers runtime is Latin-1 only — use TextEncoder → binary string → `btoa` for non-ASCII
 - DO NOT use `workers.dev` URL for smoke tests — use `api.share.refueler.io`
 
-**SW block open snag (resolve at SW9):**
-- `confirm` error messages use trailing full stops; `index.js` `err()` helper does not — normalise at SW9
+**Buffer pool:** SW2c · SW5c — **both retired** (no carry-forward work documented against either).
 
-**Buffer pool (2 sessions):** SW2c · SW5c
+**SW9a carry-forward:**
+- Phases 2–3 of `index.js` split: `handlers/stripe_sub.js` + `handlers/timestamp.js` + `handlers/delete_transfer.js`
+- `webhook_reg.test.js` handler integration tests (17 failures — pre-existing test file bug, not a source regression)
+- `LIGHTNING_BACKEND` env var in `wrangler.toml` → `"lnbits"`
+- `lightning_available` string vs boolean cosmetic fix in status response
+- HMAC auth boundary + quota 402 + webhook delivery + sandbox integration tests
+
+---
+
+## B8 — NUT-11 Mode 2 (next after SW-MCP)
+
+B8 implements NUT-11 Mode 2: keypair-based Cashu credential authentication to replace the shared-secret passphrase model. This is pure cryptography on the existing Worker — no Hetzner required.
+
+B8 gates the Silent Drop block (SD-block requires full Locke — Mode 2 — no temp auth builds permitted). It also unlocks the `journalist/source-protection` copy and removes the "keypair auth cannot be bypassed via Mode 1" blocked claim from the whitepaper.
+
+**First B8 session must load:** `CLAUDE.md` + `Share-Master-Context.md` + `share-sessions.md` + `TESTING.md` (for the `keypair.js` fixture spec and whitepaper row requirements). The `refueler-ecash-lab` repo decision (separate experiment repo vs. production Worker) must be made at the B8-Opus planning session before any code is written.
 
 ---
 

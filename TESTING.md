@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.7 | **Created:** S63 · 27 July 2026 | **Updated:** S-TG-5 · 5 Sep 2026
+> **Version:** v0.8 | **Created:** S63 · 27 July 2026 | **Updated:** SW9 · 11 Sep 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -26,7 +26,7 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 ## 2. Current test suite
 
-**282 tests passing across 10 suites** (Vitest 2 — 7 unit + 3 integration, run separately):
+**376 tests passing across 11 suites** (Vitest 2 — 8 unit + 3 integration, run separately). SW block added `webhook_reg.test.js` (unit). Integration suite extended with TG and SW fixtures.
 
 **Unit suites** (`worker/tests/unit/` — 242 passing):
 
@@ -39,6 +39,7 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 | `turnstile.test.js` | 34 | Input guards, CF success/failure paths, HTTP errors, malformed JSON, fail-closed behaviour |
 | `stripe.test.js` | 44 | HMAC-SHA256 webhook signature verification, ±300s replay window, body tampering detection, checkout customer find-or-create, tier routing across all 6 live lookup keys |
 | `destroy.test.js` | 64 | TG manifest state machine: `checkTransferStatus` (consumed/tidal boundary checks), `validateTidalHeaders` (window invariants), `flipPendingDestruction` (last-chunk armed flip, idempotency), `buildTombstone` (field strip — exactly 2 keys), `isTidalPermitted` (tier gate, case-insensitive) |
+| `webhook_reg.test.js` | 50 | SW4: `validateWebhookUrl` (21 URL rules incl. RFC1918 + loopback), `deriveWhsecFromHash` (HMAC-SHA256 + base58, determinism, rotation salt isolation), `kvWhConfigKey` (hash derivation), `handleWebhookRegister` POST/DELETE/GET/405 dispatch |
 
 **Integration suites** (`worker/tests/integration/` — 40 passing via `npm run test:integration`):
 
@@ -123,8 +124,8 @@ Fixtures are shared between Vitest integration tests and k6 load scripts. k6 run
 
 ### Future blocks
 
-- B7: `lightning.js` — LNbits callback payloads, payment-hash KV entries, invoice fixtures
-- SW: `webhooks.js` — signed event payloads, valid/invalid/stale `rfs_whsec_` signatures, dead-letter KV entries
+- B7: `lightning.js` — LNbits callback payloads, payment-hash KV entries, invoice fixtures (stub present; wired at B7)
+- SW: `webhooks.js` — signed event payloads, valid/invalid/stale `rfs_whsec_` signatures, dead-letter KV entries (stub present; handler integration tests deferred to SW9a)
 - B8: `keypair.js` — NUT-11 Mode 2 keypairs, challenge-response transcripts
 - B9: `lnurl.js` — LNURL-withdraw callback fixtures
 - B10: `mlkem-vectors.js` — ML-KEM known-answer test vectors
@@ -149,6 +150,19 @@ Fixtures are shared between Vitest integration tests and k6 load scripts. k6 run
 | Chunk bounds | S41/S42b | `rejects chunk index beyond declared total` | Storage-stuffing beyond manifest bounds closed |
 | Bearer token scope | S58 | `bearer token exp equals manifest expiry; expired token rejected` | Token lifetime bound to transfer, not hardcoded |
 | Stripe webhook auth | S71/S72 | `tampered signature → 401` · `stale timestamp → 401` · `missing header → 401` · `empty body → 401` · `valid signature → 200` | Webhook auth enforced in real Worker route; all five tests passing |
+
+| HMAC API request authentication | SW2/SW4 | *(integration test deferred to SW9a)* | API requests signed with HMAC-SHA256 over method+path+timestamp+body_hash; replay window ±300s |
+| Webhook signing — stateless HMAC derivation | SW4-patch | `unit/webhook_reg.test.js` — `deriveWhsec` suite | `rfs_whsec_` derived from master key + apiKeyHash + created_at; never stored; rotation salt confirmed |
+| Webhook URL validation — private IP / localhost rejection | SW4 | `unit/webhook_reg.test.js` — `validateWebhookUrl` suite | RFC1918, loopback, link-local, unspecified ranges rejected; non-HTTPS rejected |
+| Sandbox credential isolation | SW6 | *(integration test deferred to SW9a)* | `rfs_test_` keypairs draw from sandbox pool only; never touch production quota |
+
+**Known test gaps (SW block — resolve at SW9a):**
+- HMAC auth boundary integration test (valid/invalid/replayed signatures against real Worker)
+- Quota 402 integration test (exhausted pool → 402 `quota_exhausted`)
+- Webhook delivery retry + dead-letter creation integration test
+- Key-rotation grace window integration test
+- Sandbox smoke path integration test
+- Hostname health check — no automated test coverage; manual verification only (cron fires at 03:00 UTC daily, result readable at `GET /admin/hostname-health`)
 
 Rule: **no security fix ships in future blocks without a row added to this table and a test added to this file.**
 
@@ -318,6 +332,9 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 | 9 | Destroy-after-download transfers are permanently consumed after recipient confirmation | `integration/tg-round-trip.test.js` | `POST /confirm returns 200 and destroyed: true` · `re-download after confirm returns 410` · `second POST /confirm returns 410 (already consumed)` | Tombstone gate enforced end-to-end in real Worker runtime; consumed state is permanent |
 | 10 | Tidal windows are enforced server-side; Citizen tier cannot schedule availability | `integration/tg-round-trip.test.js` | `returns 425 when available_from is in the future` · `returns 410 when available_until has elapsed` · `Citizen tier — tidal headers rejected with 403 at upload` | Time-gating and tier gate hold at real Worker boundary |
 
+| 11 | Webhook signing keys are derived statelessly and rotation-salted | `unit/webhook_reg.test.js` | `deriveWhsec` determinism · `different created_at → different output` | Same master key + same API key + different `created_at` yields a different `rfs_whsec_` — re-registration automatically rotates the signing key |
+| 12 | Webhook endpoint URL validation rejects private/loopback addresses | `unit/webhook_reg.test.js` | `validateWebhookUrl` suite (21 cases) | RFC1918, loopback, link-local, unspecified ranges, HTTP, localhost all rejected; client cannot register an internal delivery target |
+
 **Scope honesty:** this trail proves server-side *chunk* integrity, not end-to-end file integrity — full Merkle root verification unimplemented until B9. Rows added for NUT-11 Mode 2 (B8), Merkle (B9), ML-KEM (B10), HMAC API auth (SW) when tests exist — never before.
 
 ---
@@ -328,7 +345,7 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 |-------|-------------------|-------|
 | TG-block | `destroy.test.js` unit suite (64 tests). `tg-round-trip.test.js` integration suite (16 tests). `scripts/tg-smoke.sh` production smoke. Whitepaper rows 9–10. `client.js` TG methods: `confirmTransfer`, `deleteTransfer`, `ownerDeleteTransfer`. | S-TG-5 |
 | B7 | LNbits webhook fixture, payment-hash KV fixture, credential poll helper; security rows: webhook replay, double-issuance | S83/S83a |
-| SW | `webhooks.js` fixture. Integration tests: HMAC auth boundary, quota 402, `wl_config` fail-safe, key-rotation grace window, webhook delivery retry, dead-letter creation. Whitepaper row: "API requests are HMAC-authenticated and replay-protected." | SW2/SW4 + SW9 |
+| SW (partial ✓) | `webhook_reg.test.js` unit suite (50 tests) — SW9. `webhooks.js` fixture stub — SW4. **Deferred to SW9a:** HMAC auth boundary integration test, quota 402, `wl_config` fail-safe, key-rotation grace window, webhook delivery retry + dead-letter. Whitepaper rows 11–12 added SW9. | SW4/SW9 + SW9a |
 | B8 | Keypair fixture, NUT-11 Mode 2 challenge-response integration test; security row: keypair auth cannot be bypassed via Mode 1 | Inside B8 build sessions |
 | B9 | Mock LNURL callback fixture, LNURL-withdraw credential delivery round-trip; Merkle verification tests; incident response plan docs + tabletop simulation; `incident_active` KV integration test (set/clear/panel render) | Dedicated whitepaper + incident response sessions |
 | B10 | ML-KEM known-answer vectors, key-wrapping round-trip; chaos test foundation | Inside B10 spike |
@@ -367,6 +384,7 @@ refueler-share/
         turnstile.test.js
         stripe.test.js
         destroy.test.js               ← S-TG-2 (64 tests)
+        webhook_reg.test.js           ← SW9 (50 tests)
         kv-mock.js
       integration/                    ← S64+
         client.js
