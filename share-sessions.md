@@ -297,6 +297,23 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 
 ---
 
+## SW-MCP block — open snags and design notes
+
+**Admin dashboard path collision (SW-MCP-W1):**
+`/share/admin/dashboard.html` Harbourmaster client gate has replaced the
+X-Admin-Key ops dashboard. Fix: move Harbourmaster to a distinct path, restore
+admin gate. Scheduled for SW-MCP-W2 close or buffer session.
+
+**Harbourmaster design — deferred Opus session (post SW-MCP block):**
+Current card layout is functional but not £99/mo credible. Needs a bespoke
+design pass before any API commercial relationship is onboarded. Goals: data
+visualisation appropriate for legal/finance AP audience, Carbon/Paper token
+fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
+
+### Do not retry
+
+---
+
 ## SD-block — Silent Drop (post-B8, post-NB-4)
 
 **S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) required — no temp auth builds.
