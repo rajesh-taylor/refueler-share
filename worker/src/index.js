@@ -33,6 +33,8 @@ import {
   json, err, addCors, parseRange,
 } from './utils.js';
 
+import { TIERS, isCharteredTier } from './tiers.js';
+
 import { handleStripeWebhook, handleCheckout, handleSubscriptionStatus, handlePortal } from './handlers/stripe_sub.js';
 import { fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber } from './handlers/stripe_sub.js';
 import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp.js';
@@ -809,7 +811,7 @@ async function handleApiCredentialIssue(request, env) {
     if (remaining <= 0) {
       logEvent(env, {
         endpoint: 'api_credential_issue',
-        tier:     'api',
+        tier:     TIERS.CHARTERED,
         status:   402,
         errorMsg: 'quota_exhausted',
       });
@@ -928,7 +930,7 @@ async function handleApiCredentialIssue(request, env) {
   // ─────────────────────────────────────────────────────────────────────────
   const API_EXPIRY_WINDOW = 90 * 24 * 3600;
   const uuid              = crypto.randomUUID();
-  const issuedTier        = 'api';
+  const issuedTier        = TIERS.CHARTERED;
   const mintKey           = rail === 'anonymous'
     ? env.MINT_API_PRIVATE_KEY
     : env.MINT_PRIVATE_KEY;
@@ -1251,9 +1253,9 @@ async function handleUpload(request, env, ctx, uuid, chunkIndex) {
     }
 
     let expectedCommitment;
-    if (issuedTier === 'api') {
+    if (isCharteredTier(issuedTier)) {
       const API_EXPIRY_WINDOW = 90 * 24 * 3600;
-      expectedCommitment = await computeApiCommitment(uuid, 'api', API_EXPIRY_WINDOW);
+      expectedCommitment = await computeApiCommitment(uuid, TIERS.CHARTERED, API_EXPIRY_WINDOW);
     } else {
       const canonicalTier  = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
       const expectedWindow = EXPIRY_WINDOWS[canonicalTier];
@@ -1405,7 +1407,7 @@ async function handleUpload(request, env, ctx, uuid, chunkIndex) {
     // (manifest is the only durable store at that point).
     // Consumer-tier manifests never carry these fields.
     const manifestNowSeconds = Math.floor(Date.now() / 1000);
-    if (issuedTier === 'api' && apiLiveKey) {
+    if (isCharteredTier(issuedTier) && apiLiveKey) {
       manifest.api_live_key      = apiLiveKey;
       manifest.api_accepted_at   = manifestNowSeconds;
       if (apiTransferRef) manifest.api_transfer_ref = apiTransferRef;
@@ -1435,7 +1437,7 @@ async function handleUpload(request, env, ctx, uuid, chunkIndex) {
     // A 409 resume-of-complete does not re-emit — this path only reached on
     // fresh chunk-0 writes that are not resume paths (upload_complete guard).
     // ctx.waitUntil — receipt is notification, never control flow.
-    if (issuedTier === 'api' && apiLiveKey) {
+    if (isCharteredTier(issuedTier) && apiLiveKey) {
       ctx.waitUntil(
         (async () => {
           try {

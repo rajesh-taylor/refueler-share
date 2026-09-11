@@ -68,6 +68,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Three tiers: Citizen / Sovereign / API.** Business and Enterprise demolished entirely.
 - **Sovereign** ships in two SKUs: single-seat and Teams (N-seat, shared pool, one bill, UI-only). Sovereign Teams sizing → SW-Teams-1 (cross-product Opus in `refueler.io` project).
 - **API ⊃ UI** (one-directional): an API key holder may also use the web interface. **Sovereign ⊅ API**: a Sovereign subscriber never gets API access. Price-enforced — API sits clearly above Sovereign.
+- **Tier logic keys ≠ display names (Share-1, 11 Sep 2026).** Gate on `worker/src/tiers.js` — never on display strings. Live wire vocabulary: consumer `free`/`creative`/`max` (Stripe axis, `EXPIRY_WINDOWS`/`TIER_CAPS`), Chartered axis `'api'`. `TIERS.CHARTERED === 'api'` — wire value kept, `'chartered'` rename deferred. `citizen`/`sovereign` appear in **no** source module — display-layer and S89 rename narrative only. Helpers: `isPaidTier`, `isBearerTier`, `isCharteredTier`, `displayName`. Do not reintroduce literal `'api'`/`'citizen'`/`'sovereign'` comparisons in gating.
 - **API tier is invoiceable** — preserves the PO/invoice path for firms that cannot pay by card or Lightning.
 - **The rail model extends to the API tier.** Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship.
 - **Rail is declared, not inferred from payment.** The client's principal declares the rail at onboarding; the permitted payment method follows.

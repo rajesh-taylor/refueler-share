@@ -162,7 +162,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `btoa()` on strings with chars > U+00FF in Workers | TextEncoder → binary string → `btoa` |
 | `workers.dev` URL for smoke tests | Routes to Pages project, not Worker. Always use `api.share.refueler.io`. |
 | SIGN_DOMAIN_TAG as `refueler.webhook.v1` | Must be `refueler.webhook.v1.sign` — never revert |
-| Use tier display names (Citizen/Sovereign/Chartered) as logic keys | Internal enum keys only: `free` · `paid_registered` · `paid_bearer` · `chartered` — display names live in a map, never in gating logic |
+| Use tier display names (Citizen/Sovereign/Chartered) as logic keys | Internal enum keys only: `free` · `paid_registered` · `paid_bearer` · Chartered wire value `'api'` (not `'chartered'`) — display names live in a map, never in gating logic. Gate via `worker/src/tiers.js` helpers only. |
 | Find-replace "Sovereign tier only" → "Sovereign" after brand rename | "Sovereign tier only" on perm-record/availability-window = paid-vs-free gate → must read "Citizen and Sovereign" / "paid tiers" |
 | Rename Stripe price IDs or lookup keys for tier rename | Display names only — price IDs and lookup keys (share-max-monthly etc.) are immutable |
 
@@ -206,6 +206,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Citizen | `paid_registered` | Registered | Stripe — GBP |
 | Sovereign | `paid_bearer` | Bearer | Lightning — sats |
 | Chartered | `chartered` | Registered or Bearer | Stripe / invoice, or Lightning |
+
+**Code reality (Share-1, 11 Sep 2026):** the table above is the target logic vocabulary. The Worker does **not** yet emit `paid_registered`/`paid_bearer`. Live tier strings in `worker/src/`: consumer axis `free`/`creative`/`max` (Stripe-lookup-derived, in `EXPIRY_WINDOWS`/`TIER_CAPS`/`stripe.js`) and Chartered axis wire value `'api'`. `citizen`/`sovereign` appear in **no** source module — display + S89 rename narrative only. `worker/src/tiers.js` (Share-1) is the single source of truth for logic keys. `TIERS.CHARTERED === 'api'` — wire rename to `'chartered'` is a deferred migration. `free`/`creative`/`max` → `paid_*` mapping is also deferred.
 
 **Citizen and Sovereign are the same price and feature set.** The rail is a privacy choice declared at onboarding — not a tier upgrade. Never present as a value ladder; always side-by-side.
 

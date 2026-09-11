@@ -36,6 +36,7 @@
 
 import { requireApiAuth, sha256Hex }       from './api_auth.js';
 import { deriveWhsecFromHash }             from './webhook_delivery.js';
+import { isCharteredTier }                 from './tiers.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -164,7 +165,7 @@ export async function handleWebhookRegister(request, env) {
   }
 
   // ── Tier gate ─────────────────────────────────────────────────────────────
-  if (client.tier !== 'api') {
+  if (!isCharteredTier(client.tier)) {
     return errJson(403, 'Webhook registration is only available on the API tier');
   }
 

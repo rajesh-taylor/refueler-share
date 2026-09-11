@@ -341,6 +341,27 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 
 ---
 
+## Share-1 · 11 Sep 2026 — Tier Constants Decoupling
+
+| Item | Detail |
+|------|--------|
+| Commit | `refactor(share-1): introduce tiers.js enum, wire api→CHARTERED, decouple display from logic keys` |
+| Files | `worker/src/tiers.js` (new) · `worker/src/index.js` (6 sites) · `worker/src/webhook_reg.js` (1 site) |
+| Tests | 484 — no change (all edits identity-preserving: `TIERS.CHARTERED === 'api'`) |
+
+**Discovery:** `index.js` never held `citizen`/`sovereign` strings. The Worker's live tier vocabulary is `free`/`creative`/`max` (consumer/Stripe axis, derived from lookup keys — see `EXPIRY_WINDOWS`, `TIER_CAPS`, `stripe.js`) and `'api'` (Chartered axis). `citizen`/`sovereign` are display-layer + S89 rename narrative, never wired into logic. The "stale `=== 'citizen'` corrupts gating" hazard in the brief could not occur in `index.js`.
+
+**What was done (Option A):**
+- `worker/src/tiers.js` new: `TIERS` enum (`FREE`/`PAID_REGISTERED`/`PAID_BEARER`/`CHARTERED`), `TIER_DISPLAY`, `TIER_RAIL`, helpers `displayName`/`isPaidTier`/`isBearerTier`/`isCharteredTier`.
+- `TIERS.CHARTERED === 'api'` — wire value kept; every live gate compares against `'api'`. Rename to `'chartered'` is a deferred migration.
+- `index.js`: import added; 6 `'api'` logic sites → `TIERS.CHARTERED`/`isCharteredTier`. Remaining `'api'` literal is a comment (L717) — correct.
+- `webhook_reg.js`: `client.tier !== 'api'` → `!isCharteredTier(client.tier)`.
+- Not touched: `free`/`creative`/`max` (Stripe-owned), `wl_config.js` `tier:'api'` (served payload), `sandbox.js` (synthetic AE label), `.njk`, `refueler-io`.
+
+**Deferred to Share-2:** test fixtures (`btc_rate.test.js`, `confirm_tg.test.js`, `lightning.test.js`, `webhook_reg.test.js`) contain `citizen`/`sovereign` — they are contracts of `manifest_tg.js` (`isTidalPermitted`) and `lightning.js` (`createInvoice`). Rewrite fixtures and source modules together. `free`/`creative`/`max` → `paid_*` migration and `wl_config.js` update also deferred.
+
+---
+
 ## B7 session plan — Lightning/LNbits + anonymous paid tier
 
 **All B7 sessions from S74 gate on NB-4 (node live).**
