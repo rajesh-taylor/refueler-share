@@ -88,9 +88,13 @@ export async function handleAdminStatus(request, env) {
     };
   }
 
+  const bodyPatch = { ...body };
+  if (bodyPatch.lightning_available !== undefined) {
+    bodyPatch.lightning_available = String(bodyPatch.lightning_available) === 'true';
+  }
   const updated = {
     ...current,
-    ...body,
+    ...bodyPatch,
     updated_at: Math.floor(Date.now() / 1000),
   };
 

@@ -34,8 +34,6 @@
 //   Credential issuance and transfer completion are not gated on webhook delivery.
 //   See SW4a for delivery via ctx.waitUntil.
 
-'use strict';
-
 import { requireApiAuth, sha256Hex }       from './api_auth.js';
 import { deriveWhsecFromHash }             from './webhook_delivery.js';
 
@@ -198,7 +196,7 @@ async function handleRegisterPost(request, env, client, apiKey, rawBody) {
   // Parse body — rawBody already read for HMAC; re-decode as text.
   let body;
   try {
-    const text = new TextDecoder().decode(rawBody);
+    const text = new TextDecoder().decode(rawBody ?? new ArrayBuffer(0));
     body = JSON.parse(text);
   } catch {
     return errJson(400, 'Invalid JSON body');
