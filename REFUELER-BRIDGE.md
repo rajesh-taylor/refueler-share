@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 9.1 | **Created:** 28 July 2026 | **Updated:** Share-Brand-Opus-1 · 2026-09-11
+> **Version:** 9.2 | **Created:** 28 July 2026 | **Updated:** Share-1 · 2026-09-11
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
