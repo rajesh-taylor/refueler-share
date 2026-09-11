@@ -15,6 +15,7 @@ import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdmi
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
+import { handleAdminBtcRatePost, handleAdminBtcRateGet, refreshBtcRate } from './handlers/btc_rate.js';
 import { handleWebhookRegister }        from './webhook_reg.js';
 import { findApiKeyHashForUuid, deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
 // SW5: acceptance + collection receipts
@@ -419,6 +420,13 @@ export default {
       if (request.method === 'GET' && path === '/admin/hostname-health') {
         return timed('admin_hostname_health', () => handleAdminHostnameHealth(request, env).then(r => addCors(r, request)));
       }
+            // ── SW-MCP-W1: BTC reference rate admin panel ─────────────────────────
+      if (request.method === 'POST' && path === '/admin/btc-rate') {
+        return timed('admin_btc_rate_set', () => handleAdminBtcRatePost(request, env).then(r => addCors(r, request)));
+      }
+      if (request.method === 'GET' && path === '/admin/btc-rate') {
+        return timed('admin_btc_rate_get', () => handleAdminBtcRateGet(request, env).then(r => addCors(r, request)));
+      }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
       return new Response('Not found', { status: 404 });
@@ -464,6 +472,12 @@ export default {
         await checkHostnameHealth(env);
       } catch (e) {
         console.error('scheduled/hostname_health: unhandled error:', e);
+      }
+            // Task 3 — BTC reference rate refresh (SW-MCP-W1)
+      try {
+        await refreshBtcRate(env);
+      } catch (e) {
+        console.error('scheduled/btc_rate: unhandled error:', e);
       }
     }
   },
