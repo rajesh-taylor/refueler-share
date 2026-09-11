@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.8 | **Last updated:** SW9 · 11 Sep 2026
+> **Version:** 7.9 | **Last updated:** Share-Brand-Opus-1 · 11 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -57,12 +57,12 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 
 | Product | Price ID | Lookup key | Amount | Status |
 |---------|----------|------------|--------|--------|
-| Sovereign monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo | ✅ Active |
-| Sovereign 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo | ✅ Active |
-| Sovereign yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr | ✅ Active |
+| Citizen monthly | `price_1Ts7vIGlctwiB9U3kb3NCLue` | `share-max-monthly` | £24/mo | ✅ Active |
+| Citizen 3-month | `price_1TyzMLGlctwiB9U3cA31BOQc` | `share-max-3month` | £72/3mo | ✅ Active |
+| Citizen yearly | `price_1TyzNaGlctwiB9U3T8uV4UIW` | `share-max-yearly` | £288/yr | ✅ Active |
 
-**Tier rename complete S90:** Citizen (free). Sovereign (paid). Product ID: `prod_Urre2e3PQgr5Uq`.
-**API tier:** invoiced manually via Stripe invoice template. No subscription price object — off-repo.
+**Tier rename complete Share-Brand-Opus-1:** Pro Bono (public good / free). Citizen (paid, Registered rail, Stripe). Sovereign (paid, Bearer rail, Lightning). Chartered (commercial API/MCP). Product ID: `prod_Urre2e3PQgr5Uq` — display name to update to Citizen (identity-rail paid). Price IDs and lookup keys unchanged.
+**Chartered tier:** invoiced manually via Stripe invoice template. No subscription price object — off-repo.
 **Personal API (£49/mo):** unlisted Stripe price, managed manually. Not on public pricing page.
 
 Webhook: `https://refueler-share.rt-fc4.workers.dev/webhook/stripe` · `we_1Ts8epGlctwiB9U3dXT8XBac`
@@ -162,6 +162,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | `btoa()` on strings with chars > U+00FF in Workers | TextEncoder → binary string → `btoa` |
 | `workers.dev` URL for smoke tests | Routes to Pages project, not Worker. Always use `api.share.refueler.io`. |
 | SIGN_DOMAIN_TAG as `refueler.webhook.v1` | Must be `refueler.webhook.v1.sign` — never revert |
+| Use tier display names (Citizen/Sovereign/Chartered) as logic keys | Internal enum keys only: `free` · `paid_registered` · `paid_bearer` · `chartered` — display names live in a map, never in gating logic |
+| Find-replace "Sovereign tier only" → "Sovereign" after brand rename | "Sovereign tier only" on perm-record/availability-window = paid-vs-free gate → must read "Citizen and Sovereign" / "paid tiers" |
+| Rename Stripe price IDs or lookup keys for tier rename | Display names only — price IDs and lookup keys (share-max-monthly etc.) are immutable |
 
 ---
 
@@ -189,9 +192,30 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
 | 12 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
 | 13 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block with node live. |
-| 14 | SD-block — Silent Drop | ✅ | Sovereign + Lightning-only. Full Locke (B8) required. |
+| 14 | SD-block — Silent Drop | ✅ | Sovereign (Bearer rail) + Lightning-only. Full Locke (B8) required. |
 | 15 | Article pipeline | ✅ | Unlocks after NB-4. |
 | 16 | B9 → B10+ | — | Continue as previously sequenced. |
+
+---
+
+## Brand terminology — locked Share-Brand-Opus-1 (11 Sep 2026)
+
+| Tier | Internal key | Rail (user-facing) | Payment |
+|------|-------------|-------------------|---------|
+| Pro Bono | `free` | — | Public good |
+| Citizen | `paid_registered` | Registered | Stripe — GBP |
+| Sovereign | `paid_bearer` | Bearer | Lightning — sats |
+| Chartered | `chartered` | Registered or Bearer | Stripe / invoice, or Lightning |
+
+**Citizen and Sovereign are the same price and feature set.** The rail is a privacy choice declared at onboarding — not a tier upgrade. Never present as a value ladder; always side-by-side.
+
+**Rail names user-facing:** Registered (identity/Stripe) · Bearer (anonymous/Lightning). Internal architecture: identity rail / anonymous rail unchanged.
+
+**Feature-gate copy:** permanent record and availability window are **paid-vs-free** gates → "Citizen and Sovereign" or "paid tiers" — never "Sovereign only."
+
+**Vocabulary (sealed for Share, away from Merchant):** Lodge/Lodged (upload) · Collect/Collection (download) · Sealed/Under seal (encrypted transfer) · Struck off (deleted) · In camera (anonymous transfer) · Enrolment (onboarding) · Chambers (dashboard) · Freehold/Leasehold (permanent/expiring record) · Conduit (blind relay).
+
+Full rationale and migration checklist: `docs/Share-Brand-Terminology.md`.
 
 ---
 
@@ -199,11 +223,11 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 
 Full decision log: BRIDGE §SW-Opus-1/2/3/4 decisions and `refueler-mcp-spec-v2.md`.
 
-- **SW-Opus-1:** Three-tier model (Citizen/Sovereign/API). Rail model (identity/anonymous, mutually exclusive, declared at onboarding). Model B credit pool. API v1/v2/forward-commitment features. MCP v1 tools. Sandbox. BRIDGE v8.3.
-- **SW-Opus-2:** Rate card v1.0 (10/transfer, 100/GB, 20/permanent-record). 1 credit = 1 sat. Credit blocks 10k/50k/200k/custom. £99/mo identity-API access fee. Sovereign Teams (S/M/L £49/£89/£169, UI-only). GTM reframe (HNW + accountant, warm intro). BRIDGE v8.4.
+- **SW-Opus-1:** Four-tier model (Pro Bono/Citizen/Sovereign/Chartered). Share-Brand-Opus-1 locked 11 Sep 2026. Rail model (identity/anonymous, mutually exclusive, declared at onboarding). Model B credit pool. API v1/v2/forward-commitment features. MCP v1 tools. Sandbox. BRIDGE v8.3.
+- **SW-Opus-2:** Rate card v1.0 (10/transfer, 100/GB, 20/permanent-record). 1 credit = 1 sat. Credit blocks 10k/50k/200k/custom. £99/mo identity-API access fee. Citizen Teams (formerly Sovereign Teams) (S/M/L £49/£89/£169, UI-only). GTM reframe (HNW + accountant, warm intro). BRIDGE v8.4.
 - **SW-Opus-3:** DPA mandatory by default. AM = founder for first 3–6 months. Four-surface disclosure wording. "Ecash" → "signed digital tokens" in client copy. GDPR framing locked. BRIDGE v8.5.
 - **SW4-Opus:** Webhook signing: Option B (stateless HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`). `whsec_hash` removed from KV. Dead-letter schema locked. SIGN_DOMAIN_TAG = `refueler.webhook.v1.sign`. BRIDGE v8.8.
-- **Share-MCP-Opus-2:** Capabilities endpoint locked (§7.1). Daily reference-rate KV `btc_ref_rate:current` locked (§7.3). Monthly allocation + lazy reset locked (§7.4). Personal API (£49/mo, 10k credits, `personal_api` plan, hard stop) locked (§7.5). D-1 filename fix: Option B, fragment grammar v1 locked (§7.2). Sovereign Teams UI-only confirmed; firms wanting MCP take separate API credential relationship. npm distribution, Apache 2.0, no Anthropic marketplace. Terminology: "credits" everywhere user-facing. Transfer persistence past cancellation: explicit policy. `hashSecret()` parity check required at SW-MCP-2.
+- **Share-MCP-Opus-2:** Capabilities endpoint locked (§7.1). Daily reference-rate KV `btc_ref_rate:current` locked (§7.3). Monthly allocation + lazy reset locked (§7.4). Personal API (£49/mo, 10k credits, `personal_api` plan, hard stop) locked (§7.5). D-1 filename fix: Option B, fragment grammar v1 locked (§7.2). Citizen/Sovereign Teams UI-only confirmed; firms wanting MCP take separate API credential relationship. npm distribution, Apache 2.0, no Anthropic marketplace. Terminology: "credits" everywhere user-facing. Transfer persistence past cancellation: explicit policy. `hashSecret()` parity check required at SW-MCP-2.
 
 ---
 
