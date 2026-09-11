@@ -349,6 +349,19 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 | Files | `worker/src/tiers.js` (new) · `worker/src/index.js` (6 sites) · `worker/src/webhook_reg.js` (1 site) |
 | Tests | 484 — no change (all edits identity-preserving: `TIERS.CHARTERED === 'api'`) |
 
+## Share-2 · 11 Sep 2026 — Tidal gate: paid-vs-free
+
+| Item | Detail |
+|------|--------|
+| Commit | `8f12b4e` on branch `share-2-tidal-gate` |
+| Files | `worker/src/manifest_tg.js` (gate + comment only) |
+
+**What was done:** `PAID_TIERS` → `new Set(['creative', 'max'])` (was `['sovereign','business','enterprise']` — matched no live wire value; tidal was silently gated shut for all paying users). Availability window confirmed as paid-vs-free gate — Citizen and Sovereign both permitted, never rail-gated. `lightning.js` untouched. `main` stays green; branch open pending fixtures.
+
+**Deferred to Share-3:**
+- Rewrite `confirm_tg.test.js` (lines 145–147, 151, 474, 478, 482) + `lightning.test.js` (123, 131, 216, 223) + `webhook_reg.test.js` (391) to live wire values (`creative`/`max`) — then merge branch to `main`
+- `handlers/timestamp.js:30` excludes `'citizen'` from permanent record — latent bug (Citizen is now paid; should be permitted). Fix alongside fixtures.
+
 **Discovery:** `index.js` never held `citizen`/`sovereign` strings. The Worker's live tier vocabulary is `free`/`creative`/`max` (consumer/Stripe axis, derived from lookup keys — see `EXPIRY_WINDOWS`, `TIER_CAPS`, `stripe.js`) and `'api'` (Chartered axis). `citizen`/`sovereign` are display-layer + S89 rename narrative, never wired into logic. The "stale `=== 'citizen'` corrupts gating" hazard in the brief could not occur in `index.js`.
 
 **What was done (Option A):**
