@@ -99,14 +99,20 @@ export function buildTombstone(nowSeconds) {
 }
 
 // ---------------------------------------------------------------------------
-// Tier gate for tidal headers.
+// Tier gate for tidal headers (the availability window).
 // Returns true if the credential's tier permits tidal scheduling.
-// Paid tiers: 'sovereign', 'business', 'enterprise' (lowercase).
 //
-// NOTE: confirm the exact tier string baked into the Cashu token secret
-// in the credential issue handler before first deploy.
+// The availability window is a PAID-vs-FREE gate — permitted on BOTH paid
+// tiers (Citizen and Sovereign), never rail-gated. isTidalPermitted receives a
+// tier string (feature level), which carries no rail signal, so it can only
+// ever express paid-vs-free — which is exactly the intended gate.
+//
+// Live wire values (Share-2, 11 Sep 2026): 'free' / 'creative' / 'max'. The
+// two paid keys are 'creative' and 'max'; this set mirrors the paid set in
+// lightning-routes.js (VALID_TIERS). Deferred: 'free'/'creative'/'max' →
+// 'paid_*' migration, after which gate via tiers.js isPaidTier() instead.
 // ---------------------------------------------------------------------------
-const PAID_TIERS = new Set(['sovereign', 'business', 'enterprise']);
+const PAID_TIERS = new Set(['creative', 'max']);
 
 export function isTidalPermitted(credentialTier) {
   return PAID_TIERS.has((credentialTier ?? '').toLowerCase());
