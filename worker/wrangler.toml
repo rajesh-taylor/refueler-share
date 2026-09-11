@@ -19,7 +19,7 @@ preview_bucket_name = "refueler-share-dev"
 
 [vars]
 ENVIRONMENT = "production"
-LIGHTNING_BACKEND          = "blink"
+LIGHTNING_BACKEND = "lnbits"
 BLINK_WALLET_ID            = ""
 BLINK_API_KEY              = ""
 PRICE_CREATIVE_MONTHLY_GBP = "12"
