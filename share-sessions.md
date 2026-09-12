@@ -524,3 +524,48 @@ Gate: before SD1. Required decisions:
 *(SW-MCP anonymous-rail tail (SW-MCP-7) waits for B7/NB-4 — does not block B8.)*
 
 *"Nothing stops this train."*
+
+## B9-Opus · 12 Sep 2026 — Merkle / MMR / SMT / ZK design lock
+
+| Item | Detail |
+|------|--------|
+| Session type | Architecture + design, no code produced |
+| Output | `merkle-spec-v1.md` (refueler-share repo root) |
+| Repos | refueler-share (primary) · refueler-legend (forward notes) · refueler-pass (forward notes) |
+| BRIDGE | v9.4 |
+
+**Seven decisions locked (D-1…D-7):**
+
+- **D-1 Tree construction:** RFC 6962 unbalanced binary tree, domain-separated (`0x00` leaf / `0x01` node), BLAKE3 node hash, big-endian sequential leaves. `tree_algo: "rfc6962-unbalanced-blake3-v1"`. Duplicate-last-leaf rejected (CVE-2012-2459). `chunk_count` committed. Client computes authoritative root at upload; Worker reconstructs for verification at download.
+- **D-2 Root placement (both):** `merkle_root` in manifest + in receipts post-B9-3 (acceptance: `merkle_root`; collection: `merkle_root` + `verified`). Overrides standing "no BLAKE3 root in receipt" rule — narrowly: ciphertext root only, post-B9-3 only. Plaintext `blake3PlaintextRoot` barred from all receipts permanently.
+- **D-3 Worker verification path:** chunk hashes persisted in R2 sidecar `{uuid}/hashes` (raw 32-byte concat). Never inline in manifest (64 KB `safeGetManifest()` ceiling). Download = sidecar GET → reconstruct root → compare → verify-then-flush per chunk → 409 on mismatch. Spot-check = background canary only, never backs `verified`.
+- **D-4 MMR architecture:** on-device default; published root opt-in via Share OTS relay. "Smart contract" framing retired as inaccurate — say "Bitcoin-anchored" or "public timestamping layer". AES-256-GCM leaf encryption, on-device key (Deed→HKDF).
+- **D-5 SMT:** complement to Supabase (public verifiability, periodic OTS-anchored root), never the live arbiter. No build slot without design partner. London B2B (legal single-use doc token, broker quote, property reference) = §Future work.
+- **D-6 ZK boundary:** build slot only when (a) hides which set member satisfied predicate; (b) no NUT-22/nutroot primitive covers it; (c) buyer committed. Consumer history → plain MMR. Double-spend → SMT.
+- **D-7 Whitepaper language:** five exact sentences locked (see `merkle-spec-v1.md` §7). Due-diligence proof = FCA SYSC 6.3 / MLR 2017 reg. 40, **not** FATF travel rule (Rec. 16) — MLRO confirmation required before any copy. Open Banking leaves = self-asserted only; bank-signed leaves required for "verified" language — solicitor to confirm evidential weight before publication.
+
+**Two-roots distinction (permanent invariant, never conflate):**
+- `merkle_root` (ciphertext) = Worker-verifiable, storage integrity
+- `blake3PlaintextRoot` (plaintext) = recipient-only, end-to-end integrity, permanently barred from Worker + all receipts
+
+**Five-vertical use-case matrix + B9 session plan (B9-1…B9-8, 3-session buffer):** full detail in `merkle-spec-v1.md`.
+
+**B9-Opus do-not-retry (all carried into `CLAUDE.md` §Known broken):**
+- Duplicate-last-leaf Merkle padding → RFC 6962 unbalanced promotion only
+- Undomain-separated node hash → mandatory `0x00`/`0x01` prefixes
+- Chunk hash array inline in manifest → sidecar `{uuid}/hashes` only
+- `verified: true` backed by spot-check → full reconstruction + full inline body verification only
+- "Smart contract" for OTS/MMR anchoring → "Bitcoin-anchored" / "public timestamping layer"
+- SMT replacing Supabase → SMT is a public verifiability complement, never the live arbiter
+- "Travel-rule compliance" for due-diligence proof → SYSC 6.3 / MLR reg. 40; MLRO to confirm before marketing
+- `blake3PlaintextRoot` in any receipt or Worker → permanently barred; no exceptions
+
+---
+
+## Locked block sequence (updated B9-Opus · 12 Sep 2026)
+
+`SW-MCP-8 → B8-Opus → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-1…B9-8) → B10+`
+
+*(B9-Opus is design complete. B9 build sessions are sequenced in `merkle-spec-v1.md` §9 and gate on the SD-block being shipped.)*
+
+*"Nothing stops this train."*

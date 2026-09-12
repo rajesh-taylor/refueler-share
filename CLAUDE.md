@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.4 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-MCP-Opus-2 · 10 Sep 2026
+> **Version:** 2.5 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B9-Opus · 12 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -34,6 +34,12 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 - **Cashu** → anonymous auth (no hashing role)
 
 BLAKE3 is not the auth layer. Cashu is not the hashing layer. SHA-256/OTS is not the integrity layer and never enters the Worker.
+
+**Two Merkle roots, never conflated (locked B9-Opus · 12 Sep 2026):**
+- **Ciphertext-chunk `merkle_root`** — over per-chunk BLAKE3 digests of stored ciphertext. Worker-verifiable. Storage integrity only.
+- **Plaintext `blake3PlaintextRoot`** — over plaintext bytes. Client-side + recipient only. **Never enters the Worker. Never in any receipt. Permanent.**
+
+"End-to-end file integrity" is the recipient's plaintext check. The Worker's Merkle verification is storage integrity. These are two different claims. Never conflate them in any copy, doc, or code comment.
 
 **Frontend module structure (post Share-JS-Refactor · 6 Sep 2026):**
 - `frontend/share.js` — entry point, DOM refs, shared state, mode detection
@@ -121,13 +127,24 @@ Full contracts in `refueler-mcp-spec-v2.md`. Worker-contract items that affect e
 **BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
 Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
 `blake3_worker.js`. 400 on hash mismatch. Full Merkle root verification (assembled file vs BLAKE3 tree root)
-remains unimplemented — do not claim end-to-end file integrity until B9 audit.
+remains unimplemented — do not claim end-to-end file integrity until B9 build is complete (B9-3).
 
-**Integrity/audit marketing claims — current ruling (S42e + TH-series):**
+**Integrity/audit marketing claims — current ruling (S42e + TH-series + B9-Opus · 12 Sep 2026):**
 - ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase ledger. Rate limiting on all public endpoints. UUID-bound credential issuance.
 - ✅ **Safe to assert (TH-series+):** Permanent record (Bitcoin-anchored existence proof) for Sovereign+ transfers where sender opts in. Honest scope: proves bytes existed on or before a block date. Does not prove authorship, truth, or delivery.
-- 🔒 **Still blocked:** Full Merkle tree verification. NUT-11 Mode 2 (keypair auth). "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim without the Merkle qualifier. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
-- 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 (whitepaper + Merkle) → B10 (ML-KEM).
+- ✅ **Safe to assert after B9-3 ships:** Ciphertext storage integrity — Worker verifies assembled ciphertext Merkle root on every download. Use: "ciphertext storage integrity" or "the encrypted object served equals the encrypted object stored." Never "end-to-end."
+- 🔒 **Still blocked (until B9 build):** Full Merkle tree verification at download. Receipt `merkle_root`/`verified` fields (gate: B9-3). NUT-11 Mode 2 (keypair auth). "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
+- 🔒 **Permanently blocked:** Plaintext `blake3PlaintextRoot` in any receipt or in the Worker. "End-to-end file integrity" as a Refueler-side claim (the Worker never verifies plaintext — the recipient does).
+- 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 build B9-1…B9-3 (ciphertext Merkle root verification) → B9-4 (receipt upgrade) → B10 (ML-KEM).
+
+**Merkle / MMR / SMT — locked B9-Opus · 12 Sep 2026 (full spec: `merkle-spec-v1.md` in repo root):**
+- Tree construction: RFC 6962 unbalanced, domain-separated (`0x00` leaf / `0x01` node), BLAKE3 node hash, sequential big-endian leaf ordering (matches AAD convention), `chunk_count` committed. `tree_algo: "rfc6962-unbalanced-blake3-v1"`. Duplicate-last-leaf rejected (CVE-2012-2459).
+- Chunk hashes persisted in R2 sidecar `{uuid}/hashes` (raw 32-byte concat). Never inline in manifest (64 KB `safeGetManifest()` ceiling). Download = sidecar-root check + verify-then-flush per chunk + 409 on mismatch. Full reconstruction only basis for `verified`.
+- Receipt `merkle_root`/`verified` unblocked post-B9-3, ciphertext root only. Plaintext root barred from receipts forever.
+- MMR roots anchor via Share OTS relay, never a "smart contract". AES-256-GCM leaf encryption, on-device key (Deed→HKDF).
+- SMT complements Supabase double-spend guard (public verifiability); never the live arbiter; no build slot without design partner.
+- ZK build slot only where (a) use case hides which set member satisfied a predicate; (b) no NUT-22/nutroot primitive covers it; (c) buyer committed.
+- Due-diligence proof = FCA SYSC 6.3 / MLR 2017 reg. 40 record-keeping evidence — NOT FATF travel rule compliance. MLRO confirmation required before marketing copy.
 
 ---
 
@@ -143,16 +160,17 @@ Session count is a guide not a constraint — split early, never overload. Plann
 - TH-2 ✓ — Permanent-record toggle UI, `seal_nonce`, `blake3PlaintextRoot`. Deployed `53e3c7fb`.
 - Share-JS-Refactor ✓ — 5-module split. Deployed `45a4d3b3`. 324 tests passing.
 
-**SW-block in progress — functionally complete, SW9 (close session) not yet run:**
-- SW1–SW8 ✓ — CF for SaaS, HMAC auth, credential issuance, badge, webhooks, receipts, dashboard, sandbox, hostname health. 432 tests passing.
-- **Next: SW9** — snag sweep (trailing full-stop normalisation in `err()` helper), TESTING.md additions, context trim, B8 brief, buffer review.
+**SW-block ✓ complete (11 Sep 2026):**
+- SW1–SW9 ✓ — CF for SaaS, HMAC auth, credential issuance, badge, webhooks, receipts, dashboard, sandbox, hostname health. 484 tests passing.
 
-**SW-MCP block (after SW9):**
-- SW-MCP-1 ✓ — `refueler-mcp` repo created. `ab7e010`. 32 tests passing.
-- SW-MCP-W2 — Worker: monthly allocation, lazy reset, overage ceiling, `personal_api` plan value.
-- SW-MCP-1…8 — MCP server scaffold through distribution. See `refueler-mcp-spec-v2.md` §6.3.
+**SW-MCP block in progress:**
+- SW-MCP-1–6 ✓ — MCP server scaffold through demo hardening. 228 tests passing (`refueler-mcp` repo).
+- **Next: SW-MCP-8** — npm package distribution, Apache 2.0, trust-boundary README.
+- SW-MCP-7 gates on B7/NB-4 (anonymous rail send).
 
-Locked block sequence: `SW9 → SW-MCP → B8 → [Hetzner] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`.
+**B9-Opus ✓ complete (12 Sep 2026):** Merkle / MMR / SMT / ZK design locked. `merkle-spec-v1.md` produced (repo root).
+
+Locked block sequence: `SW-MCP-8 → B8-Opus → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-1…B9-8) → B10+`
 
 ---
 
@@ -186,7 +204,7 @@ This is not optional.
 - §B-n snag list: remove fully resolved items. Carried items only.
 - Target: under 350 lines at all times.
 
-**Applies to:** SW9 (SW) · then SW-MCP, B8, B9, B10, B11, B12 close sessions.
+**Applies to:** SW-MCP-8 (next B-close) · then B8, B9, B10, B11, B12 close sessions.
 Also apply at any session where either file exceeds its target line count mid-block.
 
 ---

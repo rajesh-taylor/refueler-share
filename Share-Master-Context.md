@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 7.9 | **Last updated:** Share-Brand-Opus-1 · 11 Sep 2026
+> **Version:** 8.0 | **Last updated:** B9-Opus · 12 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -96,7 +96,17 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - AES-GCM session key lives in URL fragment only — never in requests, never in logs.
 - AAD per chunk: 4-byte big-endian uint32 via `DataView.setUint32(0, i, false)`.
 
-**Storage:** R2 binding `BUCKET`. KV binding `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`. `safeGetManifest()` enforces 64 KB ceiling.
+**Two roots, never conflated (B9-Opus · 12 Sep 2026):**
+- `merkle_root` = ciphertext-chunk Merkle root. Worker-verifiable. Written to manifest at upload (client-authoritative); reconstructed by Worker at download (verification). Storage integrity only.
+- `blake3PlaintextRoot` = plaintext root. Recipient-side only. Never in manifest. Never in Worker. Never in any receipt. Permanent ban.
+
+**Merkle tree (locked B9-Opus):**
+- RFC 6962 unbalanced, domain-separated (`0x00` leaf / `0x01` node), BLAKE3 node hash, big-endian leaf order. `tree_algo: "rfc6962-unbalanced-blake3-v1"`. `chunk_count` committed.
+- Chunk hashes: R2 sidecar `{uuid}/hashes` (raw 32-byte concat per chunk). Never inline in manifest.
+- Download sequence: `GET {uuid}/hashes` → reconstruct root → compare manifest `merkle_root` → verify-then-flush each chunk → 409 on any mismatch.
+- `{uuid}/hashes` sidecar written at manifest-write (B9-2). Download-time verification (B9-3). Receipt upgrade (B9-4, post-B9-3 only).
+
+**Storage:** R2 binding `BUCKET`. KV binding `STATUS_KV`. Chunk key: `{uuid}/{0000}`. Manifest key: `{uuid}/manifest.json`. Hashes sidecar: `{uuid}/hashes`. `safeGetManifest()` enforces 64 KB ceiling — do not inline chunk hashes in manifest.
 
 **Frontend:**
 - Credentials in browser memory only — never localStorage, never sessionStorage.
@@ -119,7 +129,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 ## Known broken / do not retry
 
 | Pattern | Correct approach |
-|---------|------------------|
+|---------|-----------------|
 | `checkout/sessions ui_mode:embedded` | Direct Subscription + PaymentIntent expansion |
 | `new Uint8Array([i])` for AES-GCM AAD | `DataView.setUint32(0, i, false)` into 4-byte buffer |
 | AE SQL `doubles[N]` / `blob[N]` syntax | Named columns: `double1`, `blob1` etc. |
@@ -165,12 +175,20 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Use tier display names (Citizen/Sovereign/Chartered) as logic keys | Internal enum keys only: `free` · `paid_registered` · `paid_bearer` · Chartered wire value `'api'` (not `'chartered'`) — display names live in a map, never in gating logic. Gate via `worker/src/tiers.js` helpers only. |
 | Find-replace "Sovereign tier only" → "Sovereign" after brand rename | "Sovereign tier only" on perm-record/availability-window = paid-vs-free gate → must read "Citizen and Sovereign" / "paid tiers" |
 | Rename Stripe price IDs or lookup keys for tier rename | Display names only — price IDs and lookup keys (share-max-monthly etc.) are immutable |
+| Duplicate-last-leaf padding in Merkle tree | RFC 6962 unbalanced promotion (last odd node promotes unchanged). Duplicate-last = CVE-2012-2459. `chunk_count` committed to close residual ambiguity. |
+| Undomain-separated Merkle node hash | `0x00` prefix for leaves, `0x01` prefix for internal nodes — leaf/node ambiguity attack without these |
+| Inline chunk-hash array in manifest | Sidecar R2 object `{uuid}/hashes` only — manifest ceiling is 64 KB (`safeGetManifest()`) |
+| `verified: true` receipt backed by spot-check | Full root reconstruction + full inline body verification only. Spot-check is a background canary, never touches a receipt. |
+| "Smart contract" for MMR root anchoring | Say "Bitcoin-anchored" or "public timestamping layer" — OTS relay, not a smart contract |
+| SMT replacing Supabase double-spend guard | SMT = public verifiability layer (periodic, complementary). Supabase = live race-safe arbiter. Never replace. |
+| Claim "travel-rule compliance" for due-diligence proof | Record-keeping evidence (FCA SYSC 6.3 / MLR reg. 40). MLRO to confirm framing before marketing copy. |
+| `blake3PlaintextRoot` in any receipt or Worker | Permanently barred. Receipt `merkle_root` post-B9-3 = ciphertext root only. |
 
 ---
 
 ## Current state
 
-**SW-block ✓ complete (11 Sep 2026). SW-MCP-Opus-2 ✓ complete. MCP spec v2 locked. Next: SW-MCP-W1.**
+**B9-Opus ✓ complete (12 Sep 2026). Design lock done. Next: SW-MCP-8 (npm distribution).**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
@@ -178,7 +196,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | TH-series ✓ | `45a4d3b3` | OTS relay · permanent-record UI · JS refactor (5 modules). |
 | SW1–SW9 ✓ | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health · utils.js extraction · trailing full-stop normalisation · lightning.js LNbits wired. 484 tests. |
 | SW-MCP-Opus-2 ✓ | — | MCP spec v2 locked. All O-6…O-11 resolved. D-1 filename fix locked (Option B). Personal API path locked. Capabilities endpoint contract locked. |
-| SW-MCP-1 ✓ | `ab7e010` | New repo `refueler-mcp`. Scaffold, HMAC signing, API client, `refueler_capabilities` tool, 32 tests. |
+| SW-MCP-1–6 ✓ | `713156a` (refueler-mcp) | MCP server scaffold → demo hardening. 228 tests. |
+| B9-Opus ✓ | — | Merkle/MMR/SMT/ZK design locked. `merkle-spec-v1.md` produced (repo root). BRIDGE v9.4. |
 
 ---
 
@@ -187,60 +206,41 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Order | Block / Session | Hetzner? | Notes |
 |---|---|---|---|
 | 1–8 | B1–TH-series ✓ | ❌ | Complete. |
-| 9 | SW block ✓ | ❌ | Complete. Commit `8b4b4a1`. SW9a carries index.js Phases 2–3 + test gaps. |
-| 10 | SW-MCP block | ❌ | W1+W2 (Worker contracts) then MCP-1…8. Full plan in `refueler-mcp-spec-v2.md` §6.3. |
-| 11 | B8 — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. |
+| 9 | SW block ✓ | ❌ | Complete. Commit `8b4b4a1`. |
+| 10 | SW-MCP block | ❌ | W1+W2 ✓. SW-MCP-1–6 ✓. **Next: SW-MCP-8** (npm, Apache 2.0). SW-MCP-7 gates on B7. |
+| 11 | B8-Opus → B8 build — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. B8-Opus first. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
 | 12 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
 | 13 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block with node live. |
 | 14 | SD-block — Silent Drop | ✅ | Sovereign (Bearer rail) + Lightning-only. Full Locke (B8) required. |
 | 15 | Article pipeline | ✅ | Unlocks after NB-4. |
-| 16 | B9 → B10+ | — | Continue as previously sequenced. |
+| 16 | B9 build (B9-1…B9-8) | — | Design locked B9-Opus · 12 Sep 2026. Build sessions sequenced in `merkle-spec-v1.md` §9. |
+| 17 | B10+ | — | ML-KEM + NUT-22 + Verkle forward. |
 
 **SD-block design decisions (locked SW-MCP-W2 session · 12 Sep 2026):**
-- **Per-client Quay link** is the canonical multi-client attribution model. One drop
-  link per client relationship. Attribution derives from which link was used, not
-  sender identity. The Worker remains blind to the client relationship.
-- **Target markets confirmed:** Legal (SRA client confidentiality), health (PHI
-  outside NHSmail/MESH), finance/accountancy (document receipt without storing
-  client data). Chartered invoiceable path (PO/invoice, no card) designed for
-  institutional buyers who cannot expense Lightning. These buyers purchase on
-  compliance obligation, not privacy values.
-- **Anonymous API/MCP rail target:** Bitcoin-native organisations running own
-  infrastructure, holding sats, wanting agent-level file transfer with no identity
-  surface. Pays in Lightning. Anon rail user guide + video guide scoped for this
-  audience at SD8/article pipeline.
-- **Notification model:** API/MCP clients get webhook (`cargo.accepted` per Quay)
-  provisioned at credential onboarding. Sovereign web clients get polling + badge
-  count. SimpleX stub deferred to SD5/B9.
-- **Harbourmaster design pass** is load-bearing before SD4 — Quay management with
-  client labelling (`label`, `drop_link`, `cargo_count`, `unread`, `created_at`,
-  all client-side) is a functional requirement for legal/accountancy use case, not
-  a cosmetic improvement.
-- **SD-Opus-pre session required** before SD1 to confirm Quay data model, reference
-  field UX, notification architecture, and anonymous rail Quay viability.
+- Per-client Quay link is the canonical multi-client attribution model.
+- Target markets confirmed: Legal, health (PHI), finance/accountancy. Chartered invoiceable path.
+- Anonymous API/MCP rail target: Bitcoin-native orgs, own infra, Lightning payment.
+- Notification model: webhook for API/MCP clients; polling + badge for Sovereign web.
+- Harbourmaster design pass load-bearing before SD4.
+- SD-Opus-pre session required before SD1 (Quay data model, reference field UX, notification architecture).
+
 ---
 
 ## Brand terminology — locked Share-Brand-Opus-1 (11 Sep 2026)
 
 | Tier | Internal key | Rail (user-facing) | Payment |
-|------|-------------|-------------------|---------|
+|------|-------------|-------------------|---------| 
 | Pro Bono | `free` | — | Public good |
 | Citizen | `paid_registered` | Registered | Stripe — GBP |
 | Sovereign | `paid_bearer` | Bearer | Lightning — sats |
 | Chartered | `chartered` | Registered or Bearer | Stripe / invoice, or Lightning |
 
-**Code reality (Share-1, 11 Sep 2026):** the table above is the target logic vocabulary. The Worker does **not** yet emit `paid_registered`/`paid_bearer`. Live tier strings in `worker/src/`: consumer axis `free`/`creative`/`max` (Stripe-lookup-derived, in `EXPIRY_WINDOWS`/`TIER_CAPS`/`stripe.js`) and Chartered axis wire value `'api'`. `citizen`/`sovereign` appear in **no** source module — display + S89 rename narrative only. `worker/src/tiers.js` (Share-1) is the single source of truth for logic keys. `TIERS.CHARTERED === 'api'` — wire rename to `'chartered'` is a deferred migration. `free`/`creative`/`max` → `paid_*` mapping is also deferred.
+**Code reality (Share-1, 11 Sep 2026):** live tier strings: `free`/`creative`/`max` (Stripe axis) + `'api'` (Chartered). `citizen`/`sovereign` appear in no source module. `TIERS.CHARTERED === 'api'` — wire rename deferred. `worker/src/tiers.js` is single source of truth for logic keys.
 
-**Citizen and Sovereign are the same price and feature set.** The rail is a privacy choice declared at onboarding — not a tier upgrade. Never present as a value ladder; always side-by-side.
+**Citizen and Sovereign are the same price and feature set.** The rail is a privacy choice, not a tier upgrade. Never present as a value ladder.
 
-**Rail names user-facing:** Registered (identity/Stripe) · Bearer (anonymous/Lightning). Internal architecture: identity rail / anonymous rail unchanged.
-
-**Feature-gate copy:** permanent record and availability window are **paid-vs-free** gates → "Citizen and Sovereign" or "paid tiers" — never "Sovereign only."
-
-**Vocabulary (sealed for Share, away from Merchant):** Lodge/Lodged (upload) · Collect/Collection (download) · Sealed/Under seal (encrypted transfer) · Struck off (deleted) · In camera (anonymous transfer) · Enrolment (onboarding) · Chambers (dashboard) · Freehold/Leasehold (permanent/expiring record) · Conduit (blind relay).
-
-Full rationale and migration checklist: `docs/Share-Brand-Terminology.md`.
+**Vocabulary (sealed):** Lodge/Lodged · Collect/Collection · Sealed/Under seal · Struck off · In camera · Enrolment · Chambers · Freehold/Leasehold · Conduit. Full rationale: `docs/Share-Brand-Terminology.md`.
 
 ---
 
@@ -248,11 +248,12 @@ Full rationale and migration checklist: `docs/Share-Brand-Terminology.md`.
 
 Full decision log: BRIDGE §SW-Opus-1/2/3/4 decisions and `refueler-mcp-spec-v2.md`.
 
-- **SW-Opus-1:** Four-tier model (Pro Bono/Citizen/Sovereign/Chartered). Share-Brand-Opus-1 locked 11 Sep 2026. Rail model (identity/anonymous, mutually exclusive, declared at onboarding). Model B credit pool. API v1/v2/forward-commitment features. MCP v1 tools. Sandbox. BRIDGE v8.3.
-- **SW-Opus-2:** Rate card v1.0 (10/transfer, 100/GB, 20/permanent-record). 1 credit = 1 sat. Credit blocks 10k/50k/200k/custom. £99/mo identity-API access fee. Citizen Teams (formerly Sovereign Teams) (S/M/L £49/£89/£169, UI-only). GTM reframe (HNW + accountant, warm intro). BRIDGE v8.4.
-- **SW-Opus-3:** DPA mandatory by default. AM = founder for first 3–6 months. Four-surface disclosure wording. "Ecash" → "signed digital tokens" in client copy. GDPR framing locked. BRIDGE v8.5.
-- **SW4-Opus:** Webhook signing: Option B (stateless HMAC derivation from `WEBHOOK_SIGNING_MASTER_KEY`). `whsec_hash` removed from KV. Dead-letter schema locked. SIGN_DOMAIN_TAG = `refueler.webhook.v1.sign`. BRIDGE v8.8.
-- **Share-MCP-Opus-2:** Capabilities endpoint locked (§7.1). Daily reference-rate KV `btc_ref_rate:current` locked (§7.3). Monthly allocation + lazy reset locked (§7.4). Personal API (£49/mo, 10k credits, `personal_api` plan, hard stop) locked (§7.5). D-1 filename fix: Option B, fragment grammar v1 locked (§7.2). Citizen/Sovereign Teams UI-only confirmed; firms wanting MCP take separate API credential relationship. npm distribution, Apache 2.0, no Anthropic marketplace. Terminology: "credits" everywhere user-facing. Transfer persistence past cancellation: explicit policy. `hashSecret()` parity check required at SW-MCP-2.
+- **SW-Opus-1:** Four-tier model. Rail model. Model B credit pool. API v1/v2/forward-commitment features. MCP v1 tools. Sandbox. BRIDGE v8.3.
+- **SW-Opus-2:** Rate card v1.0 (10/transfer, 100/GB, 20/permanent-record). 1 credit = 1 sat. Credit blocks 10k/50k/200k/custom. £99/mo identity-API. Citizen Teams (£49/£89/£169, UI-only). GTM reframe. BRIDGE v8.4.
+- **SW-Opus-3:** DPA mandatory by default. AM = founder first 3–6 months. Four-surface disclosure wording. GDPR framing. BRIDGE v8.5.
+- **SW4-Opus:** Webhook signing: Option B (stateless HMAC). `whsec_hash` removed. Dead-letter schema. SIGN_DOMAIN_TAG = `refueler.webhook.v1.sign`. BRIDGE v8.8.
+- **Share-MCP-Opus-2:** Capabilities endpoint locked (§7.1). Daily reference-rate KV locked. Monthly allocation + lazy reset locked. Personal API (£49/mo, 10k credits, `personal_api`, hard stop) locked. D-1 filename fix: Option B, fragment grammar v1. Citizen/Sovereign Teams UI-only. npm distribution, Apache 2.0. Terminology: "credits" everywhere user-facing.
+- **B9-Opus:** Merkle/MMR/SMT/ZK design locked. Full spec: `merkle-spec-v1.md`. Two-roots distinction permanent. RFC 6962 unbalanced BLAKE3 tree. Sidecar `{uuid}/hashes`. Download verify-then-flush. Due-diligence proof = SYSC 6.3 / MLR reg. 40 (not travel rule). MLRO flag. BRIDGE v9.4.
 
 ---
 

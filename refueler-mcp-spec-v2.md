@@ -28,6 +28,8 @@ merely *specifies*:
 | Agent-to-agent standing inbox (`refueler_receive`) | **Designed only** — gates on Silent Drop shipping |
 | BOLT12 / inline agent payment | **B9+ forward commitment** — documented, never built |
 
+> **Merkle / MMR / SMT integrity design:** see `merkle-spec-v1.md` (repo root, B9-Opus · 12 Sep 2026) — the two-roots distinction there governs every integrity claim in this spec.
+
 **`rails_available` today is `["identity"]`, not `["identity","anonymous"]`.** The
 anonymous rail appears in that array only when B7/NB-4 make credit-block issuance
 live. Do not let the illustrative arrays elsewhere in this file imply otherwise.
