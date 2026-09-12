@@ -196,6 +196,28 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | 15 | Article pipeline | ✅ | Unlocks after NB-4. |
 | 16 | B9 → B10+ | — | Continue as previously sequenced. |
 
+**SD-block design decisions (locked SW-MCP-W2 session · 12 Sep 2026):**
+- **Per-client Quay link** is the canonical multi-client attribution model. One drop
+  link per client relationship. Attribution derives from which link was used, not
+  sender identity. The Worker remains blind to the client relationship.
+- **Target markets confirmed:** Legal (SRA client confidentiality), health (PHI
+  outside NHSmail/MESH), finance/accountancy (document receipt without storing
+  client data). Chartered invoiceable path (PO/invoice, no card) designed for
+  institutional buyers who cannot expense Lightning. These buyers purchase on
+  compliance obligation, not privacy values.
+- **Anonymous API/MCP rail target:** Bitcoin-native organisations running own
+  infrastructure, holding sats, wanting agent-level file transfer with no identity
+  surface. Pays in Lightning. Anon rail user guide + video guide scoped for this
+  audience at SD8/article pipeline.
+- **Notification model:** API/MCP clients get webhook (`cargo.accepted` per Quay)
+  provisioned at credential onboarding. Sovereign web clients get polling + badge
+  count. SimpleX stub deferred to SD5/B9.
+- **Harbourmaster design pass** is load-bearing before SD4 — Quay management with
+  client labelling (`label`, `drop_link`, `cargo_count`, `unread`, `created_at`,
+  all client-side) is a functional requirement for legal/accountancy use case, not
+  a cosmetic improvement.
+- **SD-Opus-pre session required** before SD1 to confirm Quay data model, reference
+  field UX, notification architecture, and anonymous rail Quay viability.
 ---
 
 ## Brand terminology — locked Share-Brand-Opus-1 (11 Sep 2026)

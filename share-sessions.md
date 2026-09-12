@@ -322,13 +322,40 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 
 **Prerequisites:** B8 complete. NB-4 (node live). 7-day friend-group soft launch gates public Sovereign access.
 
+**SD-Opus-pre · 12 Sep 2026 — Quay management + multi-client attribution design**
+Gate: before SD1. Required decisions:
+- Per-client Quay link model confirmed as the canonical attribution mechanism (one
+  drop link per client relationship; attribution derives from which link was used,
+  not sender identity). Replaces any sender-declared identity field.
+- Quay data model: `label` (client name, client-side only), `drop_link`, `cargo_count`,
+  `unread` flag, `created_at`. None of this touches the Worker — labelling is
+  Harbourmaster-local state only.
+- Reference field UX: should the drop link landing page prompt the sender for a
+  reference? (e.g. "MEHTA-2026-TAX") — client-side only, travels in URL fragment
+  alongside filename, never stored by Refueler. Resolve: yes/no + copy.
+- Notification model: polling vs webhook. For API/MCP clients, webhook provisioned
+  at onboarding is the correct answer (one `rfs_whsec_` registered at credential
+  issuance; `cargo.accepted` fires per Quay on cargo arrival). For Sovereign web
+  clients, polling with badge count. SimpleX notification stub deferred to SD5/B9.
+  Confirm both paths and the design boundary between them.
+- Anonymous rail Quay: whether a Sovereign Bearer client can publish a per-client
+  drop link without creating an identity surface. Confirm the architecture holds.
+- Anonymous API/MCP rail target market locked: Bitcoin-native organisations that
+  already run their own infrastructure, already hold sats, and want agent-level file
+  transfer without any identity surface. Small market, high intent, pays in Lightning
+  without friction. Anon rail user guide + video guide on refueler.io scoped for this
+  audience at SD8/article pipeline.
+- Harbourmaster design pass scoped: Quay management with client labelling as primary
+  field is load-bearing for legal/accountancy/health use case. Not cosmetic — without
+  it a solo practitioner with 20 clients cannot function. Design gate: before SD4.
+
 | Session | Label | Scope |
 |---------|-------|-------|
 | SD1–SD1b | Lighthouse architecture | KV schema. Opaque token → inbox key. Worker endpoints. UUID isolation. |
 | SD2–SD2b | Sender upload flow | Worker validates token, one-time credential, cargo arrived AE event. |
 | SD3–SD3c | Harbourmaster auth + Deed | NUT-11 Mode 2 login. Keypair + BIP-39 mnemonic. Recovery flow. |
-| SD4–SD4b | Harbourmaster dashboard I–III + mid-block audit | Receipt ledger. Quay management. **Mid-block privacy + security audit at SD4b.** |
-| SD5–SD5a | Notification + renewal | Polling + Business webhook. SimpleX stub card (B9). Renewal banner. |
+| SD4–SD4b | Harbourmaster dashboard I–III + mid-block audit | Receipt ledger. Quay management with client labelling as primary field (label, drop_link, cargo_count, unread, created_at — all client-side). **Harbourmaster design pass required before SD4 — see SD-Opus-pre.** **Mid-block privacy + security audit at SD4b.** |
+| SD5–SD5a | Notification + renewal | API/MCP clients: webhook (`cargo.accepted` per Quay) provisioned at onboarding. Sovereign web clients: polling + badge count. SimpleX stub card (B9). Renewal banner. |
 | SD6–SD6a | Soft launch + findings | 7-day friend-group observation. P0/P1 fixes. |
 | SD7–SD7a | Source-protection copy + final audit | Gated: SD shipped + VPN scope stated. Full privacy + security audit. |
 | SD8 | SD close | Snag sweep. Context trim. B9 brief. Public Sovereign Lightning access enabled. |
@@ -338,6 +365,17 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 - DO NOT return 402 at `GET /inbox/{token}` — defer quota errors to upload attempt
 - DO NOT use Math.random() in Deed generation — `crypto.getRandomValues()` only
 - DO NOT use "anonymous" for Stripe-rail Silent Drop — it is private, not anonymous
+- DO NOT present per-client Quay links as a privacy compromise — attribution
+  derives from which link was used, not sender identity. The Worker remains blind
+  to the client relationship.
+- DO NOT add "this is not stored by Refueler" to the sender reference prompt —
+  treat it like an in-app bank transfer reference. Users understand the convention.
+- DO NOT design a single shared inbox for multi-client practices — one Quay per
+  client relationship is the only viable model at any scale above 5 clients.
+- DO NOT conflate anonymous API/MCP rail with consumer anonymous rail — Bitcoin-
+  native firms on the anonymous API rail run their own MCP infrastructure and hold
+  their own sats. User guide + video guide scoped for this audience, not the
+  general anonymous consumer.
 
 **Buffer pool (3 sessions):** SD1c · SD3d · SD4c
 
