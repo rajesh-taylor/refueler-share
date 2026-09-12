@@ -286,6 +286,15 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 | Smoke | `POST /admin/btc-rate` → `ok: true, gbp_per_btc: 62000, set_by: manual` ✓ · `GET /admin/btc-rate` → `set: true, age_seconds: 29` ✓ |
 | Notes | ADMIN_KEY rotated during session (old value mismatched). `.dev.vars` must be updated locally. `webhook_reg.test.js` 17 failures pre-existing, not introduced here. |
 | **SW-MCP-W2** | `61ea836` | `quota.js` (lazy reset, overage ceiling, personal_api hard stop, admin provision/cancel). `auth_ping.js` extended with quota summary fields. `index.js` `handleApiCredentialIssue` rewired through quota module. 2 new admin routes. 38 new tests. 522 unit passing. |
+
+## SW-MCP-1 · 12 Sep 2026 — MCP server scaffold
+
+| Item | Detail |
+|------|--------|
+| Commit | `ab7e010` on `rajesh-taylor/refueler-mcp` (new repo) |
+| Files | `package.json` · `.gitignore` · `README.md` · `src/config.js` · `src/hmac.js` · `src/api.js` · `src/index.js` · `src/tools/capabilities.js` · `test/hmac.test.js` · `test/capabilities.test.js` |
+| Tests | 32 passing (node:test only) |
+
 | **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. | SW-MCP-W1 |
 | **SW-MCP-2** | Local crypto module: chunk → AES-GCM → BLAKE3 → blinded; fragment grammar v1 helper; `hashSecret()` parity check; unit tests. | SW-MCP-1 |
 | **SW-MCP-3** | `refueler_quote` + `refueler_balance`; rate-card cache + degrade; credits vocabulary. | SW-MCP-2 |

@@ -148,7 +148,7 @@ Session count is a guide not a constraint — split early, never overload. Plann
 - **Next: SW9** — snag sweep (trailing full-stop normalisation in `err()` helper), TESTING.md additions, context trim, B8 brief, buffer review.
 
 **SW-MCP block (after SW9):**
-- SW-MCP-W1 — Worker: `GET /api/v1/capabilities` locked shape + daily reference-rate KV.
+- SW-MCP-1 ✓ — `refueler-mcp` repo created. `ab7e010`. 32 tests passing.
 - SW-MCP-W2 — Worker: monthly allocation, lazy reset, overage ceiling, `personal_api` plan value.
 - SW-MCP-1…8 — MCP server scaffold through distribution. See `refueler-mcp-spec-v2.md` §6.3.
 

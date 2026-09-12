@@ -13,7 +13,7 @@ Refueler Share is not a file host. It is a cryptographic pipeline.
 
 Files are encrypted in your browser before a single byte leaves your machine. The server is architecturally blind — not by policy, but by design. The key never exists on our infrastructure. A court order compelling us to hand over file contents would be complied with immediately, and yield nothing readable.
 
-No account is required. Not on the free tier, not ever.
+No account is required on the free tier. The Lightning payment rail requires none either.
 
 ---
 

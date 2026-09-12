@@ -37,6 +37,7 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 | `share-nav.njk`, `share-footer.njk`, `share.js`, `blake3/` | BLAKE3 source + build tooling |
 | Admin dashboard pages `src/share/admin/` | Admin Worker endpoints |
 | Notes articles at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning) |
+**MCP server boundary:** `refueler-mcp` is a separate repo (`/Users/rajeshtaylor/Documents/refueler-mcp/`). Runs in the agent's trust domain — not in `refueler-share`. Handles ciphertext only. Apache 2.0. One repo serves all Refueler products. SW-MCP-1 shipped `ab7e010` (12 Sep 2026).
 
 **Dual-repo asset sync (SYNC-1 · 31 Aug 2026):** `share.js`, `share.css`, `share-tokens.css`, `status.css`, `fflate.min.js`, `qr-creator.min.js`, `blake3/` exist in both repos. **`refueler-share/frontend/` is canonical.** `refueler.io/src/share/assets/` is the mirror. Mirror copies carry a `GENERATED FILE` header — never edit them directly. Sync tool: `bin/sync-share.sh` in `refueler-share` (**path: `bin/sync-share.sh`**, not repo root). Run after every edit to any shared asset. `plans.css` is io-only and excluded from sync.
 

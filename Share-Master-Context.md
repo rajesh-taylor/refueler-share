@@ -178,6 +178,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | TH-series ✓ | `45a4d3b3` | OTS relay · permanent-record UI · JS refactor (5 modules). |
 | SW1–SW9 ✓ | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health · utils.js extraction · trailing full-stop normalisation · lightning.js LNbits wired. 484 tests. |
 | SW-MCP-Opus-2 ✓ | — | MCP spec v2 locked. All O-6…O-11 resolved. D-1 filename fix locked (Option B). Personal API path locked. Capabilities endpoint contract locked. |
+| SW-MCP-1 ✓ | `ab7e010` | New repo `refueler-mcp`. Scaffold, HMAC signing, API client, `refueler_capabilities` tool, 32 tests. |
 
 ---
 
