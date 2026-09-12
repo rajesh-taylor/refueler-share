@@ -295,8 +295,23 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 | Files | `package.json` · `.gitignore` · `README.md` · `src/config.js` · `src/hmac.js` · `src/api.js` · `src/index.js` · `src/tools/capabilities.js` · `test/hmac.test.js` · `test/capabilities.test.js` |
 | Tests | 32 passing (node:test only) |
 
-| **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. | SW-MCP-W1 |
-| **SW-MCP-2** | Local crypto module: chunk → AES-GCM → BLAKE3 → blinded; fragment grammar v1 helper; `hashSecret()` parity check; unit tests. | SW-MCP-1 |
+| **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. |
+## SW-MCP-2 · 12 Sep 2026 — Local crypto module
+
+| Item | Detail |
+|------|--------|
+| Commit | `bc64298` on `rajesh-taylor/refueler-mcp` |
+| Files | `src/crypto.js` · `src/fragment.js` · `test/crypto.test.js` · `test/fragment.test.js` · `PARITY.md` |
+| Tests | 54 passing (node:test) |
+
+**What was done:** AES-256-GCM encrypt/decrypt with 4-byte big-endian uint32 AAD (load-bearing — matches `frontend/crypto.js` exactly). BLAKE3 chunk hash and rolling root via `@noble/hashes/blake3.js` (pure JS, no WASM — `blake3` npm package rejected, `blake3-wasm@2.1.7` does not exist). Fragment grammar v1: `assembleFragment`/`parseFragment` with legacy raw-key fallback. `hashSecret()` parity confirmed: bare SHA-256, no domain tag — ✅ matches `worker/src/nut11.js` exactly. See `PARITY.md`.
+
+**Repo boundary rule (SW-MCP-2 — do not retry):**
+- All MCP server files (`src/`, `test/`, `PARITY.md`) live in `/Users/rajeshtaylor/Documents/refueler-mcp/` only
+- `refueler-share/` receives nothing from the MCP block except `bin/sync-share.sh` runs (SW-MCP-4, shared frontend assets only)
+- When Claude presents files during SW-MCP sessions, mentally confirm the target repo before placing — the two repos sit one directory apart
+
+**Next:** SW-MCP-3 — `refueler_quote` tool.
 | **SW-MCP-3** | `refueler_quote` + `refueler_balance`; rate-card cache + degrade; credits vocabulary. | SW-MCP-2 |
 | **SW-MCP-4** | `refueler_send_file` E2E; D-1 filename fix for MCP AND consumer frontend (both in this session); full error matrix incl. `overage_ceiling`. | SW-MCP-2 (overage: W2) |
 | **SW-MCP-5** | `refueler_check_transfer`; state derivation; optional single re-check. | SW-MCP-4 |
@@ -323,6 +338,8 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 
 - DO NOT write quota write-back synchronously — fire-and-forget KV put; the race-critical path is in Supabase double-spend, not quota.
 - DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset logic.
+- DO NOT use `blake3` npm package — `blake3-wasm@2.1.7` does not exist on npm; use `@noble/hashes/blake3.js`
+- DO NOT import `@noble/hashes/blake3` without the `.js` extension — not in the package exports map; must be `@noble/hashes/blake3.js`
 ---
 
 ## SD-block — Silent Drop (post-B8, post-NB-4)
