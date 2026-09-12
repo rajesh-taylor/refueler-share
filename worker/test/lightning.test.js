@@ -120,7 +120,7 @@ describe('createInvoice (lnbits)', () => {
     const env = makeEnv();
 
     await createInvoice(
-      { tier: 'sovereign', period: '3month', amountSats: 2000, expirySeconds: 1800 },
+      { tier: 'max', period: '3month', amountSats: 2000, expirySeconds: 1800 },
       env,
     );
 
@@ -128,7 +128,7 @@ describe('createInvoice (lnbits)', () => {
     const [key, value] = env.STATUS_KV.put.mock.calls[0];
     expect(key).toBe(`lightning:invoice:${MOCK_PAYMENT_HASH}`);
     const parsed = JSON.parse(value);
-    expect(parsed).toMatchObject({ tier: 'sovereign', period: '3month', settled: false });
+    expect(parsed).toMatchObject({ tier: 'max', period: '3month', settled: false });
     expect(typeof parsed.created_at).toBe('string');
   });
 
@@ -213,14 +213,14 @@ describe('getInvoiceStatus (lnbits)', () => {
     const env = makeEnv();
     await env.STATUS_KV.put(
       `lightning:invoice:${MOCK_PAYMENT_HASH}`,
-      JSON.stringify({ tier: 'sovereign', period: '3month', settled: false, created_at: new Date().toISOString() }),
+      JSON.stringify({ tier: 'max', period: '3month', settled: false, created_at: new Date().toISOString() }),
     );
 
     mockFetch(lnbitsInvoicePending());
 
     const result = await getInvoiceStatus({ paymentHash: MOCK_PAYMENT_HASH }, env);
 
-    expect(result).toEqual({ settled: false, tier: 'sovereign', period: '3month' });
+    expect(result).toEqual({ settled: false, tier: 'max', period: '3month' });
   });
 
   it('returns null when paymentHash is not in KV', async () => {

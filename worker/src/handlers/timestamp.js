@@ -27,7 +27,7 @@ export async function handleTimestampSubmit(request, env, ctx) {
   if (!manifest) return err(404, 'Transfer not found');
 
   const manifestTier = (manifest.tier ?? 'free').toLowerCase();
-  if (manifestTier === 'free' || manifestTier === 'citizen') {
+  if (manifestTier === 'free') {
     return err(403, 'Permanent record requires a Sovereign subscription');
   }
 

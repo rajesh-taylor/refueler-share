@@ -142,13 +142,11 @@ describe('flipPendingDestruction', () => {
 });
 
 describe('isTidalPermitted', () => {
-  it('returns true for sovereign', () => expect(isTidalPermitted('sovereign')).toBe(true));
-  it('returns true for business',  () => expect(isTidalPermitted('business')).toBe(true));
-  it('returns true for enterprise', () => expect(isTidalPermitted('enterprise')).toBe(true));
-  it('returns false for free',     () => expect(isTidalPermitted('free')).toBe(false));
-  it('returns false for citizen',  () => expect(isTidalPermitted('citizen')).toBe(false));
+  it('returns true for max',      () => expect(isTidalPermitted('max')).toBe(true));
+  it('returns true for creative', () => expect(isTidalPermitted('creative')).toBe(true));
+  it('returns false for free',    () => expect(isTidalPermitted('free')).toBe(false));
   it('returns false for undefined', () => expect(isTidalPermitted(undefined)).toBe(false));
-  it('is case-insensitive',        () => expect(isTidalPermitted('Sovereign')).toBe(true));
+  it('is case-insensitive',       () => expect(isTidalPermitted('Max')).toBe(true));
 });
 
 describe('validateTidalHeaders', () => {
@@ -282,7 +280,7 @@ describe('handleConfirmTransfer', () => {
   });
 
   it('200 { destroyed: false } — not a destroy-after-download transfer', async () => {
-    const manifest = { total_chunks: 2, tier: 'sovereign' }; // no pending_destruction field
+    const manifest = { total_chunks: 2, tier: 'max' }; // no pending_destruction field
     const env = makeEnv(manifest);
     const ctx = makeCtx();
 
@@ -295,7 +293,7 @@ describe('handleConfirmTransfer', () => {
   });
 
   it('409 — pending_destruction is false (armed but not yet fully downloaded)', async () => {
-    const manifest = { total_chunks: 3, pending_destruction: false, tier: 'sovereign' };
+    const manifest = { total_chunks: 3, pending_destruction: false, tier: 'max' };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
 
@@ -310,10 +308,10 @@ describe('handleConfirmTransfer', () => {
   it('200 { destroyed: true } — pending_destruction is true, deletion fires', async () => {
     const uuid = 'aaaaaaaa-0000-0000-0000-000000000000';
     const manifest = {
-      total_chunks:       2,
+      total_chunks:        2,
       pending_destruction: true,
-      tier:               'sovereign',
-      p2sh_secret_hash:   null,
+      tier:                'max',
+      p2sh_secret_hash:    null,
     };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
@@ -333,7 +331,7 @@ describe('handleConfirmTransfer', () => {
     expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/0001`);
     expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/date-seal.ots.enc`);
 
-      // Tombstone written — putManifest is mocked, verify it was called
+    // Tombstone written — putManifest is mocked, verify it was called
     const { putManifest } = await import('../src/manifest.js');
     expect(putManifest).toHaveBeenCalled();
   });
@@ -360,10 +358,10 @@ describe('handleConfirmTransfer', () => {
 
   it('401 — passphrase-protected transfer, no token provided', async () => {
     const manifest = {
-      total_chunks:       1,
+      total_chunks:        1,
       pending_destruction: true,
-      p2sh_secret_hash:   'a'.repeat(64), // 64-char hex = passphrase present
-      tier:               'sovereign',
+      p2sh_secret_hash:    'a'.repeat(64), // 64-char hex = passphrase present
+      tier:                'max',
     };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
@@ -376,10 +374,10 @@ describe('handleConfirmTransfer', () => {
     verifyDownloadToken.mockResolvedValue({ valid: false, uuid: null });
 
     const manifest = {
-      total_chunks:       1,
+      total_chunks:        1,
       pending_destruction: true,
-      p2sh_secret_hash:   'a'.repeat(64),
-      tier:               'sovereign',
+      p2sh_secret_hash:    'a'.repeat(64),
+      tier:                'max',
     };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
@@ -397,10 +395,10 @@ describe('handleConfirmTransfer', () => {
     verifyDownloadToken.mockResolvedValue({ valid: true, uuid });
 
     const manifest = {
-      total_chunks:       1,
+      total_chunks:        1,
       pending_destruction: true,
-      p2sh_secret_hash:   'a'.repeat(64),
-      tier:               'sovereign',
+      p2sh_secret_hash:    'a'.repeat(64),
+      tier:                'max',
     };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
@@ -466,19 +464,11 @@ describe('tidal tier gate', () => {
     expect(isTidalPermitted('free')).toBe(false);
   });
 
-  it('rejects citizen tier for tidal headers', () => {
-    expect(isTidalPermitted('citizen')).toBe(false);
+  it('permits max tier', () => {
+    expect(isTidalPermitted('max')).toBe(true);
   });
 
-  it('permits sovereign tier', () => {
-    expect(isTidalPermitted('sovereign')).toBe(true);
-  });
-
-  it('permits business tier', () => {
-    expect(isTidalPermitted('business')).toBe(true);
-  });
-
-  it('permits enterprise tier', () => {
-    expect(isTidalPermitted('enterprise')).toBe(true);
+  it('permits creative tier', () => {
+    expect(isTidalPermitted('creative')).toBe(true);
   });
 });
