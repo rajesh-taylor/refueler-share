@@ -2,51 +2,73 @@
  * auth_ping.js — GET /api/v1/auth/ping
  *
  * Lightweight HMAC-authenticated liveness/identity check used by the
- * Harbourmaster client dashboard on login. Returns the rail + tier for
- * the presenting API key so the dashboard can gate features correctly.
+ * Harbourmaster client dashboard on login. Returns the rail + tier + quota
+ * summary for the presenting API key so the dashboard and MCP tools can
+ * gate features and warn before pool exhaustion.
  *
  * Auth: requireApiAuth() from api_auth.js (canonical HMAC-SHA256
  * over method + path + timestamp + body_hash, rfs_sign_ signing key).
  *
- * KV lookup: api_client_{sha256hex(rfs_live_)} → { tier, rail, active, created_at }
- * Written at credential issuance (POST /api/v1/credential/issue, SW2/SW2a).
+ * KV lookup (client record): api_client_{sha256hex(rfs_live_)} → { tier, rail, active, created_at }
+ * KV lookup (quota record):  api_quota_{sha256hex(rfs_live_)}  → quota schema (quota.js)
  *
- * Response (200):
- *   { ok: true, tier: "api", rail: "identity" | "anonymous" }
+ * Response (200) — identity rail:
+ *   {
+ *     ok:                 true,
+ *     tier:               "api",
+ *     rail:               "identity",
+ *     plan:               "identity_api" | "personal_api",
+ *     allocation_credits: number,
+ *     remaining_credits:  number,
+ *     period_end:         number,       // unix secs
+ *     overage_credits:    number,       // identity_api only
+ *     overage_ceiling:    number,       // identity_api only
+ *     status:             "active" | "cancelled",
+ *   }
+ *
+ * Response (200) — anonymous rail:
+ *   {
+ *     ok:   true,
+ *     tier: "api",
+ *     rail: "anonymous",
+ *     // No quota fields — balance is client-held; server is blind to it.
+ *   }
  *
  * Error responses:
  *   401 — HMAC invalid / timestamp stale / key not found
- *   403 — key exists but active: false (suspended)
- *   500 — KV read failure
+ *   403 — key exists but active: false (suspended), or wrong tier
+ *   502 — KV read failure (quota record — non-fatal; ping still returns ok with quota: null)
+ *   500 — unexpected internal error
  *
- * Do-not-retry (SW5a):
- *   - Never return tier !== "api" as OK — this endpoint is API-tier-only.
- *     Sovereign/Citizen keys get 403, not a degraded 200.
+ * Do-not-retry:
+ *   - Never return tier !== "api" as OK — API-tier-only endpoint.
  *   - Never proxy Supabase on this path — KV only.
  *   - Never log rfs_live_ value to AE — log apiKeyHash only.
+ *   - Quota KV failure is non-fatal: return ping ok + quota: null rather than 502.
+ *     The MCP tool degrades gracefully (shows credits as unknown, does not block a send).
+ *
+ * SW-MCP-W2: added quota summary fields to the identity-rail response.
  */
 
-import { requireApiAuth, sha256Hex } from './api_auth.js';
+import { requireApiAuth, sha256Hex, kvQuotaKey } from './api_auth.js';
+import { loadQuota, quotaSummary }               from './quota.js';
 
 /**
  * handleAuthPing
  *
  * @param {Request} request
- * @param {object} env  — Worker bindings (STATUS_KV, AE)
+ * @param {object}  env  — Worker bindings (STATUS_KV, AE)
  * @returns {Response}
  */
 export async function handleAuthPing(request, env) {
-  // ── 1. HMAC verification ────────────────────────────────────────────────
-  // requireApiAuth throws a Response on any auth failure — malformed header,
-  // unknown key, bad sign-key hash, invalid HMAC, or stale timestamp.
-  // On success returns { client, apiKey }.
+  // ── 1. HMAC verification ────────────────────────────────────────────────────
   let client, apiKey;
   try {
     ({ client, apiKey } = await requireApiAuth(request, new ArrayBuffer(0), env));
   } catch (e) {
     if (e instanceof Response) {
       const h = new Headers(e.headers);
-      h.set("Access-Control-Allow-Origin", "https://refueler.io");
+      h.set('Access-Control-Allow-Origin', 'https://refueler.io');
       return new Response(e.body, { status: e.status, headers: h });
     }
     return jsonError(500, 'auth_check_failed', 'Internal error during auth verification.');
@@ -54,58 +76,65 @@ export async function handleAuthPing(request, env) {
 
   const apiKeyHash = await sha256Hex(apiKey);
 
-  // ── 2. Tier + active gate ─────────────────────────────────────────────────
-  // requireApiAuth already rejected inactive keys. We re-read the client record
-  // here only to enforce the API-tier gate — requireApiAuth does not check tier.
-  // KV key: api_client_{ sha256hex(rfs_live_) } — matches api_auth.js schema.
+  // ── 2. Client record — tier + active gate ──────────────────────────────────
   let record;
   try {
     const raw = await env.STATUS_KV.get(`api_client_${apiKeyHash}`);
-    if (!raw) {
-      return jsonError(401, 'key_not_found', 'API key not found.');
-    }
+    if (!raw) return jsonError(401, 'key_not_found', 'API key not found.');
     record = JSON.parse(raw);
   } catch (e) {
     return jsonError(500, 'kv_read_failed', 'Could not read key record.');
   }
 
-  // ── 3. Active gate ────────────────────────────────────────────────────────
   if (!record.active) {
     logPingEvent(env, apiKeyHash, 'ping_rejected_suspended');
     return jsonError(403, 'key_suspended', 'This API key has been suspended.');
   }
 
-  // ── 4. Tier gate — API-tier only ─────────────────────────────────────────
-  // Dashboard is API-tier only (SW5a scope). Sovereign/Citizen keys may hold
-  // a valid HMAC but are not admitted here. A Sovereign holder never gets an
-  // API keypair, so this is defence-in-depth — not expected to fire in prod.
   if (record.tier !== 'api') {
     logPingEvent(env, apiKeyHash, 'ping_rejected_wrong_tier');
     return jsonError(403, 'api_tier_required',
       'The Harbourmaster dashboard requires an API-tier credential.');
   }
 
-  // ── 5. Success ────────────────────────────────────────────────────────────
+  // ── 3. Quota summary — identity rail only ──────────────────────────────────
+  // Anonymous rail: server is blind to the balance (client-held stack).
+  // Quota KV failure is non-fatal — ping returns ok, quota fields set to null.
+  let quota = null;
+  if (record.rail === 'identity') {
+    const qKey    = await kvQuotaKey(apiKey);
+    const { record: qRecord, error: qError } = await loadQuota(env, qKey);
+
+    if (qError) {
+      // Non-fatal — log and continue. MCP tool will show credits as unknown.
+      console.error('auth_ping: quota load failed:', qError);
+    } else {
+      quota = quotaSummary(qRecord);
+    }
+  }
+
+  // ── 4. Success ─────────────────────────────────────────────────────────────
   logPingEvent(env, apiKeyHash, 'ping_ok');
 
-  return new Response(JSON.stringify({
+  const responseBody = {
     ok:   true,
-    tier: record.tier,                          // "api"
-    rail: record.rail,                          // "identity" | "anonymous"
-  }), {
-    status: 200,
+    tier: record.tier,   // "api"
+    rail: record.rail,   // "identity" | "anonymous"
+    ...(record.rail === 'identity' && quota !== null ? quota : {}),
+  };
+
+  return new Response(JSON.stringify(responseBody), {
+    status:  200,
     headers: corsHeaders(),
   });
 }
 
-// ── CORS preflight ────────────────────────────────────────────────────────────
-// Dashboard is served from dashboard.share.refueler.io (Cloudflare Pages).
-// Worker is at api.share.refueler.io. Cross-origin preflight needed.
+// ── CORS preflight ─────────────────────────────────────────────────────────────
 export function handleAuthPingOptions() {
   return new Response(null, { status: 204, headers: corsHeaders() });
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function jsonError(status, code, message) {
   return new Response(JSON.stringify({ ok: false, error: code, message }), {
@@ -124,10 +153,6 @@ function corsHeaders() {
   };
 }
 
-/**
- * Fire-and-forget AE log. Never awaited — never control flow.
- * Logs apiKeyHash (never the raw rfs_live_ value).
- */
 function logPingEvent(env, apiKeyHash, eventType) {
   try {
     env.AE.writeDataPoint({
@@ -136,6 +161,6 @@ function logPingEvent(env, apiKeyHash, eventType) {
       indexes: ['auth_ping'],
     });
   } catch (_) {
-    // AE is fire-and-forget — ignore write failures.
+    // Fire-and-forget — ignore.
   }
 }
