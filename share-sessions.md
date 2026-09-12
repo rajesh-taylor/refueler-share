@@ -285,7 +285,7 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 | Summary | cap.v1 capabilities endpoint (locked §7.1 shape) + `btc_ref_rate:current` KV + manual admin override (`POST/GET /admin/btc-rate`) + CoinGecko cron Task 3 at 03:00 UTC + ±20% guard. 50 new tests passing. 409 total passing. |
 | Smoke | `POST /admin/btc-rate` → `ok: true, gbp_per_btc: 62000, set_by: manual` ✓ · `GET /admin/btc-rate` → `set: true, age_seconds: 29` ✓ |
 | Notes | ADMIN_KEY rotated during session (old value mismatched). `.dev.vars` must be updated locally. `webhook_reg.test.js` 17 failures pre-existing, not introduced here. |
-| **SW-MCP-W2** | Worker: monthly allocation + lazy reset; identity-API overage ceiling; Personal-API hard stop; `personal_api` plan value in KV. | SW-MCP-W1 |
+| **SW-MCP-W2** | `61ea836` | `quota.js` (lazy reset, overage ceiling, personal_api hard stop, admin provision/cancel). `auth_ping.js` extended with quota summary fields. `index.js` `handleApiCredentialIssue` rewired through quota module. 2 new admin routes. 38 new tests. 522 unit passing. |
 | **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. | SW-MCP-W1 |
 | **SW-MCP-2** | Local crypto module: chunk → AES-GCM → BLAKE3 → blinded; fragment grammar v1 helper; `hashSecret()` parity check; unit tests. | SW-MCP-1 |
 | **SW-MCP-3** | `refueler_quote` + `refueler_balance`; rate-card cache + degrade; credits vocabulary. | SW-MCP-2 |
@@ -312,6 +312,8 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 
 ### Do not retry
 
+- DO NOT write quota write-back synchronously — fire-and-forget KV put; the race-critical path is in Supabase double-spend, not quota.
+- DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset logic.
 ---
 
 ## SD-block — Silent Drop (post-B8, post-NB-4)
