@@ -323,8 +323,17 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 
 **Spec reconciliation (flagged):** session brief used `can_afford`/`shortfall_credits` at top level; locked spec §2.2 uses `affordable` and nested `balance`. Followed spec. `shortfall_credits` absent — recommend adding to spec at SW-MCP-4 review.
 
-**Next:** SW-MCP-4 — `refueler_send_file` E2E; D-1 filename fix for MCP AND consumer frontend.
-| **SW-MCP-4** | `refueler_send_file` E2E; D-1 filename fix for MCP AND consumer frontend (both in this session); full error matrix incl. `overage_ceiling`. | SW-MCP-2 (overage: W2) |
+## SW-MCP-4 · 12 Sep 2026 — refueler_send_file + D-1 frontend fix
+
+| Item | Detail |
+|------|--------|
+| Commit (refueler-mcp) | `d5fc84d` — feat(sw-mcp-4): refueler_send_file tool, 40 tests passing, D-1 X-File-Name invariant |
+| Commit (refueler-share) | `f07fc37` — fix(d-1): X-File-Name constant placeholder, fragment grammar v1 on both upload paths |
+| Files (refueler-mcp) | `src/tools/send.js` (new) · `test/send.test.js` (new) · `src/index.js` (wired) |
+| Files (refueler-share) | `frontend/upload.js` (D-1 patch + fragment v1) |
+| Tests | 40 new passing · 126 total |
+
+**What shipped:** Full E2E `refueler_send_file` tool per §2.3. AES-256-GCM session key generated locally. Chunks at 8 MiB, encrypted with 4-byte big-endian AAD. BLAKE3 per chunk + root. `X-File-Name` to Worker is always `"encrypted-payload"` — real filename in URL fragment only (fragment grammar v1, `assembleFragment`). Full 402 error matrix (overage_ceiling, quota_exhausted, account_cancelled, credit_invalid). passphrase → `hashSecret()` → `X-P2SH-Secret-Hash`. permanent_record → 16-byte `seal_nonce` in fragment `s` field. Consumer `frontend/upload.js` patched: both fresh-upload and resume paths now send constant placeholder and assemble v1 fragments. `bin/sync-share.sh` run.
 | **SW-MCP-5** | `refueler_check_transfer`; state derivation; optional single re-check. | SW-MCP-4 |
 | **SW-MCP-6** | Demo hardening: scripted happy path, failure-mode rehearsal, on-stage honesty script. | SW-MCP-5 |
 | **SW-MCP-7** | Anonymous-rail send through the MCP (credit-block spend). | **B7 / NB-4** |
@@ -351,6 +360,9 @@ fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
 - DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset logic.
 - DO NOT use `blake3` npm package — `blake3-wasm@2.1.7` does not exist on npm; use `@noble/hashes/blake3.js`
 - DO NOT import `@noble/hashes/blake3` without the `.js` extension — not in the package exports map; must be `@noble/hashes/blake3.js`
+- DO NOT generate artifacts with `description: ...` or `inputSchema: { ... }` placeholder stubs — these are literal syntax errors in JS, not VS Code fold indicators
+- DO NOT present `index.js` edits without specifying the full repo path. `refueler-mcp/src/index.js` and `refueler-share/worker/src/index.js` are completely different files in different repos. Always write the full path. Never say "index.js" alone.
+- When attaching or editing any `.js` file, confirm which repo it belongs to before proceeding — `refueler-mcp/src/` and `refueler-share/worker/src/` share many filenames (`index.js`, `crypto.js`, `utils.js` etc.) and are never interchangeable
 ---
 
 ## SD-block — Silent Drop (post-B8, post-NB-4)
