@@ -349,7 +349,16 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 - DO NOT return a truthy wrapper object from `fetchReceipt` when `body.receipt === null` — return `null` directly so `deriveState` sees absence correctly
 - DO NOT put the banned vocabulary word in the prohibition comment of a tool description — the vocabulary test scans the full string
 - DO NOT test first then skip committing — always test green before commit, never after
-| **SW-MCP-6** | Demo hardening: scripted happy path, failure-mode rehearsal, on-stage honesty script. | SW-MCP-5 |
+
+## SW-MCP-6 · 12 Sep 2026 — Demo hardening
+
+| Item | Detail |
+|------|--------|
+| Commit | `713156a` on `rajesh-taylor/refueler-mcp` |
+| Files | `docs/DEMO.md` · `scripts/demo-send.js` · `scripts/demo-payload.txt` |
+| Tests | 228 passing — no new tests (demo scripts are not unit-testable) |
+
+**What shipped:** On-stage runbook (`docs/DEMO.md`): pre-flight checklist, exact happy-path commands (quote → send → check), failure-mode rehearsal for 402/auth_failed/file-not-found, honesty script (live vs designed-not-yet-live for anonymous rail, Merkle integrity, Silent Drop, BOLT12, NUT-11 Mode 2), three recovery lines. `scripts/demo-send.js`: imports tool handlers directly from `src/tools/`, reads `REFUELER_LIVE_KEY` + `REFUELER_SIGN_KEY` from env, sends `scripts/demo-payload.txt`, prints share_url/cost_credits/expires_at, immediately calls check and prints state, Carbon/Paper terminal output, exits 0/1. `scripts/demo-payload.txt`: prospect-readable paragraph on Refueler Share, privacy, and Bitcoin — no pricing.
 | **SW-MCP-7** | Anonymous-rail send through the MCP (credit-block spend). | **B7 / NB-4** |
 | **SW-MCP-8** | npm package distribution, Apache 2.0; trust-boundary README; no Anthropic marketplace. | SW-MCP-5 |
 
