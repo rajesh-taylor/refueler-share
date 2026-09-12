@@ -311,8 +311,19 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 - `refueler-share/` receives nothing from the MCP block except `bin/sync-share.sh` runs (SW-MCP-4, shared frontend assets only)
 - When Claude presents files during SW-MCP sessions, mentally confirm the target repo before placing — the two repos sit one directory apart
 
-**Next:** SW-MCP-3 — `refueler_quote` tool.
-| **SW-MCP-3** | `refueler_quote` + `refueler_balance`; rate-card cache + degrade; credits vocabulary. | SW-MCP-2 |
+## SW-MCP-3 · 12 Sep 2026 — Quote + Balance tools
+
+| Item | Detail |
+|------|--------|
+| Commit | `817afa7` on `rajesh-taylor/refueler-mcp` |
+| Files | `src/rate-card.js` · `src/tools/quote.js` · `src/tools/balance.js` · `src/index.js` (updated) · `test/rate-card.test.js` · `test/quote.test.js` · `test/balance.test.js` |
+| Tests | 86 passing (node:test only) |
+
+**What was done:** Rate card v1.0 pure functions (`costCredits`, `gbpReference`). `refueler_quote` wired to `auth/ping` — §2.2 output shape exactly (`affordable`, nested `balance: { kind, remaining_credits }`). `refueler_balance` wired to `auth/ping` — identity and anonymous rail shapes, `overage_credits` omitted for `personal_api`. Both degrade gracefully on ping failure. Both registered in `src/index.js` tools map. Vocabulary invariant: no "sats"/"ecash"/"tokens" in any output field, confirmed by dedicated test assertions.
+
+**Spec reconciliation (flagged):** session brief used `can_afford`/`shortfall_credits` at top level; locked spec §2.2 uses `affordable` and nested `balance`. Followed spec. `shortfall_credits` absent — recommend adding to spec at SW-MCP-4 review.
+
+**Next:** SW-MCP-4 — `refueler_send_file` E2E; D-1 filename fix for MCP AND consumer frontend.
 | **SW-MCP-4** | `refueler_send_file` E2E; D-1 filename fix for MCP AND consumer frontend (both in this session); full error matrix incl. `overage_ceiling`. | SW-MCP-2 (overage: W2) |
 | **SW-MCP-5** | `refueler_check_transfer`; state derivation; optional single re-check. | SW-MCP-4 |
 | **SW-MCP-6** | Demo hardening: scripted happy path, failure-mode rehearsal, on-stage honesty script. | SW-MCP-5 |
