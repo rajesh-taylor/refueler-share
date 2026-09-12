@@ -33,6 +33,8 @@ import {
   runPermanentRecord,
 } from './timestamp.js';
 
+import { assembleFragment } from './fragment.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IndexedDB — chunk resume state (RU1)
 //
@@ -766,7 +768,9 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
       headers['X-Total-Bytes']           = String(state.selectedFile.size);
       headers['X-Tier']                  = 'free';
       headers['X-Expiry-Timestamp']      = String(expiryTimestamp);
-      headers['X-File-Name']             = state.selectedFile.name;
+      // D-1 invariant: constant placeholder — real filename travels in the URL fragment only.
+      // The Worker never sees the filename; it cannot read it under compulsion.
+      headers['X-File-Name']             = 'encrypted-payload';
       headers['X-Credential-Commitment'] = commitment;
       headers['X-Issued-Tier']           = issuedTier;
       if (p2shHashHex)          headers['X-P2SH-Secret-Hash']       = p2shHashHex;
@@ -836,10 +840,15 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   await new Promise(r => setTimeout(r, 700));
   progressCard.classList.add('hidden');
 
-  const fragmentStr = sealNonceHex
-    ? `uuid=${state.uploadUUID}&key=${keyHex}&iv=${ivHex}&sn=${sealNonceHex}`
-    : `uuid=${state.uploadUUID}&key=${keyHex}&iv=${ivHex}`;
-  const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
+  // Fragment grammar v1 (D-1): base64url-JSON { v:1, k:<key>, n:<real-filename>, s:<seal_nonce> }
+  // Real filename travels here only — the Worker never sees it.
+  const keyBytesRaw = new Uint8Array(await crypto.subtle.exportKey('raw', state.sessionAesKey));
+  const fragmentBlob = assembleFragment({
+    keyBytes:  keyBytesRaw,
+    filename:  state.selectedFile.name,
+    sealNonce: sealNonceHex ? hexToBuf(sealNonceHex) : undefined,
+  });
+  const shareUrl = `${location.origin}${location.pathname}#${fragmentBlob}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, !!p2shHashHex);
 }
@@ -1027,7 +1036,8 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       headers['X-Total-Bytes']           = String(record.fileSize);
       headers['X-Tier']                  = issuedTier;
       headers['X-Expiry-Timestamp']      = String(expiryTimestamp);
-      headers['X-File-Name']             = record.fileName;
+      // D-1 invariant: constant placeholder on resume path too.
+      headers['X-File-Name']             = 'encrypted-payload';
       headers['X-Credential-Commitment'] = commitment;
       headers['X-Issued-Tier']           = issuedTier;
       headers['X-Resume-From-Chunk']     = String(resumeFromChunk);
@@ -1091,10 +1101,14 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   await new Promise(r => setTimeout(r, 700));
   progressCard.classList.add('hidden');
 
-  const fragmentStr = sealNonceHex
-    ? `uuid=${state.uploadUUID}&key=${record.keyHex}&iv=${record.ivHex}&sn=${sealNonceHex}`
-    : `uuid=${state.uploadUUID}&key=${record.keyHex}&iv=${record.ivHex}`;
-  const shareUrl = `${location.origin}${location.pathname}#${fragmentStr}`;
+  // Fragment grammar v1 (D-1) on resume path.
+  const resumeKeyBytes = hexToBuf(record.keyHex);
+  const resumeFragmentBlob = assembleFragment({
+    keyBytes:  new Uint8Array(resumeKeyBytes),
+    filename:  record.fileName,
+    sealNonce: sealNonceHex ? hexToBuf(sealNonceHex) : undefined,
+  });
+  const shareUrl = `${location.origin}${location.pathname}#${resumeFragmentBlob}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, false);
 }
