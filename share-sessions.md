@@ -334,7 +334,21 @@ MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decis
 | Tests | 40 new passing · 126 total |
 
 **What shipped:** Full E2E `refueler_send_file` tool per §2.3. AES-256-GCM session key generated locally. Chunks at 8 MiB, encrypted with 4-byte big-endian AAD. BLAKE3 per chunk + root. `X-File-Name` to Worker is always `"encrypted-payload"` — real filename in URL fragment only (fragment grammar v1, `assembleFragment`). Full 402 error matrix (overage_ceiling, quota_exhausted, account_cancelled, credit_invalid). passphrase → `hashSecret()` → `X-P2SH-Secret-Hash`. permanent_record → 16-byte `seal_nonce` in fragment `s` field. Consumer `frontend/upload.js` patched: both fresh-upload and resume paths now send constant placeholder and assemble v1 fragments. `bin/sync-share.sh` run.
-| **SW-MCP-5** | `refueler_check_transfer`; state derivation; optional single re-check. | SW-MCP-4 |
+## SW-MCP-5 · 12 Sep 2026 — refueler_check_transfer + path traversal guard
+
+| Item | Detail |
+|------|--------|
+| Commit | `e78e953` on `rajesh-taylor/refueler-mcp` |
+| Files | `src/tools/check.js` (new) · `test/check.test.js` (new) · `src/index.js` (wired) · `src/tools/send.js` (traversal guard) |
+| Tests | 228 passing (node:test only) |
+
+**What was done:** `refueler_check_transfer` tool per §2.7. Calls `GET /api/v1/receipt/{uuid}/acceptance` and/or `/collection` (HMAC-auth). `deriveState()` pure function covering all four values: `uploaded` / `collected` / `expired` / `unknown`. `collection: null` = honest not-yet, never an error. T4 bug found and fixed during session: `fetchReceipt` was returning `{ receipt: null, sig: null }` (truthy object) instead of `null` when Worker signals not-yet-collected — `deriveState` was seeing two present receipts and returning `"collected"`. T9 bug: tool description contained the word `"delivered"` in its own prohibition comment — rephrased. Path traversal guard added to `refueler_send_file` (SW-MCP-4 flagged item): `path.resolve()` + `..` segment check; `chunkFile` now uses `resolvedPath`. Guard uses segment check not `cwd` restriction — MCP tool files can live anywhere on the filesystem. `import path from 'node:path'` added to `send.js` imports.
+
+**SW-MCP-5 do-not-retry:**
+- DO NOT restrict `file_path` to `process.cwd()` — MCP tools read files from anywhere on the user's filesystem; use `..` segment check only
+- DO NOT return a truthy wrapper object from `fetchReceipt` when `body.receipt === null` — return `null` directly so `deriveState` sees absence correctly
+- DO NOT put the banned vocabulary word in the prohibition comment of a tool description — the vocabulary test scans the full string
+- DO NOT test first then skip committing — always test green before commit, never after
 | **SW-MCP-6** | Demo hardening: scripted happy path, failure-mode rehearsal, on-stage honesty script. | SW-MCP-5 |
 | **SW-MCP-7** | Anonymous-rail send through the MCP (credit-block spend). | **B7 / NB-4** |
 | **SW-MCP-8** | npm package distribution, Apache 2.0; trust-boundary README; no Anthropic marketplace. | SW-MCP-5 |
