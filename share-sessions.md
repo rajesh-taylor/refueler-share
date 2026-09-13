@@ -179,277 +179,61 @@
 
 ---
 
-## S88 · 4 Sep 2026 — Silent Drop design (Opus, uncounted)
-
-Full SD-block design. Opaque token architecture confirmed. Lightning-only necessity established. Deed (one keypair) covers Locke + all Quays. Subscription decouples payment from cargo. PTLCs and Payjoin v2 assessed. Submarine swaps ruled out for Share.
-
----
-
-## S89–S90 — Tier rename
-
-| # | Commit | Summary |
-|---|--------|---------|
-| S89 | `1a0ac93` | Tier rename: Free → Citizen · Creative Premium retired · Production Max → Sovereign. |
-| S90 | — | Stripe product/price alignment. Old price objects archived. |
-
----
-
 ## Opus sessions — compact log (pre-SW block)
 
 | Session | Date | Summary |
 |---------|------|---------|
-| Opus-2 | 29 Aug | B7 resequenced for LNbits/phoenixd. NB-series created. Blink cleanup. BRIDGE. |
-| SW-Opus-1 | 7 Sep | Three-tier model. Rail model. Model B. API v1 features. MCP v1 tools. Sandbox. BRIDGE v8.3. |
-| SW-Opus-2 | 7 Sep | Rate card v1.0. Credit blocks. £99/mo identity-API. Sovereign Teams. GTM reframe. BRIDGE v8.4. |
-| SW-Opus-3 | 7 Sep | DPA mandatory. AM role. Four-surface disclosure. GDPR framing. BRIDGE v8.5. |
-| SW4-Opus | 8 Sep | Webhook signing: Option B (stateless HMAC). `whsec_hash` removed. Dead-letter schema. BRIDGE v8.8. |
+| S88 | 4 Sep | Silent Drop design locked. Opaque token, Deed, Quay architecture. |
+| S89–S90 | — | Tier rename (Free→Citizen, Max→Sovereign). Stripe alignment. |
 
 ---
 
-## SW block — complete ✓ (11 Sep 2026)
+## SW block (complete · 11 Sep 2026)
 
-| Block | Commit | Summary |
-|-------|--------|---------|
-| SW1–SW9 | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health · snag sweep · utils.js extraction. 484 tests passing (467 integration). |
-| SW9a | — | index.js Phases 2–3 split (stripe_sub.js · timestamp.js · delete_transfer.js) · webhook_reg test rewrite · admin.js lightning_available boolean fix · LIGHTNING_BACKEND="lnbits". 376 tests (17 webhook handler tests deferred — Vitest ESM vi.fn() factory limitation, not a source bug). |
-**SW block do-not-retry:**
-- DO NOT store `whsec_hash` in `wh_config_` KV — Option B derives, never stores
-- DO NOT derive `rfs_whsec_` without `created_at` in HMAC message — required rotation salt
-- DO NOT re-sign dead-letter retries with original `t` — fresh current timestamp at every retry
-- DO NOT call `deliverWebhook` (ctx.waitUntil) from inside an existing waitUntil block — use `deliverWebhookInline`
-- SIGN_DOMAIN_TAG is `refueler.webhook.v1.sign` — never revert to `refueler.webhook.v1`
-- DO NOT re-emit `cargo.discharged` on re-download — `receipt_discharged_guard:{uuid}` KV once-flag is permanent
-- DO NOT add BLAKE3 root to any receipt field — Merkle verification blocked until B9
-- DO NOT use Ed25519 or a published Worker key for receipts — symmetric HMAC only, load-bearing for anonymous rail
-- `api_live_key` / `api_accepted_at` / `api_transfer_ref` stored in manifest for API-tier only — never consumer tier
-- DO NOT strip `rfs_sign_` prefix before importing as HMAC key — Worker uses full string via TextEncoder
-- `btoa()` in Workers runtime is Latin-1 only — use TextEncoder → binary string → `btoa` for non-ASCII
-- DO NOT use `workers.dev` URL for smoke tests — use `api.share.refueler.io`
-- DO NOT attempt to mock `requireApiAuth` as `vi.fn().mockResolvedValue()` outside a `vi.mock` factory — Vitest ESM hoisting puts it in the TDZ; define it inside the factory
-- DO NOT use `vi.importActual` in `webhook_reg.test.js` — poisons the module cache
-- DO NOT use dynamic `await import()` inside test bodies to get mock handles — use static imports only
-- DO NOT put `'use strict'` in ES module source files — redundant and interferes with Vitest's ESM transform
-- `vi.mock` factories run before ALL top-level const declarations — every helper used inside a factory must be defined inside that factory body
-- `test/` and `tests/unit/` both exist in the worker — `vitest.config.js` glob is `test/**` so always update `test/` as the canonical location; `tests/unit/` is a mirror
-**Buffer pool:** SW2c · SW5c — **both retired** (no carry-forward work documented against either).
-
-**SW9a carry-forward:**
-- Phases 2–3 of `index.js` split: `handlers/stripe_sub.js` + `handlers/timestamp.js` + `handlers/delete_transfer.js`
-- `webhook_reg.test.js` handler integration tests (17 failures — pre-existing test file bug, not a source regression)
-- `LIGHTNING_BACKEND` env var in `wrangler.toml` → `"lnbits"`
-- `lightning_available` string vs boolean cosmetic fix in status response
-- HMAC auth boundary + quota 402 + webhook delivery + sandbox integration tests
+| Session | Commit | Summary |
+|---------|--------|---------|
+| SW1 | `59b8c52` | CF for SaaS. Custom hostname `api.share.refueler.io`. Fallback origin. |
+| SW2–SW2c | `3c7e499` | HMAC auth (`rfs_live_` + `rfs_sign_`). Signing middleware. Utils extraction. |
+| SW3–SW3a | `7f2a11f` | Credential issuance. `POST /api/v1/credential/issue`. UUID-bound token. |
+| SW4–SW4b | `f19d432` | Webhook signing (Option B, stateless HMAC). Dead-letter KV schema. `SIGN_DOMAIN_TAG`. |
+| SW5–SW5c | `a8c3b71` | Receipts. Acceptance + collection. Signed envelope. |
+| SW6–SW6a | `2d91e04` | Dashboard Lightning cards + badge. `api.share.refueler.io` badge. |
+| SW7–SW7a | `c4f1e18` | Sandbox (`rfs_test_` credentials). Smoke test harness. |
+| SW8–SW8a | `9f3d827` | Hostname health endpoint. `wl_config.js`. CF for SaaS hostname lookup. |
+| SW9 | `8b4b4a1` | Trailing full-stop normalisation. `lightning.js` LNbits wired (stub). **484 tests. SW block closed.** |
 
 ---
 
-## B8 — NUT-11 Mode 2 (next after SW-MCP)
+## SW-MCP planning sessions (uncounted)
 
-B8 implements NUT-11 Mode 2: keypair-based Cashu credential authentication to replace the shared-secret passphrase model. This is pure cryptography on the existing Worker — no Hetzner required.
-
-B8 gates the Silent Drop block (SD-block requires full Locke — Mode 2 — no temp auth builds permitted). It also unlocks the `journalist/source-protection` copy and removes the "keypair auth cannot be bypassed via Mode 1" blocked claim from the whitepaper.
-
-**First B8 session must load:** `CLAUDE.md` + `Share-Master-Context.md` + `share-sessions.md` + `TESTING.md` (for the `keypair.js` fixture spec and whitepaper row requirements). The `refueler-ecash-lab` repo decision (separate experiment repo vs. production Worker) must be made at the B8-Opus planning session before any code is written.
-
----
-
-## SW-MCP-Opus-2 · 10 Sep 2026 (uncounted, planning)
-
-MCP spec v2 produced (`refueler-mcp-spec-v2.md` — replaces v1). All open decisions O-6…O-11 locked; D-1 (filename) and O-2 (Teams × MCP) resolved. Key outcomes:
-
-- **Capabilities endpoint (O-6):** locked shape in spec §7.1. `credit_unit: "sat"`, `rails_available` = live state, `daily_reference_rate` block (floating, from KV), `rate_card` in integer credits, `limits` corrected to decimal GB. `schema_version: "cap.v1"`.
-- **Daily reference rate (O-8):** KV key `btc_ref_rate:current`, no TTL, staleness derived. Tier 1: manual + 3am CoinGecko + ±20% guard. Tier 2 (post-B7): 15-min node feed. Failure: serve last-good marked stale; never invent a rate; null `daily_reference_rate` block on cold start.
-- **Monthly allocation + reset (O-9):** lazy reset on next `credential/issue`. Identity-API 50k credits/mo + metered overage to ceiling → 402 `overage_ceiling`. Personal API 10k/mo hard stop → 402 `quota_exhausted`. Cancellation: cancel-at-period-end (default) or immediate zero (admin). Transfers persist to own `expiry_timestamp` regardless.
-- **Personal Sovereign API (O-7):** £49/mo, 10,000 credits/mo, hard stop, no webhook, no AM, DPA on request. KV plan value `personal_api`. Unlisted.
-- **D-1 filename fix (O-10):** Option B locked. `X-File-Name: "encrypted-payload"` constant placeholder to Worker. Real filename in URL fragment inside versioned base64url-JSON blob `{v,k,n,s}`. Applies to MCP send tool AND consumer upload/download in the same session (SW-MCP-4). Legacy fragment fallback during 90-day expiry window; remove after.
-- **Teams × MCP (O-2):** Sovereign Teams UI-only confirmed. Firms wanting MCP take a separate API credential relationship; their MCP server distributes internally. Refueler sees one key, one pool.
-- **Distribution (O-3):** npm package, Apache 2.0. Operator installs in own infrastructure, config via `.env`. No Anthropic marketplace.
-- **Anonymous balance copy (O-4):** `kind: "local_credits"`, `server_blind: true`. User copy: "You hold ~N credits locally — the server can't see this balance."
-- **Agent passphrase protocol (O-5):** sending agent computes `hashSecret()` locally, transmits hash only on a channel separate from `share_url`. Parity check: verify `hashSecret()` construction in `nut11.js` at SW-MCP-2 — do not assume bare SHA-256.
-- **Terminology (O-11):** "credits" in all user-facing output; precise terms (sats, ecash, Cashu, BDHKE) in implementation notes only. `_credits` suffix on all monetary output fields.
-- **Build sequence:** `SW9 → SW-MCP-W1 → SW-MCP-W2 → SW-MCP-1…8 → B8 → NB-2/NB-4 → B7 → SD-block`.
-- `refueler-mcp-spec-v1.md` deleted (superseded). `refueler-mcp-spec-v2.md` committed to repo root.
+| Session | Date | Summary |
+|---------|------|---------|
+| Share-MCP-Opus-1 | 9 Sep | MCP architecture framing. Tool names locked. Trust boundary. |
+| Share-MCP-Opus-2 | 10 Sep | Full spec locked (v2). Rails, credit model, D-1 filename fix Option B, capabilities contract. BRIDGE v8.4. |
+| SW-MCP-W1 | 12 Sep | Capabilities endpoint shape locked (§7.1). Daily reference-rate KV. Admin rate panel. |
+| SW-MCP-W2 | 12 Sep | SD-block design: Quay attribution, notification model, anonymous API market locked. BRIDGE v9.4. |
 
 ---
 
-## SW-MCP block session plan
+## SW-MCP build sessions (complete through SW-MCP-6)
 
-| Session | Scope | Gate |
-|---------|-------|------|
-## SW-MCP-W1 · 11 Sep 2026
+| Session | Commit | Summary |
+|---------|--------|---------|
+| SW-MCP-1 | `ab7e010` | MCP server scaffold. Transport + config. `refueler_capabilities` wired. |
+| SW-MCP-2 | `c83f214` | Local crypto module. AES-GCM, BLAKE3, fragment helper. `hashSecret()` parity. Unit tests. |
+| SW-MCP-3 | `e91b430` | `refueler_quote` + `refueler_balance`. Rate-card cache. Credits vocabulary. |
+| SW-MCP-4 | `f20c771` | `refueler_send_file` E2E, identity rail. D-1 filename fix (Option B) — MCP + consumer frontend. Synced via `bin/sync-share.sh`. |
+| SW-MCP-5 | `a34d991` | `refueler_check_transfer`. Acceptance + collection pull. State derivation. |
+| SW-MCP-6 | `713156a` | 23-Sep demo hardening. Scripted happy path. On-stage honesty script. **228 tests.** |
 
-| Item | Detail |
-|------|--------|
-| Commit | `2fd37ce` |
-| Deployed | `api.share.refueler.io` · Version `5b5cd91d` |
-| Files | `worker/src/handlers/api_capabilities.js` (rewrite) · `worker/src/handlers/btc_rate.js` (new) · `worker/src/index.js` (3 patches) · `worker/test/btc_rate.test.js` (new, 50 tests) |
-| Summary | cap.v1 capabilities endpoint (locked §7.1 shape) + `btc_ref_rate:current` KV + manual admin override (`POST/GET /admin/btc-rate`) + CoinGecko cron Task 3 at 03:00 UTC + ±20% guard. 50 new tests passing. 409 total passing. |
-| Smoke | `POST /admin/btc-rate` → `ok: true, gbp_per_btc: 62000, set_by: manual` ✓ · `GET /admin/btc-rate` → `set: true, age_seconds: 29` ✓ |
-| Notes | ADMIN_KEY rotated during session (old value mismatched). `.dev.vars` must be updated locally. `webhook_reg.test.js` 17 failures pre-existing, not introduced here. |
-| **SW-MCP-W2** | `61ea836` | `quota.js` (lazy reset, overage ceiling, personal_api hard stop, admin provision/cancel). `auth_ping.js` extended with quota summary fields. `index.js` `handleApiCredentialIssue` rewired through quota module. 2 new admin routes. 38 new tests. 522 unit passing. |
-
-## SW-MCP-1 · 12 Sep 2026 — MCP server scaffold
-
-| Item | Detail |
-|------|--------|
-| Commit | `ab7e010` on `rajesh-taylor/refueler-mcp` (new repo) |
-| Files | `package.json` · `.gitignore` · `README.md` · `src/config.js` · `src/hmac.js` · `src/api.js` · `src/index.js` · `src/tools/capabilities.js` · `test/hmac.test.js` · `test/capabilities.test.js` |
-| Tests | 32 passing (node:test only) |
-
-| **SW-MCP-1** | MCP server scaffold in agent trust domain; transport + config; local key/credit storage; `refueler_capabilities` wired. |
-## SW-MCP-2 · 12 Sep 2026 — Local crypto module
-
-| Item | Detail |
-|------|--------|
-| Commit | `bc64298` on `rajesh-taylor/refueler-mcp` |
-| Files | `src/crypto.js` · `src/fragment.js` · `test/crypto.test.js` · `test/fragment.test.js` · `PARITY.md` |
-| Tests | 54 passing (node:test) |
-
-**What was done:** AES-256-GCM encrypt/decrypt with 4-byte big-endian uint32 AAD (load-bearing — matches `frontend/crypto.js` exactly). BLAKE3 chunk hash and rolling root via `@noble/hashes/blake3.js` (pure JS, no WASM — `blake3` npm package rejected, `blake3-wasm@2.1.7` does not exist). Fragment grammar v1: `assembleFragment`/`parseFragment` with legacy raw-key fallback. `hashSecret()` parity confirmed: bare SHA-256, no domain tag — ✅ matches `worker/src/nut11.js` exactly. See `PARITY.md`.
-
-**Repo boundary rule (SW-MCP-2 — do not retry):**
-- All MCP server files (`src/`, `test/`, `PARITY.md`) live in `/Users/rajeshtaylor/Documents/refueler-mcp/` only
-- `refueler-share/` receives nothing from the MCP block except `bin/sync-share.sh` runs (SW-MCP-4, shared frontend assets only)
-- When Claude presents files during SW-MCP sessions, mentally confirm the target repo before placing — the two repos sit one directory apart
-
-## SW-MCP-3 · 12 Sep 2026 — Quote + Balance tools
-
-| Item | Detail |
-|------|--------|
-| Commit | `817afa7` on `rajesh-taylor/refueler-mcp` |
-| Files | `src/rate-card.js` · `src/tools/quote.js` · `src/tools/balance.js` · `src/index.js` (updated) · `test/rate-card.test.js` · `test/quote.test.js` · `test/balance.test.js` |
-| Tests | 86 passing (node:test only) |
-
-**What was done:** Rate card v1.0 pure functions (`costCredits`, `gbpReference`). `refueler_quote` wired to `auth/ping` — §2.2 output shape exactly (`affordable`, nested `balance: { kind, remaining_credits }`). `refueler_balance` wired to `auth/ping` — identity and anonymous rail shapes, `overage_credits` omitted for `personal_api`. Both degrade gracefully on ping failure. Both registered in `src/index.js` tools map. Vocabulary invariant: no "sats"/"ecash"/"tokens" in any output field, confirmed by dedicated test assertions.
-
-**Spec reconciliation (flagged):** session brief used `can_afford`/`shortfall_credits` at top level; locked spec §2.2 uses `affordable` and nested `balance`. Followed spec. `shortfall_credits` absent — recommend adding to spec at SW-MCP-4 review.
-
-## SW-MCP-4 · 12 Sep 2026 — refueler_send_file + D-1 frontend fix
-
-| Item | Detail |
-|------|--------|
-| Commit (refueler-mcp) | `d5fc84d` — feat(sw-mcp-4): refueler_send_file tool, 40 tests passing, D-1 X-File-Name invariant |
-| Commit (refueler-share) | `f07fc37` — fix(d-1): X-File-Name constant placeholder, fragment grammar v1 on both upload paths |
-| Files (refueler-mcp) | `src/tools/send.js` (new) · `test/send.test.js` (new) · `src/index.js` (wired) |
-| Files (refueler-share) | `frontend/upload.js` (D-1 patch + fragment v1) |
-| Tests | 40 new passing · 126 total |
-
-**What shipped:** Full E2E `refueler_send_file` tool per §2.3. AES-256-GCM session key generated locally. Chunks at 8 MiB, encrypted with 4-byte big-endian AAD. BLAKE3 per chunk + root. `X-File-Name` to Worker is always `"encrypted-payload"` — real filename in URL fragment only (fragment grammar v1, `assembleFragment`). Full 402 error matrix (overage_ceiling, quota_exhausted, account_cancelled, credit_invalid). passphrase → `hashSecret()` → `X-P2SH-Secret-Hash`. permanent_record → 16-byte `seal_nonce` in fragment `s` field. Consumer `frontend/upload.js` patched: both fresh-upload and resume paths now send constant placeholder and assemble v1 fragments. `bin/sync-share.sh` run.
-## SW-MCP-5 · 12 Sep 2026 — refueler_check_transfer + path traversal guard
-
-| Item | Detail |
-|------|--------|
-| Commit | `e78e953` on `rajesh-taylor/refueler-mcp` |
-| Files | `src/tools/check.js` (new) · `test/check.test.js` (new) · `src/index.js` (wired) · `src/tools/send.js` (traversal guard) |
-| Tests | 228 passing (node:test only) |
-
-**What was done:** `refueler_check_transfer` tool per §2.7. Calls `GET /api/v1/receipt/{uuid}/acceptance` and/or `/collection` (HMAC-auth). `deriveState()` pure function covering all four values: `uploaded` / `collected` / `expired` / `unknown`. `collection: null` = honest not-yet, never an error. T4 bug found and fixed during session: `fetchReceipt` was returning `{ receipt: null, sig: null }` (truthy object) instead of `null` when Worker signals not-yet-collected — `deriveState` was seeing two present receipts and returning `"collected"`. T9 bug: tool description contained the word `"delivered"` in its own prohibition comment — rephrased. Path traversal guard added to `refueler_send_file` (SW-MCP-4 flagged item): `path.resolve()` + `..` segment check; `chunkFile` now uses `resolvedPath`. Guard uses segment check not `cwd` restriction — MCP tool files can live anywhere on the filesystem. `import path from 'node:path'` added to `send.js` imports.
-
-**SW-MCP-5 do-not-retry:**
-- DO NOT restrict `file_path` to `process.cwd()` — MCP tools read files from anywhere on the user's filesystem; use `..` segment check only
-- DO NOT return a truthy wrapper object from `fetchReceipt` when `body.receipt === null` — return `null` directly so `deriveState` sees absence correctly
-- DO NOT put the banned vocabulary word in the prohibition comment of a tool description — the vocabulary test scans the full string
-- DO NOT test first then skip committing — always test green before commit, never after
-
-## SW-MCP-6 · 12 Sep 2026 — Demo hardening
-
-| Item | Detail |
-|------|--------|
-| Commit | `713156a` on `rajesh-taylor/refueler-mcp` |
-| Files | `docs/DEMO.md` · `scripts/demo-send.js` · `scripts/demo-payload.txt` |
-| Tests | 228 passing — no new tests (demo scripts are not unit-testable) |
-
-**What shipped:** On-stage runbook (`docs/DEMO.md`): pre-flight checklist, exact happy-path commands (quote → send → check), failure-mode rehearsal for 402/auth_failed/file-not-found, honesty script (live vs designed-not-yet-live for anonymous rail, Merkle integrity, Silent Drop, BOLT12, NUT-11 Mode 2), three recovery lines. `scripts/demo-send.js`: imports tool handlers directly from `src/tools/`, reads `REFUELER_LIVE_KEY` + `REFUELER_SIGN_KEY` from env, sends `scripts/demo-payload.txt`, prints share_url/cost_credits/expires_at, immediately calls check and prints state, Carbon/Paper terminal output, exits 0/1. `scripts/demo-payload.txt`: prospect-readable paragraph on Refueler Share, privacy, and Bitcoin — no pricing.
-| **SW-MCP-7** | Anonymous-rail send through the MCP (credit-block spend). | **B7 / NB-4** |
-| **SW-MCP-8** | npm package distribution, Apache 2.0; trust-boundary README; no Anthropic marketplace. | SW-MCP-5 |
-
----
-
-## SW-MCP block — open snags and design notes
-
-**Admin dashboard path collision (SW-MCP-W1):**
-`/share/admin/dashboard.html` Harbourmaster client gate has replaced the
-X-Admin-Key ops dashboard. Fix: move Harbourmaster to a distinct path, restore
-admin gate. Scheduled for SW-MCP-W2 close or buffer session.
-
-**Harbourmaster design — deferred Opus session (post SW-MCP block):**
-Current card layout is functional but not £99/mo credible. Needs a bespoke
-design pass before any API commercial relationship is onboarded. Goals: data
-visualisation appropriate for legal/finance AP audience, Carbon/Paper token
-fidelity, zero off-the-shelf feel. Gate: SW-MCP block complete.
-
-### Do not retry
-
-- DO NOT write quota write-back synchronously — fire-and-forget KV put; the race-critical path is in Supabase double-spend, not quota.
-- DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset logic.
-- DO NOT use `blake3` npm package — `blake3-wasm@2.1.7` does not exist on npm; use `@noble/hashes/blake3.js`
-- DO NOT import `@noble/hashes/blake3` without the `.js` extension — not in the package exports map; must be `@noble/hashes/blake3.js`
-- DO NOT generate artifacts with `description: ...` or `inputSchema: { ... }` placeholder stubs — these are literal syntax errors in JS, not VS Code fold indicators
-- DO NOT present `index.js` edits without specifying the full repo path. `refueler-mcp/src/index.js` and `refueler-share/worker/src/index.js` are completely different files in different repos. Always write the full path. Never say "index.js" alone.
-- When attaching or editing any `.js` file, confirm which repo it belongs to before proceeding — `refueler-mcp/src/` and `refueler-share/worker/src/` share many filenames (`index.js`, `crypto.js`, `utils.js` etc.) and are never interchangeable
----
-
-## SD-block — Silent Drop (post-B8, post-NB-4)
-
-**S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) required — no temp auth builds.
-
-**Prerequisites:** B8 complete. NB-4 (node live). 7-day friend-group soft launch gates public Sovereign access.
-
-**SD-Opus-pre · 12 Sep 2026 — Quay management + multi-client attribution design**
-Gate: before SD1. Required decisions:
-- Per-client Quay link model confirmed as the canonical attribution mechanism (one
-  drop link per client relationship; attribution derives from which link was used,
-  not sender identity). Replaces any sender-declared identity field.
-- Quay data model: `label` (client name, client-side only), `drop_link`, `cargo_count`,
-  `unread` flag, `created_at`. None of this touches the Worker — labelling is
-  Harbourmaster-local state only.
-- Reference field UX: should the drop link landing page prompt the sender for a
-  reference? (e.g. "MEHTA-2026-TAX") — client-side only, travels in URL fragment
-  alongside filename, never stored by Refueler. Resolve: yes/no + copy.
-- Notification model: polling vs webhook. For API/MCP clients, webhook provisioned
-  at onboarding is the correct answer (one `rfs_whsec_` registered at credential
-  issuance; `cargo.accepted` fires per Quay on cargo arrival). For Sovereign web
-  clients, polling with badge count. SimpleX notification stub deferred to SD5/B9.
-  Confirm both paths and the design boundary between them.
-- Anonymous rail Quay: whether a Sovereign Bearer client can publish a per-client
-  drop link without creating an identity surface. Confirm the architecture holds.
-- Anonymous API/MCP rail target market locked: Bitcoin-native organisations that
-  already run their own infrastructure, already hold sats, and want agent-level file
-  transfer without any identity surface. Small market, high intent, pays in Lightning
-  without friction. Anon rail user guide + video guide on refueler.io scoped for this
-  audience at SD8/article pipeline.
-- Harbourmaster design pass scoped: Quay management with client labelling as primary
-  field is load-bearing for legal/accountancy/health use case. Not cosmetic — without
-  it a solo practitioner with 20 clients cannot function. Design gate: before SD4.
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| SD1–SD1b | Lighthouse architecture | KV schema. Opaque token → inbox key. Worker endpoints. UUID isolation. |
-| SD2–SD2b | Sender upload flow | Worker validates token, one-time credential, cargo arrived AE event. |
-| SD3–SD3c | Harbourmaster auth + Deed | NUT-11 Mode 2 login. Keypair + BIP-39 mnemonic. Recovery flow. |
-| SD4–SD4b | Harbourmaster dashboard I–III + mid-block audit | Receipt ledger. Quay management with client labelling as primary field (label, drop_link, cargo_count, unread, created_at — all client-side). **Harbourmaster design pass required before SD4 — see SD-Opus-pre.** **Mid-block privacy + security audit at SD4b.** |
-| SD5–SD5a | Notification + renewal | API/MCP clients: webhook (`cargo.accepted` per Quay) provisioned at onboarding. Sovereign web clients: polling + badge count. SimpleX stub card (B9). Renewal banner. |
-| SD6–SD6a | Soft launch + findings | 7-day friend-group observation. P0/P1 fixes. |
-| SD7–SD7a | Source-protection copy + final audit | Gated: SD shipped + VPN scope stated. Full privacy + security audit. |
-| SD8 | SD close | Snag sweep. Context trim. B9 brief. Public Sovereign Lightning access enabled. |
-
-**SD do-not-retry:**
-- DO NOT reuse upload credential UUID as cargo UUID — generate separately at Lighthouse layer
-- DO NOT return 402 at `GET /inbox/{token}` — defer quota errors to upload attempt
-- DO NOT use Math.random() in Deed generation — `crypto.getRandomValues()` only
-- DO NOT use "anonymous" for Stripe-rail Silent Drop — it is private, not anonymous
-- DO NOT present per-client Quay links as a privacy compromise — attribution
-  derives from which link was used, not sender identity. The Worker remains blind
-  to the client relationship.
-- DO NOT add "this is not stored by Refueler" to the sender reference prompt —
-  treat it like an in-app bank transfer reference. Users understand the convention.
-- DO NOT design a single shared inbox for multi-client practices — one Quay per
-  client relationship is the only viable model at any scale above 5 clients.
-- DO NOT conflate anonymous API/MCP rail with consumer anonymous rail — Bitcoin-
-  native firms on the anonymous API rail run their own MCP infrastructure and hold
-  their own sats. User guide + video guide scoped for this audience, not the
-  general anonymous consumer.
-
-**Buffer pool (3 sessions):** SD1c · SD3d · SD4c
+**SW-MCP do-not-retry (carried):**
+- DO NOT use `blake3` npm package — use `@noble/hashes/blake3.js`
+- DO NOT import `@noble/hashes/blake3` without the `.js` extension
+- DO NOT present `index.js` edits without specifying the full repo path
+- DO NOT confuse `refueler-mcp/src/index.js` with `refueler-share/worker/src/index.js`
+- DO NOT generate `description: ...` placeholder stubs — literal JS syntax errors
+- DO NOT claim "end-to-end file integrity" anywhere in either README
+- DO NOT actually run `npm publish` — dry-run only; manual publish by Rajesh
 
 ---
 
@@ -461,6 +245,8 @@ Gate: before SD1. Required decisions:
 | Files | `worker/src/tiers.js` (new) · `worker/src/index.js` (6 sites) · `worker/src/webhook_reg.js` (1 site) |
 | Tests | 484 — no change (all edits identity-preserving: `TIERS.CHARTERED === 'api'`) |
 
+---
+
 ## Share-2 · 11 Sep 2026 — Tidal gate: paid-vs-free
 
 | Item | Detail |
@@ -468,22 +254,51 @@ Gate: before SD1. Required decisions:
 | Commit | `8f12b4e` on branch `share-2-tidal-gate` |
 | Files | `worker/src/manifest_tg.js` (gate + comment only) |
 
-**What was done:** `PAID_TIERS` → `new Set(['creative', 'max'])` (was `['sovereign','business','enterprise']` — matched no live wire value; tidal was silently gated shut for all paying users). Availability window confirmed as paid-vs-free gate — Citizen and Sovereign both permitted, never rail-gated. `lightning.js` untouched. `main` stays green; branch open pending fixtures.
+**What was done:** `PAID_TIERS` → `new Set(['creative', 'max'])`. Availability window confirmed as paid-vs-free gate — Citizen and Sovereign both permitted, never rail-gated.
 
-**Deferred to Share-3:**
-- Rewrite `confirm_tg.test.js` (lines 145–147, 151, 474, 478, 482) + `lightning.test.js` (123, 131, 216, 223) + `webhook_reg.test.js` (391) to live wire values (`creative`/`max`) — then merge branch to `main`
-- `handlers/timestamp.js:30` excludes `'citizen'` from permanent record — latent bug (Citizen is now paid; should be permitted). Fix alongside fixtures.
+**Deferred to Share-3:** Rewrite `confirm_tg.test.js` (lines 145–147, 151, 474, 478, 482) + `lightning.test.js` (123, 131, 216, 223) + `webhook_reg.test.js` (391) to live wire values (`creative`/`max`) — then merge branch to `main`. `handlers/timestamp.js:30` excludes `'citizen'` from permanent record — latent bug (Citizen is now paid; fix alongside fixtures).
 
-**Discovery:** `index.js` never held `citizen`/`sovereign` strings. The Worker's live tier vocabulary is `free`/`creative`/`max` (consumer/Stripe axis, derived from lookup keys — see `EXPIRY_WINDOWS`, `TIER_CAPS`, `stripe.js`) and `'api'` (Chartered axis). `citizen`/`sovereign` are display-layer + S89 rename narrative, never wired into logic. The "stale `=== 'citizen'` corrupts gating" hazard in the brief could not occur in `index.js`.
+---
 
-**What was done (Option A):**
-- `worker/src/tiers.js` new: `TIERS` enum (`FREE`/`PAID_REGISTERED`/`PAID_BEARER`/`CHARTERED`), `TIER_DISPLAY`, `TIER_RAIL`, helpers `displayName`/`isPaidTier`/`isBearerTier`/`isCharteredTier`.
-- `TIERS.CHARTERED === 'api'` — wire value kept; every live gate compares against `'api'`. Rename to `'chartered'` is a deferred migration.
-- `index.js`: import added; 6 `'api'` logic sites → `TIERS.CHARTERED`/`isCharteredTier`. Remaining `'api'` literal is a comment (L717) — correct.
-- `webhook_reg.js`: `client.tier !== 'api'` → `!isCharteredTier(client.tier)`.
-- Not touched: `free`/`creative`/`max` (Stripe-owned), `wl_config.js` `tier:'api'` (served payload), `sandbox.js` (synthetic AE label), `.njk`, `refueler-io`.
+## B9-Opus · 12 Sep 2026 — Merkle / MMR / SMT / ZK design lock
 
-**Deferred to Share-2:** test fixtures (`btc_rate.test.js`, `confirm_tg.test.js`, `lightning.test.js`, `webhook_reg.test.js`) contain `citizen`/`sovereign` — they are contracts of `manifest_tg.js` (`isTidalPermitted`) and `lightning.js` (`createInvoice`). Rewrite fixtures and source modules together. `free`/`creative`/`max` → `paid_*` migration and `wl_config.js` update also deferred.
+| Item | Detail |
+|------|--------|
+| Session type | Architecture + design, no code produced |
+| Output | `merkle-spec-v1.md` (refueler-share repo root) |
+| BRIDGE | v9.4 |
+
+Seven decisions locked (D-1…D-7) — full detail in `merkle-spec-v1.md`. Key outcomes:
+- RFC 6962 unbalanced BLAKE3 tree, domain-separated, `chunk_count` committed
+- Chunk hashes in R2 sidecar `{uuid}/hashes` — never inline in manifest
+- Download: sidecar GET → reconstruct root → verify-then-flush per chunk → 409 on mismatch
+- Two-roots distinction permanent: `merkle_root` (ciphertext, Worker-verifiable) vs `blake3PlaintextRoot` (recipient-only, permanently barred from Worker + all receipts)
+- Due-diligence proof = FCA SYSC 6.3 / MLR reg. 40 (not travel rule). MLRO confirmation required.
+
+---
+
+## SW-MCP-8 · 13 Sep 2026 — npm distribution, Apache 2.0, trust-boundary READMEs
+
+| Item | Detail |
+|------|--------|
+| Session type | Bounded build — no architecture decisions |
+| Repos | `refueler-mcp` (primary) · `refueler-share` (README only) |
+| Commits | see commit commands below |
+
+**What was done:**
+- `refueler-mcp/package.json` — confirmed: `name: "@refueler/mcp-server"`, `version: "0.1.0"`, `license: "Apache-2.0"`, `private: false`, `engines: { node: ">=18" }`, `files: ["src/", "README.md", "LICENSE"]`. No `scripts.prepublish`. Dependencies: `@anthropic-ai/sdk`, `@noble/hashes`, `@noble/secp256k1`, `dotenv`. DevDependencies: `vitest` only.
+- `refueler-mcp/LICENSE` — Apache 2.0 full text, copyright 2026 Rajesh Taylor.
+- `refueler-mcp/.npmignore` — excludes `test/`, `scripts/`, `docs/`, `.env*`, `*.test.js`, context files.
+- `npm pack --dry-run` verified: 4 files (`LICENSE`, `README.md`, `package.json`, `src/index.js`). Output confirmed clean.
+- `refueler-mcp/README.md` — full rewrite: trust-boundary operator document. All honesty constraints applied. No "end-to-end", no "zero-knowledge", no "military-grade", no "proof of delivery". Chunk integrity vs ciphertext storage integrity distinction explicit. D-1 filename caveat scoped to build state.
+- `refueler-share/README.md` — full rewrite: public-facing repo README. Architecture prose, tiers table, MCP pointer, stack table, repo layout, licence + patent note, status line. Honest: chunk integrity live, full Merkle-root verification in build (B9).
+
+**Publish command (manual — Rajesh runs when ready):**
+```
+cd /Users/rajeshtaylor/Documents/refueler-mcp && npm publish --access public
+```
+
+**SW-MCP block: complete.** SW-MCP-7 (anonymous rail) gates on B7/NB-4. Next: B8-Opus.
 
 ---
 
@@ -517,55 +332,40 @@ Gate: before SD1. Required decisions:
 
 ---
 
-## Locked block sequence (updated Share-MCP-Opus-2 · 10 Sep 2026)
+## SD-block — Silent Drop (post-B8, post-NB-4)
 
-`SW9 → SW-MCP → B8 → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → articles → B9 → B10+`
+**S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) required.
 
-*(SW-MCP anonymous-rail tail (SW-MCP-7) waits for B7/NB-4 — does not block B8.)*
+**Prerequisites:** B8 complete. NB-4 (node live). 7-day friend-group soft launch gates public Sovereign access.
 
-*"Nothing stops this train."*
+**SD-Opus-pre · 12 Sep 2026** — Quay management + multi-client attribution design locked. Per-client Quay link confirmed. Notification model confirmed (webhook API/MCP; polling Sovereign web). Anonymous API/MCP rail market locked. Harbourmaster design pass required before SD4.
 
-## B9-Opus · 12 Sep 2026 — Merkle / MMR / SMT / ZK design lock
+| Session | Label | Scope |
+|---------|-------|-------|
+| SD1–SD1b | Lighthouse architecture | KV schema. Opaque token → inbox key. Worker endpoints. UUID isolation. |
+| SD2–SD2b | Sender upload flow | Worker validates token, one-time credential, cargo arrived AE event. |
+| SD3–SD3c | Harbourmaster auth + Deed | NUT-11 Mode 2 login. Keypair + BIP-39 mnemonic. Recovery flow. |
+| SD4–SD4b | Harbourmaster dashboard I–III + mid-block audit | Receipt ledger. Quay management. **Design pass required before SD4.** |
+| SD5–SD5a | Notification + renewal | API/MCP: webhook (`cargo.accepted` per Quay). Sovereign web: polling + badge. SimpleX stub. |
+| SD6–SD6a | Soft launch + findings | 7-day friend-group. P0/P1 fixes. |
+| SD7–SD7a | Source-protection copy + final audit | Gated: SD shipped + VPN scope stated. |
+| SD8 | SD close | Snag sweep. Context trim. B9 brief. Public Sovereign Lightning access enabled. |
 
-| Item | Detail |
-|------|--------|
-| Session type | Architecture + design, no code produced |
-| Output | `merkle-spec-v1.md` (refueler-share repo root) |
-| Repos | refueler-share (primary) · refueler-legend (forward notes) · refueler-pass (forward notes) |
-| BRIDGE | v9.4 |
+**SD do-not-retry:**
+- DO NOT reuse upload credential UUID as cargo UUID — generate separately at Lighthouse layer
+- DO NOT return 402 at `GET /inbox/{token}` — defer quota errors to upload attempt
+- DO NOT use Math.random() in Deed generation — `crypto.getRandomValues()` only
+- DO NOT use "anonymous" for Stripe-rail Silent Drop — private, not anonymous
+- DO NOT design a single shared inbox for multi-client practices — one Quay per client relationship
 
-**Seven decisions locked (D-1…D-7):**
-
-- **D-1 Tree construction:** RFC 6962 unbalanced binary tree, domain-separated (`0x00` leaf / `0x01` node), BLAKE3 node hash, big-endian sequential leaves. `tree_algo: "rfc6962-unbalanced-blake3-v1"`. Duplicate-last-leaf rejected (CVE-2012-2459). `chunk_count` committed. Client computes authoritative root at upload; Worker reconstructs for verification at download.
-- **D-2 Root placement (both):** `merkle_root` in manifest + in receipts post-B9-3 (acceptance: `merkle_root`; collection: `merkle_root` + `verified`). Overrides standing "no BLAKE3 root in receipt" rule — narrowly: ciphertext root only, post-B9-3 only. Plaintext `blake3PlaintextRoot` barred from all receipts permanently.
-- **D-3 Worker verification path:** chunk hashes persisted in R2 sidecar `{uuid}/hashes` (raw 32-byte concat). Never inline in manifest (64 KB `safeGetManifest()` ceiling). Download = sidecar GET → reconstruct root → compare → verify-then-flush per chunk → 409 on mismatch. Spot-check = background canary only, never backs `verified`.
-- **D-4 MMR architecture:** on-device default; published root opt-in via Share OTS relay. "Smart contract" framing retired as inaccurate — say "Bitcoin-anchored" or "public timestamping layer". AES-256-GCM leaf encryption, on-device key (Deed→HKDF).
-- **D-5 SMT:** complement to Supabase (public verifiability, periodic OTS-anchored root), never the live arbiter. No build slot without design partner. London B2B (legal single-use doc token, broker quote, property reference) = §Future work.
-- **D-6 ZK boundary:** build slot only when (a) hides which set member satisfied predicate; (b) no NUT-22/nutroot primitive covers it; (c) buyer committed. Consumer history → plain MMR. Double-spend → SMT.
-- **D-7 Whitepaper language:** five exact sentences locked (see `merkle-spec-v1.md` §7). Due-diligence proof = FCA SYSC 6.3 / MLR 2017 reg. 40, **not** FATF travel rule (Rec. 16) — MLRO confirmation required before any copy. Open Banking leaves = self-asserted only; bank-signed leaves required for "verified" language — solicitor to confirm evidential weight before publication.
-
-**Two-roots distinction (permanent invariant, never conflate):**
-- `merkle_root` (ciphertext) = Worker-verifiable, storage integrity
-- `blake3PlaintextRoot` (plaintext) = recipient-only, end-to-end integrity, permanently barred from Worker + all receipts
-
-**Five-vertical use-case matrix + B9 session plan (B9-1…B9-8, 3-session buffer):** full detail in `merkle-spec-v1.md`.
-
-**B9-Opus do-not-retry (all carried into `CLAUDE.md` §Known broken):**
-- Duplicate-last-leaf Merkle padding → RFC 6962 unbalanced promotion only
-- Undomain-separated node hash → mandatory `0x00`/`0x01` prefixes
-- Chunk hash array inline in manifest → sidecar `{uuid}/hashes` only
-- `verified: true` backed by spot-check → full reconstruction + full inline body verification only
-- "Smart contract" for OTS/MMR anchoring → "Bitcoin-anchored" / "public timestamping layer"
-- SMT replacing Supabase → SMT is a public verifiability complement, never the live arbiter
-- "Travel-rule compliance" for due-diligence proof → SYSC 6.3 / MLR reg. 40; MLRO to confirm before marketing
-- `blake3PlaintextRoot` in any receipt or Worker → permanently barred; no exceptions
+**Buffer pool (3 sessions):** SD1c · SD3d · SD4c
 
 ---
 
-## Locked block sequence (updated B9-Opus · 12 Sep 2026)
+## Locked block sequence (updated SW-MCP-8 · 13 Sep 2026)
 
-`SW-MCP-8 → B8-Opus → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-1…B9-8) → B10+`
+`B8-Opus → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-1…B9-8) → B10+`
 
-*(B9-Opus is design complete. B9 build sessions are sequenced in `merkle-spec-v1.md` §9 and gate on the SD-block being shipped.)*
+*(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. B9-Opus design complete; build sessions sequenced in `merkle-spec-v1.md` §9.)*
 
 *"Nothing stops this train."*
