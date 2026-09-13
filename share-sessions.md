@@ -362,10 +362,31 @@ cd /Users/rajeshtaylor/Documents/refueler-mcp && npm publish --access public
 
 ---
 
-## Locked block sequence (updated SW-MCP-8 · 13 Sep 2026)
+## Locked block sequence (updated B8-Opus · 13 Sep 2026)
 
 `B8-Opus → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-1…B9-8) → B10+`
 
 *(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. B9-Opus design complete; build sessions sequenced in `merkle-spec-v1.md` §9.)*
+
+## B8-Opus · 13 Sep 2026 — NUT-11 Mode 2 (Locke) design lock
+
+| Item | Detail |
+|------|--------|
+| Session type | Architecture + design, no code produced |
+| Output | `B8-spec-v1.md` (refueler-share repo root) |
+| BRIDGE | v9.5 |
+
+Seven decisions locked (D-1…D-7) — full detail in `B8-spec-v1.md`. Key outcomes:
+- Deed→Locke derivation: **HKDF** (`salt="refueler.locke.v1"`), reduce/reject-sample to valid secp256k1 scalar. Not BIP-32.
+- Worker check order: **sig → BDHKE → double-spend** (Supabase INSERT always last).
+- Schnorr **BIP-340**, x-only key from the 33-byte P2PK `data`; witness `{signatures:[…]}` verbatim; message preimage pinned against cashu-ts vectors at B8-1.
+- Locke lifecycle: primary Locke Deed-derived + immutable recovery anchor; devices 2…N fresh-random, authorised by existing Locke; KV challenge-response login (domain-tagged, one-shot). **This is the SD3 primitive.**
+- `hashSecret()` (Mode 1, bare SHA-256) unchanged and independent of Mode 2; the two gates coexist.
+- CDK stays **0.17.2** (Worker is CDK-independent for BDHKE).
+- Build **direct in refueler-share**, B9-style; `refueler-ecash-lab` Mode 2 flag retired (reserved for ML-KEM/B10).
+
+**Do-not-retry additions:** see `B8-spec-v1.md` §9.
+
+**B8-Opus complete. Next: B8 build (B8-1…B8-6, buffer B8-2b · B8-5b). Signs off Pass SD3.**
 
 *"Nothing stops this train."*

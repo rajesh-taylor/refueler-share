@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.0 | **Last updated:** SW-MCP-8 · 13 Sep 2026
+> **Version:** 9.1 | **Last updated:** B8-Opus · 13 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -149,7 +149,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 
 ## Current state
 
-**SW-MCP block ✓ complete (13 Sep 2026). Next: B8-Opus.**
+**B8-Opus ✓ complete (13 Sep 2026). Next: B8 build.**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
@@ -206,5 +206,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 - **B9-Opus:** Merkle/MMR/SMT/ZK design locked. Full spec: `merkle-spec-v1.md`. Two-roots distinction permanent. RFC 6962 unbalanced BLAKE3 tree. Sidecar `{uuid}/hashes`. MLRO flag on due-diligence proof framing. BRIDGE v9.4.
 
 ---
+
+- **B8-Opus:** NUT-11 Mode 2 (Locke) design locked. Full spec: `B8-spec-v1.md`. Deed→Locke HKDF derivation (scalar reject-sampled); Schnorr BIP-340 x-only verify; check order sig→BDHKE→double-spend; Locke KV challenge-response (SD3 primitive); `hashSecret()` unchanged/independent; CDK stays 0.17.2; builds direct in refueler-share (ecash-lab Mode 2 flag retired). BRIDGE v9.5.
 
 *"Nothing stops this train."*
