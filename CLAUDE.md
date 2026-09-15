@@ -187,6 +187,24 @@ Rajesh consistently forgets the push step. Claude must always include `&& git pu
 commit command at session close, without being asked.
 
 ---
+## Frontend change checklist — mandatory
+
+Before committing ANY change to frontend/upload.js, frontend/download.js, frontend/share.js, or frontend/fragment.js:
+
+1. `npm run build && bin/sync-share.sh` must complete without errors
+2. Manually upload a file at https://refueler.io/share/ and confirm:
+   a. Share URL contains `?uuid=` and a non-empty `#` fragment
+   b. Pasting that URL in a new tab shows the receiver card — NOT the upload screen
+   c. File name, size, and expiry are populated on the receiver card
+3. If the change touches passphrase flow: verify unlock screen appears on paste
+4. Only then: `git commit && git push`
+
+DO NOT commit frontend JS based on code review alone — always verify live.
+DO NOT assume manifest fields exist — `curl /meta/{uuid}` to verify before coding against them.
+DO NOT change fragment.js without verifying upload.js and download.js handle IV, key, and filename end-to-end.
+Claude must ask for all relevant files before writing any fix — never assume and code blind.
+
+---
 
 ## Context file hygiene — mandatory at every B-close session
 
