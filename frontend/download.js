@@ -3,7 +3,15 @@
 // No behaviour change from TH-2 share.js — pure structural split.
 //
 // Exports:
-//   enterDownloadMode(fragment, domRefs, state, helpers)
+//   enterDownloadMode(detected, domRefs, state, helpers)
+//
+// Fragment grammar v1 (D-1 filename fix, SW-MCP-4):
+//   detected.v === 1  → { v:1, uuid, keyBytes (Uint8Array), filename, sealNonce (Uint8Array|null) }
+//   detected.v === 0  → { v:0, uuid, key (hex), iv (hex|null), sn (hex|null) }  [legacy]
+//
+//   IV source:
+//     v1: manifest meta.iv (hex) — IV is not secret, lives server-side.
+//     v0: fragment iv param (hex) — backward compat for old links.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { loadDeps, hexToBuf, bufToHex, WORKER_URL } from './crypto.js';
@@ -12,7 +20,8 @@ import { decryptOts } from './timestamp.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // enterDownloadMode
 // ─────────────────────────────────────────────────────────────────────────────
-export async function enterDownloadMode({ uuid, key, iv, sn }, domRefs, state, helpers) {
+export async function enterDownloadMode(detected, domRefs, state, helpers) {
+  const { uuid } = detected;
   const {
     dropZone, infoCard, optionsCard, receiverCard,
     rcFileName, rcFileIcon, rcFolderNote, rcSize, rcExpiry,
@@ -27,14 +36,28 @@ export async function enterDownloadMode({ uuid, key, iv, sn }, domRefs, state, h
 
   await loadDeps();
 
-  const keyBytes = hexToBuf(key);
-  const ivBytes  = hexToBuf(iv);
-  state.sessionAesKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
-  state.sessionIv     = new Uint8Array(ivBytes);
-  history.replaceState(null, '', location.pathname);
+  // ── Resolve AES key bytes ─────────────────────────────────────────────────
+  // v1: keyBytes is already a Uint8Array from parseFragment()
+  // v0: key is a hex string — convert with hexToBuf()
+  const rawKeyBytes = detected.v === 1 ? detected.keyBytes : hexToBuf(detected.key);
 
-  // TH-2: sn = seal_nonce from fragment
-  const sealNonceHex = sn || null;
+  // ── Import AES key — IV resolved after meta fetch (v1) or from fragment (v0) ──
+  state.sessionAesKey = await crypto.subtle.importKey(
+    'raw', rawKeyBytes, { name: 'AES-GCM' }, false, ['decrypt'],
+  );
+
+  // ── Seal nonce — for OTS download offer ──────────────────────────────────
+  // v1: detected.sealNonce is Uint8Array|null → convert to hex string for internal use
+  // v0: detected.sn is already a hex string|null
+  let sealNonceHex = null;
+  if (detected.v === 1 && detected.sealNonce) {
+    sealNonceHex = bufToHex(detected.sealNonce);
+  } else if (detected.v === 0 && detected.sn) {
+    sealNonceHex = detected.sn;
+  }
+
+  // Clear fragment + query from URL bar now (key is imported, no longer needed)
+  history.replaceState(null, '', location.pathname);
 
   // Fetch metadata
   let meta = {};
@@ -47,11 +70,27 @@ export async function enterDownloadMode({ uuid, key, iv, sn }, domRefs, state, h
     return;
   }
 
+  // ── Resolve IV ────────────────────────────────────────────────────────────
+  // v1: IV lives in the manifest (meta.iv hex string) — not secret, non-sensitive.
+  // v0: IV came from the fragment (detected.iv hex string) — backward compat.
+  const ivHex = detected.v === 1 ? (meta.iv || null) : (detected.iv || null);
+  if (!ivHex) {
+    _showDownloadError('Transfer metadata is missing IV — link may be corrupt.', domRefs);
+    return;
+  }
+  state.sessionIv = new Uint8Array(hexToBuf(ivHex));
+
+  // ── Filename (v1 carries real name in fragment; v0 falls back to meta) ───
+  // In v1 the Worker always saw "encrypted-payload" as X-File-Name, so meta.file_name
+  // is that constant placeholder. Real name comes from the fragment.
+  const fileName = (detected.v === 1 && detected.filename)
+    ? detected.filename
+    : (meta.file_name || `refueler-${uuid.slice(0, 8)}`);
+
   const timestampState = meta.timestamp_state || 'none';
   const hasOts = (timestampState === 'pending' || timestampState === 'complete') && !!sealNonceHex;
 
-  // Populate receiver card
-  const fileName = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
+  // Populate receiver card  (fileName resolved above — fragment v1 or meta fallback)
   rcFileName.textContent = fileName;
 
   const isZip = fileName.toLowerCase().endsWith('.zip');
@@ -146,7 +185,7 @@ export async function enterDownloadMode({ uuid, key, iv, sn }, domRefs, state, h
             state.downloadToken = token;
             unlockInput.value = '';
             unlockScreen.style.display = 'none';
-            await _startDownloadGated(uuid, meta, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+            await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
           } catch {
             unlockError.textContent = 'Network error. Try again.';
             unlockBtn.disabled = false;
@@ -154,7 +193,7 @@ export async function enterDownloadMode({ uuid, key, iv, sn }, domRefs, state, h
         });
         unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
       } else {
-        await _startDownloadGated(uuid, meta, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+        await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
       }
     };
 
@@ -169,29 +208,28 @@ export async function enterDownloadMode({ uuid, key, iv, sn }, domRefs, state, h
 // ─────────────────────────────────────────────────────────────────────────────
 // Download capability gate
 // ─────────────────────────────────────────────────────────────────────────────
-async function _startDownloadGated(uuid, meta, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
+async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
   const hasFSAA = typeof showSaveFilePicker !== 'undefined';
   if (hasFSAA) {
-    const fileName = meta.file_name || `refueler-${uuid.slice(0, 8)}`;
     let fileHandle;
     try {
       fileHandle = await showSaveFilePicker({ suggestedName: fileName, types: [] });
     } catch (e) {
       if (e.name === 'AbortError') { domRefs.receiverCard.style.display = 'flex'; return; }
       helpers.reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
-      await _startDownload(uuid, meta, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+      await _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
       return;
     }
-    await _startDownloadStream(uuid, meta, fileHandle, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+    await _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
   } else {
-    await _startDownload(uuid, meta, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+    await _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FSAA streaming download
 // ─────────────────────────────────────────────────────────────────────────────
-async function _startDownloadStream(uuid, meta, fileHandle, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
+async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
   const { downloadCard, dlStageTag, dlPct, dlBar, dlSignoff, uspBlock } = domRefs;
   const { reportError } = helpers;
   const totalChunks = meta.total_chunks;
@@ -282,7 +320,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, willSelfDestruct, ha
 // ─────────────────────────────────────────────────────────────────────────────
 // Blob fallback download
 // ─────────────────────────────────────────────────────────────────────────────
-async function _startDownload(uuid, meta, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
+async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
   const { downloadCard, dlStageTag, dlPct, dlBar, dlSignoff, uspBlock } = domRefs;
   const { formatBytes, reportError } = helpers;
   const totalChunks = meta?.total_chunks;
@@ -295,7 +333,6 @@ async function _startDownload(uuid, meta, willSelfDestruct, hasOts, sealNonceHex
   dlBar.style.width = '0%';
 
   const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
-  const fileName   = meta?.file_name || `refueler-${uuid.slice(0, 8)}`;
   const chunks = [];
   let bytesReceived = 0;
 

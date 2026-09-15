@@ -3,9 +3,18 @@
 // This file: imports, DOM refs, shared state, mode detection, UI helpers only.
 // Crypto → crypto.js  |  Upload → upload.js  |  Download → download.js
 // Loaded as <script type="module" src="/share.js"></script> — do not change type.
+//
+// Fragment grammar v1 (D-1 filename fix, SW-MCP-4):
+//   URL format: https://refueler.io/share/?uuid=<uuid>#<base64url-JSON-blob>
+//   Fragment blob: base64url( JSON { v:1, k:"<aes-key-b64url>", n:"<filename>", s:"<seal-nonce-b64url>" } )
+//   UUID travels in the query string (?uuid=) — not secret, never in the fragment.
+//   AES session key travels in the fragment only — never in requests, never in logs.
+//
+// Legacy fallback: pre-v1 links used #uuid=X&key=Y&iv=Z — handled transparently.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { WORKER_URL }                                   from './crypto.js';
+import { parseFragment as parseFragmentV1 }             from './fragment.js';
 import { enterUploadMode, checkResumeState }            from './upload.js';
 import { enterDownloadMode }                            from './download.js';
 
@@ -209,18 +218,49 @@ domRefs.copyBtn.addEventListener('click', () => {
 domRefs.newUploadBtn.addEventListener('click', () => location.reload());
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode detection — download if fragment has uuid+key, otherwise upload
+// Mode detection — fragment grammar v1 (SW-MCP-4) + legacy fallback
+//
+// v1 URL:     https://refueler.io/share/?uuid=<uuid>#<base64url-JSON-blob>
+// Legacy URL: https://refueler.io/share/#uuid=<uuid>&key=<hex>&iv=<hex>[&sn=<hex>]
+//
+// Detection order:
+//   1. Fragment present + parseable as v1 JSON blob → download mode (v1)
+//   2. Fragment contains uuid= and key= (ampersand format) → download mode (legacy)
+//   3. Otherwise → upload mode
 // ─────────────────────────────────────────────────────────────────────────────
-function parseFragment() {
+function detectMode() {
   const raw = location.hash.slice(1);
-  if (!raw) return {};
-  return Object.fromEntries(raw.split('&').map(p => p.split('=')));
+  if (!raw) return null;
+
+  // ── Attempt v1 fragment parse first ──────────────────────────────────────
+  try {
+    const parsed = parseFragmentV1(raw);
+    if (!parsed.legacy) {
+      // v1: uuid lives in query string
+      const uuid = new URLSearchParams(location.search).get('uuid');
+      if (!uuid) return null; // malformed v1 link — no uuid in query
+      return { v: 1, uuid, keyBytes: parsed.keyBytes, filename: parsed.filename, sealNonce: parsed.sealNonce };
+    }
+  } catch {
+    // not a v1 blob — fall through to legacy check
+  }
+
+  // ── Legacy: #uuid=X&key=Y&iv=Z[&sn=W] ───────────────────────────────────
+  const params = Object.fromEntries(raw.split('&').map(p => {
+    const idx = p.indexOf('=');
+    return idx === -1 ? [p, ''] : [p.slice(0, idx), p.slice(idx + 1)];
+  }));
+  if (params.uuid && params.key) {
+    return { v: 0, uuid: params.uuid, key: params.key, iv: params.iv || null, sn: params.sn || null };
+  }
+
+  return null;
 }
 
-const fragment = parseFragment();
+const detected = detectMode();
 
-if (fragment.uuid && fragment.key) {
-  enterDownloadMode(fragment, domRefs, state, helpers);
+if (detected) {
+  enterDownloadMode(detected, domRefs, state, helpers);
 } else {
   checkResumeState(domRefs, state, helpers).catch(() => {});
   enterUploadMode(domRefs, state, helpers);

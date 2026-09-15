@@ -43,7 +43,8 @@ const MODAL_DISMISS_KEY = 'rs-maint-modal-dismissed';
 function showMaintenanceModal(status) {
   try { if (sessionStorage.getItem(MODAL_DISMISS_KEY)) return; } catch {}
   const hash = window.location.hash.slice(1);
-  if (hash.includes('uuid=') && hash.includes('key=')) return;
+  // Suppress modal on any download link: v1 (non-empty opaque blob) or legacy (uuid=&key=)
+  if (hash.length > 0) return;
   if (document.getElementById('maint-modal')) return;
 
   const overlay = document.createElement('div');

@@ -848,7 +848,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     filename:  state.selectedFile.name,
     sealNonce: sealNonceHex ? hexToBuf(sealNonceHex) : undefined,
   });
-  const shareUrl = `${location.origin}${location.pathname}#${fragmentBlob}`;
+  const shareUrl = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, !!p2shHashHex);
 }
@@ -1108,7 +1108,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     filename:  record.fileName,
     sealNonce: sealNonceHex ? hexToBuf(sealNonceHex) : undefined,
   });
-  const shareUrl = `${location.origin}${location.pathname}#${resumeFragmentBlob}`;
+  const shareUrl = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${resumeFragmentBlob}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, false);
 }
