@@ -71,14 +71,21 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   }
 
   // ── Resolve IV ────────────────────────────────────────────────────────────
-  // v1: IV lives in the manifest (meta.iv hex string) — not secret, non-sensitive.
-  // v0: IV came from the fragment (detected.iv hex string) — backward compat.
-  const ivHex = detected.v === 1 ? (meta.iv || null) : (detected.iv || null);
-  if (!ivHex) {
-    _showDownloadError('Transfer metadata is missing IV — link may be corrupt.', domRefs);
-    return;
+  // v1: IV is in the fragment (detected.ivBytes Uint8Array) — never in manifest.
+  // v0: IV came from the fragment iv param (hex string) — backward compat.
+  if (detected.v === 1) {
+    if (!detected.ivBytes || detected.ivBytes.length === 0) {
+      _showDownloadError('Link is missing IV — was this link generated before today\'s update? Please ask the sender for a new link.', domRefs);
+      return;
+    }
+    state.sessionIv = detected.ivBytes;
+  } else {
+    if (!detected.iv) {
+      _showDownloadError('Link is corrupt — missing IV.', domRefs);
+      return;
+    }
+    state.sessionIv = new Uint8Array(hexToBuf(detected.iv));
   }
-  state.sessionIv = new Uint8Array(hexToBuf(ivHex));
 
   // ── Filename (v1 carries real name in fragment; v0 falls back to meta) ───
   // In v1 the Worker always saw "encrypted-payload" as X-File-Name, so meta.file_name

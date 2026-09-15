@@ -3,7 +3,7 @@
  *
  * Implements the locked fragment grammar (D-1 filename fix, SW-MCP-4):
  *
- *   { v: 1, k: "<aes-key-b64url>", n: "<real-filename>", s: "<seal-nonce-b64url>" }
+ *   { v: 1, k: "<aes-key-b64url>", i: "<iv-b64url>", n: "<real-filename>", s: "<seal-nonce-b64url>" }
  *
  * The `s` (seal_nonce) field is present only for permanent-record transfers.
  * The AES session key lives in the URL fragment only — never in requests,
@@ -66,13 +66,17 @@ function fromBase64url(str) {
  *
  * @param {object}      params
  * @param {Uint8Array}  params.keyBytes   — 32-byte AES session key
+ * @param {Uint8Array}  params.ivBytes    — 12-byte AES-GCM IV
  * @param {string}      params.filename   — real filename (not "encrypted-payload")
  * @param {Uint8Array}  [params.sealNonce] — seal nonce for permanent-record transfers
  * @returns {string} base64url-encoded JSON fragment
  */
-export function assembleFragment({ keyBytes, filename, sealNonce } = {}) {
+export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce } = {}) {
   if (!(keyBytes instanceof Uint8Array) || keyBytes.length === 0) {
     throw new TypeError('keyBytes must be a non-empty Uint8Array');
+  }
+  if (!(ivBytes instanceof Uint8Array) || ivBytes.length === 0) {
+    throw new TypeError('ivBytes must be a non-empty Uint8Array');
   }
   if (typeof filename !== 'string' || filename.length === 0) {
     throw new TypeError('filename must be a non-empty string');
@@ -81,6 +85,7 @@ export function assembleFragment({ keyBytes, filename, sealNonce } = {}) {
   const obj = {
     v: 1,
     k: toBase64url(keyBytes),
+    i: toBase64url(ivBytes),
     n: filename,
   };
 
@@ -136,11 +141,13 @@ export function parseFragment(fragmentString) {
       throw new Error('Fragment v1: missing or empty filename field (n)');
     }
 
-    const keyBytes = fromBase64url(decoded.k);
+    const keyBytes  = fromBase64url(decoded.k);
+    const ivBytes   = decoded.i ? fromBase64url(decoded.i) : null;
     const sealNonce = decoded.s ? fromBase64url(decoded.s) : null;
 
     return {
       keyBytes,
+      ivBytes,
       filename: decoded.n,
       sealNonce,
       legacy: false,

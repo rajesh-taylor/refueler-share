@@ -845,8 +845,9 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   const keyBytesRaw = new Uint8Array(await crypto.subtle.exportKey('raw', state.sessionAesKey));
   const fragmentBlob = assembleFragment({
     keyBytes:  keyBytesRaw,
+    ivBytes:   new Uint8Array(state.sessionIv),
     filename:  state.selectedFile.name,
-    sealNonce: sealNonceHex ? hexToBuf(sealNonceHex) : undefined,
+    sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
   });
   const shareUrl = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob}`;
   history.replaceState(null, '', location.pathname);
@@ -1105,8 +1106,9 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   const resumeKeyBytes = hexToBuf(record.keyHex);
   const resumeFragmentBlob = assembleFragment({
     keyBytes:  new Uint8Array(resumeKeyBytes),
+    ivBytes:   new Uint8Array(hexToBuf(record.ivHex)),
     filename:  record.fileName,
-    sealNonce: sealNonceHex ? hexToBuf(sealNonceHex) : undefined,
+    sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
   });
   const shareUrl = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${resumeFragmentBlob}`;
   history.replaceState(null, '', location.pathname);
