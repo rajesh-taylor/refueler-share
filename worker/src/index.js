@@ -11,7 +11,7 @@ import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } 
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
-import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot } from './handlers/admin.js';
+import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
@@ -433,6 +433,10 @@ export default {
       }
       if (request.method === 'GET' && path === '/admin/btc-rate') {
         return timed('admin_btc_rate_get', () => handleAdminBtcRateGet(request, env).then(r => addCors(r, request)));
+      }
+
+      if (request.method === 'GET' && path === '/admin/kv-stats') {
+        return timed('admin_kv_stats', () => handleAdminKvStats(request, env).then(r => addCors(r, request)));
       }
 
       // ── SW-MCP-W2: Quota admin endpoints ──────────────────────────────────

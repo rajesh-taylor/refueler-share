@@ -89,6 +89,7 @@ async function refreshAll() {
     fetchMetrics(),
     fetchAeMetrics(),
     fetchSnapshot(),
+    fetchKvStats(),
     fetchHostnameHealth(),
   ]);
   if (m)    { lastMetrics  = m;    renderMetrics(m); }
@@ -948,4 +949,18 @@ async function sandboxReset() {
   } finally {
     btn.disabled = false; btn.textContent = 'Reset credits';
   }
+}
+
+// ── KV monitor card ───────────────────────────────────────────────────────────
+async function fetchKvStats() {
+  try {
+    const res  = await fetch(`${WORKER}/admin/kv-stats`, { headers: { 'X-Admin-Key': adminKey } });
+    const data = await res.json();
+    const el   = document.getElementById('snap-kv-keys');
+    if (!el) return;
+    const count = data.key_count ?? 0;
+    el.textContent = count.toLocaleString('en-GB');
+    el.style.color = count > 500_000 ? 'var(--c-red)' : count > 100_000 ? 'var(--c-amber)' : '';
+    window._kvCache = data;
+  } catch (e) { console.warn('[kv-stats]', e); }
 }

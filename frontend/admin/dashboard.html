@@ -210,7 +210,7 @@
       </div>
 
       <!-- Row 3: growth + farming (4-column) -->
-      <div class="row-4">
+      <div class="row-5">
         <div class="snap-metric" tabindex="0" onclick="openModal('free-users', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('free-users', this)">
           <div class="sm-label">Free users</div>
           <div class="sm-plain">Total on free tier</div>
@@ -233,6 +233,11 @@
           <div class="sm-label">Farming signal</div>
           <div class="sm-plain">Credentials per upload</div>
           <div class="sm-value" id="snap-farming">—</div>
+        </div>
+        <div class="snap-metric" tabindex="0" onclick="openModal('kv-monitor', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('kv-monitor', this)">
+          <div class="sm-label">KV keys stored</div>
+          <div class="sm-plain">Free plan · 1 GB cap</div>
+          <div class="sm-value" id="snap-kv-keys">—</div>
         </div>
       </div>
     </div>
@@ -274,155 +279,6 @@
   </div>
 </div>
 
-// ─── SW6: Sandbox card ────────────────────────────────────────────────────────
-
-const WORKER = 'https://refueler-share.rt-fc4.workers.dev';
-
-async function sandboxActivate() {
-  const adminKey = sessionAdminKey();
-  if (!adminKey) return;
-
-  const rail = document.getElementById('sandbox-rail-select').value;
-  const ref  = (document.getElementById('sandbox-ref-input').value || 'sandbox').trim();
-
-  const btn = document.getElementById('btn-sandbox-activate');
-  btn.disabled    = true;
-  btn.textContent = 'Issuing…';
-
-  try {
-    const res = await fetch(`${WORKER}/api/v1/sandbox/activate`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
-      body:    JSON.stringify({ rail, transfer_ref_prefix: ref }),
-    });
-
-    const data = await res.json();
-
-    const resultEl = document.getElementById('sandbox-result');
-    resultEl.style.display = 'block';
-
-    if (!res.ok) {
-      resultEl.innerHTML = `<span style="color:#e05353;">Error ${res.status}: ${escapeHtml(data.error ?? 'Unknown error')}</span>`;
-      updateSandboxState('Error');
-      return;
-    }
-
-    // Show keypair — this is the one-time display.
-    const lines = [
-      `<strong style="color:var(--fg,#F5F0E8)">✓ Sandbox client issued</strong>`,
-      ``,
-      `Rail:      <strong>${escapeHtml(data.rail)}</strong>`,
-      `Live key:  <span style="color:#C8A96E">${escapeHtml(data.live_key)}</span>`,
-      `Sign key:  <span style="color:#C8A96E">${escapeHtml(data.sign_key)}</span>  ← shown once`,
-      data.credits !== null
-        ? `Credits:   ${data.credits}`
-        : `Tokens:    ${data.test_tokens?.length ?? 0} test tokens issued (see JSON)`,
-      `Expires:   ${new Date(data.expires_at * 1000).toISOString()}`,
-      ``,
-      `<span style="opacity:.5;font-size:10px;">Full response (copy before closing):</span>`,
-      `<span style="opacity:.7">${escapeHtml(JSON.stringify(data, null, 2))}</span>`,
-    ];
-    resultEl.innerHTML = lines.join('<br>');
-
-    updateSandboxState('Active');
-    document.getElementById('sandbox-sub').textContent =
-      `${data.rail} rail · ${data.credits !== null ? data.credits + ' credits' : SANDBOX_TOKEN_COUNT + ' test tokens'} · expires ${new Date(data.expires_at * 1000).toLocaleDateString()}`;
-
-    // Auto-clear result after 5 minutes — keypair should be recorded by then.
-    setTimeout(() => {
-      resultEl.innerHTML = '<span style="opacity:.5">Result cleared — record credentials before this timer.</span>';
-    }, 5 * 60 * 1000);
-
-  } catch (e) {
-    document.getElementById('sandbox-result').style.display = 'block';
-    document.getElementById('sandbox-result').innerHTML =
-      `<span style="color:#e05353;">Network error: ${escapeHtml(String(e))}</span>`;
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Issue keypair';
-  }
-}
-
-async function sandboxReset() {
-  const adminKey = sessionAdminKey();
-  if (!adminKey) return;
-
-  const liveKey = (document.getElementById('sandbox-reset-key-input').value ?? '').trim();
-  if (!liveKey.startsWith('rfs_test_live_')) {
-    alert('Enter an rfs_test_live_ key to reset.');
-    return;
-  }
-
-  const btn = document.getElementById('btn-sandbox-reset');
-  btn.disabled    = true;
-  btn.textContent = 'Resetting…';
-
-  try {
-    const res = await fetch(`${WORKER}/api/v1/sandbox/reset`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
-      body:    JSON.stringify({ live_key: liveKey }),
-    });
-
-    const data      = await res.json();
-    const resultEl  = document.getElementById('sandbox-result');
-    resultEl.style.display = 'block';
-
-    if (!res.ok) {
-      resultEl.innerHTML = `<span style="color:#e05353;">Error ${res.status}: ${escapeHtml(data.error ?? 'Unknown error')}</span>`;
-      return;
-    }
-
-    const lines = [
-      `<strong style="color:var(--fg,#F5F0E8)">✓ Sandbox reset</strong>`,
-      `Rail: ${escapeHtml(data.rail)}`,
-      data.credits !== null ? `Credits reissued: ${data.credits}` : `Test tokens reissued: ${data.test_tokens?.length ?? 0}`,
-      `Reset at: ${new Date(data.reset_at * 1000).toISOString()}`,
-    ];
-    if (data.test_tokens?.length) {
-      lines.push(``, `<span style="opacity:.7">${escapeHtml(JSON.stringify(data.test_tokens, null, 2))}</span>`);
-    }
-    resultEl.innerHTML = lines.join('<br>');
-
-  } catch (e) {
-    document.getElementById('sandbox-result').style.display = 'block';
-    document.getElementById('sandbox-result').innerHTML =
-      `<span style="color:#e05353;">Network error: ${escapeHtml(String(e))}</span>`;
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Reset credits';
-  }
-}
-
-function updateSandboxState(label) {
-  const el = document.getElementById('sandbox-state');
-  if (!el) return;
-  el.textContent = label;
-  el.style.color = label === 'Active' ? 'var(--green, #5cb85c)' : label === 'Error' ? '#e05353' : '';
-}
-
-// sessionAdminKey() — reads the unlocked admin key from the session.
-// dashboard.js already has this stored in the gate flow; adapt if your variable name differs.
-function sessionAdminKey() {
-  const k = window._adminKey ?? document.getElementById('key-input')?.value ?? '';
-  if (!k) { alert('Not authenticated — unlock the dashboard first.'); return null; }
-  return k;
-}
-
-const SANDBOX_TOKEN_COUNT = 10; // mirrors sandbox.js constant — update together
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-// Scroll helper for sidebar nav link
-function scrollToCard(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
 
 <script src="dashboard.js"></script>
 </body>

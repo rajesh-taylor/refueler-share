@@ -513,3 +513,19 @@ export async function handleAdminSnapshot(request, env) {
 
   return json(snapshot);
 }
+
+// ── KV monitor — GET /admin/kv-stats ─────────────────────────────────────────
+// Returns key count for STATUS_KV. Reads/writes per day need AE (S82+).
+export async function handleAdminKvStats(request, env) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  try {
+    let keyCount = 0, cursor, iters = 0;
+    do {
+      const res = await env.STATUS_KV.list(cursor ? { limit: 1000, cursor } : { limit: 1000 });
+      keyCount += res.keys.length;
+      cursor = res.list_complete ? undefined : res.cursor;
+    } while (cursor && ++iters < 1000);
+    return json({ key_count: keyCount, reads_today: null, writes_today: null, limits: { reads_per_day: 100_000, writes_per_day: 1_000, storage_bytes: 1_073_741_824 }, note: 'reads/writes require AE instrumentation (S82+)' });
+  } catch (e) { return err(500, 'KV list failed'); }
+}

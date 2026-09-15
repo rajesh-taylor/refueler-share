@@ -621,3 +621,9 @@ body {
   border-radius: 3px;
   border: 0.5px solid var(--border);
 }
+
+/* ── row-5: 5-column grid (KV card) ── */
+.row-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+@media (max-width: 960px) { .row-5 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px) { .row-5 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 400px) { .row-5 { grid-template-columns: 1fr; } }
