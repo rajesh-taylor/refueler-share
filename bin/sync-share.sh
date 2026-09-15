@@ -16,7 +16,7 @@ IO_SHARE="/Users/rajeshtaylor/Documents/refueler.io/src/share"
 echo "▶ sync-share: ${SHARE_ROOT}/frontend/ → ${IO_ASSETS}/"
 
 # ── 1. JS modules ─────────────────────────────────────────────────────────────
-for f in share.js crypto.js upload.js download.js timestamp.js refueler-badge.js; do
+for f in share.js crypto.js upload.js download.js timestamp.js refueler-badge.js fragment.js; do
   if [[ -f "${SHARE_ROOT}/frontend/${f}" ]]; then
     cp "${SHARE_ROOT}/frontend/${f}" "${IO_ASSETS}/${f}"
     echo "  ✓ ${f}"
