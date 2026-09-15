@@ -239,7 +239,7 @@ function detectMode() {
       // v1: uuid lives in query string
       const uuid = new URLSearchParams(location.search).get('uuid');
       if (!uuid) return null; // malformed v1 link — no uuid in query
-      return { v: 1, uuid, keyBytes: parsed.keyBytes, filename: parsed.filename, sealNonce: parsed.sealNonce };
+            return { v: 1, uuid, keyBytes: parsed.keyBytes, ivBytes: parsed.ivBytes, filename: parsed.filename, sealNonce: parsed.sealNonce };
     }
   } catch {
     // not a v1 blob — fall through to legacy check

@@ -5,7 +5,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>System Status — refueler share</title>
-<meta name="description" content="Real-time operational status and cryptographic integrity layer for share.refueler.io." />
+<meta name="description" content="Real-time operational status for refueler.io/share." />
 
 <!-- Fonts — canonical match to refueler.io -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -37,7 +37,7 @@
         root.setAttribute('data-theme', 'carbon');
         if (pill) pill.textContent = 'Carbon / Paper';
       } else {
-        root.removeAttribute('data-theme');
+        root.setAttribute('data-theme', 'paper');
         if (pill) pill.textContent = 'Paper / Carbon';
       }
     }
@@ -186,7 +186,7 @@
 
 <footer class="site-footer">
   <div class="footer-inner">
-    <span class="footer-note">© 2026 Refueler · share.refueler.io</span>
+    <span class="footer-note">© 2026 Refueler · refueler.io/share</span>
     <div class="footer-links">
       <a href="/status.html">Status</a>
       <a href="/upgrade.html">Upgrade</a>
