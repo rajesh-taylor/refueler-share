@@ -10,7 +10,7 @@
 //   detected.v === 0  → { v:0, uuid, key (hex), iv (hex|null), sn (hex|null) }  [legacy]
 //
 //   IV source:
-//     v1: manifest meta.iv (hex) — IV is not secret, lives server-side.
+//     v1: URL fragment (detected.ivBytes) — never in manifest. See Share-4.
 //     v0: fragment iv param (hex) — backward compat for old links.
 // ─────────────────────────────────────────────────────────────────────────────
 

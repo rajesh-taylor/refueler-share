@@ -12,7 +12,7 @@
  *   safeGetManifest(bucket, uuid, env) → { manifest, oversize }
  *   supabaseFetch(env, method, path, body?, extraHeaders?) → Response
  *   json(data, status?) → Response
- *   err(status, message) → Response
+ *   err(status, message, request?) → Response   ← Share-5: optional request param adds CORS
  *   addCors(response, request) → Response
  *   parseRange(rangeHeader) → { offset, length } | undefined
  */
@@ -140,11 +140,20 @@ export function json(data, status = 200) {
   });
 }
 
-export function err(status, message) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+// Share-5: err() now accepts an optional request parameter.
+// When provided, CORS headers are attached unconditionally — this ensures that
+// any Worker-generated error (400, 401, 413, 415, 429, 500, etc.) is legible
+// to cross-origin callers even if the call site forgot addCors().
+// Callers that already wrap with addCors() are unaffected — duplicate header
+// sets from the outer addCors() simply overwrite, which is idempotent.
+// Callers that pass no request continue to work as before (no CORS headers on
+// those responses — typically admin or server-to-server paths).
+export function err(status, message, request = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (request) {
+    Object.assign(headers, corsHeaders(request));
+  }
+  return new Response(JSON.stringify({ error: message }), { status, headers });
 }
 
 export function addCors(response, request) {

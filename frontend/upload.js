@@ -731,7 +731,13 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   // Streaming BLAKE3 plaintext root — incremental update per chunk (TH-2)
   const blake3PlaintextHash = wantsPermanentRecord ? blake3CreateHash() : null;
 
-  const CHUNK_RETRY_DELAYS = [2000, 5000, 10000];
+  // Share-5: retry budget raised to 6 attempts (5 retries).
+  // Delays: 2s, 5s, 15s, 30s, 60s — long enough to clear a CF per-minute window.
+  // 429 and network-level failures (TypeError / ERR_FAILED from edge-generated
+  // responses with no CORS header) are retryable. Only hard 4xx from the Worker
+  // (which carry CORS headers and a JSON body) are immediately fatal.
+  const CHUNK_RETRY_DELAYS = [2000, 5000, 15000, 30000, 60000];
+  const MAX_ATTEMPTS = CHUNK_RETRY_DELAYS.length + 1; // 6
 
   for (let i = 0; i < totalChunks; i++) {
     const raw = await _readChunk(chunks[i]);
@@ -781,33 +787,59 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
 
     let lastErr;
     let uploaded = false;
-    for (let attempt = 0; attempt <= CHUNK_RETRY_DELAYS.length; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         const res = await fetchWithTimeout(
           `${WORKER_URL}/upload/${state.uploadUUID}/${String(i).padStart(4, '0')}`,
           { method: 'PUT', headers, body: encrypted },
           CHUNK_UPLOAD_TIMEOUT_MS
         );
+
+        if (res.status === 429) {
+          // Rate-limited — honour Retry-After if present, otherwise use scheduled delay.
+          const retryAfterSecs = parseInt(res.headers.get('Retry-After') ?? '0', 10);
+          const schedDelay = CHUNK_RETRY_DELAYS[attempt] ?? 60000;
+          const waitMs = retryAfterSecs > 0 ? retryAfterSecs * 1000 : schedDelay;
+          reportError('upload_chunk_429', `429 chunk ${i} attempt ${attempt} wait ${waitMs}ms`, `uuid:${state.uploadUUID.slice(0,8)}`);
+          lastErr = new Error(`HTTP 429`);
+          if (attempt < MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, waitMs));
+          continue;
+        }
+
+        // Hard Worker errors (CORS headers present, JSON body) — fatal, do not retry.
+        // 409 = credential already spent; 401/400/413/415 = logic errors.
         if (res.status >= 400 && res.status < 500) {
           const errText = await res.text();
           reportError('upload_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${state.uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
           throw new Error(`Chunk ${i} upload failed: ${errText}`);
         }
-        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); }
-        else { uploaded = true; break; }
+
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+        } else {
+          uploaded = true;
+          break;
+        }
       } catch (e) {
-        if (!e.timedOut && !(e.message?.startsWith('Chunk'))) { lastErr = e; }
-        else if (!e.timedOut) { throw e; }
-        else {
-          lastErr = e;
+        if (e.message?.startsWith('Chunk') && !e.timedOut) {
+          // Fatal Worker error propagated from above — do not retry.
+          throw e;
+        }
+        // TypeError (net::ERR_FAILED — edge-generated response with no CORS header, or
+        // network interruption) and timeout are both retryable.
+        lastErr = e;
+        if (e.timedOut) {
           reportError('chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${state.uploadUUID.slice(0,8)}`);
+        } else {
+          reportError('chunk_fetch_err', `chunk ${i} fetch error attempt ${attempt}: ${e.message?.slice(0,80)}`, `uuid:${state.uploadUUID.slice(0,8)}`);
         }
       }
-      if (!uploaded && attempt < CHUNK_RETRY_DELAYS.length) {
-        await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAYS[attempt]));
+      if (!uploaded && attempt < MAX_ATTEMPTS - 1) {
+        const delay = CHUNK_RETRY_DELAYS[attempt] ?? 60000;
+        await new Promise(r => setTimeout(r, delay));
       }
     }
-    if (!uploaded) throw new Error(`Chunk ${i} failed after ${CHUNK_RETRY_DELAYS.length + 1} attempts: ${lastErr?.message}`);
+    if (!uploaded) throw new Error(`Chunk ${i} failed after ${MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
 
     writeChunkState({
       uuid: state.uploadUUID, chunkIndex: i, totalChunks,
@@ -1014,7 +1046,9 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   }
 
   setStage(`Resuming — uploading from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 22);
-  const CHUNK_RETRY_DELAYS = [2000, 5000, 10000];
+  // Share-5: same retry budget as main upload loop — 6 attempts, 429-aware.
+  const CHUNK_RETRY_DELAYS = [2000, 5000, 15000, 30000, 60000];
+  const MAX_ATTEMPTS = CHUNK_RETRY_DELAYS.length + 1; // 6
 
   for (let i = resumeFromChunk; i < totalChunks; i++) {
     const raw = await _readChunk(chunks[i]);
@@ -1045,12 +1079,13 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     }
 
     let lastErr; let uploaded = false;
-    for (let attempt = 0; attempt <= CHUNK_RETRY_DELAYS.length; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         const res = await fetchWithTimeout(
           `${WORKER_URL}/upload/${state.uploadUUID}/${String(i).padStart(4, '0')}`,
           { method: 'PUT', headers, body: encrypted }, CHUNK_UPLOAD_TIMEOUT_MS
         );
+
         if (res.status === 409) {
           reportError('resume_409', `chunk ${i} 409 — transfer already complete`, `uuid:${state.uploadUUID.slice(0,8)}`);
           await clearResumeState(state.uploadUUID, reportError);
@@ -1064,21 +1099,39 @@ export async function resumeUpload(record, domRefs, state, helpers) {
           if (resumeDiscardBtn409) { resumeDiscardBtn409.textContent = 'New upload'; resumeDiscardBtn409.addEventListener('click', () => location.reload(), { once: true }); }
           return;
         }
+
+        if (res.status === 429) {
+          const retryAfterSecs = parseInt(res.headers.get('Retry-After') ?? '0', 10);
+          const schedDelay = CHUNK_RETRY_DELAYS[attempt] ?? 60000;
+          const waitMs = retryAfterSecs > 0 ? retryAfterSecs * 1000 : schedDelay;
+          reportError('resume_chunk_429', `429 chunk ${i} attempt ${attempt} wait ${waitMs}ms`, `uuid:${state.uploadUUID.slice(0,8)}`);
+          lastErr = new Error(`HTTP 429`);
+          if (attempt < MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, waitMs));
+          continue;
+        }
+
         if (res.status >= 400 && res.status < 500) {
           const errText = await res.text();
           reportError('resume_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${state.uploadUUID.slice(0,8)}`);
           throw new Error(`Chunk ${i} upload failed (resume): ${errText}`);
         }
+
         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); }
         else { uploaded = true; break; }
       } catch (e) {
-        if (e.timedOut) { lastErr = e; reportError('resume_chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${state.uploadUUID.slice(0,8)}`); }
-        else if (e.message?.includes('upload failed (resume)')) { throw e; }
-        else { lastErr = e; }
+        if (e.timedOut) {
+          lastErr = e;
+          reportError('resume_chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${state.uploadUUID.slice(0,8)}`);
+        } else if (e.message?.includes('upload failed (resume)')) {
+          throw e;
+        } else {
+          lastErr = e;
+          reportError('resume_chunk_fetch_err', `chunk ${i} fetch error attempt ${attempt}: ${e.message?.slice(0,80)}`, `uuid:${state.uploadUUID.slice(0,8)}`);
+        }
       }
-      if (!uploaded && attempt < CHUNK_RETRY_DELAYS.length) await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAYS[attempt]));
+      if (!uploaded && attempt < MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAYS[attempt] ?? 60000));
     }
-    if (!uploaded) throw new Error(`Chunk ${i} failed after ${CHUNK_RETRY_DELAYS.length + 1} attempts: ${lastErr?.message}`);
+    if (!uploaded) throw new Error(`Chunk ${i} failed after ${MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
 
     writeChunkState({
       uuid: state.uploadUUID, chunkIndex: i, totalChunks,

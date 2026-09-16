@@ -451,7 +451,7 @@ export default {
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
-      return new Response('Not found', { status: 404 });
+            return new Response('Not found', { status: 404, headers: corsHeaders(request) });
 
     } catch (e) {
       const latency = performance.now() - t0;
