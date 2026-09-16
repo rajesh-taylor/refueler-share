@@ -368,6 +368,12 @@ cd /Users/rajeshtaylor/Documents/refueler-mcp && npm publish --access public
 
 *(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. B9-Opus design complete; build sessions sequenced in `merkle-spec-v1.md` §9.)*
 
+## Locked block sequence (updated Share-6-Opus · 16 Sep 2026)
+
+`Share-6 block (large-upload direct-to-R2) → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-4…B9-8) → B10+`
+
+*(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. Share-6 is Priority-1 — SHARE-503 blocks all large uploads — and front-loads B9-1/B9-2/B9-3, so the later B9 build resumes at B9-4. Share-6-vs-B8-build order is Rajesh's call; Share-6 recommended first on the SHARE-503 blocker. B9-Opus design complete; sequenced in `merkle-spec-v1.md` §9.)*
+
 ## B8-Opus · 13 Sep 2026 — NUT-11 Mode 2 (Locke) design lock
 
 | Item | Detail |
@@ -388,5 +394,28 @@ Seven decisions locked (D-1…D-7) — full detail in `B8-spec-v1.md`. Key outco
 **Do-not-retry additions:** see `B8-spec-v1.md` §9.
 
 **B8-Opus complete. Next: B8 build (B8-1…B8-6, buffer B8-2b · B8-5b). Signs off Pass SD3.**
+
+## Share-6-Opus · 16 Sep 2026 — Large-upload direct-to-R2 architecture lock
+
+| Item | Detail |
+|------|--------|
+| Session type | Architecture + design, no code produced |
+| Output | `Share-6-spec-v1.md` (refueler-share repo root) |
+| BRIDGE | v9.6 |
+
+Six decisions locked (D-1…D-6) — full detail in `Share-6-spec-v1.md`. Key outcomes:
+- **Upload moves off the Worker edge to R2 direct** via presigned S3 `PutObject` URLs (one object per chunk at `{uuid}/{iiii}`). Worker `initiate`s + `finalise`s only; never in the transfer path. Kills SHARE-503 and the in-RAM `NotReadableError`.
+- **Not S3 multipart** — `CompleteMultipartUpload` collapses parts into one object and breaks `merkle-spec-v1.md` §1 (`{uuid}/{iiii}` per-chunk leaf). Per-object PUT preserves the layout, the `/download` path, and resume. Also dissolves the part-number↔AAD off-by-one (all 0-indexed).
+- **Part size 32 MiB, uniform across tiers.** 250 GiB = 8,000 objects (20% under the 10k advisory ceiling); 100 GiB = 3,200; 4 GiB = 128. `CHUNK_SIZE` 8→32 MiB. Real Safari/iOS 32-vs-64 test at Share-6-2.
+- **Cashu verified + spent once at `initiate`** (moved off chunk-0). Size cap gated on `resolvedTier` (live Supabase), never `issued_tier`. API-tier credit-pool debit also at initiate.
+- **Integrity shift (the honest one):** the Worker's upload-time 400-on-mismatch is structurally lost (Worker sees no parts). Integrity moves entirely to download-time (B9-3): browser writes `merkle_root` + `{uuid}/hashes` at finalise; Worker reconstructs + 409 on download. **B9-3 is not built** — block front-loads B9-1/B9-2/B9-3; consumer cutover gated on Share-6-5 green.
+- **No confidentiality/privacy change:** AES in-browser before any byte leaves; key in fragment only; filename never reaches Worker; R2 holds keyless ciphertext. New item: an R2 API key as a Worker secret (scope to the two buckets; leak = keyless-ciphertext exposure only).
+- **aws4fetch** (in-Worker SigV4 signer, MIT, £0, not Amazon) recommended over hand-rolled. Presigned expiry 6 days; URL batches of 256.
+
+**Build sequence:** Share-6-1 (presigning + initiate) → 6-2 (CORS + direct-PUT loop) → 6-3 (finalise + sidecar, folds in B9-1) → 6-4 (resume + folder cap) → 6-5 (download verify = B9-3, **cutover gate**) → 6-6 (audit + `WORKER_URL` cutover, closes SHARE-503). Buffer: 6-2b · 6-5b. New path built additive alongside the live one until 6-6; every session ends in a real upload/send.
+
+**Do-not-retry additions:** see `Share-6-spec-v1.md` §10.
+
+**Share-6-Opus complete. Next: Share-6-1 (presigning + initiate). Front-loads B9-1…B9-3; B9 build then resumes at B9-4.**
 
 *"Nothing stops this train."*
