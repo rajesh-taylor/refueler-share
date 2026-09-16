@@ -649,6 +649,98 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Share-6-2: direct-to-R2 feature flag.
+// false = legacy Worker-relay path (unchanged). true = presigned-PUT path.
+// Flip to true at Share-6-6 cutover ONLY after Share-6-5 (B9-3 download verify) is green.
+// DO NOT flip before Share-6-5 — no download-time integrity check exists yet.
+// ─────────────────────────────────────────────────────────────────────────────
+const USE_DIRECT_R2 = true; // Share-6-2: enabled for dev smoke
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _fetchNextUrlBatch — POST /upload/{uuid}/urls {from,count}, session-token authed.
+// Never re-verifies or re-spends Cashu (spec §6 / do-not-retry §10).
+// ─────────────────────────────────────────────────────────────────────────────
+async function _fetchNextUrlBatch(uuid, sessionToken, from, count, reportError) {
+  let res;
+  try {
+    res = await fetch(`${WORKER_URL}/upload/${uuid}/urls`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+      body: JSON.stringify({ from, count }),
+    });
+  } catch (e) {
+    reportError('url_batch_fetch', e.message?.slice(0, 80), `uuid:${uuid.slice(0, 8)} from:${from}`);
+    throw new Error(`URL batch fetch failed (network): ${e.message}`);
+  }
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    reportError('url_batch_status', `HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} from:${from} ${txt.slice(0, 80)}`);
+    throw new Error(`URL batch ${from} failed: HTTP ${res.status}`);
+  }
+  const body = await res.json();
+  return body.urls || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _putChunkDirect — PUT one encrypted chunk to R2 via a presigned URL.
+// Returns the ETag string (R2 ACK). Implements Share-5 retry budget (6 attempts).
+// ─────────────────────────────────────────────────────────────────────────────
+const _DIRECT_RETRY_DELAYS = [2000, 5000, 15000, 30000, 60000];
+const _DIRECT_MAX_ATTEMPTS = _DIRECT_RETRY_DELAYS.length + 1; // 6
+
+async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, reportError) {
+  let lastErr;
+  for (let attempt = 0; attempt < _DIRECT_MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetchWithTimeout(presignedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: encryptedBytes,
+      }, CHUNK_UPLOAD_TIMEOUT_MS);
+
+      if (res.ok) {
+        const etag = res.headers.get('ETag') || res.headers.get('etag') || '';
+        return etag.replace(/"/g, '');
+      }
+
+      // 403 = signature invalid / URL reused — unrecoverable without a new URL
+      if (res.status === 403) {
+        const txt = await res.text().catch(() => '');
+        reportError('direct_put_403', `chunk ${chunkIndex} 403 — URL invalid`, `uuid:${uuid.slice(0, 8)} attempt:${attempt} ${txt.slice(0, 80)}`);
+        throw new Error(`Chunk ${chunkIndex} direct PUT 403: presigned URL rejected`);
+      }
+
+      if (res.status === 429) {
+        const waitMs = _DIRECT_RETRY_DELAYS[attempt] ?? 60000;
+        reportError('direct_put_429', `chunk ${chunkIndex} 429 attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
+        lastErr = new Error('HTTP 429');
+        if (attempt < _DIRECT_MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      if (res.status < 500) {
+        const txt = await res.text().catch(() => '');
+        reportError('direct_put_4xx', `chunk ${chunkIndex} HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
+        throw new Error(`Chunk ${chunkIndex} direct PUT: HTTP ${res.status}`);
+      }
+
+      lastErr = new Error(`HTTP ${res.status}`);
+      reportError('direct_put_5xx', `chunk ${chunkIndex} HTTP ${res.status} attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
+    } catch (e) {
+      if (e.message?.includes('direct PUT')) throw e; // fatal — propagate immediately
+      lastErr = e;
+      if (e.timedOut) {
+        reportError('direct_put_timeout', `chunk ${chunkIndex} timed out attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
+      } else {
+        reportError('direct_put_err', `chunk ${chunkIndex} attempt ${attempt}: ${e.message?.slice(0, 80)}`, `uuid:${uuid.slice(0, 8)}`);
+      }
+    }
+    if (attempt < _DIRECT_MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, _DIRECT_RETRY_DELAYS[attempt] ?? 60000));
+  }
+  throw new Error(`Chunk ${chunkIndex} direct PUT failed after ${_DIRECT_MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // startUpload — main upload state machine
 // ─────────────────────────────────────────────────────────────────────────────
 async function startUpload(domRefs, state, helpers, transferOpts) {
@@ -731,6 +823,123 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   // Streaming BLAKE3 plaintext root — incremental update per chunk (TH-2)
   const blake3PlaintextHash = wantsPermanentRecord ? blake3CreateHash() : null;
 
+  // ── Share-6-2: direct-to-R2 path ──────────────────────────────────────────
+  if (USE_DIRECT_R2) {
+    setStage('Initiating', 15);
+
+    const initiateBody = {
+      cashu_credential:      credential,
+      credential_commitment: commitment,
+      issued_tier:           issuedTier,
+      total_chunks:          totalChunks,
+      total_bytes:           state.selectedFile.size,
+      expiry_timestamp:      expiryTimestamp,
+      file_name:             'encrypted-payload', // D-1 invariant — real name in fragment only
+    };
+    if (p2shHashHex)          initiateBody.p2sh_secret_hash       = p2shHashHex;
+    if (destroyAfterDownload) initiateBody.destroy_after_download = true;
+    if (availableFromUnix)    initiateBody.available_from         = availableFromUnix;
+    if (availableUntilUnix)   initiateBody.available_until        = availableUntilUnix;
+    if (sealNonceHex)         initiateBody.seal_nonce_hex         = sealNonceHex;
+
+    const initRes = await fetch(`${WORKER_URL}/upload/${state.uploadUUID}/initiate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(initiateBody),
+    });
+    if (!initRes.ok) {
+      const txt = await initRes.text().catch(() => '');
+      reportError('initiate', `HTTP ${initRes.status}`, txt.slice(0, 200));
+      throw new Error(`Initiate failed: HTTP ${initRes.status} — ${txt.slice(0, 120)}`);
+    }
+    const initData     = await initRes.json();
+    const sessionToken = initData.session_token;
+
+    // URL map: index → presigned URL. First batch arrives in initiate response.
+    const urlMap = new Map();
+    for (const entry of (initData.urls || [])) urlMap.set(entry.index, entry.url);
+    let batchNext = initData.batch_next; // null when all URLs delivered upfront (≤ 256 chunks)
+
+    setStage('Uploading', 18);
+
+    for (let i = 0; i < totalChunks; i++) {
+      // Fetch the next URL batch on demand (chunks > 256)
+      if (!urlMap.has(i)) {
+        if (batchNext === null) throw new Error(`No presigned URL for chunk ${i} and no batch_next`);
+        const newUrls = await _fetchNextUrlBatch(state.uploadUUID, sessionToken, batchNext, 256, reportError);
+        for (const entry of newUrls) urlMap.set(entry.index, entry.url);
+        const maxIdx = newUrls.length > 0 ? Math.max(...newUrls.map(e => e.index)) : batchNext - 1;
+        batchNext = (maxIdx + 1 < totalChunks) ? maxIdx + 1 : null;
+      }
+
+      const presignedUrl = urlMap.get(i);
+      if (!presignedUrl) throw new Error(`Presigned URL for chunk ${i} missing after batch fetch`);
+
+      const raw = await _readChunk(chunks[i]); // fresh FileReader per chunk — fixes NotReadableError
+      if (blake3PlaintextHash) blake3PlaintextHash.update(new Uint8Array(raw));
+
+      const aad = new Uint8Array(4);
+      new DataView(aad.buffer).setUint32(0, i, false); // AAD index = object index = Merkle leaf
+      const encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
+        state.sessionAesKey, raw
+      );
+
+      let chunkHashHex;
+      try {
+        chunkHashHex = blake3Hash(new Uint8Array(encrypted));
+      } catch (e) {
+        reportError('blake3_hash', e.message, `uuid:${state.uploadUUID.slice(0, 8)} chunk:${i}`);
+        throw e;
+      }
+      chunkHashes.push(chunkHashHex);
+
+      await _putChunkDirect(presignedUrl, encrypted, i, state.uploadUUID, reportError);
+
+      writeChunkState({
+        uuid: state.uploadUUID, chunkIndex: i, totalChunks,
+        fileName: state.selectedFile.name, fileSize: state.selectedFile.size,
+        keyHex, ivHex, tier: issuedTier, expiryTimestamp, timestamp: Date.now(),
+        sealNonceHex: sealNonceHex || undefined,
+        uploadMode: 'direct-r2', sessionToken, // Share-6: resume will need these
+      }, reportError).catch(() => {});
+
+      setProgress(Math.round(((i + 1) / totalChunks) * 77) + 18, `${i + 1} / ${totalChunks} chunks`);
+    }
+
+    clearResumeState(state.uploadUUID, reportError).catch(() => {});
+
+    let permanentRecordOk = false;
+    if (wantsPermanentRecord && blake3PlaintextHash && sealNonceHex) {
+      setStage('Anchoring to Bitcoin', 97);
+      const blake3PlaintextRoot = blake3PlaintextHash.digest('hex');
+      const prResult = await runPermanentRecord(state.uploadUUID, blake3PlaintextRoot, sealNonceHex, state.sessionAesKey);
+      permanentRecordOk = prResult.ok;
+      if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${state.uploadUUID.slice(0, 8)}`);
+    }
+
+    // Finalise not called here — that's Share-6-3. upload_complete stays false.
+    setStage('Done', 100);
+    progressDetail.textContent = wantsPermanentRecord
+      ? (permanentRecordOk ? 'Chunks lodged — finalise pending ✓' : 'Chunks lodged — date seal failed')
+      : 'Chunks lodged — finalise pending (Share-6-3)';
+    await new Promise(r => setTimeout(r, 700));
+    progressCard.classList.add('hidden');
+
+    const keyBytesRaw2 = new Uint8Array(await crypto.subtle.exportKey('raw', state.sessionAesKey));
+    const fragmentBlob2 = assembleFragment({
+      keyBytes:  keyBytesRaw2,
+      ivBytes:   new Uint8Array(state.sessionIv),
+      filename:  state.selectedFile.name,
+      sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
+    });
+    const shareUrl2 = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob2}`;
+    history.replaceState(null, '', location.pathname);
+    showSharePanel(shareUrl2, !!p2shHashHex);
+    return;
+  }
+
+  // ── Legacy Worker-relay path (unchanged) ──────────────────────────────────
   // Share-5: retry budget raised to 6 attempts (5 retries).
   // Delays: 2s, 5s, 15s, 30s, 60s — long enough to clear a CF per-minute window.
   // 429 and network-level failures (TypeError / ERR_FAILED from edge-generated
