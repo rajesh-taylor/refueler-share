@@ -63,3 +63,7 @@ The argument is complete in four paragraphs. The power is in its brevity. A 600-
 ---
 
 *Seed logged 16 Sep 2026. Add to notes-articles-list.md pipeline at next editorial session.*
+## Copy seed — logged 16 Sep 2026
+
+**The telephone wire.**
+Bending Spoons now owns both ends of the wire. The sender's service and the receiver's service. The metadata from both calls home to the same address. That is not a conspiracy — it is a consolidation strategy, and it is working exactly as intended.
