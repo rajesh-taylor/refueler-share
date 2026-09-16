@@ -149,17 +149,13 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 
 ## Current state
 
-**B8-Opus ✓ complete (13 Sep 2026). Next: B8 build.**
+**B8-Opus ✓ complete (13 Sep 2026). Next: BShare-6-2 build**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
-| TG-block ✓ | `0e51385` | Destroy-after-download · tidal window · Execution Dock · owner DELETE. 432 tests. |
-| TH-series ✓ | `45a4d3b3` | OTS relay · permanent-record UI · JS refactor (5 modules). |
-| SW1–SW9 ✓ | `8b4b4a1` | CF for SaaS · HMAC auth · credential issuance · badge · webhooks · receipts · dashboard · sandbox · hostname health. 484 tests. |
-| SW-MCP-1–6 ✓ | `713156a` (refueler-mcp) | MCP server scaffold → demo hardening. 228 tests. |
-| SW-MCP-8 ✓ | pending commit | npm package distribution. Apache 2.0. Trust-boundary READMEs (refueler-mcp + refueler-share). |
-| B9-Opus ✓ | — | Merkle/MMR/SMT/ZK design locked. `merkle-spec-v1.md` produced. BRIDGE v9.4. |
-
+| Share-6-1 ✓ | `0013908` (deployed `aa4a73bc`) | R2 SigV4 presigner · /initiate · /urls · session token. Smoke test passed. |
+| Share-6-2 ✓ | c593b23/5180e5a | R2 CORS + direct-PUT loop. PUT 200 confirmed |
+| Share-6-3 → | in progress | Finalise + sidecar (B9-1)
 ---
 
 ## Roadmap
