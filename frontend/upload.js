@@ -827,25 +827,24 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   if (USE_DIRECT_R2) {
     setStage('Initiating', 15);
 
-    const initiateBody = {
-      cashu_credential:      credential,
-      credential_commitment: commitment,
-      issued_tier:           issuedTier,
-      total_chunks:          totalChunks,
-      total_bytes:           state.selectedFile.size,
-      expiry_timestamp:      expiryTimestamp,
-      file_name:             'encrypted-payload', // D-1 invariant — real name in fragment only
+    // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
+    const initiateHeaders = {
+      'X-Cashu-Credential':      credential,
+      'X-Credential-Commitment': commitment,
+      'X-Issued-Tier':           issuedTier,
+      'X-Total-Chunks':          String(totalChunks),
+      'X-Total-Bytes':           String(state.selectedFile.size),
+      'X-Expiry-Timestamp':      String(expiryTimestamp),
+      'X-File-Name':             'encrypted-payload', // D-1 invariant
     };
-    if (p2shHashHex)          initiateBody.p2sh_secret_hash       = p2shHashHex;
-    if (destroyAfterDownload) initiateBody.destroy_after_download = true;
-    if (availableFromUnix)    initiateBody.available_from         = availableFromUnix;
-    if (availableUntilUnix)   initiateBody.available_until        = availableUntilUnix;
-    if (sealNonceHex)         initiateBody.seal_nonce_hex         = sealNonceHex;
+    if (p2shHashHex)          initiateHeaders['X-P2SH-Secret-Hash']       = p2shHashHex;
+    if (destroyAfterDownload) initiateHeaders['X-Destroy-After-Download'] = '1';
+    if (availableFromUnix)    initiateHeaders['X-Available-From']         = String(availableFromUnix);
+    if (availableUntilUnix)   initiateHeaders['X-Available-Until']        = String(availableUntilUnix);
 
     const initRes = await fetch(`${WORKER_URL}/upload/${state.uploadUUID}/initiate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(initiateBody),
+      headers: initiateHeaders,
     });
     if (!initRes.ok) {
       const txt = await initRes.text().catch(() => '');
