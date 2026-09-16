@@ -34,6 +34,8 @@ import {
 } from './utils.js';
 
 import { TIERS, isCharteredTier } from './tiers.js';
+// Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
+import { makePresigner, presignPutObject, signSessionToken, computeTransferCost } from './r2_presign.js';
 // SW-MCP-W2: monthly credit allocation, lazy reset, overage ceiling, personal_api plan
 import {
   loadQuota, applyQuotaSpend, provisionQuota, cancelQuota,
@@ -296,6 +298,36 @@ export default {
         });
       }
 
+      // ── Share-6-1: initiate direct-to-R2 upload — POST /upload/:uuid/initiate ──
+      // Additive. The legacy PUT /upload/:uuid/:chunk path above is untouched and
+      // stays live; this runs alongside it. Cashu verify+spend once here, size-cap
+      // via resolvedTier, manifest create, first presigned-URL batch + session token.
+      const initiateMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/initiate$/i);
+      if (request.method === 'POST' && initiateMatch) {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'upload_initiate', 20, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'upload_initiate', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('upload_initiate', () => handleInitiate(request, env, ctx, initiateMatch[1]).then(r => addCors(r, request)), {
+          httpProtocol: request.cf?.httpProtocol ?? '',
+        });
+      }
+
+      // ── Share-6-1: next presigned-URL batch — POST /upload/:uuid/urls ──────────
+      // Authed by the upload-session token (NOT by re-verifying/re-spending Cashu).
+      const uploadUrlsMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/urls$/i);
+      if (request.method === 'POST' && uploadUrlsMatch) {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'upload_urls', 60, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'upload_urls', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('upload_urls', () => handleUploadUrls(request, env, uploadUrlsMatch[1]).then(r => addCors(r, request)));
+      }
+
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
         // Rate limit layer 1: 5 requests / 60s per IP — password brute-force protection
@@ -437,6 +469,14 @@ export default {
 
       if (request.method === 'GET' && path === '/admin/kv-stats') {
         return timed('admin_kv_stats', () => handleAdminKvStats(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── Share-6-1: R2 presign smoke test — POST /admin/r2-presign-test ────
+      // X-Admin-Key gated. Presigns a single PutObject to the DEV bucket only
+      // (never prod) so the presigner can be proven end-to-end without a full
+      // Cashu credential flow. Remove after Share-6-6 cutover if desired.
+      if (request.method === 'POST' && path === '/admin/r2-presign-test') {
+        return timed('admin_r2_presign_test', () => handleAdminR2PresignTest(request, env).then(r => addCors(r, request)));
       }
 
       // ── SW-MCP-W2: Quota admin endpoints ──────────────────────────────────
@@ -1897,3 +1937,445 @@ async function handleDownload(request, env, ctx, uuid, chunkIndex) {
 // handleStripeWebhook, handleCheckout, handleSubscriptionStatus, handlePortal,
 // fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber
 //   — moved to ./handlers/stripe_sub.js (SW9a)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Share-6-1 — direct-to-R2 upload: initiate + next-batch + presign smoke test.
+//
+// Additive block. The legacy PUT /upload/:uuid/:chunk path (handleUpload above)
+// is untouched and remains the live consumer path until the Share-6-6 cutover
+// (gated on Share-6-5 / B9-3 download verification). Nothing here changes it.
+//
+// Flow (Share-6-spec §3):
+//   POST /upload/:uuid/initiate  → Cashu verify+spend once, size-cap, credit
+//                                  debit (API tier), manifest, session token,
+//                                  first batch of 256 presigned PutObject URLs.
+//   POST /upload/:uuid/urls      → next batch, authed by the session token only.
+//   (browser PUTs each ciphertext chunk direct to R2 — Worker not in the path.)
+//   POST /upload/:uuid/finalise  → Share-6-3 (not this session).
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Canonical expiry ceilings (seconds), keyed on resolvedTier. Mirrors the local
+// EXPIRY_MAX_SECONDS inside handleUpload — kept separate so the live path is
+// untouched. free/creative/max/api are the live Stripe-axis logic keys.
+const INITIATE_EXPIRY_MAX = {
+  free:     7  * 24 * 3600,
+  creative: 30 * 24 * 3600,
+  max:      90 * 24 * 3600,
+  api:      90 * 24 * 3600,
+};
+
+const PART_SIZE_BYTES = 33_554_432; // 32 MiB (Share-6-spec §2, D-1)
+const URL_BATCH_SIZE  = 256;        // Share-6-spec §6, D-5
+
+// Constant-time string compare (matches the inline chunk-0 pattern). Used for
+// commitment binding and session-token auth.
+function ctEqual(a, b) {
+  const ab = new TextEncoder().encode(String(a));
+  const bb = new TextEncoder().encode(String(b));
+  if (ab.length !== bb.length) return false;
+  try {
+    if (crypto.subtle.timingSafeEqual) return crypto.subtle.timingSafeEqual(ab, bb);
+  } catch { /* fall through to manual compare */ }
+  let diff = 0;
+  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
+  return diff === 0;
+}
+
+// Resolve the R2 S3 endpoint config from Worker secrets/vars.
+// The R2 secret access key is a Worker secret — never KV, never a URL (invariant).
+function r2Config(env) {
+  return {
+    accountId:       env.CF_ACCOUNT_ID,
+    accessKeyId:     env.R2_S3_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_S3_SECRET_ACCESS_KEY,
+    bucket:          env.R2_BUCKET_NAME
+                       || (env.ENVIRONMENT === 'production' ? 'refueler-share-prod' : 'refueler-share-dev'),
+  };
+}
+
+// Build the MCP-spec §2.5 payment_required envelope from an applyQuotaSpend 402.
+function paymentRequired402(response402, cost) {
+  return new Response(
+    JSON.stringify({
+      error:             'payment_required',
+      code:              response402.code,
+      rail:              'identity',
+      remaining_credits: response402.remaining_credits ?? 0,
+      shortfall_credits: response402.shortfall_credits ?? cost,
+      ...(response402.overage_credits !== undefined
+        ? { overage_credits: response402.overage_credits, overage_ceiling: response402.overage_ceiling }
+        : {}),
+      payment: {
+        method:        'out_of_band_v1',
+        instructions:  'Request a credit top-up (or wait for your monthly reset) from your Refueler account.',
+        dashboard_url: 'https://refueler.io/share/',
+        offer:         null,
+      },
+    }),
+    { status: 402, headers: { 'Content-Type': 'application/json' } }
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /upload/:uuid/initiate
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleInitiate(request, env, ctx, uuid) {
+  if (!UUID_RE.test(uuid)) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 400, errorMsg: 'invalid_uuid' });
+    return err(400, 'Invalid transfer ID');
+  }
+
+  // Idempotency: a transfer that already has a manifest must not re-spend.
+  const existing = await safeGetManifest(env.BUCKET, uuid, env);
+  if (existing.oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (existing.manifest) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 409, errorMsg: 'already_initiated' });
+    return err(409, 'Transfer already initiated');
+  }
+
+  // ── Headers (migrated from chunk-0; no body, no per-chunk hash) ────────────
+  const credential  = request.headers.get('X-Cashu-Credential');
+  const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
+  const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
+  const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
+  const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
+  const commitment  = request.headers.get('X-Credential-Commitment') ?? '';
+  const issuedTier  = (request.headers.get('X-Issued-Tier') ?? 'free').trim().toLowerCase();
+  const apiLiveKey  = request.headers.get('X-Api-Live-Key') ?? null;
+  const rawTransferRef = request.headers.get('X-Transfer-Ref') ?? null;
+  const apiTransferRef = rawTransferRef
+    ? String(rawTransferRef).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
+    : null;
+
+  if (!credential || !totalChunks || !totalBytes || !expiryTs) {
+    return err(400, 'Missing required headers');
+  }
+  if (!commitment) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 401, errorMsg: 'credential_commitment_missing' });
+    return err(401, 'Missing credential commitment');
+  }
+
+  // ── Resolve tier LIVE from Supabase — never issued_tier for the cap ────────
+  const email = (request.headers.get('X-Email') ?? '').trim().toLowerCase();
+  let resolvedTier = 'free';
+  if (email) {
+    try {
+      const subRes = await supabaseFetch(
+        env, 'GET',
+        `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&status=eq.active&select=tier&limit=1`
+      );
+      if (subRes.ok) {
+        const rows = await subRes.json();
+        if (rows.length > 0 && rows[0].tier) resolvedTier = rows[0].tier;
+      }
+    } catch (e) {
+      console.error('Tier resolution failed, defaulting to free:', e);
+    }
+  }
+  const tierCap = TIER_CAPS[resolvedTier] ?? TIER_CAPS.free;
+
+  // ── UUID-bound commitment verification (S42c) ──────────────────────────────
+  let expectedCommitment;
+  if (isCharteredTier(issuedTier)) {
+    const API_EXPIRY_WINDOW = 90 * 24 * 3600;
+    expectedCommitment = await computeApiCommitment(uuid, TIERS.CHARTERED, API_EXPIRY_WINDOW);
+  } else {
+    const canonicalTier  = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
+    expectedCommitment   = await computeCommitment(uuid, canonicalTier, EXPIRY_WINDOWS[canonicalTier]);
+  }
+  if (!ctEqual(commitment, expectedCommitment)) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 401, errorMsg: 'credential_uuid_mismatch' });
+    return err(401, 'Credential commitment mismatch');
+  }
+
+  // ── Total chunks advisory ceiling (§1/§2) ──────────────────────────────────
+  const TOTAL_CHUNKS_MAX = 10_000;
+  if (totalChunks > TOTAL_CHUNKS_MAX) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'total_chunks_exceeded' });
+    return err(400, `X-Total-Chunks exceeds maximum of ${TOTAL_CHUNKS_MAX}`);
+  }
+
+  // ── Expiry tier validation ─────────────────────────────────────────────────
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const maxWindow  = INITIATE_EXPIRY_MAX[resolvedTier] ?? INITIATE_EXPIRY_MAX.free;
+  if (expiryTs <= nowSeconds) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_in_past' });
+    return err(400, 'X-Expiry-Timestamp is in the past');
+  }
+  if (expiryTs > nowSeconds + maxWindow) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_exceeds_tier' });
+    return err(400, `X-Expiry-Timestamp exceeds maximum window for ${resolvedTier} tier (${maxWindow / 86400} days)`);
+  }
+
+  // ── Size-cap guard (§5) — resolvedTier, never issued_tier. 413 on breach ───
+  if (totalBytes > tierCap) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 413, errorMsg: 'declared_total_exceeds_cap' });
+    return err(413, `Declared total ${totalBytes} bytes exceeds ${resolvedTier} tier cap of ${tierCap} bytes`);
+  }
+
+  // ── Cashu verify (Mode 1 BDHKE) — local, no side effect. Throws → 401 ──────
+  let serial;
+  try {
+    serial = await verifyCredential(JSON.parse(credential), env.MINT_PRIVATE_KEY);
+  } catch {
+    return err(401, 'Invalid credential');
+  }
+
+  // ── API-tier credit-pool debit — COMPUTE and refuse (402) BEFORE the spend. ─
+  // Sandbox (rfs_test_) keys never touch the production pool. Write-back happens
+  // AFTER the atomic spend commits, so a double-spend (409) never debits credits.
+  let quotaKey = null;
+  let quotaUpdated = null;
+  const isApiTier = isCharteredTier(issuedTier) && !!apiLiveKey && !isSandboxRequest(apiLiveKey);
+  if (isApiTier) {
+    const cost = computeTransferCost(totalBytes);
+    quotaKey = await kvQuotaKey(apiLiveKey);
+    const { record, error: loadErr } = await loadQuota(env, quotaKey);
+    if (loadErr === 'kv_read_failed') {
+      return err(502, 'Quota check unavailable — please retry');
+    }
+    if (loadErr) {
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 402, errorMsg: 'quota_not_provisioned' });
+      return new Response(
+        JSON.stringify({ error: 'No quota record found — contact support', code: 'quota_not_provisioned' }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    const { updated, response402 } = applyQuotaSpend(record, cost, nowSeconds);
+    if (response402) {
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 402, errorMsg: response402.code });
+      return paymentRequired402(response402, cost);
+    }
+    quotaUpdated = updated;
+  }
+
+  // ── Tidal / destroy-after-download (migrated from chunk-0) ─────────────────
+  const destroyAfterDownload = request.headers.get('X-Destroy-After-Download') === '1';
+  const availableFromHeader  = request.headers.get('X-Available-From');
+  const availableUntilHeader = request.headers.get('X-Available-Until');
+  const hasTidalHeaders = availableFromHeader !== null || availableUntilHeader !== null;
+
+  if (hasTidalHeaders && !isTidalPermitted(resolvedTier)) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 403, errorMsg: 'tidal_tier_gate' });
+    return err(403, 'Availability scheduling requires a paid subscription');
+  }
+
+  let availableFromTs = null;
+  let availableUntilTs = null;
+  if (availableFromHeader !== null) {
+    availableFromTs = parseInt(availableFromHeader, 10);
+    if (isNaN(availableFromTs)) return err(400, 'X-Available-From must be a unix timestamp (integer)');
+  }
+  if (availableUntilHeader !== null) {
+    availableUntilTs = parseInt(availableUntilHeader, 10);
+    if (isNaN(availableUntilTs)) return err(400, 'X-Available-Until must be a unix timestamp (integer)');
+  }
+  const tidalInvariantError = validateTidalHeaders(availableFromTs, availableUntilTs, nowSeconds, expiryTs);
+  if (tidalInvariantError) {
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'tidal_invariant_violation' });
+    return err(400, tidalInvariantError);
+  }
+
+  // ── Spend — atomic double-spend guard: INSERT-on-serial (B8 §D-3). ─────────
+  // sig → BDHKE done above; this INSERT is the point of no return. 409 conflict
+  // = already spent (fire-and-forget log). This is the LAST Supabase write.
+  const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
+  if (meltRes.status === 409) {
+    supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
+      serial, uuid, attempted_at: new Date().toISOString(),
+    }).then(r => {
+      if (!r.ok) r.text().then(t => console.error('double_spend_attempts write failed:', t));
+    }).catch(e => console.error('double_spend_attempts fetch error:', e));
+    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 409, errorMsg: 'credential_double_spend' });
+    return err(409, 'Credential already spent');
+  }
+  if (!meltRes.ok) {
+    console.error('spend INSERT failed:', serial, await meltRes.text());
+    return err(502, 'Ledger unavailable');
+  }
+
+  // ── Credit write-back — only after the spend commits (fire-and-forget KV) ──
+  if (isApiTier && quotaKey && quotaUpdated) {
+    env.STATUS_KV.put(quotaKey, JSON.stringify(quotaUpdated)).catch(e =>
+      console.error('initiate: KV quota write-back failed:', e)
+    );
+  }
+
+  // ── Manifest: upload_complete:false, chunks_received:[], filename constant ──
+  // No merkle_root here — the browser writes it at /finalise (Share-6-3 / B9-1).
+  const manifest = createManifest({
+    uuid,
+    tier: resolvedTier,
+    totalChunks,
+    totalBytes,
+    expiryTimestamp: expiryTs,
+    blake3Root: null,
+    p2shSecretHash: p2shHash,
+  });
+  manifest.file_name       = 'encrypted-payload'; // D-1: real name in fragment only
+  manifest.chunks_received = [];
+  manifest.upload_complete = false;
+  manifest.status          = 'uploading';
+  manifest.upload_mode     = 'direct-r2'; // Share-6 marker for finalise/download branch
+
+  if (destroyAfterDownload) manifest.pending_destruction = false; // armed
+  if (availableFromTs !== null)  manifest.available_from_timestamp  = availableFromTs;
+  if (availableUntilTs !== null) manifest.available_until_timestamp = availableUntilTs;
+
+  if (isCharteredTier(issuedTier) && apiLiveKey) {
+    manifest.api_live_key    = apiLiveKey;
+    manifest.api_accepted_at = nowSeconds;
+    if (apiTransferRef) manifest.api_transfer_ref = apiTransferRef;
+  }
+
+  await putManifest(env.BUCKET, uuid, manifest);
+
+  // ── Execution Dock KV entry (TG-4) ─────────────────────────────────────────
+  const dockTtl = (expiryTs - nowSeconds) + 48 * 3600 + 3600;
+  env.STATUS_KV.put(
+    `dock_index:${uuid}`,
+    JSON.stringify({
+      expiry_timestamp: expiryTs,
+      tier:             resolvedTier,
+      file_name:        'encrypted-payload',
+      created_at:       nowSeconds,
+    }),
+    { expirationTtl: Math.max(dockTtl, 3600) }
+  ).catch(e => console.error('Execution Dock KV write failed:', e));
+
+  // NOTE: the cargo.accepted receipt is deferred to /finalise (Share-6-3, spec
+  // §3③.4). Under direct-R2 the transfer is not "accepted" until finalise
+  // validates completeness — so it is NOT emitted here. (In the legacy chunk-0
+  // path it fired at manifest-write; that path is unchanged.)
+
+  // ── Upload-session token (HMAC over uuid‖commitment, KV-TTL to expiry) ──────
+  const sessionToken = await signSessionToken(env.WEBHOOK_SIGNING_MASTER_KEY, uuid, commitment);
+  const sessionTtl   = Math.max(expiryTs - nowSeconds, 3600);
+  try {
+    await env.STATUS_KV.put(`upload_session:${uuid}`, sessionToken, { expirationTtl: sessionTtl });
+  } catch (e) {
+    console.error('upload_session KV write failed:', e);
+    return err(502, 'Session store unavailable');
+  }
+
+  // ── First batch of presigned PutObject URLs (§6) ───────────────────────────
+  let presign;
+  try {
+    presign = await makePresigner(r2Config(env));
+  } catch (e) {
+    console.error('makePresigner failed:', e);
+    return err(503, 'R2 presigning not configured');
+  }
+  const firstCount = Math.min(totalChunks, URL_BATCH_SIZE);
+  const urls = [];
+  for (let i = 0; i < firstCount; i++) {
+    const { url, expires } = await presign(`${uuid}/${String(i).padStart(4, '0')}`);
+    urls.push({ index: i, url, expires });
+  }
+  const batchNext = totalChunks > URL_BATCH_SIZE ? URL_BATCH_SIZE : null;
+
+  return json({
+    uuid,
+    session_token: sessionToken,
+    part_size:     PART_SIZE_BYTES,
+    total_chunks:  totalChunks,
+    urls,
+    batch_next:    batchNext,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /upload/:uuid/urls  — next presigned-URL batch, session-token authed.
+// Never re-verifies or re-spends Cashu (spec §6, do-not-retry §10).
+// Body: { from:int, count:int }.  Returns { urls:[{index,url,expires}], batch_next }.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleUploadUrls(request, env, uuid) {
+  if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
+
+  // ── Session-token auth (timing-safe compare vs KV) ─────────────────────────
+  const presented = request.headers.get('X-Upload-Session') ?? '';
+  let stored = null;
+  try {
+    stored = await env.STATUS_KV.get(`upload_session:${uuid}`);
+  } catch (e) {
+    console.error('upload_session KV read failed:', e);
+    return err(502, 'Session store unavailable');
+  }
+  if (!presented || !stored || !ctEqual(presented, stored)) {
+    logEvent(env, { endpoint: 'upload_urls', status: 401, errorMsg: 'session_token_invalid' });
+    return err(401, 'Invalid or expired upload session');
+  }
+
+  // ── Manifest bounds ────────────────────────────────────────────────────────
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize) return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+  if (manifest.upload_complete) return err(409, 'Upload already complete');
+  const totalChunks = manifest.total_chunks ?? 0;
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
+  const from  = parseInt(body.from, 10);
+  let   count = parseInt(body.count, 10);
+  if (!Number.isInteger(from) || from < 0 || from >= totalChunks) {
+    return err(400, 'from out of range');
+  }
+  if (!Number.isInteger(count) || count < 1) {
+    return err(400, 'count must be a positive integer');
+  }
+  count = Math.min(count, URL_BATCH_SIZE, totalChunks - from);
+
+  let presign;
+  try {
+    presign = await makePresigner(r2Config(env));
+  } catch (e) {
+    console.error('makePresigner failed:', e);
+    return err(503, 'R2 presigning not configured');
+  }
+  const urls = [];
+  for (let i = from; i < from + count; i++) {
+    const { url, expires } = await presign(`${uuid}/${String(i).padStart(4, '0')}`);
+    urls.push({ index: i, url, expires });
+  }
+  const next = (from + count) < totalChunks ? (from + count) : null;
+
+  return json({ uuid, urls, batch_next: next });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /admin/r2-presign-test  — X-Admin-Key gated. DEV bucket only.
+// Presigns one PutObject so the presigner can be proven end-to-end (Share-6-1
+// definition of done) without a Cashu credential. Cannot mint a prod write URL.
+// Body (optional): { key }.  Returns { url, expires, bucket, key }.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleAdminR2PresignTest(request, env) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+
+  let body = {};
+  try { body = await request.json(); } catch { /* optional body */ }
+
+  const key = (typeof body.key === 'string' && body.key)
+    ? body.key.replace(/[^0-9A-Za-z/_-]/g, '')
+    : `share-6-1-smoke/${crypto.randomUUID()}/0000`;
+
+  const cfg = {
+    accountId:       env.CF_ACCOUNT_ID,
+    accessKeyId:     env.R2_S3_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_S3_SECRET_ACCESS_KEY,
+    bucket:          'refueler-share-dev', // forced — never prod from this endpoint
+  };
+  if (!cfg.accessKeyId || !cfg.secretAccessKey) {
+    return err(503, 'R2 API token not configured (set R2_S3_ACCESS_KEY_ID / R2_S3_SECRET_ACCESS_KEY)');
+  }
+  try {
+    const { url, expires } = await presignPutObject({ ...cfg, key });
+    return json({ ok: true, bucket: cfg.bucket, key, url, expires });
+  } catch (e) {
+    return err(500, `Presign failed: ${e.message}`);
+  }
+}

@@ -14,12 +14,19 @@ preview_bucket_name = "refueler-share-dev"
 # TURNSTILE_SECRET_KEY — Cloudflare Turnstile secret key
 # SUPABASE_URL         — https://<project>.supabase.co
 # SUPABASE_SERVICE_KEY — service_role JWT (spent_tokens write)
+# R2_S3_ACCESS_KEY_ID     — R2 API token Access Key ID  (Share-6-1, presigning). Worker secret only.
+# R2_S3_SECRET_ACCESS_KEY — R2 API token Secret Access Key (Share-6-1, presigning). Worker secret only — never KV, never a URL.
 # BLINK_API_KEY        — Blink Share account API key (READ + RECEIVE scopes)
 # BLINK_WALLET_ID      — Blink Share account GBP wallet ID
 
 [vars]
 ENVIRONMENT = "production"
 LIGHTNING_BACKEND = "lnbits"
+# Share-6-1: bucket the Worker presigns PutObject against (direct-to-R2 path).
+# The R2 Workers binding above (BUCKET) is unaffected. For the dev smoke test,
+# set this to refueler-share-dev; the /admin/r2-presign-test endpoint always
+# forces the dev bucket regardless of this value.
+R2_BUCKET_NAME = "refueler-share-prod"
 BLINK_WALLET_ID            = ""
 BLINK_API_KEY              = ""
 PRICE_CREATIVE_MONTHLY_GBP = "12"
