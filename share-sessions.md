@@ -368,8 +368,6 @@ cd /Users/rajeshtaylor/Documents/refueler-mcp && npm publish --access public
 
 *(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. B9-Opus design complete; build sessions sequenced in `merkle-spec-v1.md` §9.)*
 
-## Locked block sequence (updated Share-6-Opus · 16 Sep 2026)
-
 `Share-6 block (large-upload direct-to-R2) → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-4…B9-8) → B10+`
 
 *(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. Share-6 is Priority-1 — SHARE-503 blocks all large uploads — and front-loads B9-1/B9-2/B9-3, so the later B9 build resumes at B9-4. Share-6-vs-B8-build order is Rajesh's call; Share-6 recommended first on the SHARE-503 blocker. B9-Opus design complete; sequenced in `merkle-spec-v1.md` §9.)*
