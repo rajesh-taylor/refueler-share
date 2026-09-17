@@ -1,5 +1,5 @@
 /* ─── dashboard.css — refueler-share admin dashboard ───────────────────────
- * DESIGN-TOKENS.md v1.0 · Last updated: S46a
+ * DESIGN-TOKENS.md v1.0 · Last updated: Share-Snag-1
  * Single source of truth for all dashboard styles.
  * Edit here — never inline in dashboard.html.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -238,6 +238,112 @@ body {
   font-size: 0.85rem; color: var(--c-red); font-family: var(--sans);
 }
 
+/* ── Ops section — Lightning + Sandbox ───────────────────────────────────── */
+
+/* Section heading: matches Satoshi / --heading, same weight + spacing as
+   modal-label / sb-section — aligns with the rest of the design system. */
+.ops-section-heading {
+  font-family: var(--heading);
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+  margin-bottom: 0.75rem;
+}
+
+/* Hairline between Lightning card and Sandbox heading */
+.ops-section-divider {
+  border: none;
+  border-top: 0.5px solid var(--border);
+  margin: 1.25rem 0;
+}
+
+/* Hairline below keypair warning, above metric card-group */
+.ops-metric-divider {
+  border: none;
+  border-top: 0.5px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+/* Hairline between sandbox controls and keypair warning line */
+.ops-keypair-divider {
+  border: none;
+  border-top: 0.5px solid var(--border);
+  margin: 14px 0 10px;
+}
+
+.ops-keypair-warn {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* ── Card (ops cards: Lightning toggle, Sandbox) ─────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 0;
+  transition: background 0.35s, border-color 0.35s;
+}
+
+/* Card typography — all use --heading per design system */
+.card-label {
+  font-family: var(--heading);
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+.card-value {
+  font-family: var(--heading);
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.05;
+  margin-bottom: 2px;
+}
+.card-sub {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ── Sandbox form controls — themed, not raw inline ─────────────────────── */
+.sandbox-select,
+.sandbox-input {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 0.5px solid var(--border-mid);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: var(--mono);
+  transition: border-color 0.15s ease;
+}
+.sandbox-select:focus,
+.sandbox-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── Sandbox result box ──────────────────────────────────────────────────── */
+.sandbox-result {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
 /* ── Card group ──────────────────────────────────────────────────────────── */
 .card-group {
   background: var(--surface);
@@ -246,24 +352,58 @@ body {
   overflow: hidden;
   transition: background 0.35s, border-color 0.35s;
 }
+
+/* All row types share border-top between them inside .card-group */
 .row-6 { display: grid; grid-template-columns: repeat(6, 1fr); }
 .row-4 { display: grid; grid-template-columns: repeat(4, 1fr); }
 .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
 
+/* row-5 is now a plain 5-column grid inside .card-group,
+   matching row-6/row-4 exactly — no gap/background tricks. */
+.row-5 { display: grid; grid-template-columns: repeat(5, 1fr); }
+
+/* Row dividers — every row after the first gets a top border */
 .row-6 + .row-6,
+.row-6 + .row-5,
 .row-6 + .row-4,
-.row-4 + .row-4,
 .row-6 + .row-3,
+.row-5 + .row-6,
+.row-5 + .row-5,
+.row-5 + .row-4,
+.row-5 + .row-3,
+.row-4 + .row-6,
+.row-4 + .row-5,
+.row-4 + .row-4,
 .row-4 + .row-3,
-.row-3 + .row-4 { border-top: 0.5px solid var(--border); }
+.row-3 + .row-6,
+.row-3 + .row-5,
+.row-3 + .row-4,
+.row-3 + .row-3 { border-top: 0.5px solid var(--border); }
 
 @media (max-width: 1200px) {
   .row-6 { grid-template-columns: repeat(3, 1fr); }
-  .row-6 .snap-metric:nth-child(3n)  { border-right: none; }
+  .row-6 .snap-metric:nth-child(3n)   { border-right: none; }
   .row-6 .snap-metric:nth-child(-n+3) { border-bottom: 0.5px solid var(--border); }
+  .row-5 { grid-template-columns: repeat(3, 1fr); }
+  .row-5 .snap-metric:nth-child(3n)   { border-right: none; }
+  .row-5 .snap-metric:nth-child(-n+3) { border-bottom: 0.5px solid var(--border); }
   .row-4 { grid-template-columns: repeat(2, 1fr); }
-  .row-4 .snap-metric:nth-child(2n)  { border-right: none; }
+  .row-4 .snap-metric:nth-child(2n)   { border-right: none; }
   .row-4 .snap-metric:nth-child(-n+2) { border-bottom: 0.5px solid var(--border); }
+}
+
+@media (max-width: 640px) {
+  .row-6, .row-5 { grid-template-columns: repeat(2, 1fr); }
+  .row-4          { grid-template-columns: repeat(2, 1fr); }
+  .row-6 .snap-metric:nth-child(3n)   { border-right: 0.5px solid var(--border); }
+  .row-6 .snap-metric:nth-child(2n)   { border-right: none; }
+  .row-5 .snap-metric:nth-child(3n)   { border-right: 0.5px solid var(--border); }
+  .row-5 .snap-metric:nth-child(2n)   { border-right: none; }
+}
+
+@media (max-width: 400px) {
+  .row-6, .row-5, .row-4 { grid-template-columns: 1fr; }
+  .snap-metric { border-right: none !important; }
 }
 
 /* ── Snap metric cards ───────────────────────────────────────────────────── */
@@ -428,7 +568,7 @@ body {
   line-height: 1.6;
 }
 
-/* ── Partial data source outage banner */
+/* ── Partial data source outage banner ────────────────────────────────────── */
 .modal-datasource-warn {
   background: var(--c-amber-bg); border: 0.5px solid var(--c-amber);
   border-radius: 6px; padding: 10px 16px; margin: 12px 0 20px;
@@ -436,7 +576,7 @@ body {
   line-height: 1.5;
 }
 
-/* ── Sparkline stub (SVG/CSS only — never Canvas; Canvas breaks @media print) */
+/* ── Sparkline stub (SVG/CSS only — never Canvas; breaks @media print) ────── */
 .modal-sparkline-stub {
   width: 100%; height: 80px;
   border: 1.5px dashed var(--border-mid); border-radius: 10px;
@@ -459,12 +599,86 @@ body {
   color: var(--text-tertiary); font-style: italic;
 }
 
+/* ── KV monitor modal ────────────────────────────────────────────────────── */
+.kv-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.kv-bar-row { display: flex; flex-direction: column; gap: 6px; }
+.kv-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.kv-bar-label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+.kv-bar-figure {
+  font-family: var(--heading);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.kv-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.kv-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  background: var(--c-green);
+}
+.kv-bar-fill.warn   { background: var(--c-amber); }
+.kv-bar-fill.danger { background: var(--c-red); }
+.kv-bar-caption {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+}
+.kv-keys-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 0.5px solid var(--border);
+}
+.kv-keys-label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+.kv-keys-value {
+  font-family: var(--heading);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.kv-plan-note {
+  margin-top: 16px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
 /* ── Print / PDF export ──────────────────────────────────────────────────── */
 /*
- * Browser header/footer are controlled by the "Headers and footers" checkbox
- * in the print dialog — not suppressible via CSS without clipping content.
- * Full branded PDF template (logo, legal footer) scoped to S49b.
- * Until then: instruct users to uncheck "Headers and footers".
+ * Browser header/footer controlled by "Headers and footers" in the print dialog.
+ * Full branded PDF template scoped to S49b.
  */
 @page { margin: 1.5cm 1cm; }
 
@@ -488,6 +702,9 @@ body {
   #main                                 { margin-left: 0; padding: 0; }
   .content-header, #error-banner,
   #modal, .editorial-note               { display: none !important; }
+  .card, .ops-section-heading,
+  .ops-section-divider,
+  .ops-metric-divider                   { display: none !important; }
   #main::before {
     content: "Refueler Share — System Summary · " attr(data-print-ts);
     display: block;
@@ -501,12 +718,12 @@ body {
     border-color: #D6D1C8;
     break-inside: auto;
   }
-  .row-6, .row-4 {
+  .row-6, .row-5, .row-4 {
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .row-6 { grid-template-columns: repeat(2, 1fr); }
-  .row-4 { grid-template-columns: repeat(2, 1fr); }
+  .row-6, .row-5 { grid-template-columns: repeat(2, 1fr); }
+  .row-4         { grid-template-columns: repeat(2, 1fr); }
   .snap-metric {
     break-inside: avoid;
     page-break-inside: avoid;
@@ -621,9 +838,3 @@ body {
   border-radius: 3px;
   border: 0.5px solid var(--border);
 }
-
-/* ── row-5: 5-column grid (KV card) ── */
-.row-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-@media (max-width: 960px) { .row-5 { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 640px) { .row-5 { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 400px) { .row-5 { grid-template-columns: 1fr; } }

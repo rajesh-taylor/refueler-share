@@ -33,7 +33,6 @@
     <div class="sb-section">Ops</div>
     <a class="sb-item stub">Maintenance mode</a>
     <a class="sb-item stub">Rate limits</a>
-    <a class="sb-item stub">Rate limits</a>
     <div class="sb-section">API</div>
     <a class="sb-item stub" onclick="scrollToCard('card-sandbox')">Sandbox</a>
   </nav>
@@ -70,27 +69,23 @@
       </div>
     </div>
 
-<!-- ─── Lightning availability toggle card ───────────────────────────────
-     Add this card inside the admin ops row in dashboard.html.
-     Sits alongside the maintenance / status toggle cards.
-     Backend: POST /admin/status with { lightning_available: "true"|"false"|"blink" }
-     STATUS_KV key: lightning_available
-──────────────────────────────────────────────────────────────────────── -->
+<!-- ─── Ops cards ──────────────────────────────────────────────────────────── -->
+<div class="ops-section-heading">Lightning availability</div>
 <div class="card" id="card-lightning-toggle">
   <div class="card-label">Lightning availability</div>
   <div class="card-value" id="lightning-toggle-state">—</div>
   <div class="card-sub" id="lightning-toggle-sub">checking…</div>
   <div class="lightning-toggle-controls">
-    <button class="toggle-btn" id="btn-lightning-blink"  data-value="blink">Blink (live)</button>
-    <button class="toggle-btn" id="btn-lightning-true"   data-value="true">On (any)</button>
-    <button class="toggle-btn" id="btn-lightning-false"  data-value="false">Off</button>
+    <button class="toggle-btn" id="btn-lightning-phoenixd" data-value="phoenixd">Phoenixd</button>
+    <button class="toggle-btn" id="btn-lightning-true"     data-value="true">On (any)</button>
+    <button class="toggle-btn" id="btn-lightning-false"    data-value="false">Off</button>
   </div>
 </div>
-<!-- ─── Sandbox card ─────────────────────────────────────────────────────────
-     SW6. Admin-key protected. Shows active sandbox clients + credit state.
-     activate → issues rfs_test_ keypair + credits.
-     reset    → wipes + reissues credits. Keypair unchanged.
-──────────────────────────────────────────────────────────────────────────── -->
+
+<div class="ops-section-divider"></div>
+
+<div class="ops-section-heading">API Sandbox</div>
+<!-- ─── Sandbox card ──────────────────────────────────────────────────────── -->
 <div class="card" id="card-sandbox">
   <div class="card-label">API Sandbox</div>
   <div class="card-value" id="sandbox-state">—</div>
@@ -101,15 +96,14 @@
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px;">
         <label class="card-sub" for="sandbox-rail-select" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Rail</label>
-        <select id="sandbox-rail-select" style="background:var(--surface-2,#2a2a2a);color:var(--fg,#F5F0E8);border:1px solid var(--border,#333);border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;">
+        <select id="sandbox-rail-select" class="sandbox-select">
           <option value="identity">Identity</option>
           <option value="anonymous">Anonymous</option>
         </select>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px;">
         <label class="card-sub" for="sandbox-ref-input" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Transfer ref prefix</label>
-        <input id="sandbox-ref-input" type="text" value="sandbox" maxlength="32"
-          style="background:var(--surface-2,#2a2a2a);color:var(--fg,#F5F0E8);border:1px solid var(--border,#333);border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;" />
+        <input id="sandbox-ref-input" type="text" value="sandbox" maxlength="32" class="sandbox-input" />
       </div>
       <button class="toggle-btn" id="btn-sandbox-activate" onclick="sandboxActivate()" style="white-space:nowrap;">
         Issue keypair
@@ -119,8 +113,7 @@
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
         <label class="card-sub" for="sandbox-reset-key-input" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">rfs_test_live_ key (to reset)</label>
-        <input id="sandbox-reset-key-input" type="text" placeholder="rfs_test_live_…" maxlength="64"
-          style="background:var(--surface-2,#2a2a2a);color:var(--fg,#F5F0E8);border:1px solid var(--border,#333);border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit;width:100%;box-sizing:border-box;" />
+        <input id="sandbox-reset-key-input" type="text" placeholder="rfs_test_live_…" maxlength="64" class="sandbox-input" style="width:100%;" />
       </div>
       <button class="toggle-btn" id="btn-sandbox-reset" onclick="sandboxReset()" style="white-space:nowrap;">
         Reset credits
@@ -129,15 +122,16 @@
   </div>
 
   <!-- Result area — shown after activate/reset. Auto-clears after 5 min. -->
-  <div id="sandbox-result" style="display:none;margin-top:14px;padding:12px;background:var(--surface-2,#1a1a1a);border:1px solid var(--border,#333);border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.6;word-break:break-all;color:var(--fg-muted,#999);">
-  </div>
+  <div id="sandbox-result" class="sandbox-result" style="display:none;"></div>
 
-  <div class="card-sub" style="margin-top:10px;font-size:11px;opacity:.6;">
+  <div class="ops-keypair-divider"></div>
+  <div class="card-sub ops-keypair-warn">
     ⚠ Keypair shown once — record it immediately. Do not send real cargo to the sandbox.
   </div>
 </div>
 
-    <div id="error-banner"></div>
+<div class="ops-metric-divider"></div>
+
     <div id="error-banner"></div>
 
     <div class="card-group">
@@ -209,8 +203,8 @@
         </div>
       </div>
 
-      <!-- Row 3: growth + farming (4-column) -->
-      <div class="row-5">
+      <!-- Row 3: growth + ops (6-column, matches rows 1 & 2) -->
+      <div class="row-6">
         <div class="snap-metric" tabindex="0" onclick="openModal('free-users', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('free-users', this)">
           <div class="sm-label">Free users</div>
           <div class="sm-plain">Total on free tier</div>
@@ -238,6 +232,11 @@
           <div class="sm-label">KV keys stored</div>
           <div class="sm-plain">Free plan · 1 GB cap</div>
           <div class="sm-value" id="snap-kv-keys">—</div>
+        </div>
+        <div class="snap-metric" tabindex="0" onclick="openModal('cpu-time', this)" onkeydown="if(event.key==='Enter'||event.key===' ')openModal('cpu-time', this)">
+          <div class="sm-label">CPU time today</div>
+          <div class="sm-plain">vs 10 ms free limit</div>
+          <div class="sm-value" id="snap-cpu-time">—</div>
         </div>
       </div>
     </div>
@@ -278,7 +277,6 @@
     <div class="modal-csv-note" id="modal-csv-note" style="display:none">CSV export available from B6</div>
   </div>
 </div>
-
 
 <script src="dashboard.js"></script>
 </body>

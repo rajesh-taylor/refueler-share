@@ -14,14 +14,16 @@ let clientErrorsDetail = []; // S73a — detail rows from AE client_errors_detai
 // ── Theme ──────────────────────────────────────────────────────────────────
 function getTheme() {
   const cookie = document.cookie.split(';').map(c => c.trim())
-    .find(c => c.startsWith('theme='));
+    .find(c => c.startsWith('rs-theme='));
   return cookie ? cookie.split('=')[1] : 'carbon';
 }
 function setTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   document.getElementById('theme-paper').classList.toggle('active', t === 'paper');
   document.getElementById('theme-carbon').classList.toggle('active', t === 'carbon');
-  document.cookie = `theme=${t};path=/;domain=.refueler.io;max-age=31536000;SameSite=Lax`;
+  // Write with dot-prefixed domain only; evict any legacy exact-host cookie.
+  document.cookie = `rs-theme=${t};path=/;domain=.refueler.io;max-age=2592000;SameSite=Lax;Secure`;
+  document.cookie = `rs-theme=;path=/;domain=refueler.io;max-age=0;SameSite=Lax`;
 }
 setTheme(getTheme());
 
@@ -290,6 +292,10 @@ function renderAeMetrics(d) {
   // S73a — store detail rows for client-errors modal
   clientErrorsDetail = Array.isArray(d.client_errors_detail) ? d.client_errors_detail : [];
 
+  // CPU time — deferred to B6; render stub so card is not blank
+  const cpuEl = document.getElementById('snap-cpu-time');
+  if (cpuEl) { cpuEl.textContent = '—'; cpuEl.className = 'sm-value'; }
+
   lastAe = d;
 }
 
@@ -357,6 +363,8 @@ const MODAL_DEFS = {
   'client-errors':      { label: 'Client errors (24h)',       plain: 'Browser-side failures reported' },
   farming:              { label: 'Farming signal',            plain: 'Credential-to-upload ratio (normal: 0.8–1.2 · alarm: >3.0)' },
   lightning:            { label: 'Lightning settlement',      plain: 'Sats vs fiat payment mix' },
+  'kv-monitor':         { label: 'KV quota monitor',         plain: 'Cloudflare Workers KV free-plan usage' },
+  'cpu-time':           { label: 'Worker CPU time',          plain: 'Average CPU ms per request today' },
 };
 
 let _modalTrigger = null;
@@ -594,6 +602,91 @@ function openModal(key, triggerEl) {
       value = '—'; sub = 'Deferred to Block 7'; isNA = true;
       break;
     }
+    case 'kv-monitor': {
+      // Build the 3-bar quota view instead of the standard sparkline layout.
+      const kv = window._kvCache ?? {};
+      const writes   = kv.writes_today   ?? 0;
+      const reads    = kv.reads_today    ?? 0;
+      const storage  = kv.storage_bytes  ?? 0;
+      const keys     = kv.key_count      ?? 0;
+      // Free-plan limits (daily reset for ops, fixed for storage)
+      const W_LIMIT = 1_000;
+      const R_LIMIT = 100_000;
+      const S_LIMIT = 1_073_741_824; // 1 GiB
+
+      const writePct   = Math.min((writes  / W_LIMIT)  * 100, 100);
+      const readPct    = Math.min((reads   / R_LIMIT)   * 100, 100);
+      const storagePct = Math.min((storage / S_LIMIT)   * 100, 100);
+
+      function _barClass(pct) { return pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : ''; }
+      function _fmtBytes(b) {
+        if (b >= 1_073_741_824) return (b / 1_073_741_824).toFixed(2) + ' GB';
+        if (b >= 1_048_576)     return (b / 1_048_576).toFixed(1) + ' MB';
+        if (b >= 1024)          return (b / 1024).toFixed(0) + ' KB';
+        return b + ' B';
+      }
+
+      // Hide the default sparkline/export section; this modal owns its layout.
+      const sparkEl = document.getElementById('modal-sparkline');
+      sparkEl.classList.remove('modal-sparkline-stub');
+      sparkEl.closest('.modal-body').querySelectorAll('.modal-section-title').forEach(el => {
+        el.style.display = 'none';
+      });
+      document.getElementById('modal-csv-btn').style.display  = 'none';
+      document.getElementById('modal-csv-note').style.display = 'none';
+
+      value = keys.toLocaleString('en-GB');
+      sub   = 'Keys stored (no cap — Cloudflare does not limit key count)';
+
+      sparkEl.innerHTML = `
+        <div class="kv-bars">
+          <div class="kv-bar-row">
+            <div class="kv-bar-header">
+              <span class="kv-bar-label">Writes today</span>
+              <span class="kv-bar-figure">${writes.toLocaleString('en-GB')} / ${W_LIMIT.toLocaleString('en-GB')}</span>
+            </div>
+            <div class="kv-bar-track">
+              <div class="kv-bar-fill ${_barClass(writePct)}" style="width:${writePct.toFixed(1)}%"></div>
+            </div>
+            <div class="kv-bar-caption">${writePct.toFixed(1)}% of daily free-plan allowance · resets midnight UTC</div>
+          </div>
+          <div class="kv-bar-row">
+            <div class="kv-bar-header">
+              <span class="kv-bar-label">Reads today</span>
+              <span class="kv-bar-figure">${reads.toLocaleString('en-GB')} / ${R_LIMIT.toLocaleString('en-GB')}</span>
+            </div>
+            <div class="kv-bar-track">
+              <div class="kv-bar-fill ${_barClass(readPct)}" style="width:${readPct.toFixed(1)}%"></div>
+            </div>
+            <div class="kv-bar-caption">${readPct.toFixed(1)}% of daily free-plan allowance · resets midnight UTC</div>
+          </div>
+          <div class="kv-bar-row">
+            <div class="kv-bar-header">
+              <span class="kv-bar-label">Storage</span>
+              <span class="kv-bar-figure">${_fmtBytes(storage)} / 1 GB</span>
+            </div>
+            <div class="kv-bar-track">
+              <div class="kv-bar-fill ${_barClass(storagePct)}" style="width:${storagePct.toFixed(1)}%"></div>
+            </div>
+            <div class="kv-bar-caption">${storagePct.toFixed(2)}% of 1 GB cap · persistent</div>
+          </div>
+        </div>
+        <div class="kv-keys-row">
+          <span class="kv-keys-label">Keys stored</span>
+          <span class="kv-keys-value">${keys.toLocaleString('en-GB')}</span>
+        </div>
+        <div class="kv-plan-note">
+          Plan: FREE · Ops limits reset DAILY at midnight UTC.<br>
+          Upgrade to Workers Paid ($5/mo) to move to MONTHLY accrual with 10× higher allowances.<br>
+          Flip <code>PLAN='paid'</code> in dashboard.js after upgrade — no GraphQL auto-detect yet.
+        </div>`;
+      break;
+    }
+    case 'cpu-time': {
+      // Stub — AE CPU time metric not yet wired; deferred to B6 analytics pass.
+      value = '—'; sub = 'Deferred — CPU time per-request reporting lands in B6'; isNA = true;
+      break;
+    }
     default:
       value = 'n/a'; isNA = true; sub = 'Unknown metric key';
   }
@@ -639,7 +732,7 @@ function closeModal() {
   document.body.style.overflow = '';
   document.getElementById('modal-csv-note').style.display = 'none';
 
-  // Restore elements that the client-errors modal hides, so other modals render correctly
+  // Restore elements hidden by client-errors and kv-monitor modals
   const sparkEl = document.getElementById('modal-sparkline');
   if (sparkEl) {
     sparkEl.classList.add('modal-sparkline-stub');
@@ -649,6 +742,8 @@ function closeModal() {
     });
     const csvBtn = document.getElementById('modal-csv-btn');
     if (csvBtn) csvBtn.style.display = '';
+    const csvNote = document.getElementById('modal-csv-note');
+    if (csvNote) csvNote.style.display = 'none';
   }
 
   if (_modalTrigger) {
@@ -713,7 +808,9 @@ function formatBytes(bytes) {
 }
 
 function showError(msg) {
-  const el = document.getElementById('error-banner');
+  // querySelector rather than getElementById — guards against stale duplicate IDs.
+  const el = document.querySelector('#error-banner');
+  if (!el) return;
   el.style.display = 'block'; el.textContent = msg;
   setTimeout(() => { el.style.display = 'none'; }, 8000);
 }
@@ -735,9 +832,9 @@ function updateCountdown() {
 
 // ── Lightning availability toggle (S71) ────────────────────────────────────
 const LIGHTNING_STATE_LABELS = {
-  blink:  { display: 'Blink',  sub: 'Lightning live — Blink backend active' },
-  true:   { display: 'On',     sub: 'Lightning live — all backends accepted' },
-  false:  { display: 'Off',    sub: 'Lightning hidden — Stripe path only' },
+  phoenixd: { display: 'Phoenixd', sub: 'Lightning live — Phoenixd backend active' },
+  true:     { display: 'On',       sub: 'Lightning live — all backends accepted' },
+  false:    { display: 'Off',      sub: 'Lightning hidden — Stripe path only' },
 };
 
 function renderLightningToggle(val) {
@@ -757,7 +854,7 @@ async function loadLightningToggleState() {
   try {
     const res  = await fetch(`${WORKER}/status`);
     const data = await res.json();
-    const val  = String(data.lightning_available ?? 'blink');
+    const val  = String(data.lightning_available ?? 'phoenixd');
     renderLightningToggle(val);
   } catch {
     const subEl = document.getElementById('lightning-toggle-sub');
