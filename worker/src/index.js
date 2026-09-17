@@ -328,6 +328,21 @@ export default {
         return timed('upload_urls', () => handleUploadUrls(request, env, uploadUrlsMatch[1]).then(r => addCors(r, request)));
       }
 
+      // ── Share-6-3a: finalise direct-to-R2 upload — POST /upload/:uuid/finalise ──
+      // Authed by the upload-session token (NOT a Cashu re-spend). HEAD completeness
+      // check, write the {uuid}/hashes sidecar, set merkle_root + tree_algo +
+      // upload_complete:true, then spend (delete) the session token.
+      const finaliseMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/finalise$/i);
+      if (request.method === 'POST' && finaliseMatch) {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'upload_finalise', 20, 60);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'upload_finalise', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
+        return timed('upload_finalise', () => handleFinalise(request, env, finaliseMatch[1]).then(r => addCors(r, request)));
+      }
+
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
       if (request.method === 'POST' && authMatch) {
         // Rate limit layer 1: 5 requests / 60s per IP — password brute-force protection
@@ -2344,6 +2359,136 @@ async function handleUploadUrls(request, env, uuid) {
   const next = (from + count) < totalChunks ? (from + count) : null;
 
   return json({ uuid, urls, batch_next: next });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// base64url → Uint8Array. Returns null on any non-base64url input or decode
+// failure; the caller enforces the exact 32-byte length. Strict base64url
+// alphabet only (matches r2_presign.b64url on the way out).
+// ─────────────────────────────────────────────────────────────────────────────
+function b64urlToBytes(s) {
+  if (typeof s !== 'string' || s.length === 0) return null;
+  if (/[^A-Za-z0-9_-]/.test(s)) return null;
+  let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4 !== 0) b64 += '=';
+  let bin;
+  try { bin = atob(b64); } catch { return null; }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /upload/:uuid/finalise  — session-token authed (Share-6-3a, spec §3③).
+//
+// The Worker reads no chunk bodies. It confirms every {uuid}/{iiii} object
+// exists (HEAD), writes the {uuid}/hashes sidecar (raw 32-byte concat, chunk
+// order — merkle-spec §1/§2), records the browser-supplied ciphertext-chunk
+// merkle_root + tree_algo, flips upload_complete:true, and spends the session
+// token. The root is TRUSTED here and RECONSTRUCTED at download (Share-6-5 /
+// B9-3): finalise writes, download verifies. The sidecar is written here and
+// MUST persist for Share-6-5 — it is never deleted in this handler.
+//
+// Body: { hashes: [b64url(32B) × chunk_count], merkle_root: b64url(32B) }.
+// chunk_count is read from the manifest (total_chunks) — never trusted from the
+// body. Returns 200 { ok:true, merkle_root }.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function handleFinalise(request, env, uuid) {
+  if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
+
+  // ── 1. Session-token auth (timing-safe compare vs KV) ──────────────────────
+  const presented = request.headers.get('X-Upload-Session') ?? '';
+  let stored = null;
+  try {
+    stored = await env.STATUS_KV.get(`upload_session:${uuid}`);
+  } catch (e) {
+    console.error('upload_session KV read failed:', e);
+    return err(502, 'Session store unavailable');
+  }
+  if (!presented || !stored || !ctEqual(presented, stored)) {
+    logEvent(env, { endpoint: 'upload_finalise', status: 401, errorMsg: 'session_token_invalid' });
+    return err(401, 'Invalid or expired upload session');
+  }
+
+  // ── Manifest (source of truth for chunk_count == total_chunks) ─────────────
+  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (oversize)  return err(502, 'Transfer manifest exceeds size limit');
+  if (!manifest) return err(404, 'Transfer not found');
+  const chunkCount = manifest.total_chunks;
+  if (!Number.isInteger(chunkCount) || chunkCount < 1) {
+    return err(502, 'Manifest is missing a valid chunk count');
+  }
+
+  // ── 2. HEAD completeness — every {uuid}/{iiii} must exist ──────────────────
+  // No bodies read. Collect ALL missing indices, then 409 with the full list —
+  // never stop at the first gap. Bounded concurrency keeps us clear of the
+  // connection cap; see the large-N note in the session hand-off.
+  const HEAD_WINDOW = 64;
+  const missing = [];
+  for (let start = 0; start < chunkCount; start += HEAD_WINDOW) {
+    const end = Math.min(start + HEAD_WINDOW, chunkCount);
+    const window = [];
+    for (let i = start; i < end; i++) window.push(i);
+    const results = await Promise.all(window.map(async (i) => {
+      const obj = await env.BUCKET.head(`${uuid}/${String(i).padStart(4, '0')}`);
+      return obj === null ? i : -1;
+    }));
+    for (const i of results) if (i !== -1) missing.push(String(i).padStart(4, '0'));
+  }
+  if (missing.length > 0) {
+    return json({ error: 'incomplete', missing }, 409);
+  }
+
+  // ── 3. Read + validate chunk hashes and merkle_root from the body ──────────
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err(400, 'Invalid JSON');
+  }
+  const hashes = body?.hashes;
+  if (!Array.isArray(hashes) || hashes.length !== chunkCount) {
+    return err(400, 'hashes length must equal chunk count');
+  }
+  const sidecar = new Uint8Array(chunkCount * 32);
+  for (let i = 0; i < chunkCount; i++) {
+    const bytes = b64urlToBytes(hashes[i]);
+    if (!bytes || bytes.length !== 32) {
+      return err(400, `hash at index ${i} is not 32 bytes`);
+    }
+    sidecar.set(bytes, i * 32);
+  }
+  const merkleRoot = body?.merkle_root;
+  const rootBytes  = b64urlToBytes(merkleRoot);
+  if (!rootBytes || rootBytes.length !== 32) {
+    return err(400, 'merkle_root is not 32 bytes');
+  }
+
+  // ── 4. Write the {uuid}/hashes sidecar (raw 32-byte concat, chunk order) ───
+  // No padding: exactly chunk_count × 32 bytes. Never inline in the manifest
+  // (64 KB safeGetManifest ceiling). This is the Share-6-5 verification input.
+  try {
+    await env.BUCKET.put(`${uuid}/hashes`, sidecar, {
+      httpMetadata: { contentType: 'application/octet-stream' },
+    });
+  } catch (e) {
+    console.error('hashes sidecar write failed:', e);
+    return err(502, 'Failed to persist chunk hashes');
+  }
+
+  // ── 5. Update manifest + spend the session token ───────────────────────────
+  manifest.merkle_root     = merkleRoot;                      // trusted b64url string
+  manifest.tree_algo       = 'rfc6962-unbalanced-blake3-v1';  // pinned — never vary
+  manifest.upload_complete = true;
+  await putManifest(env.BUCKET, uuid, manifest);
+
+  try {
+    await env.STATUS_KV.delete(`upload_session:${uuid}`);      // session is spent
+  } catch (e) {
+    console.error('upload_session KV delete failed:', e);      // manifest already written — do not fail
+  }
+
+  return json({ ok: true, merkle_root: merkleRoot });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
