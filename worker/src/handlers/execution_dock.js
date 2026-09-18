@@ -126,6 +126,14 @@ export async function handleExecutionDock(request, env) {
       collected_at:     entry.collected_at ?? null,
       status,
       days_remaining:   daysRemaining,
+      // Share-Dash-2 enrichment — written into dock_index at finalise.
+      size_bytes:       entry.size_bytes ?? null,
+      rail:             entry.rail ?? null,
+      // merkle_root IS captured in dock_index at finalise (ciphertext-chunk root),
+      // but is deliberately WITHHELD here until Share-6-5 download verify is live
+      // (kept pending, Rajesh · Share-Dash-2). Surfacing it is then a one-line
+      // change: merkle_root: entry.merkle_root ?? null.
+      merkle_root:      null,
     };
   });
 

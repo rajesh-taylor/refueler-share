@@ -11,6 +11,10 @@ import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } 
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
+import { handleFinalise } from './handlers/finalise.js';                       // Share-Dash-2 fold
+import { handleClientErrorsLog, appendClientError } from './handlers/client_errors_kv.js'; // Share-Dash-2
+import { handleApiStats } from './handlers/api_stats.js';                      // Share-Dash-2
+import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
@@ -104,6 +108,14 @@ export default {
         const response = await handler();
         const latency  = performance.now() - t0;
         logEvent(env, { endpoint, status: response.status, latency, ...logExtra });
+        // Share-Dash-2: server-observed error log (KV, 90d). Fire-and-forget —
+        // never blocks the response. Thrown errors are logged once in the outer
+        // catch instead, so this covers only returned 4xx/5xx (no double-count).
+        if (response.status >= 400) {
+          ctx.waitUntil(appendClientError(env, {
+            status: response.status, endpoint, path, method: request.method,
+          }));
+        }
         return response;
       } catch (e) {
         const latency = performance.now() - t0;
@@ -468,6 +480,25 @@ export default {
         return timed('admin_execution_dock', () => handleExecutionDock(request, env).then(r => addCors(r, request)));
       }
 
+      // ── Share-Dash-2: Navy Office admin surfaces ──────────────────────────
+      // Server-observed 4xx/5xx log (KV, 90d) — distinct from /log/error (AE).
+      if (request.method === 'GET' && path === '/admin/client-errors-log') {
+        return timed('admin_client_errors_log', () => handleClientErrorsLog(request, env).then(r => addCors(r, request)));
+      }
+      // API & MCP stats — active keys (KV) · requests by rail + attach (AE).
+      if (request.method === 'GET' && path === '/admin/api-stats') {
+        return timed('admin_api_stats', () => handleApiStats(request, env).then(r => addCors(r, request)));
+      }
+      // Growth-signal events — GET list / POST append.
+      if (path === '/admin/news-events' && (request.method === 'GET' || request.method === 'POST')) {
+        return timed('admin_news_events', () => handleNewsEvents(request, env).then(r => addCors(r, request)));
+      }
+      // Growth-signal events — DELETE by id.
+      const newsDeleteMatch = path.match(/^\/admin\/news-events\/([A-Za-z0-9_-]+)$/);
+      if (request.method === 'DELETE' && newsDeleteMatch) {
+        return timed('admin_news_events_delete', () => handleNewsEvents(request, env, newsDeleteMatch[1]).then(r => addCors(r, request)));
+      }
+
       // ── SW8: Hostname health — GET /admin/hostname-health ──────────────────
       // Admin-key gated. Returns latest hostname_health results from STATUS_KV.
       // Written by the daily cron at 03:00 UTC (checkHostnameHealth). Pull-only.
@@ -506,11 +537,13 @@ export default {
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
+            ctx.waitUntil(appendClientError(env, { status: 404, endpoint: 'unknown', path, method: request.method }));
             return new Response('Not found', { status: 404, headers: corsHeaders(request) });
 
     } catch (e) {
       const latency = performance.now() - t0;
       logEvent(env, { endpoint: 'unhandled', status: 500, latency, errorMsg: e?.message ?? 'unknown' });
+      ctx.waitUntil(appendClientError(env, { status: 500, endpoint: 'unhandled', path, method: request.method, errorMsg: e?.message ?? 'unknown' }));
       console.error('Worker error:', e);
       return new Response(JSON.stringify({ error: 'Internal server error' }), {
         status: 500,
@@ -2359,136 +2392,6 @@ async function handleUploadUrls(request, env, uuid) {
   const next = (from + count) < totalChunks ? (from + count) : null;
 
   return json({ uuid, urls, batch_next: next });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// base64url → Uint8Array. Returns null on any non-base64url input or decode
-// failure; the caller enforces the exact 32-byte length. Strict base64url
-// alphabet only (matches r2_presign.b64url on the way out).
-// ─────────────────────────────────────────────────────────────────────────────
-function b64urlToBytes(s) {
-  if (typeof s !== 'string' || s.length === 0) return null;
-  if (/[^A-Za-z0-9_-]/.test(s)) return null;
-  let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (b64.length % 4 !== 0) b64 += '=';
-  let bin;
-  try { bin = atob(b64); } catch { return null; }
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /upload/:uuid/finalise  — session-token authed (Share-6-3a, spec §3③).
-//
-// The Worker reads no chunk bodies. It confirms every {uuid}/{iiii} object
-// exists (HEAD), writes the {uuid}/hashes sidecar (raw 32-byte concat, chunk
-// order — merkle-spec §1/§2), records the browser-supplied ciphertext-chunk
-// merkle_root + tree_algo, flips upload_complete:true, and spends the session
-// token. The root is TRUSTED here and RECONSTRUCTED at download (Share-6-5 /
-// B9-3): finalise writes, download verifies. The sidecar is written here and
-// MUST persist for Share-6-5 — it is never deleted in this handler.
-//
-// Body: { hashes: [b64url(32B) × chunk_count], merkle_root: b64url(32B) }.
-// chunk_count is read from the manifest (total_chunks) — never trusted from the
-// body. Returns 200 { ok:true, merkle_root }.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handleFinalise(request, env, uuid) {
-  if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
-
-  // ── 1. Session-token auth (timing-safe compare vs KV) ──────────────────────
-  const presented = request.headers.get('X-Upload-Session') ?? '';
-  let stored = null;
-  try {
-    stored = await env.STATUS_KV.get(`upload_session:${uuid}`);
-  } catch (e) {
-    console.error('upload_session KV read failed:', e);
-    return err(502, 'Session store unavailable');
-  }
-  if (!presented || !stored || !ctEqual(presented, stored)) {
-    logEvent(env, { endpoint: 'upload_finalise', status: 401, errorMsg: 'session_token_invalid' });
-    return err(401, 'Invalid or expired upload session');
-  }
-
-  // ── Manifest (source of truth for chunk_count == total_chunks) ─────────────
-  const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
-  if (oversize)  return err(502, 'Transfer manifest exceeds size limit');
-  if (!manifest) return err(404, 'Transfer not found');
-  const chunkCount = manifest.total_chunks;
-  if (!Number.isInteger(chunkCount) || chunkCount < 1) {
-    return err(502, 'Manifest is missing a valid chunk count');
-  }
-
-  // ── 2. HEAD completeness — every {uuid}/{iiii} must exist ──────────────────
-  // No bodies read. Collect ALL missing indices, then 409 with the full list —
-  // never stop at the first gap. Bounded concurrency keeps us clear of the
-  // connection cap; see the large-N note in the session hand-off.
-  const HEAD_WINDOW = 64;
-  const missing = [];
-  for (let start = 0; start < chunkCount; start += HEAD_WINDOW) {
-    const end = Math.min(start + HEAD_WINDOW, chunkCount);
-    const window = [];
-    for (let i = start; i < end; i++) window.push(i);
-    const results = await Promise.all(window.map(async (i) => {
-      const obj = await env.BUCKET.head(`${uuid}/${String(i).padStart(4, '0')}`);
-      return obj === null ? i : -1;
-    }));
-    for (const i of results) if (i !== -1) missing.push(String(i).padStart(4, '0'));
-  }
-  if (missing.length > 0) {
-    return json({ error: 'incomplete', missing }, 409);
-  }
-
-  // ── 3. Read + validate chunk hashes and merkle_root from the body ──────────
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return err(400, 'Invalid JSON');
-  }
-  const hashes = body?.hashes;
-  if (!Array.isArray(hashes) || hashes.length !== chunkCount) {
-    return err(400, 'hashes length must equal chunk count');
-  }
-  const sidecar = new Uint8Array(chunkCount * 32);
-  for (let i = 0; i < chunkCount; i++) {
-    const bytes = b64urlToBytes(hashes[i]);
-    if (!bytes || bytes.length !== 32) {
-      return err(400, `hash at index ${i} is not 32 bytes`);
-    }
-    sidecar.set(bytes, i * 32);
-  }
-  const merkleRoot = body?.merkle_root;
-  const rootBytes  = b64urlToBytes(merkleRoot);
-  if (!rootBytes || rootBytes.length !== 32) {
-    return err(400, 'merkle_root is not 32 bytes');
-  }
-
-  // ── 4. Write the {uuid}/hashes sidecar (raw 32-byte concat, chunk order) ───
-  // No padding: exactly chunk_count × 32 bytes. Never inline in the manifest
-  // (64 KB safeGetManifest ceiling). This is the Share-6-5 verification input.
-  try {
-    await env.BUCKET.put(`${uuid}/hashes`, sidecar, {
-      httpMetadata: { contentType: 'application/octet-stream' },
-    });
-  } catch (e) {
-    console.error('hashes sidecar write failed:', e);
-    return err(502, 'Failed to persist chunk hashes');
-  }
-
-  // ── 5. Update manifest + spend the session token ───────────────────────────
-  manifest.merkle_root     = merkleRoot;                      // trusted b64url string
-  manifest.tree_algo       = 'rfc6962-unbalanced-blake3-v1';  // pinned — never vary
-  manifest.upload_complete = true;
-  await putManifest(env.BUCKET, uuid, manifest);
-
-  try {
-    await env.STATUS_KV.delete(`upload_session:${uuid}`);      // session is spent
-  } catch (e) {
-    console.error('upload_session KV delete failed:', e);      // manifest already written — do not fail
-  }
-
-  return json({ ok: true, merkle_root: merkleRoot });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
