@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 9.6 | **Created:** 28 July 2026 | **Updated:** Share-6-Opus · 2026-09-16
+> **Version:** 9.6 | **Created:** 28 July 2026 | **Updated:** Share-Dash-2 · 2026-09-18
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -198,7 +198,10 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | **Royal Mint** | Share's Cashu mint — issues credentials, governs movement, observes events, holds no cargo content. The Royal Mint operated inside the Tower walls for ~500 years; the pun lands at the technical level (a Cashu *mint*). Signal-only / no melt path stated separately in properties. | Product / whitepaper |
 | **Port Authority** | The admission-control layer at the upload boundary — Content-Type denylist + rate-limiting gate. Every transfer passes it, as every vessel passed the Port of London Authority to enter the Pool. An authority that controls what enters, not an issuer. | Docs / internal |
 | **Quay** | A named individual intake point issued to a specific client or sender. Quay/Key double-meaning: a bitcoiner reads one, a consultant reads the other. | Professional users |
-| **Harbourmaster** | The admin dashboard — the account holder who controls their drops, views the receipt ledger, manages Quays | Everyone |
+| **Navy Office** | The operator admin dashboard — the back-office ops surface for Rajesh. Named for the Navy Office on Seething Lane, where Pepys worked and lived yards away. Contains the Execution Dock (Harbourmaster view), KV monitor, Lightning state, API stats, growth signal, client-error log. Permalink: `/share/admin/navy-office` (rename from `dashboard` at Share-Dash-3). | Internal / ops only |
+| **Harbourmaster** | The live-transfer monitoring view *inside the Navy Office* — the operator's view of who is in port, what is pending, what has expired. Matches the `execution_dock.js` header ("Harbourmaster sent-transfers view"). Not a top-level surface; not the client account area. | Internal / ops only |
+| **Chambers** | The Citizen/Sovereign client account area — "Your Chambers." Inns of Court register. Where a barrister keeps their own affairs. Existing Harbourmaster client-facing HTML to be renamed `chambers.html` at Share-Dash-3. | Everyone (client-facing) |
+| **Custom House** | The Chartered API/MCP client surface — credential issuance, rate-card assessment, DPA, HMAC key management. Additive on upgrade from Citizen/Sovereign: client keeps Chambers and is additionally admitted to the Custom House. Reserved this session; not yet built. | Chartered clients |
 | **Cargo** | The encrypted file bundle in transit. Used in API event names (`cargo.accepted` / `cargo.discharged` / `cargo.in_bond` reserved), webhook payloads, and developer docs. Not used in patient-facing or professional UI copy — use "documents" there. | Docs / API / webhooks |
 | **Locke** | The credential-as-key mechanism — presented to access Harbourmaster. Locke/Lock double-meaning. Named in whitepaper and docs; not necessarily surfaced to end users. | Whitepaper / docs |
 | **Raven** | The warrant canary system — replaces "canary" across all products. Ravens signal safety by presence, not by dying. Absence = compromise signal. Architecturally more accurate than the canary metaphor. One Raven per Liberty — four total. | Whitepaper / docs / public |
@@ -241,7 +244,6 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 |---|---|---|---|---|
 | Silent Drop | ✓ | ✓ | ✓ | ✓ |
 | Lighthouse | ✓ | ✓ | ✓ | ✓ |
-| Harbourmaster | ✓ | ✓ | ✓ | ✓ |
 | Quay | ✓ | ✓ | ✓ | ✓ |
 | a Pass (reward token / access credential) | ✓ (UI name) | ✓ | ✓ | ✓ |
 | a Note (Merchant reward stamp) | ✓ (UI name) | ✓ | ✓ | ✓ |
@@ -250,7 +252,11 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | Royal Mint | — | ✓ (Share mint) | ✓ | ✓ |
 | Port Authority | — | — | ✓ (admission-control layer) | ✓ |
 | Dragon | — | — | — | ✓ (status indicator) |
-| Execution Dock | — | — | ✓ | ✓ (dashboard card) |
+| Execution Dock | — | — | ✓ | ✓ (Harbourmaster view inside Navy Office) |
+| Navy Office | — | — | — | ✓ (operator admin dashboard — internal/ops only) |
+| Harbourmaster | — | — | — | ✓ (live-transfer view inside Navy Office — internal/ops only) |
+| Chambers | — | ✓ (client account area) | ✓ | ✓ |
+| Custom House | — | — | ✓ (Chartered API/MCP — reserved, not built) | ✓ |
 | Three Tides | — | — | — | ✓ |
 | Traitor's Gate | — | — | ✓ (feature internal name) | ✓ |
 | Tidal Window | — | — | ✓ | ✓ |
@@ -298,7 +304,7 @@ The Refueler product ecosystem is anchored in London geography — specifically 
 | Deptford Royal Dockyard | — | — | ✓ (WP §API layer) | ✓ (held — closed-door) |
 | London Stone (Cannon Street) | — | — | ✓ (WP §permanence / §anchoring) | ✓ (held — alongside Cleopatra's Needle) |
 
-**Rule:** if a term is not in the Website/UI column, it does not appear on `refueler.io` outside of the whitepaper and notes articles. Harbourmaster, Quay, "a Pass", "a Note", and "Clearance" are the only geography/product terms that have passed the website test.
+**Rule:** if a term is not in the Website/UI column, it does not appear on `refueler.io` outside of the whitepaper and notes articles. Quay, "a Pass", "a Note", "Clearance", and **Chambers** are the client-facing geography/product terms that have passed the website test. **Navy Office**, **Harbourmaster**, and **Custom House** are internal/operator/Chartered terms — they do not appear in public product copy.
 
 ---
 
@@ -713,7 +719,7 @@ The OTS committed value chosen at TH-1 — `SHA-256(blake3_root || url_fragment_
 
 ## Locke — credential-as-key design (locked AP-ARCH · 31 Aug 2026)
 
-**Locke is the name of the mechanism and the object** — the credential that unlocks the Harbourmaster dashboard. NUT-11 Mode 2 P2PK in its full form (B8). The name is operational: it is a Locke (not a lock), and it is a Locke (John, philosopher of consent — "no one can be put out of his estate, and subjected to the political power of another, without his own consent"). Both readings are correct.
+**Locke is the name of the mechanism and the object** — the credential that unlocks the Navy Office (admin) and, for clients, Chambers. NUT-11 Mode 2 P2PK in its full form (B8). The name is operational: it is a Locke (not a lock), and it is a Locke (John, philosopher of consent — "no one can be put out of his estate, and subjected to the political power of another, without his own consent"). Both readings are correct.
 
 **Locke lifecycle:**
 - **Issued:** at Harbourmaster onboarding. One Lightning payment → one Deed (BIP-39 mnemonic) → one Locke (secp256k1 keypair, secure enclave storage on device).
@@ -797,7 +803,7 @@ Sells short-lived WireGuard VPN access for Cashu ecash. Architecturally relevant
 
 **Full spec: `B8-spec-v1.md` (refueler-share repo root). Cross-product summary retained here; §Locke above is superseded by that file.**
 
-**NUT-11 Mode 2 = keypair-binding (the Locke).** "Only the holder of key K can spend." Shared primitive: Share (upload-credential binding; later receiver-bound Silent Drop collection) + Pass (Harbourmaster login, SD3). Locked once here for both.
+**NUT-11 Mode 2 = keypair-binding (the Locke).** "Only the holder of key K can spend." Shared primitive: Share (upload-credential binding; later receiver-bound Silent Drop collection) + Pass (Chambers/Navy Office login, SD3). Locked once here for both.
 
 - **Deed → Locke: HKDF, not BIP-32.** `HKDF-SHA256(ikm=BIP39_seed, salt="refueler.locke.v1", info="locke_keypair")` → reduce/reject-sample to `1 ≤ d < n`. Consistent with the Deed→HKDF MMR-key pattern (B9-Opus). Auth key, not a spending key.
 - **Worker verify: sig → BDHKE → double-spend.** Both local checks before the Supabase atomic INSERT (spend commit always last). Schnorr BIP-340, x-only key from the 33-byte P2PK `data`; witness `{signatures:[…]}` verbatim; NUT-11 message preimage pinned against cashu-ts/nutshell vectors at B8-1.
@@ -820,5 +826,45 @@ Sells short-lived WireGuard VPN access for Cashu ecash. Architecturally relevant
 - **No privacy/confidentiality change** for any product: AES in-browser pre-flight, key in fragment only, filename never at Worker, R2 holds keyless ciphertext.
 - **Cross-product:** the `initiate`/`finalise` contract is the surface the **Chartered MCP** adopts for large transfers later (aggregate-quota clients debit the credit pool at initiate); front-loading B9-1…3 also unblocks **B9-5 MMR** (the Legend/Pass collaboration primitive) sooner. Nutroot / NUT-22 / Silent Drop unaffected and out of scope — their boundaries (B8-spec, merkle-spec, PR #421) stand.
 - **CDK pin unchanged (0.17.2).** Presigning is SigV4 maths (aws4fetch, in-Worker); no CDK, no Amazon, no new recurring cost (R2 per-op pennies, zero egress).
+
+## Share-Dash-2 decisions — locked 18 Sep 2026
+
+**Session type: Opus (architecture + naming with downstream consequences). Two repos: refueler-share (Worker) + refueler-io (dashboard).**
+
+### Surface naming locked (permanent)
+
+Four surfaces, four names, each a real Pool-of-London institution:
+
+| Surface | Name | Audience | Notes |
+|---|---|---|---|
+| Operator admin/ops dashboard | **Navy Office** | Internal / Rajesh only | Named for the Navy Office, Seething Lane — Pepys worked and lived yards away. Pepys = patron saint of monitoring dashboards. |
+| Live-transfer monitoring view (inside Navy Office) | **Harbourmaster** | Internal / ops only | Matches `execution_dock.js` header ("Harbourmaster sent-transfers view"). Operator's view of who is in port. |
+| Citizen/Sovereign client account area | **Chambers** | Everyone (client-facing) | "Your Chambers." Inns of Court. Already theirs — existing Harbourmaster client-facing HTML renamed `chambers.html` at Share-Dash-3. |
+| Chartered API/MCP client surface | **Custom House** | Chartered clients | Where cargo is assessed, duty levied, papers issued. Additive on upgrade — client keeps Chambers, is additionally admitted. Reserved; not yet built. |
+
+**Upgrade path is additive:** Citizen/Sovereign who upgrades to Chartered keeps Chambers AND gains Custom House — not a migration. One sentence of onboarding copy: *"Your Chambers remain. The Custom House is where your credentials are issued."*
+
+**Pepys cross-reference:** Pepys buried his Parmesan cheese in his Seething Lane garden to protect it from the Great Fire. The Navy Office and his house were yards apart. Pepys also attended the execution at Execution Dock with complete equanimity — the two are geographically and biographically linked. Article potential (security-through-obscurity vs cryptographic security) noted in §Historical prior art.
+
+### Worker changes — deployed `34a9188d` · commit `d68ec8b`
+
+- **`handleFinalise` folded:** extracted from `worker/src/index.js` into `worker/src/handlers/finalise.js` (with `b64urlToBytes` as private helper). `index.js` 2526 → 2429 lines. Includes §6 dock-index enrichment.
+- **Dock enrichment:** `finalise.js §6` reads-then-merges `size_bytes` + `rail` + `merkle_root` into `dock_index:{uuid}` KV at finalise. Non-fatal (fire-and-forget). TTL recomputed from `expiry_timestamp`. `merkle_root` is the **ciphertext-chunk root only** — never `blake3PlaintextRoot`. `handleExecutionDock` returns `size_bytes` and `rail`; `merkle_root` withheld until Share-6-5 (one-line unlock commented in place). Download count deferred.
+- **Three new handlers:**
+  - `client_errors_kv.js` — server-observed 4xx/5xx rolling KV log (`admin:client_errors_log`, 90d/500-cap). Distinct from `/log/error` → AE (client-reported). `appendClientError` hooked into `timed()` + 404 + 500 egress.
+  - `api_stats.js` — `GET /admin/api-stats`: active keys (KV `api_quota_` prefix), requests 30d by rail (AE), API attach rate (AE), sandbox→live conversion (stubbed honestly — no KV signal exists in `sandbox.js`; wire when first Chartered client onboarded by adding `live_at` field to `sandbox_meta_` record).
+  - `news_events.js` — `GET/POST/DELETE /admin/news-events`: unified `{id, date, label, note, free?, paid?, api?}` array (`admin:news_events` KV). Rows with counts plot sparkline points; rows with label/note render as tick marks; rows may be both. Feeds the Navy Office growth-signal card (Share-Dash-3).
+- **`by_rail` display note:** AE groups by tier; `'free'` → rail `none`. Dashboard must render `none` bucket as "Pro Bono" not `"none"`. Carry into Share-Dash-3.
+
+### Deferred to Share-Dash-3 (Sonnet, gated on this deploy)
+
+- Navy Office file rename: `git mv dashboard.{html,js,css} navy-office.{html,js,css}` from refueler.io root. Title, wordmark sub-span (`dashboard` → `Navy Office`), sidebar, `<h1>`, `<link>`/`<script>` hrefs.
+- Chambers rename: `git mv` existing Harbourmaster client-facing HTML → `chambers.html`. Title, wordmark, copy, permalink.
+- Client-errors modal toggle: "Reported by browser (24h)" (AE) / "Observed by Worker (90d)" (KV) — two observers, not just two windows.
+- CPU-time stub card → API & MCP card: active keys · requests · rail split (Pro Bono label for `none`) · sandbox→live pending state.
+- Growth-signal card: three-line sparkline (free/paid/API from `admin:news_events`), tick-mark annotations, click-to-add form.
+- Execution Dock detail modal: flip `size_bytes` and `rail` from pending to live; `merkle_root` and Download count remain pending.
+
+**BRIDGE v9.6.**
 
 *"Nothing stops this train."*

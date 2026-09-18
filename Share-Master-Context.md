@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.1 | **Last updated:** B8-Opus · 13 Sep 2026
+> **Version:** 9.2 | **Last updated:** Share-Dash-2 · 18 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -149,13 +149,16 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 
 ## Current state
 
-**B8-Opus ✓ complete (13 Sep 2026). Next: BShare-6-2 build**
+**Share-Dash-2 ✓ complete (18 Sep 2026). Next: Share-Dash-3 (Sonnet, refueler-io only)**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
 | Share-6-1 ✓ | `0013908` (deployed `aa4a73bc`) | R2 SigV4 presigner · /initiate · /urls · session token. Smoke test passed. |
-| Share-6-2 ✓ | c593b23/5180e5a | R2 CORS + direct-PUT loop. PUT 200 confirmed |
-| Share-6-3 → | in progress | Finalise + sidecar (B9-1)
+| Share-6-2 ✓ | c593b23/5180e5a | R2 CORS + direct-PUT loop. PUT 200 confirmed. |
+| Share-6-3a ✓ | (inline, committed in Dash-2) | Worker /finalise handler: HEAD completeness, sidecar write, merkle_root, session-token spend. |
+| Share-Dash-2 ✓ | d68ec8b (deployed 34a9188d) | Fold handleFinalise → handlers/; dock enrichment (size_bytes/rail/merkle_root); three new admin handlers (client_errors_kv, api_stats, news_events). Navy Office / Chambers / Custom House / Harbourmaster naming locked. |
+| Share-Dash-3 → | next | refueler-io only — Navy Office rename, Chambers rename, client-errors toggle, API & MCP card, growth card. |
+| Share-6-3b → | after Dash-3 | B9-1 RFC-6962-unbalanced-BLAKE3 tree function (Opus). |
 ---
 
 ## Roadmap
@@ -204,5 +207,6 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 ---
 
 - **B8-Opus:** NUT-11 Mode 2 (Locke) design locked. Full spec: `B8-spec-v1.md`. Deed→Locke HKDF derivation (scalar reject-sampled); Schnorr BIP-340 x-only verify; check order sig→BDHKE→double-spend; Locke KV challenge-response (SD3 primitive); `hashSecret()` unchanged/independent; CDK stays 0.17.2; builds direct in refueler-share (ecash-lab Mode 2 flag retired). BRIDGE v9.5.
+- **Share-Dash-2 (18 Sep 2026):** Surface naming locked — **Navy Office** (admin/ops, Pepys/Seething Lane mnemonic), **Chambers** (Citizen/Sovereign account area — already theirs), **Custom House** (Chartered API/MCP, reserved — additive on upgrade, not a move), **Harbourmaster** (Execution Dock view inside Navy Office). `handleFinalise` folded to `handlers/finalise.js` with dock enrichment (size_bytes · rail · merkle_root stored, response-withheld until Share-6-5). Three new handlers: `client_errors_kv.js` · `api_stats.js` · `news_events.js`. `by_rail` `none` → renders as "Pro Bono" in dashboard (carry to Dash-3). sandbox_to_live stubbed honestly — wire when first Chartered client onboarded (add `live_at` to `sandbox_meta_` record). BRIDGE v9.6.
 
 *"Nothing stops this train."*
