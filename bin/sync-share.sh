@@ -16,7 +16,7 @@ IO_SHARE="/Users/rajeshtaylor/Documents/refueler.io/src/share"
 echo "▶ sync-share: ${SHARE_ROOT}/frontend/ → ${IO_ASSETS}/"
 
 # ── 1. JS modules ─────────────────────────────────────────────────────────────
-for f in share.js crypto.js upload.js download.js timestamp.js refueler-badge.js fragment.js; do
+for f in share.js crypto.js upload.js download.js timestamp.js refueler-badge.js fragment.js merkle.js; do
   if [[ -f "${SHARE_ROOT}/frontend/${f}" ]]; then
     cp "${SHARE_ROOT}/frontend/${f}" "${IO_ASSETS}/${f}"
     echo "  ✓ ${f}"
@@ -46,7 +46,7 @@ if [[ -d "${SHARE_ROOT}/frontend/blake3" ]]; then
   echo "  ✓ blake3/"
 fi
 
-# ── 5. index.njk — single source of truth ────────────────────────────────────
+# ── 6. index.njk — single source of truth ────────────────────────────────────
 # Canonical lives at refueler-share/src/index.njk.
 # The four values below differ between repos; everything else is identical.
 #
