@@ -35,6 +35,8 @@ import {
 
 import { assembleFragment } from './fragment.js';
 
+import { buildMerkleTree } from './merkle.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IndexedDB — chunk resume state (RU1)
 //
@@ -917,11 +919,57 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
       if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${state.uploadUUID.slice(0, 8)}`);
     }
 
-    // Finalise not called here — that's Share-6-3. upload_complete stays false.
+    // ── Share-6-3d: finalise the transfer ─────────────────────────────────────
+    // Client-authoritative CIPHERTEXT-chunk Merkle root over the per-chunk
+    // ciphertext-object digests accumulated in chunkHashes (hex, index order).
+    // buildMerkleTree (frontend/merkle.js) applies the RFC-6962 leaf/node domain
+    // separation internally — feed it the RAW 32-byte digests. Do NOT prepend the
+    // session IV (NONCE trap): the leaves must equal BLAKE3 of the exact stored
+    // bytes the Worker re-hashes at download, or every transfer 409-walls at 6-5.
+    // This is the ciphertext root ONLY — never blake3PlaintextRoot above (TWO ROOTS).
+    setStage('Finalising', 98);
+
+    const leaves = chunkHashes.map(hex => new Uint8Array(hexToBuf(hex)));
+    const { root: merkleRootBytes } = buildMerkleTree(leaves);
+    const finaliseBody = {
+      hashes:      leaves.map(_bytesToB64url), // b64url(raw 32B digest) × total_chunks
+      merkle_root: _bytesToB64url(merkleRootBytes),
+      // tree_algo is NOT sent — the Worker pins 'rfc6962-unbalanced-blake3-v1'.
+    };
+
+    let finRes;
+    try {
+      finRes = await fetch(`${WORKER_URL}/upload/${state.uploadUUID}/finalise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+        body: JSON.stringify(finaliseBody),
+      });
+    } catch (e) {
+      reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${state.uploadUUID.slice(0, 8)}`);
+      progressDetail.textContent = 'Finalise failed (network) — transfer not complete. Please try again.';
+      return; // no share URL for an unfinalised transfer
+    }
+
+    if (finRes.status === 409) {
+      let missing = [];
+      try { missing = (await finRes.json()).missing || []; } catch { /* not JSON */ }
+      reportError('finalise_incomplete', `${missing.length} missing: ${missing.slice(0, 20).join(',')}`, `uuid:${state.uploadUUID.slice(0, 8)}`);
+      progressDetail.textContent = `Finalise failed — ${missing.length} chunk(s) missing at storage. Transfer not complete.`;
+      return; // no share URL
+    }
+
+    if (!finRes.ok) {
+      const txt = await finRes.text().catch(() => '');
+      reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${state.uploadUUID.slice(0, 8)} ${txt.slice(0, 120)}`);
+      progressDetail.textContent = `Finalise failed (HTTP ${finRes.status}) — transfer not complete. Please try again.`;
+      return; // no share URL
+    }
+
+    // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
     setStage('Done', 100);
     progressDetail.textContent = wantsPermanentRecord
-      ? (permanentRecordOk ? 'Chunks lodged — finalise pending ✓' : 'Chunks lodged — date seal failed')
-      : 'Chunks lodged — finalise pending (Share-6-3)';
+      ? (permanentRecordOk ? 'Transfer complete — date seal submitted ✓' : 'Transfer complete — date seal failed (transfer still available)')
+      : 'Transfer complete';
     await new Promise(r => setTimeout(r, 700));
     progressCard.classList.add('hidden');
 
@@ -1393,6 +1441,17 @@ function _readChunk(blob) {
     r.onerror = rej;
     r.readAsArrayBuffer(blob);
   });
+}
+
+// bytes → base64url, UNPADDED, strict URL-safe alphabet [A-Za-z0-9_-].
+// Matches fragment.js's canonical encoder and exactly what finalise.js's
+// b64urlToBytes accepts — it REJECTS any '=' padding. Used only on the 6-3d
+// finalise wire body, where every input is a fixed 32-byte digest. (fragment.js's
+// own encoder is not exported, so this is the small local copy the brief calls for.)
+function _bytesToB64url(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function _promptForResumeFile(expectedName, expectedSize, domRefs) {
