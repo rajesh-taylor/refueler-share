@@ -2,6 +2,21 @@
 // Extracted from share.js at Share-JS-Refactor session (TH-block).
 // No behaviour change from TH-2 share.js — pure structural split.
 //
+// Share-6-5b: integrity-failure UX (B9-3 client half).
+//   Handles every response shape from the verified download path:
+//   - Verified 200  → header X-Integrity: ciphertext-storage-verified (silent, no UX change)
+//   - Legacy 200    → no X-Integrity header (silent, no UX change)
+//   - 409 root/sidecar failure → {"error":"integrity_failed"} → show IntegrityError UI
+//   - 409 per-chunk ≤128      → {"error":"integrity_failed","chunk":<i>} → same UI + chunk index
+//   - 409 per-chunk >128      → connection truncates mid-body (short/empty read) → same UI
+//   - Range on verified       → 416 (fatal; fetch never sends Range — confirmed locked)
+//   - No partial file is ever kept on any integrity failure.
+//
+// Honesty constraint (CLAUDE.md + Share-Master-Context §Locked):
+//   NEVER say "end-to-end integrity", "proof of delivery", "verified in transit".
+//   The browser surfaces ciphertext STORAGE integrity only.
+//   End-to-end is the recipient's plaintext check, which is separate and unreported here.
+//
 // Exports:
 //   enterDownloadMode(detected, domRefs, state, helpers)
 //
@@ -16,6 +31,19 @@
 
 import { loadDeps, hexToBuf, bufToHex, WORKER_URL } from './crypto.js';
 import { decryptOts } from './timestamp.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IntegrityError — typed error thrown on any 409 or truncated-body path.
+// Carries the raw chunk index from the 409 body when present (chunk field).
+// ─────────────────────────────────────────────────────────────────────────────
+class IntegrityError extends Error {
+  constructor(chunk = null) {
+    super('integrity_failed');
+    this.name = 'IntegrityError';
+    this.integrity = true;
+    this.chunk = chunk; // null = root/sidecar failure; number = chunk i was bad
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // enterDownloadMode
@@ -234,7 +262,83 @@ async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FSAA streaming download
+// _parse409Body — safely read a 409 body and extract {chunk} if present.
+// Returns null (root/sidecar failure) or a number (chunk index).
+// Never throws.
+// ─────────────────────────────────────────────────────────────────────────────
+async function _parse409Body(res) {
+  try {
+    const body = await res.json();
+    if (body && typeof body.chunk === 'number') return body.chunk;
+  } catch {
+    // body already consumed or non-JSON — root/sidecar failure path
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _showIntegrityFailure — the honest, user-facing integrity failure state.
+//
+// Copy rules (honesty banner in session brief):
+//   - NEVER "end-to-end integrity", "proof of delivery", "verified in transit"
+//   - "Transfer failed its integrity check" — ciphertext storage integrity only
+//   - No partial file was saved
+// ─────────────────────────────────────────────────────────────────────────────
+function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
+  const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
+
+  // Stop the progress bar where it is — don't snap to 100%
+  dlPct.textContent  = '—';
+  dlBar.style.width  = '0%';
+  dlStageTag.textContent = 'Transfer failed';
+  downloadCard.classList.remove('hidden');
+
+  // Remove any existing error card to avoid doubling up
+  const existing = document.getElementById('integrity-fail-card');
+  if (existing) existing.remove();
+
+  const card = document.createElement('div');
+  card.id = 'integrity-fail-card';
+  card.className = 'integrity-fail-card';
+
+  const icon = document.createElement('div');
+  icon.className = 'integrity-fail-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '⚠';
+
+  const heading = document.createElement('p');
+  heading.className = 'integrity-fail-heading';
+  heading.textContent = 'This transfer did not pass its integrity check';
+
+  const body = document.createElement('p');
+  body.className = 'integrity-fail-body';
+  // Honest scope: ciphertext storage integrity check, not end-to-end
+  body.textContent = 'The encrypted file on the server does not match what was lodged. '
+    + 'No partial file has been saved to your device. '
+    + 'Contact the sender for a fresh link.';
+
+  card.appendChild(icon);
+  card.appendChild(heading);
+  card.appendChild(body);
+
+  // Insert after the download card heading area
+  downloadCard.appendChild(card);
+
+  // Log for ops visibility — fire-and-forget
+  const detail = chunkIdx !== null ? `chunk:${chunkIdx}` : 'root_or_sidecar';
+  try {
+    reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)} ${detail}`);
+  } catch {}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FSAA streaming download — Share-6-5b changes:
+//   1. fetchChunkWithRetry detects 409 → throws IntegrityError (never retried)
+//   2. No Range header ever sent — confirmed and locked; fetch uses the full URL only
+//   3. Truncated-body guard: if buf.byteLength === 0 on a chunk that should have bytes → IntegrityError
+//   4. Catch block handles IntegrityError → _showIntegrityFailure, abort writable, no partial file
+//   5. X-Integrity header read silently on first chunk; no UX change
+//   6. Legacy 200 (no X-Integrity) → identical path, silent pass-through
 // ─────────────────────────────────────────────────────────────────────────────
 async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
   const { downloadCard, dlStageTag, dlPct, dlBar, dlSignoff, uspBlock } = domRefs;
@@ -256,21 +360,57 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
     return;
   }
 
+  // ── fetchChunkWithRetry (FSAA path) ────────────────────────────────────────
+  // 6-5b invariant: NO Range header ever sent on any chunk request.
+  // 409 → IntegrityError (not retried). 416 would mean we somehow sent Range — should never occur.
+  // Truncated read (byteLength === 0 on a non-empty transfer) → IntegrityError (>128-chunk path).
   async function fetchChunkWithRetry(chunkIdx) {
     const padded  = String(chunkIdx).padStart(4, '0');
+    // Auth header only — never a Range header (locked 6-5b).
     const headers = {};
     if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
+
     const RETRYABLE_DELAYS = [1000, 2000, 4000];
     let lastErr;
     for (let attempt = 0; attempt <= RETRYABLE_DELAYS.length; attempt++) {
       try {
         const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+
+        // ── Fatal non-retry statuses ─────────────────────────────────────────
         if (res.status === 400 || res.status === 401 || res.status === 410) {
           const err = new Error(`HTTP ${res.status}`); err.fatal = true; err.status = res.status; throw err;
         }
-        if (res.ok) return await res.arrayBuffer();
+
+        // ── 409 integrity failure (≤128 path: clean JSON body) ──────────────
+        // 409 is never retried — it is a definitive integrity verdict.
+        if (res.status === 409) {
+          const chunkBad = await _parse409Body(res);
+          throw new IntegrityError(chunkBad);
+        }
+
+        // ── 416 would mean a Range header was sent — should be impossible ───
+        if (res.status === 416) {
+          const err = new Error('HTTP 416 — unexpected Range response on verified path');
+          err.fatal = true; err.status = 416; throw err;
+        }
+
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+
+          // ── Truncated-body guard (>128 path) ───────────────────────────────
+          // If the connection was cut mid-body, the Worker never sent 409.
+          // byteLength === 0 on chunk 0 is a legitimate empty file edge case, but
+          // chunk_count ≥ 1 guarantees chunk 0 is non-empty (AES-GCM tag alone = 16 B).
+          if (buf.byteLength === 0) {
+            throw new IntegrityError(chunkIdx);
+          }
+
+          return buf;
+        }
+
         lastErr = new Error(`HTTP ${res.status}`);
       } catch (e) {
+        if (e instanceof IntegrityError) throw e; // never retry integrity failures
         if (e.fatal) throw e;
         lastErr = e;
       }
@@ -291,7 +431,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
       try {
         plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: state.sessionIv, additionalData: aad }, state.sessionAesKey, ciphertextBuf);
       } catch (e) {
-        reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`).catch(() => {});
+        reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
         await writable.abort();
         _showDownloadError('Decryption failed — wrong key or corrupted data. No partial file was saved.', domRefs);
         return;
@@ -315,8 +455,16 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
     if (willSelfDestruct) _showConfirmGate(uuid, !!state.downloadToken, domRefs, state);
 
   } catch (e) {
-    reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`).catch(() => {});
     try { await writable.abort(); } catch {}
+
+    // ── IntegrityError — the 409 and truncated-body paths ───────────────────
+    if (e instanceof IntegrityError) {
+      reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)}`);
+      _showIntegrityFailure(domRefs, reportError, uuid, e.chunk);
+      return;
+    }
+
+    reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
     if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
     else if (e.status === 410)  _showDownloadError('This transfer has expired. The file is no longer available.', domRefs);
     else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
@@ -325,7 +473,12 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Blob fallback download
+// Blob fallback download — Share-6-5b changes:
+//   1. 409 detected in the fetch loop → IntegrityError thrown
+//   2. Truncated-body guard: byteLength === 0 after res.ok → IntegrityError
+//   3. No Range header ever sent (loop fetches full chunk URL only)
+//   4. chunks array discarded and never assembled on IntegrityError
+//   5. X-Integrity read silently on res headers; no UX change for legacy
 // ─────────────────────────────────────────────────────────────────────────────
 async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
   const { downloadCard, dlStageTag, dlPct, dlBar, dlSignoff, uspBlock } = domRefs;
@@ -344,10 +497,21 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
   let bytesReceived = 0;
 
   for (let i = 0; i < totalChunks; i++) {
+    // Auth header only — never a Range header (locked 6-5b).
     const headers = {};
     if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
     const padded = String(i).padStart(4, '0');
     const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+
+    // ── 409 integrity failure ────────────────────────────────────────────────
+    // 409 is a definitive verdict — parse body for chunk index, then bail.
+    // No partial file is kept (chunks array is discarded, never assembled).
+    if (res.status === 409) {
+      const chunkBad = await _parse409Body(res);
+      reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)}`);
+      _showIntegrityFailure(domRefs, reportError, uuid, chunkBad);
+      return;
+    }
 
     if (res.status === 401 || res.status === 410) {
       _showDownloadError(res.status === 401
@@ -356,12 +520,21 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
       return;
     }
     if (!res.ok) {
-      reportError('download_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uuid.slice(0,8)}`).catch(() => {});
+      reportError('download_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uuid.slice(0,8)}`);
       _showDownloadError(`Download failed (${res.status}). Please try again.`, domRefs);
       return;
     }
 
     const buf = await res.arrayBuffer();
+
+    // ── Truncated-body guard (>128 path — connection cut mid-body, no 409) ──
+    // AES-GCM tag alone is 16 B, so any real chunk is > 0 bytes.
+    if (buf.byteLength === 0) {
+      reportError('integrity_check_failed', 'truncated_body', `uuid:${uuid.slice(0,8)} chunk:${i}`);
+      _showIntegrityFailure(domRefs, reportError, uuid, i);
+      return;
+    }
+
     chunks.push(buf);
     bytesReceived += buf.byteLength;
     const pct = totalBytes > 0
@@ -380,7 +553,7 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
       const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: state.sessionIv, additionalData: aad }, state.sessionAesKey, chunks[i]);
       decrypted.push(plain);
     } catch (e) {
-      reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`).catch(() => {});
+      reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
       _showDownloadError('Decryption failed — wrong key or corrupted data.', domRefs);
       return;
     }

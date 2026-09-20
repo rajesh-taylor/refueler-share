@@ -502,7 +502,34 @@ Fragment grammar v1 decoded clean (v1, 32B key, 12B IV, real filename, no seal_n
 expected for direct-R2 (chunks bypass the Worker; completeness proven by HEAD). Dock now stores
 the real merkle_root as of 6-3d — the "pending" display can show it; "verified" still waits for 6-5.
 
-**Next: Share-6-4a — upload resume + FOLDER-RESUME discard fix (Sonnet).** BRIDGE unchanged (build session).
+Share-6-4a — upload resume + FOLDER-RESUME discard fix (Sonnet). BRIDGE unchanged (build session).
 Dash-3 leftovers (API & MCP tile sub-line, hh-* keep/strip) deferred to a dedicated end-of-block snag session.
+
+## Share-6-5a — Worker download verification (B9-3 server half)
+
+**Deployed:** Version `f31dc124-376f-4368-8dcf-f9712c36368b` · 20 Sep 2026
+**Files:** `worker/src/handlers/download_verify.js` (new), `worker/src/handlers/download.js` (new — `handleDownload` fully extracted from `index.js`), `worker/src/index.js` (dispatch stub only), `worker/test/share-6-5a.test.js` (new).
+**Tests:** 19 unit pass under Vitest; 12 integration cases staged `describe.skip` for `test:integration`. `merkle.js selfTest()` vectors reproduce.
+
+Implements merkle-spec §3 steps 1–4 in the download handler, behind a per-manifest cutover gate. Tree fn imported from `merkle.js`, not reimplemented. Leaf = BLAKE3 over exactly the stored bytes (no IV prepend). No `verified:true`, no `blake3_root`, no "end-to-end" emitted. Consumer `WORKER_URL` NOT flipped (6-6b).
+
+**Gate predicate (`isVerifiedPath`):** `upload_complete === true && typeof merkle_root === 'string' && merkle_root.length > 0 && tree_algo === 'rfc6962-unbalanced-blake3-v1'`. Per-manifest, not a global flag. False → legacy serve (206 Range allowed, no sidecar read, no 409). Pre-6-3 files never 409.
+
+**Hybrid threshold:** `VERIFY_INLINE_CHUNK_THRESHOLD = 128`. ≤128 → buffer-verify-then-flush (clean 409). >128 → stream + end-of-chunk verify (truncate on mismatch).
+
+**409 body shapes (6-5b depends on these):**
+- Root/sidecar failure (steps 2–3): `409 {"error":"integrity_failed"}`
+- Per-chunk tamper ≤128: `409 {"error":"integrity_failed","chunk":<i>}` — chunks `0..i-1` already served 200
+- Per-chunk tamper >128: no clean status — connection truncates mid-body
+- Range on verified: `416`
+- Verified 200 header: `X-Integrity: ciphertext-storage-verified`
+
+**On mismatch:** AE logged; R2 object NOT auto-destroyed (preserved for investigation); `date-seal.ots.enc` deletion invariant untouched.
+
+**`verified` still needs (6-5b + B9-4):** collection-receipt `verified` field NOT set here (receipt tail preserved verbatim). B9-4 wires it off this path's result. Plaintext root permanently barred.
+
+**Watch in 6-6 soak:** streaming path holds one 32 MiB chunk in RAM during transit (bounded per-chunk); sidecar re-read once per chunk GET (R2 cache should absorb — measure, don't assume).
+
+**BRIDGE:** no bump.
 
 *"Nothing stops this train — though it pauses for CORS, sync lists, and CLI defaults."*

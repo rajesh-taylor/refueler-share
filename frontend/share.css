@@ -611,3 +611,32 @@ main {
   justify-content: center;
   padding: 4px 20px 16px;
 }
+
+/* ── 6-5b: integrity-fail card ──────────────────────────────────────────────── */
+.integrity-fail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: var(--c-red-bg);
+  border: 1px solid var(--c-red);
+}
+.integrity-fail-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--c-red);
+}
+.integrity-fail-heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--c-red);
+}
+.integrity-fail-body {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--fg);
+  line-height: 1.5;
+}
