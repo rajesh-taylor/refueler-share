@@ -620,6 +620,13 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
   }
   if (files.length > FOLDER_WARN_FILES) setDropMsg(`Large folder (${files.length.toLocaleString()} files) — this may take a moment.`);
 
+  const totalUncompressedBytes = files.reduce((acc, e) => acc + (e.file.size || 0), 0);
+  if (totalUncompressedBytes > FREE_CAP) {
+    hideZipCard();
+    domRefs.capWarning.classList.remove('hidden');
+    return;
+  }
+
   const folderName = directoryEntry.name || 'folder';
   await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f) => _handleFileSelection(f, domRefs, state, helpers, transferOpts) });
   // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
@@ -628,7 +635,7 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
 }
 
 async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpts) {
-  const { setDropMsg, showZipStage } = helpers;
+  const { setDropMsg, showZipStage, hideZipCard } = helpers;
   if (fileList.length === 0) return;
   if (typeof fflate === 'undefined') {
     setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
@@ -650,6 +657,13 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
     const stripped = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
     return { relativePath: sanitisePath(stripped), file: f };
   }).filter(e => e.relativePath.length > 0);
+
+  const totalUncompressedBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
+  if (totalUncompressedBytes > FREE_CAP) {
+    hideZipCard();
+    domRefs.capWarning.classList.remove('hidden');
+    return;
+  }
 
   await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f) => _handleFileSelection(f, domRefs, state, helpers, transferOpts) });
   // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
