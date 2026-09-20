@@ -12,6 +12,7 @@ import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPer
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
 import { handleFinalise } from './handlers/finalise.js';                       // Share-Dash-2 fold
+import { handleDownload } from './handlers/download.js';                       // Share-6-5a full extraction
 import { handleClientErrorsLog, appendClientError } from './handlers/client_errors_kv.js'; // Share-Dash-2
 import { handleApiStats } from './handlers/api_stats.js';                      // Share-Dash-2
 import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
@@ -1839,146 +1840,9 @@ async function handleMeta(request, env, uuid) {
 //   - No re-emit on re-download — once-flag is permanent until 7-day TTL.
 //   - No recipient metadata (IP, UA, network) in any receipt field.
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleDownload(request, env, ctx, uuid, chunkIndex) {
-  // ── UUID format validation (S41) ──────────────────────────────────────────
-  if (!UUID_RE.test(uuid)) {
-    logEvent(env, { endpoint: 'download', status: 400, errorMsg: 'invalid_uuid' });
-    return err(400, 'Invalid transfer ID');
-  }
-
-  if (chunkIndex < 0 || chunkIndex > 9999) {
-    logEvent(env, { endpoint: 'download', status: 400, errorMsg: 'invalid_chunk_index' });
-    return err(400, 'Invalid chunk index');
-  }
-
-  const { manifest, oversize: dlOversize } = await safeGetManifest(env.BUCKET, uuid, env);
-  if (dlOversize) {
-    logEvent(env, { endpoint: 'download', status: 502, errorMsg: 'manifest_oversize' });
-    return err(502, 'Transfer manifest exceeds size limit');
-  }
-  if (!manifest) return err(404, 'Transfer not found');
-
-  const dlNowSeconds = Math.floor(Date.now() / 1000);
-  const dlStatusCheck = checkTransferStatus(manifest, dlNowSeconds);
-  if (!dlStatusCheck.ok) return err(dlStatusCheck.status, dlStatusCheck.body);
-
-  if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
-
-  if (chunkIndex === 0) {
-    logEvent(env, {
-      endpoint:    'download_tier',
-      tier:        manifest.tier ?? 'free',
-      status:      200,
-      latency:     0,
-      totalChunks: manifest.total_chunks ?? 0,
-      totalBytes:  manifest.total_bytes  ?? 0,
-    });
-  }
-
-  if (requiresPassphrase(manifest)) {
-    const authHeader = request.headers.get('Authorization') ?? '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return err(401, 'Download token required');
-    const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env.MINT_PRIVATE_KEY);
-    if (!valid || tokenUuid !== uuid) return err(401, 'Invalid or expired download token');
-  }
-
-  if (chunkIndex === 0 && !manifest.download_initiated_at) {
-    manifest.download_initiated_at = Math.floor(Date.now() / 1000);
-    await putManifest(env.BUCKET, uuid, manifest);
-  }
-
-  const key = `${uuid}/${String(chunkIndex).padStart(4, '0')}`;
-  const obj = await env.BUCKET.get(key, {
-    range: request.headers.has('Range') ? parseRange(request.headers.get('Range')) : undefined,
-  });
-  if (!obj) return err(404, 'Chunk not found');
-
-  const status = request.headers.has('Range') ? 206 : 200;
-  const headers = new Headers({
-    'Content-Type':    'application/octet-stream',
-    'Cache-Control':   'private, no-store',
-    'X-Transfer-UUID': uuid,
-    'X-Chunk-Index':   String(chunkIndex),
-    'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
-  });
-
-  if (obj.range) {
-    headers.set('Content-Range', `bytes ${obj.range.offset}-${obj.range.end}/${obj.size}`);
-  }
-
-  const dlResponse = new Response(obj.body, { status, headers });
-
-  // ── TG: flip pending_destruction → true on last chunk of a DAD transfer ───
-  const updatedManifestForFlip = flipPendingDestruction(manifest, chunkIndex);
-  const pendingDestructionFlipped = updatedManifestForFlip !== manifest;
-  if (pendingDestructionFlipped) {
-    putManifest(env.BUCKET, uuid, updatedManifestForFlip).catch(e =>
-      console.error('TG: pending_destruction flip write failed:', e)
-    );
-  }
-
-  // ── SW5: emit cargo.discharged receipt ────────────────────────────────────
-  // Fired when the last chunk is served for the first time.
-  // Guards:
-  //   1. isLastChunk — only fire on the final chunk of the transfer.
-  //   2. once-flag KV key `receipt_discharged_guard:{uuid}` — prevents
-  //      re-emission on re-download. Set atomically (fire-and-forget) with
-  //      the receipt itself.
-  //   3. api_live_key in manifest — only API-tier transfers carry this; consumer
-  //      transfers do not emit receipts (no signing key available at download time).
-  //   4. No recipient metadata — manifest carries only sender-declared fields.
-  //
-  // Co-located with pending_destruction flip for DAD transfers. For non-DAD
-  // transfers, fires on last-chunk serve regardless of flip.
-  const isLastChunk = manifest.total_chunks > 0 && chunkIndex === manifest.total_chunks - 1;
-  if (isLastChunk && manifest.api_live_key) {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          // Once-flag guard — set before emitting to prevent race on concurrent requests.
-          const guardKey  = `receipt_discharged_guard:${uuid}`;
-          let alreadyFired = false;
-          try {
-            const existing = await env.STATUS_KV.get(guardKey);
-            alreadyFired   = existing !== null;
-          } catch (e) {
-            console.error('SW5 discharge guard KV read failed:', e);
-            // Fail open — proceed; duplicate emission is less bad than silent drop.
-          }
-
-          if (!alreadyFired) {
-            // Set guard first — 7-day TTL matches receipt KV TTL.
-            env.STATUS_KV.put(guardKey, '1', { expirationTtl: 7 * 24 * 3600 }).catch(e =>
-              console.error('SW5 discharge guard KV write failed:', e)
-            );
-
-            const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
-            if (apiKeyHash) {
-              emitReceipt(env, ctx, {
-                receipt_type: 'collection',
-                event:        'cargo.discharged',
-                live_key:     manifest.api_live_key,
-                uuid,
-                transfer_ref: manifest.api_transfer_ref ?? null,
-                size_bytes:   manifest.total_bytes  ?? 0,
-                chunk_count:  manifest.total_chunks ?? 0,
-                issued_at:    Math.floor(Date.now() / 1000),
-                collected_at: Math.floor(Date.now() / 1000),
-                apiKeyHash,
-                // wh_created_at resolved inside emitReceipt via wh_config_ KV lookup
-              });
-            }
-          }
-        } catch (e) {
-          console.error('SW5 cargo.discharged emit error:', e);
-        }
-      })()
-    );
-  }
-
-  return dlResponse;
-}
+// handleDownload — extracted to ./handlers/download.js (Share-6-5a).
+//   Legacy serve preserved verbatim; verified path (merkle-spec §3 / B9-3)
+//   added behind the per-manifest gate. index.js dispatches only (router).
 
 // handleTimestampSubmit, handleTimestampSeal — moved to ./handlers/timestamp.js (SW9a)
 // handleDeleteTransfer, handleOwnerDelete    — moved to ./handlers/delete_transfer.js (SW9a)
