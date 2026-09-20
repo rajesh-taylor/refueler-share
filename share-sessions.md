@@ -416,4 +416,93 @@ Six decisions locked (D-1…D-6) — full detail in `Share-6-spec-v1.md`. Key ou
 
 **Share-6-Opus complete. Next: Share-6-1 (presigning + initiate). Front-loads B9-1…B9-3; B9 build then resumes at B9-4.**
 
+## Share-6-3a — POST /upload/{uuid}/finalise (Worker only) · 17 Sep 2026
+
+Worker /finalise: X-Upload-Session auth, HEAD completeness sweep, {uuid}/hashes
+sidecar (raw N×32), manifest merkle_root + tree_algo + upload_complete:true,
+session KV spent. index.js + worker/test/share-6-3a.test.js (12 pure pass, 8
+integration stubs skipped). Commit: <b6f4dc4>
+
+**Do-not-retry / wire contract (6-3b depends on these):**
+- Auth header is `X-Upload-Session` — never `X-Upload-Session-Token`.
+- Finalise body: { hashes: [b64url(32B) × N], merkle_root: b64url(32B) } — hashes is an ARRAY, not a concat blob.
+- chunk_count comes from manifest.total_chunks — no duplicate field.
+- tree_algo pinned `rfc6962-unbalanced-blake3-v1`.
+- Sidecar is WRITE-AND-KEEP — contradicts the "delete sidecar on finalise" lock (KEEP).
+- Deferred: cargo.accepted receipt not emitted; HEAD sweep needs list()-based check before >~1000 chunks (Share-6-6).
+
+## Build sequence re-chunked · 17 Sep 2026 (supersedes the 6-3→6-6 line above)
+6-3b fold + B9-1 tree fn + tests (Opus) · 6-3c wire + send (Sonnet) · 6-4a resume
++ FOLDER-RESUME (Sonnet) · 6-4b folder cap (Sonnet) · 6-5a Worker verify, cutover
+gate (Opus) · 6-5b browser verify + download (Sonnet) · 6-6a list() audit + large-N
+(Sonnet) · 6-6b WORKER_URL cutover, closes SHARE-503 (Sonnet).
+Model rule: Opus only for first-time crypto; Sonnet for everything specified.
+
+| Item | Detail |
+|------|--------|
+| Session type | Build (Sonnet) · refueler-io only · no Worker changes |
+| Repos touched | `refueler-io` only |
+
+### Changes
+
+- **Navy Office rename:** `git mv src/share/admin/dashboard.{html,js,css} → navy-office.{html,js,css}`. Gate h1 reads "Navy Office". Topbar wordmark sub-label reads "Navy Office". Served at `/share/admin/navy-office`.
+- **Chambers h1:** confirmed/fixed — reads "Chambers" not "The Chambers". `src/share/chambers/index.html`.
+- **Client-errors modal toggle:** two source buttons — "Reported by browser (24h)" (AE · `GET /admin/ae-metrics`) and "Observed by Worker (90d)" (KV · `GET /admin/client-errors-log`). State: in-memory `errorSource` var only, never persisted.
+- **API & MCP card:** replaces CPU-time stub (6th card, row 3). Active keys value from `GET /admin/api-stats`. Full modal: active keys / requests 30d / requests by rail / MCP attach rate / sandbox→live (pending honest stub until first Chartered client). `by_rail` `none`/`free` → renders as "Pro Bono".
+- **Growth signal card:** full-width below Execution Dock. Three SVG polylines (paid=green / free=gold / api=amber) via `GET /admin/news-events`. Tick marks with hover tooltip for label events. Add-event form (date · label · note · free/paid/api flags). Delete. `POST`/`DELETE /admin/news-events`.
+- **Dock enrichment live:** `size_bytes` → `humanBytes()` human-readable. `rail` → Registered / Bearer / Pro Bono display. `merkle_root` → "pending — available at Share-6-5". Download count → "pending".
+- **BRIDGE:** already v9.6 from Dash-2. No further bump needed.
+
+**Do-not-retry:** `navy-office.js` logic is now fully inline in the HTML; the `.js` file is a placeholder shim only. Do not split back out.
+
+**Next: Share-6-3b → B9-1 RFC-6962-unbalanced-BLAKE3 tree function (Opus).**
+
 *"Nothing stops this train."*
+
+## Catch-up: Dash-3 → 6-3c · logged 20 Sep 2026 (at Share-6-3d close)
+
+The block above ends on the Dash-3 *plan*; these are the outcomes. Commits shown where confirmed.
+
+| Session | Commit | Outcome |
+|---------|--------|---------|
+| Share-Dash-3 (Sonnet · 18 Sep) | — (reverted) | Rewrote navy-office.html from scratch, destroyed the sidebar. **Git-rolled-back.** Superseded by Dash-3b. |
+| Share-Dash-3b (Opus · 19 Sep) | `911eae8` + follow-up | Real completion. Recovered the genuine navy-office.js (1662 lines) from history; navy-office.html surgical edits (wordmark + gate h1 → "Navy Office", repoint navy-office.{css,js}, CPU-time tile → API & MCP tile, growth card full-width below Execution Dock). Chambers rename in place. hh-* hostname-health block DORMANT (null-guarded, no HTML). Deferred: API & MCP tile sub-line → commercial-only (Registered+Bearer) request count. |
+| Share-6-3b (Opus · 19 Sep) | `ec37c17` | worker/src/merkle.js — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors. Import is a FILE PATH `../node_modules/@noble/hashes/blake3.js` (noble v1 under CDK 0.17.2 exports only `./blake3`, not `./blake3.js` — file path bypasses the exports map, keeps the `.js` the invariant requires). |
+| Share-6-3c (Opus · 19 Sep) | frontend/merkle.js | Browser Merkle twin of the worker module — SAME WASM BLAKE3 as the chunk path, same pinned N=1..4 vectors, selfTest() hard gate. Exports frozen before 6-3d. |
+
+## Share-6-3d — upload.js finalise wiring + first real end-to-end send · 20 Sep 2026
+
+Sonnet · refueler-share frontend only (plus one justified Worker CORS fix). Wired POST
+/upload/{uuid}/finalise into startUpload's direct-R2 branch at the old "finalise pending"
+point. Client-authoritative ciphertext merkle_root via frontend/merkle.js's buildMerkleTree
+over chunkHashes (hex → Uint8Array; RAW 32-byte digests — buildMerkleTree applies the
+0x00/0x01 domain separation itself; no IV prepend — NONCE trap). Body
+`{ hashes:[b64url(32B)×N], merkle_root:b64url }`, header X-Upload-Session; tree_algo NOT sent
+(Worker pins it). 200 → existing fragment/share-URL assembly; 409 → surface missing count;
+any non-200 → "Finalise failed", NO share URL. Local _bytesToB64url added (unpadded, URL-safe;
+fragment.js's encoder isn't exported). Three surgical edits, node --check clean. Commit `050998b`.
+
+**First genuine end-to-end send on the live site.** article-a-research-notes.md, 16,818 B,
+1 chunk, free tier, password-protected. Manifest (wrangler r2 object get … --remote --pipe):
+upload_complete:true · tree_algo rfc6962-unbalanced-blake3-v1 · merkle_root 43 chars (→32 B) ·
+blake3_root null (plaintext root correctly absent) · file_name "encrypted-payload" (D-1 holds).
+Fragment grammar v1 decoded clean (v1, 32B key, 12B IV, real filename, no seal_nonce).
+
+**Two latent integration bugs flushed (both now in CLAUDE.md §Frontend change checklist):**
+- merkle.js (shipped 6-3c) was never in bin/sync-share.sh → mirror 404'd it → module graph
+  collapsed → dead pickers. Added to the JS copy loop. Commits `a00351a` (script), `b8906f9`
+  (refueler-io mirror). **Rule: new served module ⇒ add to sync-share.sh.**
+- X-Upload-Session read by finalise/urls but absent from corsHeaders Access-Control-Allow-Headers
+  (worker/src/utils.js) → finalise preflight blocked. Added + deployed (Version 6a97dc59).
+  Commit `f97b7d9`. **Rule: new browser header ⇒ add to corsHeaders.** Same gap would bite /urls
+  on transfers >256 chunks.
+
+**Deferred / noted:** manifest `status` stays "uploading" post-finalise (collection path owns
+`status`; finalise flips only the upload_complete bool) — eyeball at 6-5. chunks_received:[] is
+expected for direct-R2 (chunks bypass the Worker; completeness proven by HEAD). Dock now stores
+the real merkle_root as of 6-3d — the "pending" display can show it; "verified" still waits for 6-5.
+
+**Next: Share-6-4a — upload resume + FOLDER-RESUME discard fix (Sonnet).** BRIDGE unchanged (build session).
+Dash-3 leftovers (API & MCP tile sub-line, hh-* keep/strip) deferred to a dedicated end-of-block snag session.
+
+*"Nothing stops this train — though it pauses for CORS, sync lists, and CLI defaults."*

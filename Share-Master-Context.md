@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.2 | **Last updated:** Share-Dash-2 · 18 Sep 2026
+> **Version:** 9.3 | **Last updated:** Share-6-3d · 20 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -149,7 +149,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 
 ## Current state
 
-**Share-Dash-2 ✓ complete (18 Sep 2026). Next: Share-Dash-3 (Sonnet, refueler-io only)**
+**Share-6-3d ✓ complete (20 Sep 2026) — first real end-to-end send (encrypt → R2 → finalise → shareable link → recipient card). Next: Share-6-4a (upload resume + FOLDER-RESUME, Sonnet)**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
@@ -157,8 +157,11 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-6-2 ✓ | c593b23/5180e5a | R2 CORS + direct-PUT loop. PUT 200 confirmed. |
 | Share-6-3a ✓ | (inline, committed in Dash-2) | Worker /finalise handler: HEAD completeness, sidecar write, merkle_root, session-token spend. |
 | Share-Dash-2 ✓ | d68ec8b (deployed 34a9188d) | Fold handleFinalise → handlers/; dock enrichment (size_bytes/rail/merkle_root); three new admin handlers (client_errors_kv, api_stats, news_events). Navy Office / Chambers / Custom House / Harbourmaster naming locked. |
-| Share-Dash-3 → | next | refueler-io only — Navy Office rename, Chambers rename, client-errors toggle, API & MCP card, growth card. |
-| Share-6-3b → | after Dash-3 | B9-1 RFC-6962-unbalanced-BLAKE3 tree function (Opus). |
+| Share-Dash-3b ✓ | `911eae8` (refueler-io) | Navy Office + Chambers rename, API & MCP card, client-errors AE/KV toggle, growth card. (Sonnet Dash-3 was rolled back; 3b is the real completion.) |
+| Share-6-3b ✓ | `ec37c17` | `worker/src/merkle.js` — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors (Opus). |
+| Share-6-3c ✓ | `frontend/merkle.js` | Browser Merkle twin — WASM-BLAKE3 parity, same pinned vectors, `selfTest()` gate (Opus). |
+| Share-6-3d ✓ | `050998b` · `f97b7d9` · `a00351a`/`b8906f9` | `upload.js` finalise wiring + first real end-to-end send. Worker CORS `X-Upload-Session` fix; `merkle.js` added to `sync-share.sh`. |
+| Share-6-4a → | next | Upload resume + FOLDER-RESUME discard fix (Sonnet). |
 ---
 
 ## Roadmap

@@ -202,6 +202,9 @@ Before committing ANY change to frontend/upload.js, frontend/download.js, fronte
 DO NOT commit frontend JS based on code review alone — always verify live.
 DO NOT assume manifest fields exist — `curl /meta/{uuid}` to verify before coding against them.
 DO NOT change fragment.js without verifying upload.js and download.js handle IV, key, and filename end-to-end.
+DO NOT ship a NEW frontend/*.js module without adding its filename to the JS copy loop in bin/sync-share.sh — the sync silently SKIPS unlisted files (no error), the refueler.io mirror 404s the module, and the whole share.js graph collapses (dead drop zone, dead pickers, Turnstile onload undefined). merkle.js hit this at Share-6-3d.
+DO NOT introduce a NEW request header the browser sends to the Worker without adding it to Access-Control-Allow-Headers in worker/src/utils.js corsHeaders() — the CORS preflight blocks it (net::ERR_FAILED, "field x-… is not allowed"). X-Upload-Session hit this at Share-6-3d; /urls will hit it on >256-chunk transfers.
+NOTE (verifying R2 at step 2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
 Claude must ask for all relevant files before writing any fix — never assume and code blind.
 
 ---
