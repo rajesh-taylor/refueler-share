@@ -2296,8 +2296,13 @@ async function handleInitiate(request, env, ctx, uuid) {
   // validates completeness — so it is NOT emitted here. (In the legacy chunk-0
   // path it fired at manifest-write; that path is unchanged.)
 
-  // ── Upload-session token (HMAC over uuid‖commitment, KV-TTL to expiry) ──────
-  const sessionToken = await signSessionToken(env.WEBHOOK_SIGNING_MASTER_KEY, uuid, commitment);
+  // ── Upload-session token (32 opaque random bytes, KV-TTL to expiry) ──────────────
+  // Severs the gratuitous HMAC binding to WEBHOOK_SIGNING_MASTER_KEY (Share-6-4a).
+  // KV storage, TTL, and both ctEqual verifiers (handleUploadUrls, finalise.js)
+  // are UNCHANGED — they compare the stored value byte-for-byte. Backward-compatible:
+  // HMAC-shaped tokens already in KV still verify; only newly-minted tokens change shape.
+  const _rndBytes   = crypto.getRandomValues(new Uint8Array(32));
+  const sessionToken = btoa(String.fromCharCode(..._rndBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const sessionTtl   = Math.max(expiryTs - nowSeconds, 3600);
   try {
     await env.STATUS_KV.put(`upload_session:${uuid}`, sessionToken, { expirationTtl: sessionTtl });

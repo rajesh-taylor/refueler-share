@@ -580,6 +580,7 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts) {
   const { formatBytes, reportError } = helpers;
 
   state.selectedFile = file;
+  state.sourceType   = 'file'; // reset: folder path sets this to 'folder' before upload
   capWarning.classList.add('hidden');
   optionsCard.classList.add('hidden');
   if (file.size > FREE_CAP) { capWarning.classList.remove('hidden'); return; }
@@ -621,6 +622,9 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
 
   const folderName = directoryEntry.name || 'folder';
   await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f) => _handleFileSelection(f, domRefs, state, helpers, transferOpts) });
+  // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
+  // setting here overwrites that after the zip+selection chain completes.
+  state.sourceType = 'folder';
 }
 
 async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpts) {
@@ -648,6 +652,9 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
   }).filter(e => e.relativePath.length > 0);
 
   await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f) => _handleFileSelection(f, domRefs, state, helpers, transferOpts) });
+  // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
+  // setting here overwrites that after the zip+selection chain completes.
+  state.sourceType = 'folder';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -903,6 +910,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
         keyHex, ivHex, tier: issuedTier, expiryTimestamp, timestamp: Date.now(),
         sealNonceHex: sealNonceHex || undefined,
         uploadMode: 'direct-r2', sessionToken, // Share-6: resume will need these
+        sourceType: state.sourceType || 'file', // Part C: folder detection for FOLDER-RESUME discard
       }, reportError).catch(() => {});
 
       setProgress(Math.round(((i + 1) / totalChunks) * 77) + 18, `${i + 1} / ${totalChunks} chunks`);
@@ -1155,6 +1163,22 @@ export async function checkResumeState(domRefs, state, helpers) {
     return;
   }
 
+  // ── FOLDER-RESUME discard (Part C) ──────────────────────────────────────────
+  // Folder uploads are zipped into an in-memory File that never exists on disk.
+  // The file picker cannot re-select it on resume — discard cleanly rather than
+  // offering a resume that can never succeed.
+  if (record.sourceType === 'folder') {
+    await clearResumeState(record.uuid, helpers.reportError);
+    const { resumeCard, resumeDetail } = domRefs;
+    if (resumeDetail) resumeDetail.textContent = "A folder transfer was interrupted \u2014 folders can't be resumed yet, please re-upload the folder.";
+    const resumeNote = document.getElementById('resume-note');
+    if (resumeNote) resumeNote.classList.add('hidden');
+    const resumeNoticeBtn = domRefs.resumeNoticeBtn;
+    if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
+    if (resumeCard) resumeCard.classList.remove('hidden');
+    return;
+  }
+
   const nowSecs = Date.now() / 1000;
   let expired = false;
   if (record.expiryTimestamp) {
@@ -1212,8 +1236,20 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   progressCard.classList.remove('hidden');
   setStage('Resuming', 5);
 
+  // ── Mode gate (6-4a): only direct-R2 records supported ────────────────────
+  // Pre-6-2 records lack uploadMode / sessionToken and cannot finalise.
+  // Discard cleanly rather than taking the legacy relay road.
+  if (record.uploadMode !== 'direct-r2') {
+    await clearResumeState(record.uuid, reportError);
+    progressDetail.textContent = 'This transfer cannot be resumed — please start a new upload.';
+    setStage('', 0);
+    return;
+  }
+
   await loadDeps();
 
+  // Restore AES-GCM key + session IV from the record.
+  // Per-chunk AAD (4-byte BE uint32 index) differentiates chunks; session IV is shared.
   const keyBytes = hexToBuf(record.keyHex);
   const ivBytes  = hexToBuf(record.ivHex);
   state.sessionAesKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
@@ -1221,38 +1257,24 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   state.uploadUUID    = record.uuid;
 
   const totalChunks     = record.totalChunks;
-  const resumeFromChunk = record.chunkIndex + 1;
+  const resumeFrom      = record.chunkIndex + 1;
   const expiryTimestamp = record.expiryTimestamp
     || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
-  const sealNonceHex = record.sealNonceHex || null;
+  const sealNonceHex    = record.sealNonceHex || null;
+  // sessionToken was minted at /initiate and stored in the record — no re-credential needed.
+  const sessionToken    = record.sessionToken;
 
-  setStage('Re-credentialling', 8);
-  let credential, commitment, issuedTier;
-  try {
-    const { blindedMsg, blindingFactor } = await generateBlindedCredential();
-    const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resume: true, resume_uuid: record.uuid, blinded_message: blindedMsg, tier: record.tier || 'free' }),
-    });
-    if (!issueRes.ok) {
-      const errText = await issueRes.text();
-      throw new Error(`Re-credential failed (${issueRes.status}): ${errText}`);
-    }
-    const issueData = await issueRes.json();
-    if (!issueData.uuid || !issueData.commitment) throw new Error('Re-credential response missing uuid or commitment');
-    credential  = await unblindSignature(issueData.signed_point, blindingFactor, issueData.mint_pubkey);
-    commitment  = issueData.commitment;
-    issuedTier  = issueData.issued_tier || record.tier || 'free';
-  } catch (e) {
-    reportError('resume_credential', e.message, `uuid:${record.uuid.slice(0, 8)}`);
-    setStage('Could not re-validate — please start a new transfer.', 0);
-    progressDetail.textContent = '';
+  if (!sessionToken) {
+    await clearResumeState(record.uuid, reportError);
+    progressDetail.textContent = 'Resume record is incomplete — please start a new upload.';
+    setStage('', 0);
     return;
   }
 
-  setStage(`Resuming from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 10);
+  setStage(`Resuming from chunk ${resumeFrom + 1} of ${totalChunks}`, 10);
 
+  // ── File prompt + validation ───────────────────────────────────────────────
+  // We need the original plaintext bytes to re-encrypt prior chunks (HARD RULE 1).
   let resumeFile = null;
   try {
     resumeFile = await _promptForResumeFile(record.fileName, record.fileSize, domRefs);
@@ -1284,142 +1306,194 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     return;
   }
 
+  // ── Probe session token before CPU work ────────────────────────────────────
+  // 401 = sessionToken expired (transfer window closed) or finalise already spent it.
+  // 409 = upload_complete (finalise already ran — stale IDB record).
+  // Both are terminal: clear the record and surface a clean message.
+  const remaining = totalChunks - resumeFrom;
+
+  if (remaining > 0) {
+    let probeRes;
+    try {
+      probeRes = await fetch(`${WORKER_URL}/upload/${record.uuid}/urls`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+        body:    JSON.stringify({ from: resumeFrom, count: Math.min(remaining, 256) }),
+      });
+    } catch (e) {
+      reportError('resume_urls_fetch', e.message?.slice(0, 80), `uuid:${record.uuid.slice(0, 8)}`);
+      progressDetail.textContent = 'Could not reach the server — check your connection and try again.';
+      return;
+    }
+
+    if (probeRes.status === 401 || probeRes.status === 409) {
+      await clearResumeState(record.uuid, reportError);
+      progressDetail.textContent = 'This transfer can no longer be resumed — please start a new upload.';
+      return;
+    }
+
+    if (!probeRes.ok) {
+      const txt = await probeRes.text().catch(() => '');
+      reportError('resume_urls_status', `HTTP ${probeRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
+      progressDetail.textContent = `Could not fetch upload URLs (HTTP ${probeRes.status}) — please try again.`;
+      return;
+    }
+
+    // Populate the URL map from the initial batch.
+    const initBody = await probeRes.json();
+    var urlMap    = new Map();
+    for (const entry of (initBody.urls || [])) urlMap.set(entry.index, entry.url);
+    const maxInitIdx = initBody.urls?.length > 0 ? Math.max(...initBody.urls.map(e => e.index)) : resumeFrom - 1;
+    var batchNext    = (maxInitIdx + 1 < totalChunks) ? maxInitIdx + 1 : null;
+  } else {
+    // remaining === 0: all chunks already in R2 but finalise was interrupted.
+    // Fall through to the re-hash loop (which covers all chunks) then finalise.
+    var urlMap    = new Map();
+    var batchNext = null;
+  }
+
+  // ── HARD RULE 1: re-encrypt prior chunks to rebuild ciphertext hashes ───────
+  // Exactly the same key + session IV + 4-byte BE uint32 AAD as startUpload.
+  // Hash the CIPHERTEXT — these are the Merkle leaves for /finalise.
+  // Parity is proven by the acceptance-gate root-equality check (not by inspection).
   const chunkHashes = [];
   setStage('Verifying prior chunks', 12);
-  for (let i = 0; i < resumeFromChunk; i++) {
+  for (let i = 0; i < resumeFrom; i++) {
     const raw = await _readChunk(chunks[i]);
     const aad = new Uint8Array(4);
     new DataView(aad.buffer).setUint32(0, i, false);
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: state.sessionIv, additionalData: aad }, state.sessionAesKey, raw);
+    let encrypted;
+    try {
+      encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
+        state.sessionAesKey, raw
+      );
+    } catch (e) {
+      reportError('resume_encrypt', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
+      throw e;
+    }
     let h;
     try { h = blake3Hash(new Uint8Array(encrypted)); } catch (e) {
-      reportError('resume_hash', e.message, `uuid:${state.uploadUUID.slice(0,8)} chunk:${i}`);
+      reportError('resume_hash', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
       throw e;
     }
     chunkHashes.push(h);
-    const pct = Math.round(((i + 1) / resumeFromChunk) * 10) + 12;
-    setProgress(pct, `Verifying chunk ${i + 1} of ${resumeFromChunk}…`);
+    const pct = Math.round(((i + 1) / Math.max(resumeFrom, 1)) * 10) + 12;
+    setProgress(pct, `Verifying chunk ${i + 1} of ${resumeFrom}…`);
   }
 
-  setStage(`Resuming — uploading from chunk ${resumeFromChunk + 1} of ${totalChunks}`, 22);
-  // Share-5: same retry budget as main upload loop — 6 attempts, 429-aware.
-  const CHUNK_RETRY_DELAYS = [2000, 5000, 15000, 30000, 60000];
-  const MAX_ATTEMPTS = CHUNK_RETRY_DELAYS.length + 1; // 6
+  // ── Upload remaining chunks to R2 via presigned URLs ──────────────────────
+  // Mirrors startUpload's direct-R2 loop exactly: encrypt → blake3Hash → PUT.
+  setStage(`Uploading from chunk ${resumeFrom + 1} of ${totalChunks}`, 22);
 
-  for (let i = resumeFromChunk; i < totalChunks; i++) {
+  for (let i = resumeFrom; i < totalChunks; i++) {
+    // Page URL batches on demand (> 256 remaining chunks)
+    if (!urlMap.has(i)) {
+      if (batchNext === null) throw new Error(`No presigned URL for chunk ${i} and no batch_next`);
+      const newUrls = await _fetchNextUrlBatch(record.uuid, sessionToken, batchNext, 256, reportError);
+      for (const entry of newUrls) urlMap.set(entry.index, entry.url);
+      const maxIdx = newUrls.length > 0 ? Math.max(...newUrls.map(e => e.index)) : batchNext - 1;
+      batchNext = (maxIdx + 1 < totalChunks) ? maxIdx + 1 : null;
+    }
+
+    const presignedUrl = urlMap.get(i);
+    if (!presignedUrl) throw new Error(`Presigned URL for chunk ${i} missing after batch fetch`);
+
     const raw = await _readChunk(chunks[i]);
     const aad = new Uint8Array(4);
     new DataView(aad.buffer).setUint32(0, i, false);
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: state.sessionIv, additionalData: aad }, state.sessionAesKey, raw);
+    let encrypted;
+    try {
+      encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
+        state.sessionAesKey, raw
+      );
+    } catch (e) {
+      reportError('resume_encrypt_chunk', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
+      throw e;
+    }
 
     let chunkHashHex;
-    try { chunkHashHex = blake3Hash(new Uint8Array(encrypted)); } catch (e) {
-      reportError('blake3_hash', e.message, `uuid:${state.uploadUUID.slice(0,8)} chunk:${i}`);
+    try {
+      chunkHashHex = blake3Hash(new Uint8Array(encrypted));
+    } catch (e) {
+      reportError('resume_blake3_hash', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
       throw e;
     }
     chunkHashes.push(chunkHashHex);
-    const rollingRoot = blake3Hash(new TextEncoder().encode(chunkHashes.join('')));
 
-    const headers = { 'Content-Type': 'application/octet-stream', 'X-Blake3-Chunk-Hash': chunkHashHex, 'X-Blake3-Root': rollingRoot };
-    if (i === resumeFromChunk) {
-      headers['X-Cashu-Credential']      = credential;
-      headers['X-Total-Chunks']          = String(totalChunks);
-      headers['X-Total-Bytes']           = String(record.fileSize);
-      headers['X-Tier']                  = issuedTier;
-      headers['X-Expiry-Timestamp']      = String(expiryTimestamp);
-      // D-1 invariant: constant placeholder on resume path too.
-      headers['X-File-Name']             = 'encrypted-payload';
-      headers['X-Credential-Commitment'] = commitment;
-      headers['X-Issued-Tier']           = issuedTier;
-      headers['X-Resume-From-Chunk']     = String(resumeFromChunk);
-    }
-
-    let lastErr; let uploaded = false;
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      try {
-        const res = await fetchWithTimeout(
-          `${WORKER_URL}/upload/${state.uploadUUID}/${String(i).padStart(4, '0')}`,
-          { method: 'PUT', headers, body: encrypted }, CHUNK_UPLOAD_TIMEOUT_MS
-        );
-
-        if (res.status === 409) {
-          reportError('resume_409', `chunk ${i} 409 — transfer already complete`, `uuid:${state.uploadUUID.slice(0,8)}`);
-          await clearResumeState(state.uploadUUID, reportError);
-          progressCard.classList.add('hidden');
-          if (resumeCard) resumeCard.classList.remove('hidden');
-          const resumeDetail = domRefs.resumeDetail;
-          if (resumeDetail) resumeDetail.textContent = 'This transfer was already completed — start a new upload.';
-          const resumeNote = document.getElementById('resume-note');
-          if (resumeNote) resumeNote.classList.add('hidden');
-          const resumeDiscardBtn409 = document.getElementById('resume-discard-btn');
-          if (resumeDiscardBtn409) { resumeDiscardBtn409.textContent = 'New upload'; resumeDiscardBtn409.addEventListener('click', () => location.reload(), { once: true }); }
-          return;
-        }
-
-        if (res.status === 429) {
-          const retryAfterSecs = parseInt(res.headers.get('Retry-After') ?? '0', 10);
-          const schedDelay = CHUNK_RETRY_DELAYS[attempt] ?? 60000;
-          const waitMs = retryAfterSecs > 0 ? retryAfterSecs * 1000 : schedDelay;
-          reportError('resume_chunk_429', `429 chunk ${i} attempt ${attempt} wait ${waitMs}ms`, `uuid:${state.uploadUUID.slice(0,8)}`);
-          lastErr = new Error(`HTTP 429`);
-          if (attempt < MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, waitMs));
-          continue;
-        }
-
-        if (res.status >= 400 && res.status < 500) {
-          const errText = await res.text();
-          reportError('resume_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${state.uploadUUID.slice(0,8)}`);
-          throw new Error(`Chunk ${i} upload failed (resume): ${errText}`);
-        }
-
-        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); }
-        else { uploaded = true; break; }
-      } catch (e) {
-        if (e.timedOut) {
-          lastErr = e;
-          reportError('resume_chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${state.uploadUUID.slice(0,8)}`);
-        } else if (e.message?.includes('upload failed (resume)')) {
-          throw e;
-        } else {
-          lastErr = e;
-          reportError('resume_chunk_fetch_err', `chunk ${i} fetch error attempt ${attempt}: ${e.message?.slice(0,80)}`, `uuid:${state.uploadUUID.slice(0,8)}`);
-        }
-      }
-      if (!uploaded && attempt < MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, CHUNK_RETRY_DELAYS[attempt] ?? 60000));
-    }
-    if (!uploaded) throw new Error(`Chunk ${i} failed after ${MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
+    await _putChunkDirect(presignedUrl, encrypted, i, record.uuid, reportError);
 
     writeChunkState({
-      uuid: state.uploadUUID, chunkIndex: i, totalChunks,
+      uuid: record.uuid, chunkIndex: i, totalChunks,
       fileName: record.fileName, fileSize: record.fileSize,
       keyHex: record.keyHex, ivHex: record.ivHex,
       tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
       sealNonceHex: sealNonceHex || undefined,
+      uploadMode: 'direct-r2', sessionToken,
+      sourceType: record.sourceType || 'file',
     }, reportError).catch(() => {});
 
-    const uploadedChunks  = i - resumeFromChunk + 1;
-    const remainingChunks = totalChunks - resumeFromChunk;
-    setProgress(Math.round(22 + (uploadedChunks / remainingChunks) * 73), `Resuming from chunk ${resumeFromChunk + 1} of ${totalChunks} — chunk ${i + 1} of ${totalChunks} sent`);
+    const uploadedChunks  = i - resumeFrom + 1;
+    const remainingChunks = totalChunks - resumeFrom || 1;
+    setProgress(Math.round(22 + (uploadedChunks / remainingChunks) * 71), `Chunk ${i + 1} of ${totalChunks} sent`);
   }
 
-  clearResumeState(state.uploadUUID, reportError).catch(() => {});
+  clearResumeState(record.uuid, reportError).catch(() => {});
 
-  setStage('Finalising', 98);
-  await new Promise(r => setTimeout(r, 80));
+  // ── Finalise — identical to 6-3d block in startUpload (TWO ROOTS: ciphertext only) ──
+  setStage('Finalising', 95);
+
+  const leaves = chunkHashes.map(hex => new Uint8Array(hexToBuf(hex)));
+  const { root: merkleRootBytes } = buildMerkleTree(leaves);
+  const finaliseBody = {
+    hashes:      leaves.map(_bytesToB64url),
+    merkle_root: _bytesToB64url(merkleRootBytes),
+    // tree_algo NOT sent — Worker pins 'rfc6962-unbalanced-blake3-v1'.
+  };
+
+  let finRes;
+  try {
+    finRes = await fetch(`${WORKER_URL}/upload/${record.uuid}/finalise`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+      body:    JSON.stringify(finaliseBody),
+    });
+  } catch (e) {
+    reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${record.uuid.slice(0, 8)}`);
+    progressDetail.textContent = 'Finalise failed (network) — transfer not complete. Please try again.';
+    return; // no share URL for an unfinalised transfer (HARD RULE 4 — IDB already cleared above)
+  }
+
+  if (finRes.status === 409) {
+    let missing = [];
+    try { missing = (await finRes.json()).missing || []; } catch { /* not JSON */ }
+    reportError('finalise_incomplete', `${missing.length} missing: ${missing.slice(0, 20).join(',')}`, `uuid:${record.uuid.slice(0, 8)}`);
+    progressDetail.textContent = `Finalise failed — ${missing.length} chunk(s) missing at storage. Transfer not complete.`;
+    return;
+  }
+
+  if (!finRes.ok) {
+    const txt = await finRes.text().catch(() => '');
+    reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 120)}`);
+    progressDetail.textContent = `Finalise failed (HTTP ${finRes.status}) — transfer not complete. Please try again.`;
+    return;
+  }
+
+  // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
   setStage('Done', 100);
   progressDetail.textContent = 'Transfer resumed and complete';
   await new Promise(r => setTimeout(r, 700));
   progressCard.classList.add('hidden');
 
-  // Fragment grammar v1 (D-1) on resume path.
-  const resumeKeyBytes = hexToBuf(record.keyHex);
+  // Fragment grammar v1 (D-1): real filename + key + IV in URL fragment only.
   const resumeFragmentBlob = assembleFragment({
-    keyBytes:  new Uint8Array(resumeKeyBytes),
+    keyBytes:  new Uint8Array(hexToBuf(record.keyHex)),
     ivBytes:   new Uint8Array(hexToBuf(record.ivHex)),
     filename:  record.fileName,
     sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
   });
-  const shareUrl = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${resumeFragmentBlob}`;
+  const shareUrl = `${location.origin}${location.pathname}?uuid=${record.uuid}#${resumeFragmentBlob}`;
   history.replaceState(null, '', location.pathname);
   showSharePanel(shareUrl, false);
 }
