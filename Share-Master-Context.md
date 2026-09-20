@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.3 | **Last updated:** Share-6-3d · 20 Sep 2026
+> **Version:** 9.5 | **Last updated:** Share-6 live-test · 21 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
 
 ---
@@ -144,12 +144,15 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 - DO NOT present `index.js` edits without full repo path — `refueler-mcp/src/index.js` ≠ `refueler-share/worker/src/index.js`
 - DO NOT claim "end-to-end file integrity" — chunk integrity only (BLAKE3 per ciphertext chunk)
 - DO NOT run `npm publish` in a session — dry-run only; Rajesh publishes manually
+- OPEN (6-6b): `frontend/crypto.js` `WORKER_URL` = `https://api.share.refueler.io` — the custom hostname whose consumer cutover is 6-6b (not done). Serves most requests but intermittently 503s (no CORS on a 503 → browser mislabels "CORS"); downloads hit it most. Fix: revert to `https://refueler-share.rt-fc4.workers.dev` (one line, staged) OR finish 6-6b.
+- DO NOT re-chase "finalise rejects the opaque session token (HMAC)" — false; `finalise.js` byte-compares vs KV like `handleUploadUrls`; fresh uploads finalise 200. Live-verified 20–21 Sep.
+- DO NOT re-chase "Worker omits CORS on `/download`" — false; `index.js` wraps every download response (+500 catch) in `addCors`, OPTIONS → 204+CORS. curl confirmed ACAO on the "failing" chunk. Browser-side "CORS/503" download failures were **Brave** + the 503 above; Safari downloads cleanly.
 
 ---
 
 ## Current state
 
-**Share-6-3d ✓ complete (20 Sep 2026) — first real end-to-end send (encrypt → R2 → finalise → shareable link → recipient card). Next: Share-6-4a (upload resume + FOLDER-RESUME, Sonnet)**
+**Share-6-5b ✓ complete (20 Sep 2026) — download-verify consumer half (recipient card reads `X-Integrity` + `integrity_failed` 409s); folder auto-discard + folder RAM cap (2 GiB + pre-zip guard) on `upload.js`. Live-verified 20–21 Sep: single-file resume, folder cap, passphrase download (Safari) all pass. Next: Share-6-6a (open: WORKER_URL/6-6b hostname — see Known broken).**
 
 | Block | Commit | Summary |
 |-------|--------|---------|
@@ -161,7 +164,11 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-6-3b ✓ | `ec37c17` | `worker/src/merkle.js` — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors (Opus). |
 | Share-6-3c ✓ | `frontend/merkle.js` | Browser Merkle twin — WASM-BLAKE3 parity, same pinned vectors, `selfTest()` gate (Opus). |
 | Share-6-3d ✓ | `050998b` · `f97b7d9` · `a00351a`/`b8906f9` | `upload.js` finalise wiring + first real end-to-end send. Worker CORS `X-Upload-Session` fix; `merkle.js` added to `sync-share.sh`. |
-| Share-6-4a → | next | Upload resume + FOLDER-RESUME discard fix (Sonnet). |
+| Share-6-4a ✓ | `⟨fill: frontend commit⟩` | Upload resume close: single-file resume (Sonnet, pre-session) + folder auto-discard in `checkResumeState` (Opus). |
+| Share-6-4b ✓ | `⟨fill: frontend commit⟩` | Folder RAM cap — `FOLDER_ZIP_CAP` = 2 GiB in `zipAndSelect` (post-zip) + pre-zip input-bytes guard; over-cap steers to a pre-zipped single file. |
+| Share-6-5a ✓ | `f31dc124` (deployed) | Worker download-verify server half (`handlers/download_verify.js`; `download.js` extracted). 19 unit pass. |
+| Share-6-5b ✓ | `8761e7c` · `75d15c5`/`2e8e632`/`237bdb3` | Download-verify consumer half — recipient card reads `X-Integrity` + `integrity_failed` 409s. `WORKER_URL` flip deferred to 6-6b. |
+| Share-6-6a → | next | (soak / orphan sweep — spec §9). |
 ---
 
 ## Roadmap

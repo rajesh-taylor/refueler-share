@@ -141,6 +141,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 const FOLDER_MAX_DEPTH  = 20;
 const FOLDER_WARN_FILES = 500;
 const FOLDER_MAX_FILES  = 2000;
+const FOLDER_ZIP_CAP    = 2 * 1024 ** 3; // 2 GiB — folder zips are held in RAM during upload (Share-6-spec §7)
 
 function sanitiseSegment(seg) {
   // eslint-disable-next-line no-control-regex
@@ -219,6 +220,18 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
   const zipName  = `${folderName}.zip`;
   const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
 
+  // Pre-zip RAM guard (Share-6-spec §7) — a folder is read wholly into memory to
+  // compress, so refuse BEFORE the read loop when the input already exceeds the
+  // cap. The post-zip check further down can't help here: an over-cap folder
+  // throws an allocation error mid-compression, before any blob exists, and the
+  // user sees only a generic "Compression failed". Guarding on input bytes lets
+  // the useful "zip it yourself" copy show instead.
+  if (totalBytes > FOLDER_ZIP_CAP) {
+    hideZipCard();
+    setDropMsg(`This folder is ${formatBytes(totalBytes)}. Folders are held in memory during upload and capped at 2 GB. Zip it yourself and lodge the .zip as a single file — single files stream from disk with no size limit beyond your tier ceiling.`);
+    return;
+  }
+
   showZipStage('Compressing', 0, `0 B / ${formatBytes(totalBytes)}`);
 
   const zipChunks = [];
@@ -270,6 +283,15 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
   });
 
   if (!zipBlob) return;
+
+  // Folder RAM cap (Share-6-spec §7) — the zip lives entirely in memory; refuse
+  // over-cap folders and steer the user to lodging a pre-zipped single file,
+  // which streams from disk with no in-RAM ceiling.
+  if (zipBlob.size > FOLDER_ZIP_CAP) {
+    hideZipCard();
+    setDropMsg(`This folder is ${formatBytes(zipBlob.size)} zipped. Folders are held in memory during upload and capped at 2 GB. Zip it yourself and lodge the .zip as a single file — single files stream from disk with no size limit beyond your tier ceiling.`);
+    return;
+  }
 
   showZipStage('Compressing', 100, `Ready — ${formatBytes(zipBlob.size)}`);
   await new Promise(r => setTimeout(r, 300));
@@ -1177,19 +1199,18 @@ export async function checkResumeState(domRefs, state, helpers) {
     return;
   }
 
-  // ── FOLDER-RESUME discard (Part C) ──────────────────────────────────────────
-  // Folder uploads are zipped into an in-memory File that never exists on disk.
-  // The file picker cannot re-select it on resume — discard cleanly rather than
-  // offering a resume that can never succeed.
+  // ── FOLDER-RESUME auto-discard (Part C) ─────────────────────────────────────
+  // A folder upload is zipped into an in-memory File that never touches disk, so
+  // the file picker cannot re-select it on resume. Discard immediately — a resume
+  // offer here could never succeed. Gate runs BEFORE the expiry check.
   if (record.sourceType === 'folder') {
     await clearResumeState(record.uuid, helpers.reportError);
-    const { resumeCard, resumeDetail } = domRefs;
-    if (resumeDetail) resumeDetail.textContent = "A folder transfer was interrupted \u2014 folders can't be resumed yet, please re-upload the folder.";
-    const resumeNote = document.getElementById('resume-note');
-    if (resumeNote) resumeNote.classList.add('hidden');
-    const resumeNoticeBtn = domRefs.resumeNoticeBtn;
+    const { resumeCard, resumeNoticeBtn } = domRefs;
+    if (resumeCard) resumeCard.classList.add('hidden');
     if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
-    if (resumeCard) resumeCard.classList.remove('hidden');
+    if (typeof helpers.setDropMsg === 'function') {
+      helpers.setDropMsg('Folder uploads cannot be resumed — please start a new upload.');
+    }
     return;
   }
 

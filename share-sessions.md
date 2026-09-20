@@ -505,6 +505,46 @@ the real merkle_root as of 6-3d — the "pending" display can show it; "verified
 Share-6-4a — upload resume + FOLDER-RESUME discard fix (Sonnet). BRIDGE unchanged (build session).
 Dash-3 leftovers (API & MCP tile sub-line, hh-* keep/strip) deferred to a dedicated end-of-block snag session.
 
+## Share-6-4a — upload resume close + folder auto-discard + folder RAM cap (6-4b) · 20 Sep 2026
+
+Opus · `refueler-share` frontend only (`frontend/upload.js`). Single-file resume was built
+pre-session (Sonnet — IDB re-credential, missing-index presign, lazy off-disk re-slice); this
+session closes 6-4a by adding the two folder guards the spec (§7) still owed, and folds in 6-4b.
+Three surgical edits, `node --check` clean. **No BRIDGE bump** (build session).
+
+**Folder auto-discard (`checkResumeState`, Part C).** A folder is zipped into an in-RAM `File`
+that never touches disk, so the picker can't re-select it on resume. New gate — placed **before**
+the expiry check — fires when `record.sourceType === 'folder'`: `clearResumeState`, hide the
+resume card, hide `resumeNoticeBtn`, and `setDropMsg("Folder uploads cannot be resumed — please
+start a new upload.")`, then `return`. Replaces an earlier draft block that *showed* a folder
+notice card (which also left an unwired Discard button visible); the new form matches §7's
+"folder-originated transfers auto-discard on resume" exactly. True folder-resume (re-zip + skip
+sent) remains explicitly out of scope. *Dependency to confirm in the live test: `setDropMsg` must
+be present in the helpers object `share.js` passes to `checkResumeState` — if the card hides but
+no message shows, that's the one wire to add.*
+
+**Folder RAM cap — 6-4b (`zipAndSelect`).** New named constant `FOLDER_ZIP_CAP = 2 * 1024 ** 3`
+(2 GiB) at the top of the folder-helpers section. After the zip Blob is produced, if
+`zipBlob.size > FOLDER_ZIP_CAP` → `hideZipCard()` + `setDropMsg("This folder is {size} zipped.
+Folders are held in memory during upload and capped at 2 GB. Zip it yourself and lodge the .zip
+as a single file — single files stream from disk with no size limit beyond your tier ceiling.")`
+and `return` **without** calling `handleFileSelection` (the over-cap zip never enters the upload
+path). `{size}` = `formatBytes(zipBlob.size)`. Bounds the pure-RAM-pressure residual risk that the
+lazy-slice design (§7) leaves on folders; single files are unaffected (they stream from disk).
+Founder-confirmed cap number: 2 GiB (Share-5 RAM failure appeared at ~1.1–1.3 GB).
+
+**Pre-zip input-bytes guard (added after live test).** Live test surfaced that the post-zip cap
+above fires too late: a 2.5 GB folder throws an allocation error *during* compression (the whole
+folder is read into RAM to zip), before any blob exists, so the user saw only a generic
+"Compression failed" — the cap never ran. Fix: a second guard at the top of `zipAndSelect`, on the
+summed input bytes (`entries.reduce(... e.file.size)`), before the read loop — over cap → same cap
+copy (worded on the pre-compression size, "zipped" dropped) + `return`. Now an over-cap folder gets
+the useful "zip it yourself" message, not a cryptic failure. `node --check` clean.
+
+**Live test (Frontend change checklist):** upload a folder, interrupt mid-upload, reload — confirm
+the auto-discard message shows and **no** resume button appears; then confirm an over-2 GB folder
+is refused with the cap copy and a normal single file still uploads.
+
 ## Share-6-5a — Worker download verification (B9-3 server half)
 
 **Deployed:** Version `f31dc124-376f-4368-8dcf-f9712c36368b` · 20 Sep 2026
@@ -533,3 +573,68 @@ Implements merkle-spec §3 steps 1–4 in the download handler, behind a per-man
 **BRIDGE:** no bump.
 
 *"Nothing stops this train — though it pauses for CORS, sync lists, and CLI defaults."*
+
+## Share-6-5b — download verification: recipient/consumer half (B9-3 client half)
+
+**Commits:** `8761e7c` (refueler-share) · `75d15c5` · `2e8e632` · `237bdb3` (refueler-io). **No BRIDGE bump.**
+
+The recipient side of 6-5a. Canonical download flow (`refueler-share/frontend/download.js`, commit
+`8761e7c`) consumes the server-half contract 6-5a emits — the `X-Integrity:
+ciphertext-storage-verified` header on a verified 200, and the `409 {"error":"integrity_failed"[,"chunk":i]}`
+shapes — and surfaces storage-verified state on the recipient card. Mirror + surface commits in
+`refueler-io` (`75d15c5` · `2e8e632` · `237bdb3`): `bin/sync-share.sh` mirror of the changed module,
+recipient-card / receipt rendering.
+
+**Honesty rails held (unchanged from 6-5a / B9-Opus):** wording stays "ciphertext storage
+verified" — no "end-to-end", no `verified:true`, no `blake3PlaintextRoot` anywhere on the client
+path. Plaintext-root verification is recipient-local only and permanently barred from any receipt.
+
+**Boundary notes:** consumer `WORKER_URL` is **not** flipped here — that cutover is 6-6b, so
+pre-6-3 transfers still take the legacy serve path. Collection-receipt `verified` field is wired
+with B9-4, not asserted from this surface. Range requests against a verified object return `416`
+(6-5a) — the client requests whole chunks, not ranges, on the verified path.
+
+*(Reconstructed from 6-5a's forward-references + the commit list — confirm the download.js/​card
+specifics match what actually shipped and adjust if needed.)*
+
+## Share-6 live-test diagnostics — 20–21 Sep 2026 (pre-6-6a)
+
+End-to-end live testing on refueler.io/share after 6-4a/6-4b. **No build block — findings only.**
+Sessions were worked out of numeric sequence (6-4a/6-5a ahead of 6-6b), which is the source of the
+one real open item below.
+
+**Verified working (live):**
+- **Single-file resume** — uploaded, pulled wifi mid-upload, wifi back, reloaded → resumed from the
+  correct chunk (`Uploading from chunk 2 of 5`) and completed. IDB resume path good.
+- **Folder auto-discard + folder RAM cap** — folder-origin resume auto-discards with the copy; the
+  2 GiB cap + the new pre-zip input-bytes guard steer over-cap folders to "zip it yourself." A
+  self-made `.zip` uploads fine as a single file (streams from disk). Folder-vs-zip asymmetry is
+  by design (§7): folders are RAM-bound, single files are not.
+- **Passphrase download** — small passphrase-protected file, unlock prompt → passphrase → download
+  completed, **in Safari**. `download.js` unlock gate is correctly wired (button → unlock screen →
+  `POST /auth/{uuid}` → token → chunks with `Authorization: Bearer`). **No bug in download.js.**
+
+**Browser note (do not re-chase):** the "CORS / ERR_FAILED" download failures were seen in **Brave**;
+the same link downloaded cleanly in **Safari**. Suspect Brave Shields / an extension blocking the
+cross-origin fetch to the Worker host. Test downloads in Safari (or Brave Shields-down) before
+assuming a code fault.
+
+**Open item — WORKER_URL on an unfinished hostname (real, carry to 6-6b):**
+`frontend/crypto.js` sets `WORKER_URL = 'https://api.share.refueler.io'` — the CF-for-SaaS custom
+hostname whose consumer cutover is **6-6b (not done)**. It serves most requests but intermittently
+returns **503** (no CORS header on a 503 → browser mislabels it "CORS"). Downloads (heavier verified
+path) hit it more than uploads. Fix options: (a) revert consumer to canonical
+`https://refueler-share.rt-fc4.workers.dev` — a one-line change, staged but **not placed**; or
+(b) finish the 6-6b hostname cutover. Not urgent (transient), but it is the true cause of the
+scary-looking download errors.
+
+**Dead ends ruled out (do not re-investigate):**
+- ❌ "finalise rejects the new opaque session token (HMAC mismatch)" — **false.** `finalise.js`
+  byte-compares the token vs KV, identical to `handleUploadUrls`; fresh uploads finalise 200. The
+  one resume-finalise 401 was a transient on the flaky hostname, not a code bug.
+- ❌ "the Worker doesn't send CORS on `/download`" — **false.** `index.js` wraps every download
+  response (incl. errors + the 500 catch) in `addCors`; OPTIONS preflight returns 204 + CORS. curl
+  confirmed `access-control-allow-origin` on the exact "failing" chunk.
+
+**Parked, safe:** folder pre-zip guard (`upload.js`) placed + synced, commit pending. `crypto.js`
+WORKER_URL revert staged, not placed. Progress-bar smoothing (cosmetic) — after end-to-end is solid.
