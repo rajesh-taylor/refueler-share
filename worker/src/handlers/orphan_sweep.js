@@ -15,18 +15,30 @@
  *   sidecar_only  — only {uuid}/hashes or {uuid}/manifest.json present; no
  *                   numbered chunks (e.g. upload aborted after initiate)
  *
- * This is a DRY-RUN endpoint — it NEVER deletes anything. Deletion is Share-6-6b
- * scope. The report is safe to run at any time.
+ * Share-6-6b: adds ?dry_run param. When dry_run=false, deletes the R2 objects
+ * for:
+ *   - stale transfers (incomplete AND older than stale_hours)
+ *   - sidecar_only transfers (manifest/hashes but no chunks)
+ *
+ * orphan_chunks are deliberately NEVER deleted by this endpoint — a presigned-PUT
+ * transfer may still be in flight when the sweep runs. Chunks without a manifest
+ * indicate the /initiate request may have been lost in transit; deleting them
+ * would corrupt an in-progress upload. Schedule a dedicated orphan-chunk TTL
+ * sweep once direct-R2 upload history is mature enough to set a safe threshold.
+ *
+ * complete transfers are never touched.
  *
  * Query params:
- *   ?stale_hours=N   — how old (in hours) an incomplete transfer must be before
- *                      it is flagged as stale vs in-flight (default: 24).
- *   ?limit=N         — max UUIDs to inspect (default: 200, max: 500). Applied
- *                      after grouping; the R2 list() pages the full bucket.
+ *   ?dry_run=false — actually delete stale + sidecar_only objects (default: true)
+ *   ?stale_hours=N — how old (in hours) an incomplete transfer must be before
+ *                    it is flagged as stale vs in-flight (default: 24).
+ *   ?limit=N       — max UUIDs to inspect (default: 200, max: 500). Applied
+ *                    after grouping; the R2 list() pages the full bucket.
  *
  * Response shape (200):
  * {
  *   swept_at:         number,   // Unix timestamp
+ *   dry_run:          boolean,  // whether deletion was suppressed
  *   objects_scanned:  number,   // total R2 objects seen
  *   uuids_found:      number,   // distinct UUID prefixes
  *   limit_applied:    number,   // effective ?limit
@@ -34,14 +46,15 @@
  *   summary: {
  *     complete:      number,
  *     incomplete:    number,    // in-flight or stalled (not yet stale)
- *     stale:         number,    // incomplete AND older than stale_hours
+ *     stale:         number,
  *     orphan_chunks: number,
  *     sidecar_only:  number,
+ *     deleted_objects: number,  // 0 on dry_run=true
  *   },
  *   stale: [                    // incomplete transfers older than stale_hours
  *     { uuid, created_at, chunk_count, expiry_timestamp }, ...
  *   ],
- *   orphan_chunks: [            // chunks with no manifest
+ *   orphan_chunks: [            // chunks with no manifest (never deleted)
  *     { uuid, chunk_count }, ...
  *   ],
  *   sidecar_only: [             // manifest/hashes but no chunks
@@ -50,13 +63,14 @@
  * }
  *
  * Notes:
- *   - complete transfers are counted but NOT listed (may be large; dashboard
- *     consumption of this endpoint drives the design).
+ *   - complete transfers are counted but NOT listed (may be large).
  *   - Non-UUID prefixes (e.g. bare keys with no slash) are counted in
  *     objects_scanned but silently ignored in grouping.
- *   - The sweep uses list() only — no manifest reads for complete transfers
- *     (we check presence of manifest.json key). For stale/orphan candidates,
- *     the manifest IS read to get created_at and upload_complete.
+ *   - The sweep uses list() only for classification, then reads manifests only
+ *     for stale/orphan candidates.
+ *   - Deletion is best-effort per object. A failed individual delete is logged
+ *     but does not abort the sweep — partial deletion is reported in the
+ *     deleted_objects count.
  *   - Admin-key auth is checked before any R2 access.
  */
 
@@ -80,6 +94,7 @@ export async function handleOrphanSweep(request, env) {
 
   // ── Query params ────────────────────────────────────────────────────────────
   const url        = new URL(request.url);
+  const dryRun     = url.searchParams.get('dry_run') !== 'false'; // default true — must opt in to deletion
   const staleHours = Math.max(1, parseInt(url.searchParams.get('stale_hours') ?? String(ORPHAN_GRACE_DEFAULT_HOURS), 10) || ORPHAN_GRACE_DEFAULT_HOURS);
   const limitParam = parseInt(url.searchParams.get('limit') ?? String(SWEEP_LIMIT_DEFAULT), 10) || SWEEP_LIMIT_DEFAULT;
   const limit      = Math.min(Math.max(1, limitParam), SWEEP_LIMIT_MAX);
@@ -89,10 +104,6 @@ export async function handleOrphanSweep(request, env) {
   //
   // Each UUID prefix accumulates a lightweight descriptor:
   //   { chunks: Set<string>, hasManifest: bool, hasHashes: bool }
-  //
-  // We collect chunk segments matching /^\d{4}$/ and presence of the two
-  // non-chunk objects (manifest.json, hashes). No other keys exist under a
-  // valid UUID prefix in the current schema.
   const byUuid = new Map(); // uuid → { chunks: Set, hasManifest, hasHashes }
   let objectsScanned = 0;
   let cursor;
@@ -110,10 +121,10 @@ export async function handleOrphanSweep(request, env) {
     for (const obj of page.objects) {
       objectsScanned++;
       const m = UUID_PREFIX_RE.exec(obj.key);
-      if (!m) continue; // bare key or non-UUID prefix — skip
+      if (!m) continue;
 
       const uuid    = m[1].toLowerCase();
-      const segment = obj.key.slice(uuid.length + 1); // strip "uuid/"
+      const segment = obj.key.slice(uuid.length + 1);
 
       if (!byUuid.has(uuid)) {
         byUuid.set(uuid, { chunks: new Set(), hasManifest: false, hasHashes: false });
@@ -127,74 +138,56 @@ export async function handleOrphanSweep(request, env) {
       } else if (segment === 'hashes') {
         entry.hasHashes = true;
       }
-      // Any other segment (e.g. future schema additions) is silently ignored.
     }
 
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
   // ── Phase 2: classify each UUID ─────────────────────────────────────────────
-  //
-  // For UUIDs with a manifest, read the manifest to check upload_complete +
-  // created_at. We only read manifests for non-complete candidates (orphan or
-  // incomplete) — complete transfers are classified by list() signal alone.
-  //
-  // Manifest reads are I/O — cap to `limit` UUIDs to bound latency. UUIDs
-  // beyond the limit are not classified and not returned in any list; the
-  // summary counts only what was classified.
   const uuids         = [...byUuid.keys()];
   const uuidsFound    = uuids.length;
   const uuidsToCheck  = uuids.slice(0, limit);
 
   const result = {
     complete:      0,
-    incomplete:    [],  // in-flight
-    stale:         [],  // incomplete AND older than stale_hours
-    orphan_chunks: [],  // chunks, no manifest
-    sidecar_only:  [],  // manifest/hashes, no chunks
+    incomplete:    [],
+    stale:         [],
+    orphan_chunks: [],
+    sidecar_only:  [],
   };
 
   for (const uuid of uuidsToCheck) {
     const entry = byUuid.get(uuid);
     const hasChunks = entry.chunks.size > 0;
 
-    // ── No manifest present ────────────────────────────────────────────────
     if (!entry.hasManifest) {
       if (hasChunks) {
-        // Chunks exist but no manifest — orphan chunk objects.
         result.orphan_chunks.push({ uuid, chunk_count: entry.chunks.size });
       } else if (entry.hasHashes) {
-        // Hashes sidecar with no manifest and no chunks — unusual; classify.
         result.sidecar_only.push({ uuid });
       }
-      // else: nothing meaningful (should not occur — no objects would mean
-      // the UUID wouldn't be in byUuid). Skip silently.
       continue;
     }
 
-    // ── Manifest present — read it ─────────────────────────────────────────
     let manifest = null;
     try {
       const obj = await env.BUCKET.get(`${uuid}/manifest.json`);
       if (obj) manifest = await obj.json();
     } catch (e) {
       console.error(`orphan_sweep: manifest read failed for ${uuid}:`, e);
-      // Count as unknown — skip rather than misclassify.
       continue;
     }
 
-    if (!manifest) continue; // race: disappeared between list and get
+    if (!manifest) continue;
 
     if (manifest.upload_complete === true) {
       result.complete++;
       continue;
     }
 
-    // ── Incomplete: manifest present but upload_complete !== true ──────────
     const createdAt = manifest.created_at ?? manifest.initiated_at ?? null;
 
     if (!hasChunks && !entry.hasHashes) {
-      // Manifest only — no chunks, no sidecar. Initiated but nothing uploaded.
       result.sidecar_only.push({ uuid });
       continue;
     }
@@ -214,18 +207,98 @@ export async function handleOrphanSweep(request, env) {
     }
   }
 
+  // ── Phase 3: deletion (dry_run=false only) ─────────────────────────────────
+  //
+  // Deletes R2 objects for stale + sidecar_only transfers only.
+  // orphan_chunks: deliberately skipped — chunks may still be in flight via a
+  //   presigned PUT. Safe to delete only once a manifest-based TTL is established.
+  // complete: never touched.
+  //
+  // Deletion is per-object, best-effort. A single delete failure is logged and
+  // counted but does not abort the sweep.
+  let deletedObjects = 0;
+
+  if (!dryRun) {
+    // ── Delete stale transfers (manifest + optional chunks + optional hashes) ──
+    for (const entry of result.stale) {
+      const { uuid } = entry;
+      const uuidEntry = byUuid.get(uuid);
+
+      // Chunks
+      for (const chunkSeg of (uuidEntry?.chunks ?? [])) {
+        const key = `${uuid}/${chunkSeg}`;
+        try {
+          await env.BUCKET.delete(key);
+          deletedObjects++;
+        } catch (e) {
+          console.error(`orphan_sweep: delete failed for ${key}:`, e);
+        }
+      }
+
+      // Hashes sidecar
+      if (uuidEntry?.hasHashes) {
+        const key = `${uuid}/hashes`;
+        try {
+          await env.BUCKET.delete(key);
+          deletedObjects++;
+        } catch (e) {
+          console.error(`orphan_sweep: delete failed for ${key}:`, e);
+        }
+      }
+
+      // Manifest — delete last so a partial failure leaves the manifest in place
+      // for the next sweep run to re-classify rather than producing orphan_chunks.
+      const manifestKey = `${uuid}/manifest.json`;
+      try {
+        await env.BUCKET.delete(manifestKey);
+        deletedObjects++;
+      } catch (e) {
+        console.error(`orphan_sweep: delete failed for ${manifestKey}:`, e);
+      }
+    }
+
+    // ── Delete sidecar_only transfers (manifest and/or hashes, no chunks) ────
+    // These are safe to delete: no chunks means no in-flight presigned PUTs.
+    for (const entry of result.sidecar_only) {
+      const { uuid } = entry;
+      const uuidEntry = byUuid.get(uuid);
+
+      if (uuidEntry?.hasManifest) {
+        const key = `${uuid}/manifest.json`;
+        try {
+          await env.BUCKET.delete(key);
+          deletedObjects++;
+        } catch (e) {
+          console.error(`orphan_sweep: delete failed for ${key}:`, e);
+        }
+      }
+
+      if (uuidEntry?.hasHashes) {
+        const key = `${uuid}/hashes`;
+        try {
+          await env.BUCKET.delete(key);
+          deletedObjects++;
+        } catch (e) {
+          console.error(`orphan_sweep: delete failed for ${key}:`, e);
+        }
+      }
+    }
+  }
+
   return json({
     swept_at:        Math.floor(Date.now() / 1000),
+    dry_run:         dryRun,
     objects_scanned: objectsScanned,
     uuids_found:     uuidsFound,
     limit_applied:   limit,
     stale_hours:     staleHours,
     summary: {
-      complete:      result.complete,
-      incomplete:    result.incomplete.length,
-      stale:         result.stale.length,
-      orphan_chunks: result.orphan_chunks.length,
-      sidecar_only:  result.sidecar_only.length,
+      complete:        result.complete,
+      incomplete:      result.incomplete.length,
+      stale:           result.stale.length,
+      orphan_chunks:   result.orphan_chunks.length,
+      sidecar_only:    result.sidecar_only.length,
+      deleted_objects: deletedObjects,
     },
     stale:         result.stale,
     orphan_chunks: result.orphan_chunks,

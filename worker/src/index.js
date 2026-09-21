@@ -291,26 +291,10 @@ export default {
         });
       }
 
-      const uploadMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/(\d{4})$/i);
-      if (request.method === 'PUT' && uploadMatch) {
-        // Rate limit: 120 requests / 60s per IP — generous for legitimate chunked uploads, blocks bulk abuse
-        const ip = getClientIp(request);
-        const rl = await checkRateLimit(env, ip, 'upload', 120, 60);
-        if (rl.limited) {
-          logEvent(env, { endpoint: 'upload', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
-          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
-        }
-        const chunkIndex  = parseInt(uploadMatch[2], 10);
-        const tier        = request.headers.get('X-Tier') ?? 'free';
-        const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
-        const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
-        return timed('upload', () => handleUpload(request, env, ctx, uploadMatch[1], chunkIndex).then(r => addCors(r, request)), {
-          tier, chunkIndex,
-          totalChunks:  chunkIndex === 0 ? totalChunks : 0,
-          totalBytes:   chunkIndex === 0 ? totalBytes  : 0,
-          httpProtocol: request.cf?.httpProtocol ?? '',
-        });
-      }
+      // ── Share-6-6b: PUT /upload/:uuid/:chunk RETIRED ─────────────────────────
+      // Legacy Worker-relay chunk path removed. All uploads use the direct-to-R2
+      // presigned-URL path (/upload/:uuid/initiate → presigned PUT → /finalise).
+      // Any client hitting this path is pre-6-2 and must re-upload.
 
       // ── Share-6-1: initiate direct-to-R2 upload — POST /upload/:uuid/initiate ──
       // Additive. The legacy PUT /upload/:uuid/:chunk path above is untouched and
@@ -1393,6 +1377,7 @@ async function handleCredentialIssue(request, env) {
 //   - After upload_complete (subsequent chunks): receipt emission already
 //     happened at chunk 0 — no re-emit needed here.
 // ─────────────────────────────────────────────────────────────────────────────
+// Share-6-6b: handleUpload is DEAD CODE — route retired above. Kept for reference; remove in a future cleanup pass.
 async function handleUpload(request, env, ctx, uuid, chunkIndex) {
   // ── UUID format validation (S41) ──────────────────────────────────────────
   if (!UUID_RE.test(uuid)) {

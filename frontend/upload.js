@@ -9,6 +9,9 @@
 //
 // Receives shared mutable state object from share.js — mutations are visible
 // to all holders (sessionAesKey, sessionIv, uploadUUID set here; read by download.js).
+//
+// Share-6-6b: legacy Worker-relay path (PUT /upload/:uuid/:chunk) removed.
+// Direct-to-R2 is the only upload path. USE_DIRECT_R2 flag retired.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -514,9 +517,6 @@ function _uploadBtnDisabled(state, domRefs) {
   return !state.selectedFile || needsPassphrase || !state.turnstileToken;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// enterUploadMode — wire all upload-side events
-// ─────────────────────────────────────────────────────────────────────────────
 export function enterUploadMode(domRefs, state, helpers) {
   const {
     dropZone, fileInput, folderInput, folderBtn, passphraseToggle,
@@ -694,14 +694,6 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Share-6-2: direct-to-R2 feature flag.
-// false = legacy Worker-relay path (unchanged). true = presigned-PUT path.
-// Flip to true at Share-6-6 cutover ONLY after Share-6-5 (B9-3 download verify) is green.
-// DO NOT flip before Share-6-5 — no download-time integrity check exists yet.
-// ─────────────────────────────────────────────────────────────────────────────
-const USE_DIRECT_R2 = true; // Share-6-2: enabled for dev smoke
-
-// ─────────────────────────────────────────────────────────────────────────────
 // _fetchNextUrlBatch — POST /upload/{uuid}/urls {from,count}, session-token authed.
 // Never re-verifies or re-spends Cashu (spec §6 / do-not-retry §10).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -785,9 +777,6 @@ async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, r
   throw new Error(`Chunk ${chunkIndex} direct PUT failed after ${_DIRECT_MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// startUpload — main upload state machine
-// ─────────────────────────────────────────────────────────────────────────────
 async function startUpload(domRefs, state, helpers, transferOpts) {
   if (!state.selectedFile) return;
   const {
@@ -868,8 +857,8 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   // Streaming BLAKE3 plaintext root — incremental update per chunk (TH-2)
   const blake3PlaintextHash = wantsPermanentRecord ? blake3CreateHash() : null;
 
-  // ── Share-6-2: direct-to-R2 path ──────────────────────────────────────────
-  if (USE_DIRECT_R2) {
+  // ── Direct-to-R2 upload path (Share-6-6b: only path) ─────────────────────
+
     setStage('Initiating', 15);
 
     // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
@@ -1028,167 +1017,9 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     history.replaceState(null, '', location.pathname);
     showSharePanel(shareUrl2, !!p2shHashHex);
     return;
-  }
 
-  // ── Legacy Worker-relay path (unchanged) ──────────────────────────────────
-  // Share-5: retry budget raised to 6 attempts (5 retries).
-  // Delays: 2s, 5s, 15s, 30s, 60s — long enough to clear a CF per-minute window.
-  // 429 and network-level failures (TypeError / ERR_FAILED from edge-generated
-  // responses with no CORS header) are retryable. Only hard 4xx from the Worker
-  // (which carry CORS headers and a JSON body) are immediately fatal.
-  const CHUNK_RETRY_DELAYS = [2000, 5000, 15000, 30000, 60000];
-  const MAX_ATTEMPTS = CHUNK_RETRY_DELAYS.length + 1; // 6
-
-  for (let i = 0; i < totalChunks; i++) {
-    const raw = await _readChunk(chunks[i]);
-
-    if (blake3PlaintextHash) {
-      blake3PlaintextHash.update(new Uint8Array(raw));
-    }
-
-    const aad = new Uint8Array(4);
-    new DataView(aad.buffer).setUint32(0, i, false);
-    const encrypted = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
-      state.sessionAesKey, raw
-    );
-
-    let chunkHashHex;
-    try {
-      chunkHashHex = blake3Hash(new Uint8Array(encrypted));
-    } catch (e) {
-      reportError('blake3_hash', e.message, `uuid:${state.uploadUUID.slice(0,8)} chunk:${i}`);
-      throw e;
-    }
-    chunkHashes.push(chunkHashHex);
-    const rollingRoot = blake3Hash(new TextEncoder().encode(chunkHashes.join('')));
-
-    const headers = {
-      'Content-Type': 'application/octet-stream',
-      'X-Blake3-Chunk-Hash': chunkHashHex,
-      'X-Blake3-Root': rollingRoot,
-    };
-    if (i === 0) {
-      headers['X-Cashu-Credential']      = credential;
-      headers['X-Total-Chunks']          = String(totalChunks);
-      headers['X-Total-Bytes']           = String(state.selectedFile.size);
-      headers['X-Tier']                  = 'free';
-      headers['X-Expiry-Timestamp']      = String(expiryTimestamp);
-      // D-1 invariant: constant placeholder — real filename travels in the URL fragment only.
-      // The Worker never sees the filename; it cannot read it under compulsion.
-      headers['X-File-Name']             = 'encrypted-payload';
-      headers['X-Credential-Commitment'] = commitment;
-      headers['X-Issued-Tier']           = issuedTier;
-      if (p2shHashHex)          headers['X-P2SH-Secret-Hash']       = p2shHashHex;
-      if (destroyAfterDownload) headers['X-Destroy-After-Download'] = destroyAfterDownload;
-      if (availableFromUnix)    headers['X-Available-From']         = String(availableFromUnix);
-      if (availableUntilUnix)   headers['X-Available-Until']        = String(availableUntilUnix);
-    }
-
-    let lastErr;
-    let uploaded = false;
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      try {
-        const res = await fetchWithTimeout(
-          `${WORKER_URL}/upload/${state.uploadUUID}/${String(i).padStart(4, '0')}`,
-          { method: 'PUT', headers, body: encrypted },
-          CHUNK_UPLOAD_TIMEOUT_MS
-        );
-
-        if (res.status === 429) {
-          // Rate-limited — honour Retry-After if present, otherwise use scheduled delay.
-          const retryAfterSecs = parseInt(res.headers.get('Retry-After') ?? '0', 10);
-          const schedDelay = CHUNK_RETRY_DELAYS[attempt] ?? 60000;
-          const waitMs = retryAfterSecs > 0 ? retryAfterSecs * 1000 : schedDelay;
-          reportError('upload_chunk_429', `429 chunk ${i} attempt ${attempt} wait ${waitMs}ms`, `uuid:${state.uploadUUID.slice(0,8)}`);
-          lastErr = new Error(`HTTP 429`);
-          if (attempt < MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, waitMs));
-          continue;
-        }
-
-        // Hard Worker errors (CORS headers present, JSON body) — fatal, do not retry.
-        // 409 = credential already spent; 401/400/413/415 = logic errors.
-        if (res.status >= 400 && res.status < 500) {
-          const errText = await res.text();
-          reportError('upload_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${state.uploadUUID.slice(0,8)} chunk:${i} text:${errText.slice(0,100)}`);
-          throw new Error(`Chunk ${i} upload failed: ${errText}`);
-        }
-
-        if (!res.ok) {
-          lastErr = new Error(`HTTP ${res.status}`);
-        } else {
-          uploaded = true;
-          break;
-        }
-      } catch (e) {
-        if (e.message?.startsWith('Chunk') && !e.timedOut) {
-          // Fatal Worker error propagated from above — do not retry.
-          throw e;
-        }
-        // TypeError (net::ERR_FAILED — edge-generated response with no CORS header, or
-        // network interruption) and timeout are both retryable.
-        lastErr = e;
-        if (e.timedOut) {
-          reportError('chunk_timeout', `chunk ${i} timed out attempt ${attempt}`, `uuid:${state.uploadUUID.slice(0,8)}`);
-        } else {
-          reportError('chunk_fetch_err', `chunk ${i} fetch error attempt ${attempt}: ${e.message?.slice(0,80)}`, `uuid:${state.uploadUUID.slice(0,8)}`);
-        }
-      }
-      if (!uploaded && attempt < MAX_ATTEMPTS - 1) {
-        const delay = CHUNK_RETRY_DELAYS[attempt] ?? 60000;
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-    if (!uploaded) throw new Error(`Chunk ${i} failed after ${MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
-
-    writeChunkState({
-      uuid: state.uploadUUID, chunkIndex: i, totalChunks,
-      fileName: state.selectedFile.name, fileSize: state.selectedFile.size,
-      keyHex, ivHex, tier: 'free', expiryTimestamp, timestamp: Date.now(),
-      sealNonceHex: sealNonceHex || undefined,
-    }, reportError).catch(() => {});
-
-    setProgress(Math.round(((i + 1) / totalChunks) * 80) + 15, `${i + 1} / ${totalChunks} chunks`);
-  }
-
-  clearResumeState(state.uploadUUID, reportError).catch(() => {});
-
-  // TH-2: run permanent record pipeline after final ACK
-  let permanentRecordOk = false;
-  if (wantsPermanentRecord && blake3PlaintextHash && sealNonceHex) {
-    setStage('Anchoring to Bitcoin', 97);
-    const blake3PlaintextRoot = blake3PlaintextHash.digest('hex');
-    const prResult = await runPermanentRecord(state.uploadUUID, blake3PlaintextRoot, sealNonceHex, state.sessionAesKey);
-    permanentRecordOk = prResult.ok;
-    if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${state.uploadUUID.slice(0,8)}`);
-  }
-
-  setStage('Finalising', 98);
-  await new Promise(r => setTimeout(r, 80));
-  setStage('Done', 100);
-  progressDetail.textContent = wantsPermanentRecord
-    ? (permanentRecordOk ? 'Transfer complete — date seal submitted ✓' : 'Transfer complete — date seal failed (transfer still available)')
-    : 'Transfer complete';
-  await new Promise(r => setTimeout(r, 700));
-  progressCard.classList.add('hidden');
-
-  // Fragment grammar v1 (D-1): base64url-JSON { v:1, k:<key>, n:<real-filename>, s:<seal_nonce> }
-  // Real filename travels here only — the Worker never sees it.
-  const keyBytesRaw = new Uint8Array(await crypto.subtle.exportKey('raw', state.sessionAesKey));
-  const fragmentBlob = assembleFragment({
-    keyBytes:  keyBytesRaw,
-    ivBytes:   new Uint8Array(state.sessionIv),
-    filename:  state.selectedFile.name,
-    sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
-  });
-  const shareUrl = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob}`;
-  history.replaceState(null, '', location.pathname);
-  showSharePanel(shareUrl, !!p2shHashHex);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// checkResumeState — called on page load before enterUploadMode
-// ─────────────────────────────────────────────────────────────────────────────
 export async function checkResumeState(domRefs, state, helpers) {
   const record = await readResumeState();
   if (!record) return;
