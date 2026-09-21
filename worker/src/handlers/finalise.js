@@ -4,13 +4,16 @@
  *
  * Share-6-3a handler, extracted from index.js unchanged (Share-Dash-2 fold),
  * then extended with the Execution Dock enrichment step (§6 below).
+ * Share-6-6a: §2 HEAD-per-chunk completeness replaced with list()-based sweep.
  *
  * Session-token authed (NOT a Cashu re-spend). The Worker reads no chunk bodies.
- * It confirms every {uuid}/{iiii} object exists (HEAD), writes the {uuid}/hashes
- * sidecar (raw 32-byte concat, chunk order — merkle-spec §1/§2), records the
- * browser-supplied ciphertext-chunk merkle_root + tree_algo, flips
- * upload_complete:true, spends the session token, and enriches the Execution
- * Dock KV entry with size_bytes · rail · merkle_root.
+ * It confirms every {uuid}/{iiii} object exists via R2 list() (Share-6-6a —
+ * replaces per-chunk HEAD which hit the Workers subrequest ceiling at ~1000
+ * chunks / ~30 GB), writes the {uuid}/hashes sidecar (raw 32-byte concat,
+ * chunk order — merkle-spec §1/§2), records the browser-supplied
+ * ciphertext-chunk merkle_root + tree_algo, flips upload_complete:true,
+ * spends the session token, and enriches the Execution Dock KV entry with
+ * size_bytes · rail · merkle_root.
  *
  * The root is TRUSTED here and RECONSTRUCTED at download (Share-6-5 / B9-3):
  * finalise writes, download verifies. The sidecar is written here and MUST
@@ -24,6 +27,15 @@
  * — Worker-verifiable, storage-integrity. The plaintext blake3PlaintextRoot is
  * permanently barred from the Worker, KV, and every receipt (invariant). Never
  * store it here.
+ *
+ * Share-6-6a — completeness check change:
+ *   OLD: N individual env.BUCKET.head() calls in windows of 64 concurrently.
+ *        Approaches the ~1000 Workers subrequest ceiling for Chartered transfers
+ *        (250 GB = 8,000 chunks). Each HEAD is one subrequest.
+ *   NEW: env.BUCKET.list({ prefix: uuid + '/', limit: 1000 }) paged until
+ *        list_complete. One R2 API call per 1000 objects — 8,000-chunk transfer
+ *        needs 8 list() calls rather than 8,000 HEAD subrequests. The chunk
+ *        key set is built locally; missing indices computed in O(N).
  */
 
 import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
@@ -94,6 +106,52 @@ function railForTier(tier) {
   }
 }
 
+// ── Share-6-6a: list()-based completeness check ──────────────────────────────
+//
+// Pages through all R2 objects under {uuid}/ and builds a Set of chunk keys
+// matching the four-digit pattern (e.g. "1eea013f-.../0000"). Non-chunk objects
+// (manifest.json, hashes) are present under the same prefix but never match
+// /^\d{4}$/ on the final path segment, so they are naturally excluded from the
+// Set without an explicit filter step.
+//
+// Returns: { missing: string[] } where each element is the 4-digit chunk index
+// of a missing object (e.g. "0001"). Empty array means all chunks are present.
+//
+// Subrequest cost:
+//   ceil(chunkCount / 1000) list() calls vs chunkCount HEAD subrequests.
+//   250 GB (8,000 chunks): 8 list() calls vs 8,000 HEADs.
+//   4 GB (128 chunks):     1 list() call  vs 128 HEADs.
+//
+// Error handling: a list() failure throws; the caller (handleFinalise) lets it
+// propagate to the outer 500 handler — same behaviour as a failed HEAD batch.
+async function listBasedCompleteness(bucket, uuid, chunkCount) {
+  const prefix    = `${uuid}/`;
+  const chunkKeys = new Set();
+  let cursor;
+
+  do {
+    const opts = cursor ? { prefix, limit: 1000, cursor } : { prefix, limit: 1000 };
+    const page  = await bucket.list(opts);
+
+    for (const obj of page.objects) {
+      // Extract the final segment after the UUID prefix (e.g. "0000", "hashes").
+      const segment = obj.key.slice(prefix.length);
+      // Chunk keys are exactly 4 decimal digits — manifest.json and hashes excluded.
+      if (/^\d{4}$/.test(segment)) chunkKeys.add(segment);
+    }
+
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  const missing = [];
+  for (let i = 0; i < chunkCount; i++) {
+    const seg = String(i).padStart(4, '0');
+    if (!chunkKeys.has(seg)) missing.push(seg);
+  }
+
+  return missing;
+}
+
 export async function handleFinalise(request, env, uuid) {
   if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
 
@@ -120,21 +178,18 @@ export async function handleFinalise(request, env, uuid) {
     return err(502, 'Manifest is missing a valid chunk count');
   }
 
-  // ── 2. HEAD completeness — every {uuid}/{iiii} must exist ──────────────────
-  // No bodies read. Collect ALL missing indices, then 409 with the full list —
-  // never stop at the first gap. Bounded concurrency keeps us clear of the
-  // connection cap; see the large-N note in the session hand-off.
-  const HEAD_WINDOW = 64;
-  const missing = [];
-  for (let start = 0; start < chunkCount; start += HEAD_WINDOW) {
-    const end = Math.min(start + HEAD_WINDOW, chunkCount);
-    const window = [];
-    for (let i = start; i < end; i++) window.push(i);
-    const results = await Promise.all(window.map(async (i) => {
-      const obj = await env.BUCKET.head(`${uuid}/${String(i).padStart(4, '0')}`);
-      return obj === null ? i : -1;
-    }));
-    for (const i of results) if (i !== -1) missing.push(String(i).padStart(4, '0'));
+  // ── 2. list()-based completeness — every {uuid}/{iiii} must exist ──────────
+  // Share-6-6a: replaces the per-chunk HEAD window loop (64 concurrent HEADs
+  // × N windows). list() pages up to 1000 objects per call — far cheaper on
+  // subrequest budget and removes the ~1000-chunk ceiling for large transfers.
+  // All missing indices are collected before returning 409 (same contract as
+  // the old HEAD sweep — no stop-at-first behaviour).
+  let missing;
+  try {
+    missing = await listBasedCompleteness(env.BUCKET, uuid, chunkCount);
+  } catch (e) {
+    console.error('list()-based completeness check failed:', e);
+    return err(502, 'Storage completeness check failed');
   }
   if (missing.length > 0) {
     return json({ error: 'incomplete', missing }, 409);

@@ -16,6 +16,7 @@ import { handleDownload } from './handlers/download.js';                       /
 import { handleClientErrorsLog, appendClientError } from './handlers/client_errors_kv.js'; // Share-Dash-2
 import { handleApiStats } from './handlers/api_stats.js';                      // Share-Dash-2
 import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
+import { handleOrphanSweep } from './handlers/orphan_sweep.js';               // Share-6-6a
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
@@ -535,6 +536,14 @@ export default {
       }
       if (request.method === 'POST' && path === '/api/v1/admin/quota/cancel') {
         return timed('admin_quota_cancel', () => handleAdminQuotaCancel(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── Share-6-6a: orphan-object audit — GET /admin/orphan-sweep ───────────
+      // Admin-key gated, dry-run only. Pages all R2 objects, groups by UUID,
+      // classifies complete / incomplete / stale / orphan_chunks / sidecar_only.
+      // No deletion — report only. Deletion gate is Share-6-6b.
+      if (request.method === 'GET' && path === '/admin/orphan-sweep') {
+        return timed('admin_orphan_sweep', () => handleOrphanSweep(request, env).then(r => addCors(r, request)));
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
