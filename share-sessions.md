@@ -644,3 +644,26 @@ WORKER_URL revert staged, not placed. Progress-bar smoothing (cosmetic) — afte
 - Fix (Road A): upgraded to Workers Paid ($5/mo); added [limits] cpu_ms = 300000 to worker/wrangler.toml. Commit ae2d391, Version 37745346-8c1e-4974-ba4c-149c5557588d. Verified GET /download/{uuid}/0000 → 200. $6 billing budget alert set.
 - Road B (rejected): presigned-GET straight from R2 — drops serve-time re-hash, relies on browser plaintext BLAKE3 + AES-GCM (the real guarantee). Reasoning banked for later.
 - NEXT: Share-6-5d (Opus) — swap verified-path BLAKE3 → WASM (worker/blake3-wasm/ already vendored). Then the 250 GB soak (only remaining 6-6 item; WORKER_URL cutover already closed 6-6b).
+
+## Catch-up — 6-6b through Orientation · logged 23 Sep 2026
+
+Brings the log current past 6-5c. **Supersedes the earlier "Open item — WORKER_URL 6-6b (not done)" note above — 6-6b closed 21 Sep.**
+
+**Share-6-6b · 21 Sep 2026 — SHARE-503 closed, legacy retired.** refueler-share `418d0c9` · refueler-io `1ff986b` · Worker `924184db`. Legacy `PUT /upload/:uuid/:chunk` route retired from index.js (handleUpload body tagged dead code, kept for reference). `USE_DIRECT_R2` flag retired from upload.js — direct-to-R2 is now the unconditional path (upload.js 1598 → 1428). `orphan_sweep.js`: `?dry_run` param (default true); `dry_run=false` deletes stale + sidecar_only R2 objects, **never** orphan_chunks (presigned PUTs may be in flight); delete order chunks → hashes → manifest. Dry run: 3,166 objects / 126 UUIDs (39 complete, 79 stale, 4 sidecar_only, 0 orphan). Live deletion: 869 objects. Admin-key gated via `X-Admin-Key` (value in the `ADMIN_KEY` Worker secret). Small-file smoke (573 KB, passphrase + destroy-after-download): green.
+
+**Open bugs — current board.** DAD-BUG (destroy-after-download not deleting, legacy path) · CAP-WARNING-LINK (`/upgrade` → should be `/share/plans/`) · UPGRADE-CSS (`/upgrade` unstyled) · BRAVE-THEME (non-dashboard pages) · NO-ADMIN-TEST-TIER (→ Share-Admin-1) · PHOENIXD-TOGGLE (Worker `/status` must echo the granular phoenixd value) · command-centre `localStorage` → `rs-theme`.
+
+**Plan of record — forward.** Share-6-5d (WASM hasher swap in `verifyChunkBody` + root reconstruction; `worker/blake3-wasm/` already vendored; Opus) **first and alone** → Share-Admin-1 (test credential + hidden test-upload page) → **250 GB soak** (last remaining 6-6 item; run after 6-5d to measure the fast hasher). Deeper follow-on if WASM alone is insufficient: move ciphertext integrity off the download hot path (verify at finalise + background sweep + serve straight from R2). Model rule unchanged: Opus only for first-time crypto; Sonnet for specified build/wiring.
+
+**Paid-plan backlog (Workers Paid live).** Adopt (Sonnet): Durable Objects (rate-limiting — own design session), Queues (Chartered webhooks + verify-at-rest sweep), Hyperdrive (pool Supabase), Workers Builds (auto-deploy). Not a fit: D1, Workers AI, Vectorize, Workers Assets.
+
+**Ops constants (moved to architecture-invariants).** Share Worker deploy = `npm run deploy` from `worker/` (NOT `npx wrangler deploy` — wrong Worker); API host `api.share.refueler.io`. R2 SigV4 secret = SHA-256 of the R2 API Token Value (`shasum -a 256`), not the raw value.
+
+## Share — Orientation & Ideas · ad-hoc synthesis · 22 Sep 2026 (non-coding)
+
+Snapshot + triage session (no build). Outputs:
+
+- **Identity/routing thread (named, not designed).** `@handle.share` vanity URLs + Chartered namespaces (e.g. `legal.cliffordchance`). A persistent handle is inherently "on the register" — the opposite of Bearer / *in camera* — so likely **Registered/Chartered-rail only, never Sovereign**. Open threads: namespace ownership + uniqueness verification without reintroducing anonymous-rail accounts; resolution/routing without a server-side identity map (= a compulsion surface); squatting/impersonation over firm namespaces; a public handle directory = metadata leak. High scope-gravity, zero API customers hold a namespace yet — park it.
+- **OTS relay (TH-1) is NOT built** — only the TH-0 spike (hand-rolled GO; calendars reachable from host; CF egress unconfirmed). Load-bearing for `permanent_record` anchoring, MMR published-root anchoring (B9-6), and the btc++ hackathon idea. Committed value `SHA-256(blake3_root ‖ url_fragment_nonce)` locked at TH-0 — do not change.
+- **MMR / reverse-Experian = research thread, not a build** (captured in `merkle-spec-v1.md` §4/§7 + BRIDGE §Merkle). Sharpened hard part: self-anchoring lets a user lie by omission — the "better than Experian" claim depends on solving **who anchors the root**; unsolved, it is self-asserted only (bank-signed leaves before "verified"; MLRO to confirm SYSC 6.3 / MLR reg. 40, not the travel rule). The gate is data depth (18–24 months of leaves), not cryptography.
+- **btc++ Berlin (1–3 Oct, Payments Edition, 24h hack, teams ≤ 4; pool 2.5M/1.75M/750k sats + stackable Electrum 1M & Base58 500k).** Payments-edition fit favours the **Cashu payment rail** (idempotent, peer-to-peer ecash capabilities — the Base58 "Most Based Payment Protocol" challenge) over the plain file pipe. Rajesh attends as AV volunteer, flies Wed 30 Sep. Direction only — start cold, do not pre-build.
