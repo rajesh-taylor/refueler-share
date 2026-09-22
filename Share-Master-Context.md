@@ -51,6 +51,8 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 `CF_ACCOUNT_ID` (fc4f3e5aeebe483677d14185daf544f5), `CF_AE_TOKEN` (Account Analytics Read).
 `WEBHOOK_SIGNING_MASTER_KEY` (SW4a, stateless webhook signing master). Do not rotate without cause.
 
+**Cloudflare Workers Paid ($5/mo)** — required for verified-download CPU (pure-JS BLAKE3 over 32 MiB chunks). `[limits] cpu_ms = 300000` in worker/wrangler.toml. $6 billing budget alert active. Standing infra cost as of Share-6-5c (22 Sep 2026).
+
 ---
 
 ## Stripe — live mode

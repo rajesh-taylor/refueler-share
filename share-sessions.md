@@ -638,3 +638,9 @@ scary-looking download errors.
 
 **Parked, safe:** folder pre-zip guard (`upload.js`) placed + synced, commit pending. `crypto.js`
 WORKER_URL revert staged, not placed. Progress-bar smoothing (cosmetic) — after end-to-end is solid.
+
+## Share-6-5c — 22 Sep 2026 (Road A: Workers Paid + cpu_ms — multi-chunk download fixed)
+- DOWNLOAD-MULTI-CHUNK root cause was NOT CORS: Worker hit the CPU limit (CF error 1102 → 503 with no ACAO header → browser mislabels "CORS") running pure-JS noble BLAKE3 over a full 32 MiB chunk per request. Free tier's 10 ms CPU cap trips on the first full chunk, deterministically. Confirmed via `wrangler tail`: "Exceeded CPU Limit".
+- Fix (Road A): upgraded to Workers Paid ($5/mo); added [limits] cpu_ms = 300000 to worker/wrangler.toml. Commit ae2d391, Version 37745346-8c1e-4974-ba4c-149c5557588d. Verified GET /download/{uuid}/0000 → 200. $6 billing budget alert set.
+- Road B (rejected): presigned-GET straight from R2 — drops serve-time re-hash, relies on browser plaintext BLAKE3 + AES-GCM (the real guarantee). Reasoning banked for later.
+- NEXT: Share-6-5d (Opus) — swap verified-path BLAKE3 → WASM (worker/blake3-wasm/ already vendored). Then the 250 GB soak (only remaining 6-6 item; WORKER_URL cutover already closed 6-6b).
