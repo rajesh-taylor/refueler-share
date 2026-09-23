@@ -73,6 +73,11 @@ export async function handleAdminStatus(request, env) {
     return err(400, `Invalid lightning_available. Must be one of: ${validLightning.join(', ')}`);
   }
 
+  // PHOENIXD-TOGGLE: validate phoenixd boolean if present
+  if (body.phoenixd !== undefined && typeof body.phoenixd !== 'boolean') {
+    return err(400, 'Invalid phoenixd. Must be true or false (boolean)');
+  }
+
   let current = null;
   try {
     current = await env.STATUS_KV.get('status:current', { type: 'json' });
