@@ -229,6 +229,29 @@ This is not optional.
 **Applies to:** SW-MCP-8 (next B-close) · then B8, B9, B10, B11, B12 close sessions.
 Also apply at any session where either file exceeds its target line count mid-block.
 
+
+---
+## File delivery protocol — mandatory for all Refueler sessions
+
+**Root causes (B10-1 · 23 Sep 2026):**
+- Bare `.js` `SendUserFile` → desktop app blocks download ("This file type cannot be opened").
+- Desktop app folder-save icon → drops files into `Claude outputs/` inside the repo; collisions get `-1` suffix. Never use it.
+- `device_commit_files` once silently no-op'd — reported success, bytes unchanged. Byte-verify is mandatory.
+
+**Code files** (`.js`, `.ts`, `.json`, config, worker scripts):
+1. Write directly to the exact repo path via `device_commit_files`.
+2. Immediately byte-verify: `device_bash "wc -c <path> && shasum -a 256 <path>"` — must match expected size/hash.
+3. Show `git -C <repo> diff HEAD -- <file>` so Rajesh reviews the exact change.
+4. Never auto-commit, never auto-push. Rajesh commits manually with `git commit && git push`.
+
+**Docs and text files** (`.md`, `.html`, `.css`):
+- `SendUserFile` only — these download fine. Rajesh places manually.
+
+**Escape hatch when repos not connected:**
+- Wrap code in a `.zip` and `SendUserFile`. Never a bare `.js` via `SendUserFile`.
+
+**Never use the desktop app folder-save / "Show in Folder" icon** — always drops into `Claude outputs/` with `-1` collision suffixes.
+
 ---
 
 ## Deferred experiments

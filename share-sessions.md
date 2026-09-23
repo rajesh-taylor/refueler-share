@@ -602,4 +602,8 @@ curl -X DELETE "https://api.share.refueler.io/admin/orphan-sweep?dry_run=false" 
 
 **Delivery process note (not product):** desktop `.js` downloads fail ("This file type cannot be opened"); repo-folder saves landed in a stray `Claude outputs/` folder with `-1` suffixes; bridge `device_commit_files` silently no-op'd one JS write (reported success, bytes unchanged) — byte-verify every bridge write. Dedicated file-delivery-workflow session queued before further Navy Office work.
 
+## Share-Delivery-1 · 24 Sep 2026 — File delivery protocol
+
+Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatch→.zip. Written to CLAUDE.md §File delivery protocol.
+
 *"Nothing stops this train."*
