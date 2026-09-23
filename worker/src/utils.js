@@ -74,7 +74,10 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 export function corsHeaders(request) {
   const origin = request.headers.get('Origin') ?? '';
   const allowed = ['https://refueler.io'];
-  const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
+  // Share-Admin-1: allow any localhost origin for local soak testing.
+  // Never reaches production paths — admin test endpoint is X-Admin-Key gated.
+  const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+  const allowOrigin = (allowed.includes(origin) || isLocalhost) ? origin : allowed[0];
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',

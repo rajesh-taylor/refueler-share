@@ -192,7 +192,7 @@
 // for one-shot hashing.
 // NOTE: cdn.jsdelivr.net is not on the allow-list for Artifact-tool pages, but
 // this file is served directly from refueler.io — normal browser, no CSP block.
-import { blake3 } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/+esm';
+import { blake3 } from 'https://esm.sh/@noble/hashes@1.8.0/blake3';
 
 // ─── Cashu BDHKE client-side (NUT-00) ────────────────────────────────────────
 // We replicate the minimal blinding step used by share.js:
@@ -204,7 +204,7 @@ import { blake3 } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/+esm';
 //
 // For the soak we only need the blinded message + the resulting signed token.
 // We use the noble secp256k1 ESM build.
-import * as secp from 'https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.2.1/+esm';
+import * as secp from 'https://esm.sh/@noble/secp256k1@2.2.1';
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -366,7 +366,7 @@ $('btnStart').addEventListener('click', async () => {
     }
 
     const initData = await initiateRes.json();
-    const { session_token, presigned_urls: firstBatch } = initData;
+    const { session_token, urls: firstBatch } = initData;
     emit(`   Session token obtained. First batch: ${firstBatch.length} URLs.`, 'ok');
 
     // ── Step 3: upload chunks via presigned PUTs ─────────────────────────────
@@ -402,34 +402,43 @@ $('btnStart').addEventListener('click', async () => {
         }
 
         const urlsData = await urlsRes.json();
-        urlBatch = urlsData.presigned_urls;
+        urlBatch = urlsData.urls;
         emit(`   Batch: ${urlBatch.length} URLs starting at chunk ${chunkIdx}`, 'info');
       }
 
       // Generate this chunk's dummy payload (random bytes — content doesn't matter)
       const isLast     = chunkIdx === totalChunks - 1;
       const chunkBytes = isLast ? (totalBytes - chunkIdx * CHUNK_SIZE) : CHUNK_SIZE;
-      const payload    = crypto.getRandomValues(new Uint8Array(chunkBytes));
+      const payload    = (() => { const b = new Uint8Array(chunkBytes); for (let o = 0; o < b.length; o += 65536) crypto.getRandomValues(b.subarray(o, Math.min(o + 65536, b.length))); return b; })();
 
       // BLAKE3 hash of chunk for finalise
       const chunkHash = blake3B64url(payload);
       chunkHashes.push(chunkHash);
 
-      const presignedUrl = urlBatch[chunkIdx - urlOffset];
+      const presignedUrl = urlBatch[chunkIdx - urlOffset].url;
       if (!presignedUrl) {
         emit(`No presigned URL for chunk ${chunkIdx}`, 'err');
         return;
       }
 
-      const putRes = await fetch(presignedUrl, {
-        method: 'PUT',
-        signal,
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: payload,
-      });
-
+      let putRes;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        putRes = await fetch(presignedUrl, {
+          method: 'PUT',
+          signal,
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: payload,
+        });
+        if (putRes.ok || putRes.status < 500) break;
+        const errBody = await putRes.text();
+        console.warn(`PUT chunk ${chunkIdx} attempt ${attempt+1} → ${putRes.status}`, errBody);
+        emit(`PUT chunk ${chunkIdx} attempt ${attempt+1} → ${putRes.status} — retrying…`, 'warn');
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      }
       if (!putRes.ok) {
-        emit(`PUT chunk ${chunkIdx} → ${putRes.status}`, 'err');
+        const errText = await putRes.text();
+        console.error(`PUT chunk ${chunkIdx} failed → ${putRes.status}`, errText);
+        emit(`PUT chunk ${chunkIdx} → ${putRes.status}: ${errText.slice(0, 300)}`, 'err');
         return;
       }
 
