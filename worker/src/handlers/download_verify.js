@@ -1,5 +1,5 @@
 /**
- * download_verify.js — Share-6-5a (B9-3 server half)
+ * download_verify.js — Share-6-5a (B9-3 server half), WASM-hashed as of Share-6-5d
  * worker/src/handlers/download_verify.js
  *
  * Worker-side ciphertext storage-integrity verification for the download path.
@@ -20,12 +20,21 @@
  *            in the URL fragment, never per-object). Do not "fix" the IV scheme
  *            here (Share-6 §10 / invariant) — the leaf binds to the stored bytes.
  *
- * The tree function is IMPORTED from ../merkle.js (6-3b) and never reimplemented
- * (session brief; merkle-spec §10). blake3 is imported by the same pinned path
- * merkle.js uses (noble v1 under CDK 0.17.2 — invariant).
+ * BLAKE3 SOURCE (Share-6-5d change — the ONLY behavioural change this session):
+ *   The per-chunk body hash (verifyChunkBody, the 32 MiB CPU hog) now runs through
+ *   the vendored WASM BLAKE3 via ../blake3_wasm.js hashOneShot(), instead of the
+ *   pure-JS @noble/hashes pass that forced Workers Paid + cpu_ms=300000 in 6-5c.
+ *   The WASM output is proven byte-for-byte identical to pinned noble v1 (empty,
+ *   small, and a real 32 MiB input — see worker/test/share-6-5d.test.js), so every
+ *   digest, every 409, and every root reconciliation is unchanged; only the CPU
+ *   cost drops. The tree function is still IMPORTED from ../merkle.js (6-3b) and
+ *   never reimplemented (session brief; merkle-spec §10). merkle.js is left on
+ *   noble by design (it hashes only 33/65-byte nodes — the swap there buys nothing
+ *   and would disturb the parity keystone). Both hashers agree byte-for-byte, so
+ *   the reconstructed root (noble) and the chunk-body digests (WASM) still meet.
  */
 
-import { blake3 } from '../../node_modules/@noble/hashes/blake3.js';
+import { hashOneShot } from '../blake3_wasm.js';
 import { reconstructRoot, TREE_ALGO } from '../merkle.js';
 
 const DIGEST_LEN = 32;
@@ -169,6 +178,12 @@ export async function reconstructAndCheckRoot(env, uuid, manifest) {
  * partial (Range) body cannot match a whole-chunk leaf, which is why the caller
  * rejects Range on the verified path (416) rather than pretending to verify it.
  *
+ * Share-6-5d: the digest is now computed by the vendored WASM BLAKE3
+ * (hashOneShot), byte-for-byte identical to the noble pass it replaces. This is
+ * the one 32 MiB-per-request operation the swap targets; both the ≤128 buffer
+ * path (download.js) and the >128 streaming path (makeVerifyingStream, which
+ * calls straight into this function at flush) inherit the WASM hash for free.
+ *
  * @param {Uint8Array} chunkBytes  exactly the stored bytes of {uuid}/{iiii}
  * @param {Uint8Array} sidecar     the full decoded sidecar
  * @param {number} i               chunk index
@@ -176,6 +191,6 @@ export async function reconstructAndCheckRoot(env, uuid, manifest) {
  */
 export function verifyChunkBody(chunkBytes, sidecar, i) {
   const expected = sidecar.subarray(i * DIGEST_LEN, (i + 1) * DIGEST_LEN);
-  const actual = blake3(chunkBytes); // 32-byte digest over the stored bytes
+  const actual = hashOneShot(chunkBytes); // 32-byte digest over the stored bytes (WASM)
   return ctEqualBytes(actual, expected);
 }

@@ -152,7 +152,7 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   const isPassphraseProtected = !!meta.passphrase_protected;
   if (isPassphraseProtected) rcPassphraseRow.classList.remove('hidden');
 
-  const willSelfDestruct     = !!meta.pending_destruction;
+  const willSelfDestruct     = meta.pending_destruction !== null && meta.pending_destruction !== undefined;
   const availableFromUnixRx  = meta.available_from_timestamp  || null;
   const availableUntilUnixRx = meta.available_until_timestamp || null;
 

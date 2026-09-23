@@ -615,6 +615,7 @@ async function handleStatus(request, env) {
       message:     null,
       maintenance: null,
       incidents:   [],
+      phoenixd:    null,
       updated_at:  Math.floor(Date.now() / 1000),
     };
   }
@@ -1825,7 +1826,7 @@ async function handleMeta(request, env, uuid) {
     total_chunks:             manifest.total_chunks            ?? null,
     expiry_timestamp:         manifest.expiry_timestamp        ?? null,
     passphrase_protected:     !!manifest.p2sh_secret_hash,
-    pending_destruction:      manifest.pending_destruction     ?? false,
+    pending_destruction:      manifest.pending_destruction     ?? null,
     available_from_timestamp: manifest.available_from_timestamp  ?? null,
     available_until_timestamp: manifest.available_until_timestamp ?? null,
     timestamp_state:          getTimestampState(manifest),

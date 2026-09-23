@@ -287,8 +287,10 @@ function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlRespons
   const updatedManifestForFlip = flipPendingDestruction(manifest, chunkIndex);
   const pendingDestructionFlipped = updatedManifestForFlip !== manifest;
   if (pendingDestructionFlipped) {
-    putManifest(env.BUCKET, uuid, updatedManifestForFlip).catch(e =>
-      console.error('TG: pending_destruction flip write failed:', e)
+    ctx.waitUntil(
+      putManifest(env.BUCKET, uuid, updatedManifestForFlip).catch(e =>
+        console.error('TG: pending_destruction flip write failed:', e)
+      )
     );
   }
 
