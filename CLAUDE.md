@@ -254,6 +254,20 @@ Also apply at any session where either file exceeds its target line count mid-bl
 
 ---
 
+---
+
+## Editorial voice — Notes articles
+
+Articles (e.g. refueler.io/notes/) must read as honest and human, not polished or suave. Rules:
+
+- **No stacked aphorisms.** One punchy line per piece, maximum. Two in a row reads as a founder workshopping their elevator pitch.
+- **No performative openings.** "Most X are written by Y to protect Z, not you" is a cliché. Start with what the article does, plainly.
+- **Let the tables persuade.** The prose sets context and handles nuance. The tables do the comparison. Don't duplicate the table's job in the prose.
+- **Dry wit is earned, not scheduled.** One well-placed dry observation lands. The same observation every other paragraph kills it.
+- **Honest about gaps.** "B10 (upcoming)" in a comparison table is better than a footnote hedge. Self-hostable ❌ gets acknowledged, not buried.
+- **Plain declarative sentences.** "Architecture protects your content. Jurisdiction shapes the paperwork" is one sentence too many — "Architecture is what protects you; jurisdiction just determines how long the paperwork takes" is one, and it's doing the same work.
+
+
 ## Deferred experiments
 
 - **refueler-ecash-lab** — separate repo for NUT-11 Mode 2 and ML-KEM key wrapping
