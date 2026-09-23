@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  worker/src/share/admin/test-upload.html  (Share-Admin-1)
+  worker/src/share/admin/test-upload.html  (Share-Admin-2)
 
   Hidden admin soak-test page.
   - NEVER add to bin/sync-share.sh
@@ -9,19 +9,13 @@
 
   Purpose: drive large dummy uploads through the full direct-to-R2 pipeline
   (credential/issue → /upload/:uuid/initiate → /urls → presigned PUTs → /finalise)
-  so the streaming download branch (>128 chunks) can be verified end-to-end.
+  so listBasedCompleteness and the WASM BLAKE3 download-verify path can be
+  validated end-to-end at scale.
 
-  What it does:
-    1. Generates a BDHKE blinded message client-side (same path as real clients).
-    2. Calls POST /admin/test-credential with X-Admin-Key to get a signed credential
-       and a pre-approved UUID that bypasses tier caps.
-    3. Calls POST /upload/:uuid/initiate with the required headers.
-    4. Iterates /upload/:uuid/urls + presigned PUTs for the dummy payload.
-    5. Calls POST /upload/:uuid/finalise with hashes + merkle_root.
-
-  Dummy payload: a stream of random 32 MiB chunks generated in-browser — never
-  persisted to disk. Target size configurable; default 5 GiB (160 chunks, well
-  past VERIFY_INLINE_CHUNK_THRESHOLD=128).
+  Share-Admin-1: sequential, 5 GiB / 160 chunks (passed 5/5).
+  Share-Admin-2: parallel upload pool + download-verify phase; target 250 GiB /
+  8,000 chunks to validate listBasedCompleteness pagination (8 list() calls) and
+  WASM BLAKE3 under sustained load.
 
   Admin key is entered in the form — never hard-coded, never logged, never sent
   to any endpoint except the Worker.
@@ -40,6 +34,7 @@
     --accent:  #C8A96E;
     --green:   #4CAF6E;
     --red:     #CF6679;
+    --warn:    #E8A040;
     --mono:    'JetBrains Mono', 'Fira Mono', 'Courier New', monospace;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -60,7 +55,7 @@
     border-radius: 8px;
     padding: 20px;
     margin-bottom: 16px;
-    max-width: 640px;
+    max-width: 700px;
   }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   input[type=text], input[type=number], input[type=password] {
@@ -76,6 +71,8 @@
     outline: none;
   }
   input:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
   button {
     background: var(--accent);
     border: none;
@@ -99,7 +96,7 @@
     border-radius: 4px;
     font-family: var(--mono);
     font-size: 12px;
-    height: 360px;
+    height: 440px;
     overflow-y: auto;
     padding: 10px;
     white-space: pre-wrap;
@@ -108,6 +105,7 @@
   }
   .log .ok   { color: var(--green); }
   .log .err  { color: var(--red); }
+  .log .warn { color: var(--warn); }
   .log .info { color: var(--muted); }
   .log .head { color: var(--accent); }
   progress {
@@ -120,9 +118,9 @@
   }
   progress::-webkit-progress-bar   { background: var(--border); border-radius: 4px; }
   progress::-webkit-progress-value { background: var(--accent);  border-radius: 4px; }
-  .stat-row { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+  .stat-row { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
   .stat { font-size: 11px; color: var(--muted); }
-  .stat span { display: block; font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+  .stat span { display: block; font-size: 15px; font-weight: 600; color: var(--text); font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -130,27 +128,49 @@
 <h1>Share Admin · Soak Upload</h1>
 <p class="sub">
   Drives a large dummy upload through the full direct-to-R2 pipeline.<br>
+  Share-Admin-2: parallel upload pool + WASM BLAKE3 download-verify phase.<br>
   INTERNAL ONLY — never linked from any public page.
 </p>
 
 <div class="card">
   <label>Worker base URL</label>
-  <input type="text" id="workerUrl" value="https://api.share.refueler.io" placeholder="https://api.share.refueler.io">
+  <input type="text" id="workerUrl" value="https://api.share.refueler.io">
 
   <label>X-Admin-Key</label>
   <input type="password" id="adminKey" placeholder="Enter admin key">
 
-  <label>Target size (GiB)</label>
-  <input type="number" id="targetGib" value="5" min="0.1" max="250" step="0.1">
+  <div class="row">
+    <div>
+      <label>Target size (GiB)</label>
+      <input type="number" id="targetGib" value="250" min="0.1" max="300" step="0.1">
+    </div>
+    <div>
+      <label>Concurrency (parallel PUTs)</label>
+      <input type="number" id="concurrency" value="8" min="1" max="32" step="1">
+    </div>
+  </div>
 
-  <label>Chunk size (MiB) — must match Worker CHUNK_SIZE = 32 MiB</label>
-  <input type="number" id="chunkMib" value="32" min="1" max="32" step="1">
+  <div class="row">
+    <div>
+      <label>Chunk size (MiB) — must match Worker = 32</label>
+      <input type="number" id="chunkMib" value="32" min="1" max="32" step="1">
+    </div>
+    <div>
+      <label>Credential cap (GiB)</label>
+      <input type="number" id="capGib" value="260" min="1" max="300" step="1">
+    </div>
+  </div>
 
-  <label>Credential cap (GiB) — passed to /admin/test-credential</label>
-  <input type="number" id="capGib" value="250" min="1" max="250" step="1">
-
-  <label>Credential expiry (seconds)</label>
-  <input type="number" id="credExpiry" value="7200" min="60" max="86400" step="60">
+  <div class="row">
+    <div>
+      <label>Credential expiry (seconds)</label>
+      <input type="number" id="credExpiry" value="28800" min="60" max="86400" step="60">
+    </div>
+    <div>
+      <label>Download-verify chunks after upload (0 = skip)</label>
+      <input type="number" id="verifyChunks" value="5" min="0" max="100" step="1">
+    </div>
+  </div>
 
   <div style="margin-top:4px;">
     <button id="btnStart">Start soak upload</button>
@@ -162,51 +182,23 @@
     <div class="stat">Chunks<span id="statChunks">—</span></div>
     <div class="stat">Uploaded<span id="statBytes">—</span></div>
     <div class="stat">Elapsed<span id="statElapsed">—</span></div>
+    <div class="stat">Speed<span id="statSpeed">—</span></div>
+    <div class="stat">ETA<span id="statEta">—</span></div>
     <div class="stat">Transfer UUID<span id="statUuid">—</span></div>
   </div>
 </div>
 
-<div class="card" style="max-width:640px;">
+<div class="card" style="max-width:700px;">
   <div id="log" class="log"><span class="info">Waiting for start…</span>
 </div>
 </div>
 
-<!--
-  Blake3 WASM: we need BLAKE3 to compute chunk hashes (X-Blake3-Chunk-Hash at
-  initiate is no longer required; at finalise the Worker expects hashes for each
-  chunk so it can build + verify the merkle tree).
-
-  We vendor a minimal BLAKE3 pure-JS fallback here — acceptable for an admin
-  test page where throughput is not the goal; the point is functional correctness
-  of the pipeline, not CPU benchmarking.
-
-  For a 5 GiB upload at 32 MiB chunks = 160 chunks: pure-JS BLAKE3 of a 32 MiB
-  buffer takes ~300ms on M-series; 160 × 300ms = ~48s hash overhead. Tolerable.
-  If a faster path is needed: load blake3_wasm.js from the Worker bundle via
-  a script tag (worker/src/blake3_wasm.js is not a standalone browser module —
-  skip it; use the CDN noble build instead).
--->
 <script type="module">
-// ─── Minimal BLAKE3 via @noble/hashes ESM CDN build ─────────────────────────
-// We import only the hash function, not streaming — chunks are 32 MiB max, fine
-// for one-shot hashing.
-// NOTE: cdn.jsdelivr.net is not on the allow-list for Artifact-tool pages, but
-// this file is served directly from refueler.io — normal browser, no CSP block.
+// ─── Noble BLAKE3 (CDN — admin-only page, no CSP restriction) ────────────────
 import { blake3 } from 'https://esm.sh/@noble/hashes@1.8.0/blake3';
-
-// ─── Cashu BDHKE client-side (NUT-00) ────────────────────────────────────────
-// We replicate the minimal blinding step used by share.js:
-//   r  = random scalar
-//   Y  = hash_to_curve(secret)
-//   B_ = Y + r*G   (blinded message, sent to mint)
-// After mint returns C_ = k*B_:
-//   C  = C_ - r*K_pub   (unblinded token, but we don't need it for the soak)
-//
-// For the soak we only need the blinded message + the resulting signed token.
-// We use the noble secp256k1 ESM build.
 import * as secp from 'https://esm.sh/@noble/secp256k1@2.2.1';
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
+// ─── Utilities ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
 const log = $('log');
@@ -227,45 +219,68 @@ function fmtBytes(b) {
 
 function fmtSeconds(s) {
   if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return `${m}m ${s % 60}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m ${s % 60}s`;
+  return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
 }
 
 function toB64url(buf) {
-  const b = typeof buf === 'string' ? buf : btoa(String.fromCharCode(...new Uint8Array(buf)));
-  return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let b = '';
+  for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
+  return btoa(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-function fromHex(hex) {
-  const out = new Uint8Array(hex.length >> 1);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i*2, i*2+2), 16);
+function b64urlDecode(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
 
-// ─── BLAKE3 hash → b64url ─────────────────────────────────────────────────────
-function blake3B64url(data) {
-  const hash = blake3(data);
-  return toB64url(hash);
+// ─── Random chunk generator (respects 64 KiB getRandomValues cap) ────────────
+function randomChunk(size) {
+  const buf = new Uint8Array(size);
+  for (let o = 0; o < buf.length; o += 65536)
+    crypto.getRandomValues(buf.subarray(o, Math.min(o + 65536, buf.length)));
+  return buf;
 }
 
-// ─── BDHKE blind ─────────────────────────────────────────────────────────────
-// Returns { blinded_message: hex, r: bigint, secret: Uint8Array }
+// ─── BDHKE blind (same as share.js) ──────────────────────────────────────────
 async function blindedMessage() {
-  const secret = crypto.getRandomValues(new Uint8Array(32));
-  // hash_to_curve: BLAKE3(secret) used as x, try increment until valid point
-  // (simplified: use secp.Point.fromPrivateKey for a valid random point Y)
-  const Y = secp.ProjectivePoint.fromPrivateKey(secret);
+  const secret  = crypto.getRandomValues(new Uint8Array(32));
+  const Y       = secp.ProjectivePoint.fromPrivateKey(secret);
+  const rBytes  = crypto.getRandomValues(new Uint8Array(32));
+  const r       = secp.utils.normPrivateKeyToScalar(rBytes);
+  const B_      = Y.add(secp.ProjectivePoint.BASE.multiply(r));
+  return { blinded_message: B_.toHex(true), r, secret };
+}
 
-  const rBytes = crypto.getRandomValues(new Uint8Array(32));
-  const r = secp.utils.normPrivateKeyToScalar(rBytes);
-  const rG = secp.ProjectivePoint.BASE.multiply(r);
-  const B_ = Y.add(rG);
+// ─── Merkle tree (rfc6962-unbalanced-blake3-v1) ────────────────────────────────
+// leaf  = 32-byte BLAKE3(chunk bytes)        — domain tag 0x00 applied by finalise.js
+// node  = BLAKE3( 0x01 ‖ left(32) ‖ right(32) )
+// odd leaf at any level propagates up unchanged
+function merkleNode(left, right) {
+  const buf = new Uint8Array(65);
+  buf[0] = 0x01;
+  buf.set(left,  1);
+  buf.set(right, 33);
+  return blake3(buf);
+}
 
-  return {
-    blinded_message: B_.toHex(true),  // 33-byte compressed hex
-    r,
-    secret,
-  };
+function buildMerkleRoot(leafHashBytes) {
+  // leafHashBytes: Array of Uint8Array(32) in chunk order
+  let nodes = leafHashBytes.slice();
+  while (nodes.length > 1) {
+    const next = [];
+    for (let i = 0; i < nodes.length; i += 2) {
+      next.push(i + 1 < nodes.length
+        ? merkleNode(nodes[i], nodes[i + 1])
+        : nodes[i]);
+    }
+    nodes = next;
+  }
+  return nodes[0];
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -275,80 +290,134 @@ let abortController = null;
 $('btnStart').addEventListener('click', async () => {
   log.innerHTML = '';
 
-  const workerUrl   = $('workerUrl').value.replace(/\/$/, '');
-  const adminKey    = $('adminKey').value.trim();
-  const targetGib   = parseFloat($('targetGib').value) || 5;
-  const chunkMib    = parseInt($('chunkMib').value, 10) || 32;
-  const capGib      = parseFloat($('capGib').value) || 250;
-  const credExpiry  = parseInt($('credExpiry').value, 10) || 7200;
+  const workerUrl    = $('workerUrl').value.replace(/\/$/, '');
+  const adminKey     = $('adminKey').value.trim();
+  const targetGib    = parseFloat($('targetGib').value)   || 250;
+  const concurrency  = parseInt($('concurrency').value, 10) || 8;
+  const chunkMib     = parseInt($('chunkMib').value, 10)   || 32;
+  const capGib       = parseFloat($('capGib').value)       || 260;
+  const credExpiry   = parseInt($('credExpiry').value, 10) || 28800;
+  const verifyCount  = parseInt($('verifyChunks').value, 10) || 0;
 
   if (!adminKey) { emit('Admin key is required.', 'err'); return; }
 
-  const CHUNK_SIZE  = chunkMib * 1024 * 1024;
-  const totalBytes  = Math.round(targetGib * 1024 * 1024 * 1024);
-  const totalChunks = Math.ceil(totalBytes / CHUNK_SIZE);
-  const capBytes    = Math.round(capGib * 1024 * 1024 * 1024);
+  const CHUNK_SIZE   = chunkMib * 1024 * 1024;
+  const totalBytes   = Math.round(targetGib * 1024 * 1024 * 1024);
+  const totalChunks  = Math.ceil(totalBytes / CHUNK_SIZE);
+  const capBytes     = Math.round(capGib * 1024 * 1024 * 1024);
+  const URL_BATCH    = 256; // Worker returns 256 presigned URLs per /urls call
 
   emit(`▶  Starting soak upload`, 'head');
-  emit(`   Target size  : ${fmtBytes(totalBytes)} (${totalChunks} chunks of ${fmtBytes(CHUNK_SIZE)})`, 'info');
+  emit(`   Target       : ${fmtBytes(totalBytes)} — ${totalChunks} chunks × ${fmtBytes(CHUNK_SIZE)}`, 'info');
+  emit(`   Concurrency  : ${concurrency} parallel PUTs`, 'info');
   emit(`   Worker       : ${workerUrl}`, 'info');
+  emit(`   listBasedCompleteness pages needed: ${Math.ceil(totalChunks / 1000)}`, 'info');
 
   $('btnStart').disabled = true;
   $('btnAbort').disabled = false;
   abortController = new AbortController();
   const { signal } = abortController;
 
-  const tStart = Date.now();
-  let bytesUploaded = 0;
+  const tStart       = Date.now();
+  let chunksUploaded = 0;
+  let bytesUploaded  = 0;
+  let hadError       = false;
+
+  // Shared state for parallel uploader
+  const chunkHashes = new Array(totalChunks); // filled by index as chunks complete
+  // URL batch cache — keyed by batch start chunk index
+  const urlCache       = {};     // batchStart → [{index, url, expires}]
+  const batchFetching  = {};     // batchStart → Promise<void>
+  let   sessionToken   = null;
+  let   uuid           = null;
+
+  // Fetch a URL batch from /upload/:uuid/urls
+  async function fetchBatch(batchStart) {
+    if (batchStart in urlCache) return;
+    if (!(batchStart in batchFetching)) {
+      batchFetching[batchStart] = (async () => {
+        const res = await fetch(`${workerUrl}/upload/${uuid}/urls`, {
+          method: 'POST',
+          signal,
+          headers: {
+            'Content-Type':     'application/json',
+            'X-Upload-Session': sessionToken,
+          },
+          body: JSON.stringify({ from_chunk: batchStart }),
+        });
+        if (!res.ok) throw new Error(`/urls batch ${batchStart} → ${res.status}`);
+        const d = await res.json();
+        urlCache[batchStart] = d.urls;
+      })();
+    }
+    await batchFetching[batchStart];
+  }
+
+  async function getUrl(i) {
+    const batchStart = Math.floor(i / URL_BATCH) * URL_BATCH;
+    await fetchBatch(batchStart);
+    // Pre-fetch next batch in background
+    const next = batchStart + URL_BATCH;
+    if (next < totalChunks && !(next in urlCache) && !(next in batchFetching))
+      fetchBatch(next).catch(() => {}); // fire-and-forget; will retry on demand
+    return urlCache[batchStart][i - batchStart].url;
+  }
+
+  function updateStats() {
+    const elapsed = Math.round((Date.now() - tStart) / 1000) || 1;
+    const pct     = Math.round((chunksUploaded / totalChunks) * 100);
+    const speed   = bytesUploaded / elapsed; // bytes/s
+    const remaining = totalBytes - bytesUploaded;
+    const eta     = speed > 0 ? Math.round(remaining / speed) : 0;
+
+    $('prog').value            = pct;
+    $('statChunks').textContent  = `${chunksUploaded} / ${totalChunks}`;
+    $('statBytes').textContent   = fmtBytes(bytesUploaded);
+    $('statElapsed').textContent = fmtSeconds(elapsed);
+    $('statSpeed').textContent   = `${fmtBytes(speed)}/s`;
+    $('statEta').textContent     = eta > 0 ? fmtSeconds(eta) : '—';
+  }
 
   try {
     // ── Step 1: request test credential ──────────────────────────────────────
     emit('\n[1/5] Requesting test credential…', 'head');
 
-    const { blinded_message, r, secret } = await blindedMessage();
+    const { blinded_message } = await blindedMessage();
 
     const credRes = await fetch(`${workerUrl}/admin/test-credential`, {
       method: 'POST',
       signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Admin-Key': adminKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
       body: JSON.stringify({
         blinded_message,
-        cap_bytes: capBytes,
+        cap_bytes:          capBytes,
         expires_in_seconds: credExpiry,
       }),
     });
 
-    if (!credRes.ok) {
-      const t = await credRes.text();
-      emit(`Error ${credRes.status}: ${t}`, 'err');
-      return;
-    }
+    if (!credRes.ok) { emit(`Error ${credRes.status}: ${await credRes.text()}`, 'err'); return; }
 
     const cred = await credRes.json();
-    const { uuid, issued_tier, commitment, allocation_bytes, signed_point, mint_pubkey } = cred;
+    ({ uuid } = cred);
+    const { issued_tier, commitment, allocation_bytes, signed_point, mint_pubkey } = cred;
 
     emit(`   UUID         : ${uuid}`, 'ok');
     emit(`   Issued tier  : ${issued_tier}`, 'ok');
     emit(`   Allocation   : ${fmtBytes(allocation_bytes)}`, 'ok');
     $('statUuid').textContent = uuid;
 
-    // Build the credential object the Worker expects at /initiate
-    // (same shape as share.js: { C_: signed_point, mint_pubkey })
     const cashuCredential = JSON.stringify({ C_: signed_point, mint_pubkey });
 
     // ── Step 2: initiate ──────────────────────────────────────────────────────
     emit('\n[2/5] Initiating transfer…', 'head');
 
-    const expiryTs = Math.floor(Date.now() / 1000) + 80 * 24 * 3600; // 80 days
+    const expiryTs = Math.floor(Date.now() / 1000) + 90 * 24 * 3600;
 
     const initiateRes = await fetch(`${workerUrl}/upload/${uuid}/initiate`, {
       method: 'POST',
       signal,
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type':            'application/json',
         'X-Cashu-Credential':      cashuCredential,
         'X-Total-Chunks':          String(totalChunks),
         'X-Total-Bytes':           String(totalBytes),
@@ -359,68 +428,36 @@ $('btnStart').addEventListener('click', async () => {
       },
     });
 
-    if (!initiateRes.ok) {
-      const t = await initiateRes.text();
-      emit(`Error ${initiateRes.status}: ${t}`, 'err');
-      return;
-    }
+    if (!initiateRes.ok) { emit(`Error ${initiateRes.status}: ${await initiateRes.text()}`, 'err'); return; }
 
     const initData = await initiateRes.json();
-    const { session_token, urls: firstBatch } = initData;
-    emit(`   Session token obtained. First batch: ${firstBatch.length} URLs.`, 'ok');
+    sessionToken = initData.session_token;
+    urlCache[0]  = initData.urls; // seed batch 0
+    emit(`   Session token obtained. Batch 0: ${initData.urls.length} URLs.`, 'ok');
 
-    // ── Step 3: upload chunks via presigned PUTs ─────────────────────────────
-    emit(`\n[3/5] Uploading ${totalChunks} chunks…`, 'head');
+    // ── Step 3: parallel upload ───────────────────────────────────────────────
+    emit(`\n[3/5] Uploading ${totalChunks} chunks with concurrency=${concurrency}…`, 'head');
 
-    let chunkIdx   = 0;
-    let urlBatch   = firstBatch;
-    let urlOffset  = 0;  // first chunk index covered by current batch
-    const chunkHashes = [];
+    // Track chunk progress for periodic log lines
+    let lastLogChunk = 0;
 
-    while (chunkIdx < totalChunks) {
-      if (signal.aborted) throw new Error('Aborted by user');
+    async function uploadOneChunk(i) {
+      if (signal.aborted) throw new Error('Aborted');
+      if (hadError)        return; // another worker failed; bail
 
-      // Fetch next batch if we've exhausted the current one
-      if (chunkIdx >= urlOffset + urlBatch.length) {
-        emit(`   Fetching next URL batch from chunk ${chunkIdx}…`, 'info');
-        urlOffset = chunkIdx;
+      const isLast     = i === totalChunks - 1;
+      const chunkBytes = isLast ? (totalBytes - i * CHUNK_SIZE) : CHUNK_SIZE;
 
-        const urlsRes = await fetch(`${workerUrl}/upload/${uuid}/urls`, {
-          method: 'POST',
-          signal,
-          headers: {
-            'Content-Type':      'application/json',
-            'X-Upload-Session':  session_token,
-          },
-          body: JSON.stringify({ from_chunk: chunkIdx }),
-        });
+      // Generate payload and compute hash in parallel with URL fetch
+      const payload = randomChunk(chunkBytes);
+      const [hashBytes, presignedUrl] = await Promise.all([
+        Promise.resolve(blake3(payload)), // synchronous, wrapped for .all
+        getUrl(i),
+      ]);
 
-        if (!urlsRes.ok) {
-          const t = await urlsRes.text();
-          emit(`URLs error ${urlsRes.status}: ${t}`, 'err');
-          return;
-        }
+      chunkHashes[i] = toB64url(hashBytes);
 
-        const urlsData = await urlsRes.json();
-        urlBatch = urlsData.urls;
-        emit(`   Batch: ${urlBatch.length} URLs starting at chunk ${chunkIdx}`, 'info');
-      }
-
-      // Generate this chunk's dummy payload (random bytes — content doesn't matter)
-      const isLast     = chunkIdx === totalChunks - 1;
-      const chunkBytes = isLast ? (totalBytes - chunkIdx * CHUNK_SIZE) : CHUNK_SIZE;
-      const payload    = (() => { const b = new Uint8Array(chunkBytes); for (let o = 0; o < b.length; o += 65536) crypto.getRandomValues(b.subarray(o, Math.min(o + 65536, b.length))); return b; })();
-
-      // BLAKE3 hash of chunk for finalise
-      const chunkHash = blake3B64url(payload);
-      chunkHashes.push(chunkHash);
-
-      const presignedUrl = urlBatch[chunkIdx - urlOffset].url;
-      if (!presignedUrl) {
-        emit(`No presigned URL for chunk ${chunkIdx}`, 'err');
-        return;
-      }
-
+      // PUT with up to 3 retries
       let putRes;
       for (let attempt = 0; attempt < 3; attempt++) {
         putRes = await fetch(presignedUrl, {
@@ -430,102 +467,157 @@ $('btnStart').addEventListener('click', async () => {
           body: payload,
         });
         if (putRes.ok || putRes.status < 500) break;
-        const errBody = await putRes.text();
-        console.warn(`PUT chunk ${chunkIdx} attempt ${attempt+1} → ${putRes.status}`, errBody);
-        emit(`PUT chunk ${chunkIdx} attempt ${attempt+1} → ${putRes.status} — retrying…`, 'warn');
+        const body = await putRes.text();
+        console.warn(`PUT chunk ${i} attempt ${attempt+1} → ${putRes.status}`, body);
+        emit(`   ⚠ chunk ${i} attempt ${attempt+1} → ${putRes.status} — retrying…`, 'warn');
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
       }
+
       if (!putRes.ok) {
-        const errText = await putRes.text();
-        console.error(`PUT chunk ${chunkIdx} failed → ${putRes.status}`, errText);
-        emit(`PUT chunk ${chunkIdx} → ${putRes.status}: ${errText.slice(0, 300)}`, 'err');
+        const errText = await putRes.text().catch(() => '');
+        emit(`✗ PUT chunk ${i} → ${putRes.status}: ${errText.slice(0, 200)}`, 'err');
+        hadError = true;
         return;
       }
 
+      chunksUploaded++;
       bytesUploaded += chunkBytes;
-      chunkIdx++;
 
-      // Update UI every 10 chunks (or last)
-      if (chunkIdx % 10 === 0 || chunkIdx === totalChunks) {
-        const pct     = Math.round((chunkIdx / totalChunks) * 100);
+      // Log every 100 chunks
+      if (chunksUploaded - lastLogChunk >= 100 || chunksUploaded === totalChunks) {
+        lastLogChunk = chunksUploaded;
+        updateStats();
         const elapsed = Math.round((Date.now() - tStart) / 1000);
-        $('prog').value         = pct;
-        $('statChunks').textContent = `${chunkIdx} / ${totalChunks}`;
-        $('statBytes').textContent  = fmtBytes(bytesUploaded);
-        $('statElapsed').textContent = fmtSeconds(elapsed);
-        emit(`   Chunk ${chunkIdx}/${totalChunks} (${pct}%) — ${fmtBytes(bytesUploaded)} in ${fmtSeconds(elapsed)}`, 'info');
+        emit(`   ${chunksUploaded}/${totalChunks} chunks — ${fmtBytes(bytesUploaded)} in ${fmtSeconds(elapsed)}`, 'info');
       }
     }
 
-    emit('   All chunks uploaded.', 'ok');
+    // Worker pool: N concurrent workers each pulling the next chunk index
+    let nextChunk = 0;
+    async function worker() {
+      while (true) {
+        const i = nextChunk++;
+        if (i >= totalChunks) break;
+        await uploadOneChunk(i);
+        if (hadError || signal.aborted) break;
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    if (signal.aborted) throw new Error('Aborted by user');
+    if (hadError) throw new Error('Upload failed — see log above');
+    if (chunkHashes.some(h => !h)) throw new Error('Internal: missing chunk hashes after upload');
+
+    updateStats();
+    emit(`   All ${totalChunks} chunks uploaded.`, 'ok');
 
     // ── Step 4: compute merkle root ───────────────────────────────────────────
-    // We replicate the client-side merkle computation (rfc6962-unbalanced-blake3-v1).
-    // Node hash: BLAKE3( 0x01 ‖ left ‖ right )
-    // Leaf hash: the 32-byte BLAKE3 chunk hash (already computed above)
     emit('\n[4/5] Computing merkle root…', 'head');
 
-    function merkleNode(left, right) {
-      const buf = new Uint8Array(1 + 32 + 32);
-      buf[0] = 0x01;
-      buf.set(left,  1);
-      buf.set(right, 33);
-      return blake3(buf);
-    }
-
-    // Decode b64url hashes to Uint8Array
-    function b64urlDecode(s) {
-      const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-      const bin = atob(b64);
-      const out = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-      return out;
-    }
-
-    let leaves = chunkHashes.map(h => b64urlDecode(h));
-
-    // Build rfc6962 unbalanced tree
-    while (leaves.length > 1) {
-      const next = [];
-      for (let i = 0; i < leaves.length; i += 2) {
-        if (i + 1 < leaves.length) {
-          next.push(merkleNode(leaves[i], leaves[i+1]));
-        } else {
-          next.push(leaves[i]); // odd leaf propagates
-        }
-      }
-      leaves = next;
-    }
-
-    const merkleRoot = toB64url(leaves[0]);
-    emit(`   Merkle root: ${merkleRoot}`, 'ok');
+    const leafBytes = chunkHashes.map(h => b64urlDecode(h));
+    const rootBytes = buildMerkleRoot(leafBytes);
+    const merkleRoot = toB64url(rootBytes);
+    emit(`   Root: ${merkleRoot}`, 'ok');
 
     // ── Step 5: finalise ──────────────────────────────────────────────────────
-    emit('\n[5/5] Finalising…', 'head');
+    emit('\n[5/5] Finalising (listBasedCompleteness will page ' +
+         `${Math.ceil(totalChunks / 1000)} × list(limit:1000))…`, 'head');
 
     const finaliseRes = await fetch(`${workerUrl}/upload/${uuid}/finalise`, {
       method: 'POST',
       signal,
-      headers: {
-        'Content-Type':     'application/json',
-        'X-Upload-Session': session_token,
-      },
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
       body: JSON.stringify({ hashes: chunkHashes, merkle_root: merkleRoot }),
     });
 
     if (!finaliseRes.ok) {
-      const t = await finaliseRes.text();
-      emit(`Finalise error ${finaliseRes.status}: ${t}`, 'err');
+      emit(`Finalise error ${finaliseRes.status}: ${await finaliseRes.text()}`, 'err');
       return;
     }
 
     const finaliseData = await finaliseRes.json();
     const elapsed = Math.round((Date.now() - tStart) / 1000);
     emit(`   Finalise OK — ${JSON.stringify(finaliseData)}`, 'ok');
-    emit(`\n✓ Soak complete. ${fmtBytes(totalBytes)} in ${fmtSeconds(elapsed)}.`, 'ok');
-    emit(`  Transfer UUID: ${uuid}`, 'ok');
-    emit(`  You can now download from /download/${uuid}/0000 to verify the streaming branch.`, 'info');
+    emit(`\n✓ Upload soak complete. ${fmtBytes(totalBytes)} in ${fmtSeconds(elapsed)}.`, 'ok');
+    emit(`  Transfer UUID : ${uuid}`, 'ok');
+    emit(`  Merkle root   : ${merkleRoot}`, 'ok');
     $('prog').value = 100;
+
+    // ── Step 6 (optional): download-verify phase ──────────────────────────────
+    if (verifyCount > 0) {
+      emit(`\n[6/6] Download-verify phase — ${verifyCount} chunks (WASM BLAKE3 on Worker)…`, 'head');
+      emit('   Transfer has ' + totalChunks + ' chunks → ' +
+           (totalChunks > 128 ? 'streaming verify path (>128 threshold)' : 'inline verify path (≤128 threshold)'), 'info');
+
+      // Pick evenly-spaced chunk indices across the transfer
+      const verifyIndices = [];
+      if (verifyCount >= totalChunks) {
+        for (let i = 0; i < totalChunks; i++) verifyIndices.push(i);
+      } else {
+        const step = Math.floor(totalChunks / verifyCount);
+        for (let i = 0; i < verifyCount; i++) verifyIndices.push(Math.min(i * step, totalChunks - 1));
+      }
+
+      let dlOk = 0, dlFail = 0;
+
+      for (const ci of verifyIndices) {
+        if (signal.aborted) break;
+        const chunkKey = String(ci).padStart(4, '0');
+        const dlUrl    = `${workerUrl}/download/${uuid}/${chunkKey}`;
+        emit(`   → GET /download/${uuid}/${chunkKey}…`, 'info');
+
+        try {
+          const dlRes = await fetch(dlUrl, { signal });
+          const integrity = dlRes.headers.get('X-Integrity') ?? '(absent)';
+          const chunkIdx  = dlRes.headers.get('X-Chunk-Index') ?? '?';
+
+          if (!dlRes.ok) {
+            emit(`   ✗ chunk ${ci}: HTTP ${dlRes.status}`, 'err');
+            dlFail++;
+            await dlRes.body?.cancel();
+            continue;
+          }
+
+          // Drain the response body — for >128 chunks (streaming path) this is
+          // required to confirm the WASM BLAKE3 hash matched at end-of-stream.
+          // A truncated connection (hash mismatch) surfaces as a body read error.
+          try {
+            const reader = dlRes.body.getReader();
+            let totalDl  = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              totalDl += value.length;
+            }
+            if (integrity === 'ciphertext-storage-verified') {
+              emit(`   ✓ chunk ${ci}: ${fmtBytes(totalDl)} · X-Integrity=${integrity} · X-Chunk-Index=${chunkIdx}`, 'ok');
+              dlOk++;
+            } else {
+              emit(`   ⚠ chunk ${ci}: ${fmtBytes(totalDl)} · X-Integrity=${integrity} (expected ciphertext-storage-verified)`, 'warn');
+              dlFail++;
+            }
+          } catch (bodyErr) {
+            emit(`   ✗ chunk ${ci}: body read failed (possible BLAKE3 mismatch / stream truncated): ${bodyErr.message}`, 'err');
+            dlFail++;
+          }
+        } catch (fetchErr) {
+          if (fetchErr.name === 'AbortError') throw fetchErr;
+          emit(`   ✗ chunk ${ci}: ${fetchErr.message}`, 'err');
+          dlFail++;
+        }
+      }
+
+      if (dlFail === 0) {
+        emit(`\n✓ Download-verify: ${dlOk}/${verifyCount} chunks passed. WASM BLAKE3 soak: GREEN.`, 'ok');
+      } else {
+        emit(`\n⚠ Download-verify: ${dlOk} pass, ${dlFail} fail. Check log above.`, 'err');
+      }
+    }
+
+    emit('\n─── Soak complete ───', 'head');
+    emit(`UUID: ${uuid}`, 'info');
+    emit(`Merkle root: ${merkleRoot}`, 'info');
 
   } catch (e) {
     if (e.name === 'AbortError' || e.message === 'Aborted by user') {
@@ -542,10 +634,7 @@ $('btnStart').addEventListener('click', async () => {
 });
 
 $('btnAbort').addEventListener('click', () => {
-  if (abortController) {
-    abortController.abort();
-    emit('Abort requested…', 'err');
-  }
+  if (abortController) { abortController.abort(); emit('Abort requested…', 'warn'); }
 });
 </script>
 </body>
