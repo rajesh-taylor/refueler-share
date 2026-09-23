@@ -18,6 +18,7 @@ import { handleApiStats } from './handlers/api_stats.js';                      /
 import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
 import { handleOrphanSweep } from './handlers/orphan_sweep.js';               // Share-6-6a
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
+import { handleTestCredential } from './handlers/test_credential.js';                // Share-Admin-1
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
@@ -528,6 +529,15 @@ export default {
       // No deletion — report only. Deletion gate is Share-6-6b.
       if (request.method === 'GET' && path === '/admin/orphan-sweep') {
         return timed('admin_orphan_sweep', () => handleOrphanSweep(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── Share-Admin-1: test credential — POST /admin/test-credential ─────────
+      // X-Admin-Key gated. Issues a real blind-signed credential bypassing Turnstile,
+      // Cashu payment, and tier resolution. Stores a KV flag so /initiate skips the
+      // spend ledger and uses the specified cap_bytes. Soak-test only.
+      // NEVER add to bin/sync-share.sh.
+      if (request.method === 'POST' && path === '/admin/test-credential') {
+        return timed('admin_test_credential', () => handleTestCredential(request, env).then(r => addCors(r, request)));
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
@@ -1961,24 +1971,56 @@ async function handleInitiate(request, env, ctx, uuid) {
     return err(401, 'Missing credential commitment');
   }
 
+  // ── Share-Admin-1: test credential KV bypass ──────────────────────────────
+  // Issued by POST /admin/test-credential. If present with initiated:false, skip
+  // Supabase tier resolution, expiry ceiling check, size cap, Cashu verify, and
+  // the spend INSERT. Marks the flag initiated:true so a second /initiate 409s.
+  let isTestCredential = false;
+  let testCredCapBytes = null;
+  const testCredKvKey  = `test_credential:${uuid}`;
+  try {
+    const testCredRaw = await env.STATUS_KV.get(testCredKvKey, { type: 'json' });
+    if (testCredRaw && testCredRaw.initiated === false) {
+      isTestCredential = true;
+      testCredCapBytes = testCredRaw.cap_bytes;
+      // Mark initiated — a second /initiate will fall through to the normal 409 idempotency check.
+      await env.STATUS_KV.put(
+        testCredKvKey,
+        JSON.stringify({ ...testCredRaw, initiated: true }),
+        // keep whatever TTL is left — we can't read it, so reuse expiresInSeconds from the
+        // credential's expires_at field embedded in the stored record.
+        // Safest: let it expire naturally (no expirationTtl rewrite needed here).
+      );
+      console.log(`handleInitiate: test_credential bypass for uuid=${uuid} cap_bytes=${testCredCapBytes}`);
+    }
+  } catch (e) {
+    console.error('handleInitiate: test_credential KV read failed, continuing normally:', e);
+    // Non-fatal — fall through to normal path
+  }
+
   // ── Resolve tier LIVE from Supabase — never issued_tier for the cap ────────
   const email = (request.headers.get('X-Email') ?? '').trim().toLowerCase();
   let resolvedTier = 'free';
-  if (email) {
-    try {
-      const subRes = await supabaseFetch(
-        env, 'GET',
-        `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&status=eq.active&select=tier&limit=1`
-      );
-      if (subRes.ok) {
-        const rows = await subRes.json();
-        if (rows.length > 0 && rows[0].tier) resolvedTier = rows[0].tier;
+  if (!isTestCredential) {
+    if (email) {
+      try {
+        const subRes = await supabaseFetch(
+          env, 'GET',
+          `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&status=eq.active&select=tier&limit=1`
+        );
+        if (subRes.ok) {
+          const rows = await subRes.json();
+          if (rows.length > 0 && rows[0].tier) resolvedTier = rows[0].tier;
+        }
+      } catch (e) {
+        console.error('Tier resolution failed, defaulting to free:', e);
       }
-    } catch (e) {
-      console.error('Tier resolution failed, defaulting to free:', e);
     }
   }
-  const tierCap = TIER_CAPS[resolvedTier] ?? TIER_CAPS.free;
+  // For test credentials, use the stored cap_bytes directly; TIER_CAPS is not consulted.
+  const tierCap = isTestCredential
+    ? (testCredCapBytes ?? (250 * 1024 * 1024 * 1024))
+    : (TIER_CAPS[resolvedTier] ?? TIER_CAPS.free);
 
   // ── UUID-bound commitment verification (S42c) ──────────────────────────────
   let expectedCommitment;
@@ -2003,14 +2045,18 @@ async function handleInitiate(request, env, ctx, uuid) {
 
   // ── Expiry tier validation ─────────────────────────────────────────────────
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const maxWindow  = INITIATE_EXPIRY_MAX[resolvedTier] ?? INITIATE_EXPIRY_MAX.free;
   if (expiryTs <= nowSeconds) {
     logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_in_past' });
     return err(400, 'X-Expiry-Timestamp is in the past');
   }
-  if (expiryTs > nowSeconds + maxWindow) {
-    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_exceeds_tier' });
-    return err(400, `X-Expiry-Timestamp exceeds maximum window for ${resolvedTier} tier (${maxWindow / 86400} days)`);
+  if (!isTestCredential) {
+    // Share-Admin-1: test credentials skip the expiry ceiling — they are admin-issued
+    // with a configurable window up to 24 h. Normal tier ceiling does not apply.
+    const maxWindow = INITIATE_EXPIRY_MAX[resolvedTier] ?? INITIATE_EXPIRY_MAX.free;
+    if (expiryTs > nowSeconds + maxWindow) {
+      logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_exceeds_tier' });
+      return err(400, `X-Expiry-Timestamp exceeds maximum window for ${resolvedTier} tier (${maxWindow / 86400} days)`);
+    }
   }
 
   // ── Size-cap guard (§5) — resolvedTier, never issued_tier. 413 on breach ───
@@ -2019,20 +2065,26 @@ async function handleInitiate(request, env, ctx, uuid) {
     return err(413, `Declared total ${totalBytes} bytes exceeds ${resolvedTier} tier cap of ${tierCap} bytes`);
   }
 
-  // ── Cashu verify (Mode 1 BDHKE) — local, no side effect. Throws → 401 ──────
+  // ── Cashu verify + spend ───────────────────────────────────────────────────
+  // Share-Admin-1: test credentials skip both the BDHKE verify and the Supabase
+  // spent_tokens INSERT. The test_credential KV flag (marked initiated:true above)
+  // is the single-use guard. No serial → no Supabase write.
   let serial;
-  try {
-    serial = await verifyCredential(JSON.parse(credential), env.MINT_PRIVATE_KEY);
-  } catch {
-    return err(401, 'Invalid credential');
+  if (!isTestCredential) {
+    try {
+      serial = await verifyCredential(JSON.parse(credential), env.MINT_PRIVATE_KEY);
+    } catch {
+      return err(401, 'Invalid credential');
+    }
   }
 
   // ── API-tier credit-pool debit — COMPUTE and refuse (402) BEFORE the spend. ─
   // Sandbox (rfs_test_) keys never touch the production pool. Write-back happens
   // AFTER the atomic spend commits, so a double-spend (409) never debits credits.
+  // Share-Admin-1: test credentials also skip the quota gate — there is no live_key.
   let quotaKey = null;
   let quotaUpdated = null;
-  const isApiTier = isCharteredTier(issuedTier) && !!apiLiveKey && !isSandboxRequest(apiLiveKey);
+  const isApiTier = !isTestCredential && isCharteredTier(issuedTier) && !!apiLiveKey && !isSandboxRequest(apiLiveKey);
   if (isApiTier) {
     const cost = computeTransferCost(totalBytes);
     quotaKey = await kvQuotaKey(apiLiveKey);
@@ -2085,19 +2137,23 @@ async function handleInitiate(request, env, ctx, uuid) {
   // ── Spend — atomic double-spend guard: INSERT-on-serial (B8 §D-3). ─────────
   // sig → BDHKE done above; this INSERT is the point of no return. 409 conflict
   // = already spent (fire-and-forget log). This is the LAST Supabase write.
-  const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
-  if (meltRes.status === 409) {
-    supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
-      serial, uuid, attempted_at: new Date().toISOString(),
-    }).then(r => {
-      if (!r.ok) r.text().then(t => console.error('double_spend_attempts write failed:', t));
-    }).catch(e => console.error('double_spend_attempts fetch error:', e));
-    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 409, errorMsg: 'credential_double_spend' });
-    return err(409, 'Credential already spent');
-  }
-  if (!meltRes.ok) {
-    console.error('spend INSERT failed:', serial, await meltRes.text());
-    return err(502, 'Ledger unavailable');
+  // Share-Admin-1: test credentials skip the spend INSERT entirely — the KV flag
+  // (initiated:true) is the single-use gate; no serial exists to insert.
+  if (!isTestCredential) {
+    const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
+    if (meltRes.status === 409) {
+      supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
+        serial, uuid, attempted_at: new Date().toISOString(),
+      }).then(r => {
+        if (!r.ok) r.text().then(t => console.error('double_spend_attempts write failed:', t));
+      }).catch(e => console.error('double_spend_attempts fetch error:', e));
+      logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 409, errorMsg: 'credential_double_spend' });
+      return err(409, 'Credential already spent');
+    }
+    if (!meltRes.ok) {
+      console.error('spend INSERT failed:', serial, await meltRes.text());
+      return err(502, 'Ledger unavailable');
+    }
   }
 
   // ── Credit write-back — only after the spend commits (fire-and-forget KV) ──

@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<!--
+  worker/src/share/admin/test-upload.html  (Share-Admin-1)
+
+  Hidden admin soak-test page.
+  - NEVER add to bin/sync-share.sh
+  - NEVER commit to the public mirror
+  - Served ONLY from refueler.io/share/admin/test-upload.html (internal path)
+
+  Purpose: drive large dummy uploads through the full direct-to-R2 pipeline
+  (credential/issue → /upload/:uuid/initiate → /urls → presigned PUTs → /finalise)
+  so the streaming download branch (>128 chunks) can be verified end-to-end.
+
+  What it does:
+    1. Generates a BDHKE blinded message client-side (same path as real clients).
+    2. Calls POST /admin/test-credential with X-Admin-Key to get a signed credential
+       and a pre-approved UUID that bypasses tier caps.
+    3. Calls POST /upload/:uuid/initiate with the required headers.
+    4. Iterates /upload/:uuid/urls + presigned PUTs for the dummy payload.
+    5. Calls POST /upload/:uuid/finalise with hashes + merkle_root.
+
+  Dummy payload: a stream of random 32 MiB chunks generated in-browser — never
+  persisted to disk. Target size configurable; default 5 GiB (160 chunks, well
+  past VERIFY_INLINE_CHUNK_THRESHOLD=128).
+
+  Admin key is entered in the form — never hard-coded, never logged, never sent
+  to any endpoint except the Worker.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Share Admin · Soak Upload</title>
+<style>
+  :root {
+    --bg:      #1A1A1A;
+    --surface: #242424;
+    --border:  #333333;
+    --text:    #F5F0E8;
+    --muted:   #888880;
+    --accent:  #C8A96E;
+    --green:   #4CAF6E;
+    --red:     #CF6679;
+    --mono:    'JetBrains Mono', 'Fira Mono', 'Courier New', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  h1 { font-size: 18px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 24px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    max-width: 640px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], input[type=number], input[type=password] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  button {
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    color: #1A1A1A;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 20px;
+    margin-right: 8px;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    height: 360px;
+    overflow-y: auto;
+    padding: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 16px;
+  }
+  .log .ok   { color: var(--green); }
+  .log .err  { color: var(--red); }
+  .log .info { color: var(--muted); }
+  .log .head { color: var(--accent); }
+  progress {
+    width: 100%;
+    height: 8px;
+    margin-top: 12px;
+    border-radius: 4px;
+    appearance: none;
+    background: var(--border);
+  }
+  progress::-webkit-progress-bar   { background: var(--border); border-radius: 4px; }
+  progress::-webkit-progress-value { background: var(--accent);  border-radius: 4px; }
+  .stat-row { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+  .stat { font-size: 11px; color: var(--muted); }
+  .stat span { display: block; font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<h1>Share Admin · Soak Upload</h1>
+<p class="sub">
+  Drives a large dummy upload through the full direct-to-R2 pipeline.<br>
+  INTERNAL ONLY — never linked from any public page.
+</p>
+
+<div class="card">
+  <label>Worker base URL</label>
+  <input type="text" id="workerUrl" value="https://api.share.refueler.io" placeholder="https://api.share.refueler.io">
+
+  <label>X-Admin-Key</label>
+  <input type="password" id="adminKey" placeholder="Enter admin key">
+
+  <label>Target size (GiB)</label>
+  <input type="number" id="targetGib" value="5" min="0.1" max="250" step="0.1">
+
+  <label>Chunk size (MiB) — must match Worker CHUNK_SIZE = 32 MiB</label>
+  <input type="number" id="chunkMib" value="32" min="1" max="32" step="1">
+
+  <label>Credential cap (GiB) — passed to /admin/test-credential</label>
+  <input type="number" id="capGib" value="250" min="1" max="250" step="1">
+
+  <label>Credential expiry (seconds)</label>
+  <input type="number" id="credExpiry" value="7200" min="60" max="86400" step="60">
+
+  <div style="margin-top:4px;">
+    <button id="btnStart">Start soak upload</button>
+    <button id="btnAbort" class="secondary" disabled>Abort</button>
+  </div>
+
+  <progress id="prog" value="0" max="100"></progress>
+  <div class="stat-row">
+    <div class="stat">Chunks<span id="statChunks">—</span></div>
+    <div class="stat">Uploaded<span id="statBytes">—</span></div>
+    <div class="stat">Elapsed<span id="statElapsed">—</span></div>
+    <div class="stat">Transfer UUID<span id="statUuid">—</span></div>
+  </div>
+</div>
+
+<div class="card" style="max-width:640px;">
+  <div id="log" class="log"><span class="info">Waiting for start…</span>
+</div>
+</div>
+
+<!--
+  Blake3 WASM: we need BLAKE3 to compute chunk hashes (X-Blake3-Chunk-Hash at
+  initiate is no longer required; at finalise the Worker expects hashes for each
+  chunk so it can build + verify the merkle tree).
+
+  We vendor a minimal BLAKE3 pure-JS fallback here — acceptable for an admin
+  test page where throughput is not the goal; the point is functional correctness
+  of the pipeline, not CPU benchmarking.
+
+  For a 5 GiB upload at 32 MiB chunks = 160 chunks: pure-JS BLAKE3 of a 32 MiB
+  buffer takes ~300ms on M-series; 160 × 300ms = ~48s hash overhead. Tolerable.
+  If a faster path is needed: load blake3_wasm.js from the Worker bundle via
+  a script tag (worker/src/blake3_wasm.js is not a standalone browser module —
+  skip it; use the CDN noble build instead).
+-->
+<script type="module">
+// ─── Minimal BLAKE3 via @noble/hashes ESM CDN build ─────────────────────────
+// We import only the hash function, not streaming — chunks are 32 MiB max, fine
+// for one-shot hashing.
+// NOTE: cdn.jsdelivr.net is not on the allow-list for Artifact-tool pages, but
+// this file is served directly from refueler.io — normal browser, no CSP block.
+import { blake3 } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/+esm';
+
+// ─── Cashu BDHKE client-side (NUT-00) ────────────────────────────────────────
+// We replicate the minimal blinding step used by share.js:
+//   r  = random scalar
+//   Y  = hash_to_curve(secret)
+//   B_ = Y + r*G   (blinded message, sent to mint)
+// After mint returns C_ = k*B_:
+//   C  = C_ - r*K_pub   (unblinded token, but we don't need it for the soak)
+//
+// For the soak we only need the blinded message + the resulting signed token.
+// We use the noble secp256k1 ESM build.
+import * as secp from 'https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.2.1/+esm';
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+const log = $('log');
+function emit(msg, cls = 'info') {
+  const span = document.createElement('span');
+  span.className = cls;
+  span.textContent = msg + '\n';
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+function fmtBytes(b) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024**2) return `${(b/1024).toFixed(1)} KiB`;
+  if (b < 1024**3) return `${(b/1024**2).toFixed(2)} MiB`;
+  return `${(b/1024**3).toFixed(3)} GiB`;
+}
+
+function fmtSeconds(s) {
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+function toB64url(buf) {
+  const b = typeof buf === 'string' ? buf : btoa(String.fromCharCode(...new Uint8Array(buf)));
+  return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function fromHex(hex) {
+  const out = new Uint8Array(hex.length >> 1);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i*2, i*2+2), 16);
+  return out;
+}
+
+// ─── BLAKE3 hash → b64url ─────────────────────────────────────────────────────
+function blake3B64url(data) {
+  const hash = blake3(data);
+  return toB64url(hash);
+}
+
+// ─── BDHKE blind ─────────────────────────────────────────────────────────────
+// Returns { blinded_message: hex, r: bigint, secret: Uint8Array }
+async function blindedMessage() {
+  const secret = crypto.getRandomValues(new Uint8Array(32));
+  // hash_to_curve: BLAKE3(secret) used as x, try increment until valid point
+  // (simplified: use secp.Point.fromPrivateKey for a valid random point Y)
+  const Y = secp.ProjectivePoint.fromPrivateKey(secret);
+
+  const rBytes = crypto.getRandomValues(new Uint8Array(32));
+  const r = secp.utils.normPrivateKeyToScalar(rBytes);
+  const rG = secp.ProjectivePoint.BASE.multiply(r);
+  const B_ = Y.add(rG);
+
+  return {
+    blinded_message: B_.toHex(true),  // 33-byte compressed hex
+    r,
+    secret,
+  };
+}
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let abortController = null;
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+$('btnStart').addEventListener('click', async () => {
+  log.innerHTML = '';
+
+  const workerUrl   = $('workerUrl').value.replace(/\/$/, '');
+  const adminKey    = $('adminKey').value.trim();
+  const targetGib   = parseFloat($('targetGib').value) || 5;
+  const chunkMib    = parseInt($('chunkMib').value, 10) || 32;
+  const capGib      = parseFloat($('capGib').value) || 250;
+  const credExpiry  = parseInt($('credExpiry').value, 10) || 7200;
+
+  if (!adminKey) { emit('Admin key is required.', 'err'); return; }
+
+  const CHUNK_SIZE  = chunkMib * 1024 * 1024;
+  const totalBytes  = Math.round(targetGib * 1024 * 1024 * 1024);
+  const totalChunks = Math.ceil(totalBytes / CHUNK_SIZE);
+  const capBytes    = Math.round(capGib * 1024 * 1024 * 1024);
+
+  emit(`▶  Starting soak upload`, 'head');
+  emit(`   Target size  : ${fmtBytes(totalBytes)} (${totalChunks} chunks of ${fmtBytes(CHUNK_SIZE)})`, 'info');
+  emit(`   Worker       : ${workerUrl}`, 'info');
+
+  $('btnStart').disabled = true;
+  $('btnAbort').disabled = false;
+  abortController = new AbortController();
+  const { signal } = abortController;
+
+  const tStart = Date.now();
+  let bytesUploaded = 0;
+
+  try {
+    // ── Step 1: request test credential ──────────────────────────────────────
+    emit('\n[1/5] Requesting test credential…', 'head');
+
+    const { blinded_message, r, secret } = await blindedMessage();
+
+    const credRes = await fetch(`${workerUrl}/admin/test-credential`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Key': adminKey,
+      },
+      body: JSON.stringify({
+        blinded_message,
+        cap_bytes: capBytes,
+        expires_in_seconds: credExpiry,
+      }),
+    });
+
+    if (!credRes.ok) {
+      const t = await credRes.text();
+      emit(`Error ${credRes.status}: ${t}`, 'err');
+      return;
+    }
+
+    const cred = await credRes.json();
+    const { uuid, issued_tier, commitment, allocation_bytes, signed_point, mint_pubkey } = cred;
+
+    emit(`   UUID         : ${uuid}`, 'ok');
+    emit(`   Issued tier  : ${issued_tier}`, 'ok');
+    emit(`   Allocation   : ${fmtBytes(allocation_bytes)}`, 'ok');
+    $('statUuid').textContent = uuid;
+
+    // Build the credential object the Worker expects at /initiate
+    // (same shape as share.js: { C_: signed_point, mint_pubkey })
+    const cashuCredential = JSON.stringify({ C_: signed_point, mint_pubkey });
+
+    // ── Step 2: initiate ──────────────────────────────────────────────────────
+    emit('\n[2/5] Initiating transfer…', 'head');
+
+    const expiryTs = Math.floor(Date.now() / 1000) + 80 * 24 * 3600; // 80 days
+
+    const initiateRes = await fetch(`${workerUrl}/upload/${uuid}/initiate`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cashu-Credential':      cashuCredential,
+        'X-Total-Chunks':          String(totalChunks),
+        'X-Total-Bytes':           String(totalBytes),
+        'X-Expiry-Timestamp':      String(expiryTs),
+        'X-Credential-Commitment': commitment,
+        'X-Issued-Tier':           issued_tier,
+        'X-File-Name':             'soak-test-payload',
+      },
+    });
+
+    if (!initiateRes.ok) {
+      const t = await initiateRes.text();
+      emit(`Error ${initiateRes.status}: ${t}`, 'err');
+      return;
+    }
+
+    const initData = await initiateRes.json();
+    const { session_token, presigned_urls: firstBatch } = initData;
+    emit(`   Session token obtained. First batch: ${firstBatch.length} URLs.`, 'ok');
+
+    // ── Step 3: upload chunks via presigned PUTs ─────────────────────────────
+    emit(`\n[3/5] Uploading ${totalChunks} chunks…`, 'head');
+
+    let chunkIdx   = 0;
+    let urlBatch   = firstBatch;
+    let urlOffset  = 0;  // first chunk index covered by current batch
+    const chunkHashes = [];
+
+    while (chunkIdx < totalChunks) {
+      if (signal.aborted) throw new Error('Aborted by user');
+
+      // Fetch next batch if we've exhausted the current one
+      if (chunkIdx >= urlOffset + urlBatch.length) {
+        emit(`   Fetching next URL batch from chunk ${chunkIdx}…`, 'info');
+        urlOffset = chunkIdx;
+
+        const urlsRes = await fetch(`${workerUrl}/upload/${uuid}/urls`, {
+          method: 'POST',
+          signal,
+          headers: {
+            'Content-Type':      'application/json',
+            'X-Upload-Session':  session_token,
+          },
+          body: JSON.stringify({ from_chunk: chunkIdx }),
+        });
+
+        if (!urlsRes.ok) {
+          const t = await urlsRes.text();
+          emit(`URLs error ${urlsRes.status}: ${t}`, 'err');
+          return;
+        }
+
+        const urlsData = await urlsRes.json();
+        urlBatch = urlsData.presigned_urls;
+        emit(`   Batch: ${urlBatch.length} URLs starting at chunk ${chunkIdx}`, 'info');
+      }
+
+      // Generate this chunk's dummy payload (random bytes — content doesn't matter)
+      const isLast     = chunkIdx === totalChunks - 1;
+      const chunkBytes = isLast ? (totalBytes - chunkIdx * CHUNK_SIZE) : CHUNK_SIZE;
+      const payload    = crypto.getRandomValues(new Uint8Array(chunkBytes));
+
+      // BLAKE3 hash of chunk for finalise
+      const chunkHash = blake3B64url(payload);
+      chunkHashes.push(chunkHash);
+
+      const presignedUrl = urlBatch[chunkIdx - urlOffset];
+      if (!presignedUrl) {
+        emit(`No presigned URL for chunk ${chunkIdx}`, 'err');
+        return;
+      }
+
+      const putRes = await fetch(presignedUrl, {
+        method: 'PUT',
+        signal,
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: payload,
+      });
+
+      if (!putRes.ok) {
+        emit(`PUT chunk ${chunkIdx} → ${putRes.status}`, 'err');
+        return;
+      }
+
+      bytesUploaded += chunkBytes;
+      chunkIdx++;
+
+      // Update UI every 10 chunks (or last)
+      if (chunkIdx % 10 === 0 || chunkIdx === totalChunks) {
+        const pct     = Math.round((chunkIdx / totalChunks) * 100);
+        const elapsed = Math.round((Date.now() - tStart) / 1000);
+        $('prog').value         = pct;
+        $('statChunks').textContent = `${chunkIdx} / ${totalChunks}`;
+        $('statBytes').textContent  = fmtBytes(bytesUploaded);
+        $('statElapsed').textContent = fmtSeconds(elapsed);
+        emit(`   Chunk ${chunkIdx}/${totalChunks} (${pct}%) — ${fmtBytes(bytesUploaded)} in ${fmtSeconds(elapsed)}`, 'info');
+      }
+    }
+
+    emit('   All chunks uploaded.', 'ok');
+
+    // ── Step 4: compute merkle root ───────────────────────────────────────────
+    // We replicate the client-side merkle computation (rfc6962-unbalanced-blake3-v1).
+    // Node hash: BLAKE3( 0x01 ‖ left ‖ right )
+    // Leaf hash: the 32-byte BLAKE3 chunk hash (already computed above)
+    emit('\n[4/5] Computing merkle root…', 'head');
+
+    function merkleNode(left, right) {
+      const buf = new Uint8Array(1 + 32 + 32);
+      buf[0] = 0x01;
+      buf.set(left,  1);
+      buf.set(right, 33);
+      return blake3(buf);
+    }
+
+    // Decode b64url hashes to Uint8Array
+    function b64urlDecode(s) {
+      const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    let leaves = chunkHashes.map(h => b64urlDecode(h));
+
+    // Build rfc6962 unbalanced tree
+    while (leaves.length > 1) {
+      const next = [];
+      for (let i = 0; i < leaves.length; i += 2) {
+        if (i + 1 < leaves.length) {
+          next.push(merkleNode(leaves[i], leaves[i+1]));
+        } else {
+          next.push(leaves[i]); // odd leaf propagates
+        }
+      }
+      leaves = next;
+    }
+
+    const merkleRoot = toB64url(leaves[0]);
+    emit(`   Merkle root: ${merkleRoot}`, 'ok');
+
+    // ── Step 5: finalise ──────────────────────────────────────────────────────
+    emit('\n[5/5] Finalising…', 'head');
+
+    const finaliseRes = await fetch(`${workerUrl}/upload/${uuid}/finalise`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type':     'application/json',
+        'X-Upload-Session': session_token,
+      },
+      body: JSON.stringify({ hashes: chunkHashes, merkle_root: merkleRoot }),
+    });
+
+    if (!finaliseRes.ok) {
+      const t = await finaliseRes.text();
+      emit(`Finalise error ${finaliseRes.status}: ${t}`, 'err');
+      return;
+    }
+
+    const finaliseData = await finaliseRes.json();
+    const elapsed = Math.round((Date.now() - tStart) / 1000);
+    emit(`   Finalise OK — ${JSON.stringify(finaliseData)}`, 'ok');
+    emit(`\n✓ Soak complete. ${fmtBytes(totalBytes)} in ${fmtSeconds(elapsed)}.`, 'ok');
+    emit(`  Transfer UUID: ${uuid}`, 'ok');
+    emit(`  You can now download from /download/${uuid}/0000 to verify the streaming branch.`, 'info');
+    $('prog').value = 100;
+
+  } catch (e) {
+    if (e.name === 'AbortError' || e.message === 'Aborted by user') {
+      emit('\n⚠ Aborted.', 'err');
+    } else {
+      emit(`\n✗ Unexpected error: ${e.message}`, 'err');
+      console.error(e);
+    }
+  } finally {
+    $('btnStart').disabled = false;
+    $('btnAbort').disabled = true;
+    abortController = null;
+  }
+});
+
+$('btnAbort').addEventListener('click', () => {
+  if (abortController) {
+    abortController.abort();
+    emit('Abort requested…', 'err');
+  }
+});
+</script>
+</body>
+</html>
