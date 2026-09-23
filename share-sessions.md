@@ -579,3 +579,27 @@ curl -X DELETE "https://api.share.refueler.io/admin/orphan-sweep?dry_run=false" 
 - BRAVE-THEME (non-dashboard pages)
 
 **Next after soak completes:** orphan sweep, then B10 planning session.
+
+---
+
+## Share-B10-1 · 23 Sep 2026 — Navy Office dashboard build + live-review snags
+
+**Session type:** Build (Opus) + live review. **Repos:** `refueler-share` (Worker) · `refueler.io` (Navy Office frontend).
+**Commits:** refueler-share `fea2690` (+ junk cleanup `0008a5f`) · refueler.io `d55de19` → `08d8641` → `bdef6bd` → `fb841dc`.
+
+### Built (B10-1 punch list items 1–4)
+- **`GET /admin/btc-price`** (new `worker/src/handlers/btc_price.js`) — CoinGecko `simple/price` proxy, KV `btc:price:gbp` TTL 900s + no-TTL `btc:price:gbp:last` backstop, returns `{price_gbp, cached_at, source, stale?}`, X-Admin-Key gated. (Dash-2 design note said no-auth; shipped admin-gated per the session prompt — the chart is behind the admin gate anyway. Distinct from the governed `/admin/btc-rate` reference rate.)
+- **`GET /admin/growth-snapshot?range=D|W|M|Y`** (new `worker/src/handlers/growth_snapshot.js`) — AE cumulative credentials-issued per tier (free→Free, creative+max→Paid, api→API), `toStartOfInterval` bucketing, cumulative-within-retained-window. AE-only; operator chose "Year truncated to ~90d" over manual backfill.
+- **`api_stats.js`** — added `billable` (identity+anonymous) + `pro_bono` (none) to `requests_30d`; card headline is billable-only with a Pro Bono sub-line.
+- **`receiver_ab_*` → AE routing (B7 snag S93–S95, now closed)** — Worker `handleLogError` routes `context:'receiver_ab'` to `logEvent()` (blob1 = the real event from `message`, blob3 = variant) instead of the `client_error` blob. No new browser header/endpoint (consumer frontend unchanged); receiver_ab drops out of the client-errors card within 24h.
+- **Navy Office frontend** — growth card redesigned to a single **Last 90 days** view (D/W/M/Y toggle dropped after review), three auto lines + BTC overlay + **annotation flag markers seated on the Free line** with two-way hover highlight (flag ↔ list row), annotations-only form, **Print chart** (landscape one-page archive). Client-errors: Worker-90d Message column removed; Browser column dropped from the 24h table. Credential Issuances modal: real daily AE line with labelled X/Y axes.
+
+### B10 live-review snags (found post-deploy — DO NOT FIX until B10 sessions)
+1. **BTC-PRICE-503 — CoinGecko unreachable from the Worker.** `GET /admin/btc-price` (and the `refreshBtcRate` cron on `/admin/btc-rate`) return 503 live — CoinGecko unreachable from the CF Worker with empty cache. Effect: the growth-chart **BTC/GBP overlay never renders**, and the Worker-90d client-errors card fills with `admin_btc_price 503` rows. Likely CoinGecko free-API rate-limiting/blocking Worker egress IPs (or a demo-key requirement now). B10: confirm via `wrangler tail`; options — longer last-good cache + back-off polling, a CoinGecko demo key, or move the BTC feed to the node (Tier-2, post-B7). Both btc-price (display) AND btc-rate (governed rate card) share this dependency.
+2. **CLIENT-ERR-TS-1970 — Worker-90d timestamps show "21 Jan 1970".** `appendClientError` stores `ts` in unix **seconds**; `navy-office.js` KV-table render does `new Date(r.ts)` (expects **ms**) → seconds read as ms → every row collapses to ~21 Jan 1970 18:16. Fix: `new Date(r.ts * 1000)` in the KV client-errors row render only. (The AE/24h table uses `double1` in ms and is correct — do not touch.)
+3. **GROWTH-AXES — main growth chart has no readable axes.** No x-axis date ticks (doesn't read as "90 days"); the y-axis max (e.g. 156) is unlabelled. 156 = the top of the Free cumulative line = cumulative Free-tier credentials issued (≈ upload sessions started) over the retained window. B10: add x date ticks/gridlines + a labelled y-axis ("credentials issued, cumulative"), matching the issuance-modal chart's axes.
+4. **GROWTH-FLAG-TOOLTIP — hover overlay cramped.** date+label+note stack and wrap one-word-per-line against the right edge. B10 (founder-preferred design): move the **date onto the x-axis** at the flag's foot; show **only label + note** in the hover; widen the tooltip and fix right-edge positioning/clipping.
+
+**Delivery process note (not product):** desktop `.js` downloads fail ("This file type cannot be opened"); repo-folder saves landed in a stray `Claude outputs/` folder with `-1` suffixes; bridge `device_commit_files` silently no-op'd one JS write (reported success, bytes unchanged) — byte-verify every bridge write. Dedicated file-delivery-workflow session queued before further Navy Office work.
+
+*"Nothing stops this train."*
