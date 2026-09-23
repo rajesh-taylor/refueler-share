@@ -1,19 +1,13 @@
-import { defineConfig } from 'vitest/config';
-import { resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-
-export default defineConfig({
-  root: __dirname,
+export default defineWorkersConfig({
   test: {
-    environment: 'node',
     include: ['test/**/*.test.js'],
     reporter: process.env.CI ? 'verbose' : 'default',
-  },
-  resolve: {
-    alias: {
-      src: resolve(__dirname, 'src'),
+    poolOptions: {
+      workers: {
+        wrangler: { configPath: './wrangler.toml' },
+      },
     },
   },
 });
