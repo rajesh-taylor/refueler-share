@@ -68,7 +68,7 @@ export async function handleAdminStatus(request, env) {
   }
 
   // S71: validate lightning_available if present
-  const validLightning = ['blink', 'true', 'false'];
+  const validLightning = ['blink', 'phoenixd', 'true', 'false'];
   if (body.lightning_available !== undefined && !validLightning.includes(String(body.lightning_available))) {
     return err(400, `Invalid lightning_available. Must be one of: ${validLightning.join(', ')}`);
   }
@@ -95,7 +95,9 @@ export async function handleAdminStatus(request, env) {
 
   const bodyPatch = { ...body };
   if (bodyPatch.lightning_available !== undefined) {
-    bodyPatch.lightning_available = String(bodyPatch.lightning_available) === 'true';
+    const lv = String(bodyPatch.lightning_available);
+    // Preserve named backends ('phoenixd', 'blink'); collapse 'true'/'false' to boolean
+    bodyPatch.lightning_available = lv === 'true' ? true : lv === 'false' ? false : lv;
   }
   const updated = {
     ...current,
