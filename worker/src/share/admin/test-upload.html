@@ -343,7 +343,7 @@ $('btnStart').addEventListener('click', async () => {
             'Content-Type':     'application/json',
             'X-Upload-Session': sessionToken,
           },
-          body: JSON.stringify({ from_chunk: batchStart }),
+          body: JSON.stringify({ from: batchStart, count: 256 }),
         });
         if (!res.ok) throw new Error(`/urls batch ${batchStart} → ${res.status}`);
         const d = await res.json();
