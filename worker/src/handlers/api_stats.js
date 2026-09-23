@@ -14,6 +14,12 @@
  * legitimately read 0 and the rail split will be empty. That is correct, not a
  * fault — the card shows honest empty states (Share-Dash-3).
  *
+ * Share-B10-1: requests_30d now also exposes `billable` (Registered + Bearer,
+ * i.e. identity + anonymous rails) and `pro_bono` (the `none` rail). The card
+ * headline must show `billable`, NOT `total` — `total` is dominated by Pro Bono
+ * traffic and reads as if the API tier has thousands of requests when it does
+ * not. Pro Bono is shown as a separate sub-line.
+ *
  * AE query goes through the Analytics Engine SQL API (env.CF_ACCOUNT_ID +
  * env.CF_AE_TOKEN, an Account Analytics Read token). If either is absent the
  * AE-derived blocks come back { ae_available:false } and the KV block still
@@ -111,7 +117,7 @@ export async function handleApiStats(request, env) {
 
   let requests30d;
   if (byTier === null) {
-    requests30d = { ae_available: false, by_rail: {}, total: 0 };
+    requests30d = { ae_available: false, by_rail: {}, total: 0, billable: 0, pro_bono: 0 };
   } else {
     const by_rail = { identity: 0, anonymous: 0, none: 0 };
     let total = 0;
@@ -120,7 +126,12 @@ export async function handleApiStats(request, env) {
       by_rail[railForTier(row.tier)] += n;
       total += n;
     }
-    requests30d = { ae_available: true, by_rail, total };
+    // Share-B10-1: the honest headline number is billable traffic only —
+    // Registered (identity) + Bearer (anonymous). `none` is Pro Bono and is
+    // reported separately so it can never be mistaken for API-tier volume.
+    const billable = by_rail.identity + by_rail.anonymous;
+    const pro_bono = by_rail.none;
+    requests30d = { ae_available: true, by_rail, total, billable, pro_bono };
   }
 
   // ── API attach rate — api-tier finalises ÷ all finalises (30d) ─────────────

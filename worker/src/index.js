@@ -23,6 +23,8 @@ import { handleWlConfig, handleCfChallenge } from './wl_config.js';
 import { requireApiAuth, kvQuotaKey } from './api_auth.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleAdminBtcRatePost, handleAdminBtcRateGet, refreshBtcRate } from './handlers/btc_rate.js';
+import { handleAdminBtcPrice }  from './handlers/btc_price.js';        // Share-B10-1: live display ticker
+import { handleGrowthSnapshot } from './handlers/growth_snapshot.js';  // Share-B10-1: growth chart lines
 import { handleWebhookRegister }        from './webhook_reg.js';
 import { findApiKeyHashForUuid, deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
 // SW5: acceptance + collection receipts
@@ -500,6 +502,17 @@ export default {
         return timed('admin_btc_rate_get', () => handleAdminBtcRateGet(request, env).then(r => addCors(r, request)));
       }
 
+      // ── Share-B10-1: live BTC/GBP display ticker (growth chart overlay) ────
+      // Distinct from /admin/btc-rate (governed rate card). KV-cached 15 min.
+      if (request.method === 'GET' && path === '/admin/btc-price') {
+        return timed('admin_btc_price', () => handleAdminBtcPrice(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── Share-B10-1: growth snapshot (AE credentials-issued per tier) ──────
+      if (request.method === 'GET' && path === '/admin/growth-snapshot') {
+        return timed('admin_growth_snapshot', () => handleGrowthSnapshot(request, env).then(r => addCors(r, request)));
+      }
+
       if (request.method === 'GET' && path === '/admin/kv-stats') {
         return timed('admin_kv_stats', () => handleAdminKvStats(request, env).then(r => addCors(r, request)));
       }
@@ -908,6 +921,22 @@ async function handleLogError(request, env) {
   const context = String(body.context || '').slice(0, 64);
   const message = String(body.message || '').slice(0, 200);
   const detail  = String(body.detail  || '').slice(0, 200);
+
+  // Share-B10-1 (B7 snag S93–S95): receiver A/B telemetry is NOT an error — it is
+  // a legitimate completion signal that was mis-routed here and so polluted the
+  // client-error log. The consumer frontend posts these as { context:'receiver_ab',
+  // message:'receiver_ab_downloaded'|'receiver_ab_shown', detail:'variant:<x>' }.
+  // Route them to a first-class AE event via logEvent() instead of the
+  // 'client_error' blob: blob1 = the real event name (so shown vs downloaded stay
+  // distinct), blob3 = the variant. They then count as their own events and drop
+  // out of the Navy Office client-errors card automatically. No new browser header
+  // or endpoint — the browser keeps POSTing to /log/error, so the
+  // corsHeaders()/preflight contract is untouched.
+  if (context === 'receiver_ab' || context.startsWith('receiver_ab')) {
+    const eventName = message.startsWith('receiver_ab') ? message.slice(0, 64) : context;
+    logEvent(env, { endpoint: eventName, status: 200, errorMsg: detail });
+    return new Response('OK', { status: 200 });
+  }
 
   try {
     env.AE.writeDataPoint({
