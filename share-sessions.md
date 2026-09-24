@@ -719,6 +719,5 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 ## Locked block sequence (updated Share-B12-SR · 24 Sep 2026)
 
 `B12-1 → B12-1b → B12-2 → [Berlin 30 Sep–3 Oct] → KV-Audit-Opus + fixes · X3 · X5 → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
-```
 
 ---
