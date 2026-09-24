@@ -667,7 +667,7 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 | Share-B10-3 | `49399ca` (deploy `b81116e2`) | **Download-409 fixed.** `reconstructAndCheckRoot` ran on every chunk and exhausted `cpu_ms` on >128-chunk transfers → false `integrity_failed`. `readSidecarWithRootCheck()` gates reconstruction behind KV `root_verified:{uuid}` (TTL = expiry). `verifyChunkBody` untouched. Supersedes the open item in Share-6-6a above. |
 | Share-B11-1 | `76799ae` (deploy `28d43b55`) | **DAD fixed.** `finishDownload` runs the destruction sequence in `ctx.waitUntil`: consumed guard → chunks → sidecar → `date-seal.ots.enc` → `root_verified` → tombstone. Second download = 410. `dock_index` not cleared on DAD (B12-1 fixes). Open: DAD-ERROR-TEXT ("0%" on error screen). |
 | Share-B12 | `cc14d21` | Storage / quota / surfaces / billing design (Opus). `docs/B12-spec-v1.1.md`. |
-
+| Share-B12-1 | `3b1b819` + `3acbbf3` (deploy `9a3630f6`) | PURGED status on sweeps (B12 §6.2) · DAD clears `dock_index` (step 7, all three delete paths now indistinguishable) · X4 stopped (`size_bytes` no longer written to `dock_index`) · S1.10 sweep rules (tombstoned-UUID residue, 7-day orphan chunks, wrong-size objects — report-only until live-verified) · 23 unit tests, sandbox-verified (real `npm test` blocked, see below). New: `worker/src/sweep_rules.js`. Soak UUID `3dcccb35-5463-46ed-9f23-41cf217421d9` hard-excluded from the sweep. Open: `npm test` broken under Node 26 (`@cloudflare/vitest-pool-workers` needs Node 22 LTS) — fix first in B12-1b · live dry-run verify not yet run · `confirm_transfer.js` not checked for DAD-resurrection risk · Navy Office (refueler.io) not yet updated. |
 ---
 
 ## Share-B12-SR · 24 Sep 2026 — Security review of B12 (Opus, no code)
@@ -707,7 +707,9 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 
 | Block | Sessions | Model | When |
 |---|---|---|---|
-| B12-1 · B12-1b · B12-2 | 3 (+1 buffer) | Sonnet | Pre-Berlin |
+| B12-1 | 1 (done) | Sonnet | Pre-Berlin |
+| B12-1b | 1 (+1 buffer) | Sonnet | Pre-Berlin |
+| B12-2 | 1 (+1 buffer) | Sonnet | Pre-Berlin |
 | KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
 | B12-3 quota | 3 (+1) | Sonnet | Week 2 |
 | B12-4a auth | 2 (+1) | Sonnet | Week 2 |
@@ -715,6 +717,8 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 | B12-Audit (built quota + auth) | 1 + 1 | Opus + Sonnet | Week 3 |
 | B12-5 Harbourmaster | 2 | Sonnet | When a Chartered client is in sight |
 | B12-4c Sovereign ledger | 2–3 | Sonnet | With SD-block (needs B8-1 + B7) |
+
+**Split-session policy (Share-B12-1, 24 Sep 2026):** Sonnet build sessions run too much scope when cryptographic/security-sensitive work is bundled — split proactively at session-close, don't cram. Applies going forward to all B12-* sessions and beyond.
 
 ## Locked block sequence (updated Share-B12-SR · 24 Sep 2026)
 
