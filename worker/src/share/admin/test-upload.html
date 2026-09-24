@@ -257,9 +257,16 @@ async function blindedMessage() {
 }
 
 // ─── Merkle tree (rfc6962-unbalanced-blake3-v1) ────────────────────────────────
-// leaf  = 32-byte BLAKE3(chunk bytes)        — domain tag 0x00 applied by finalise.js
+// leaf  = BLAKE3( 0x00 ‖ BLAKE3(chunk bytes) )   — RFC 6962 leaf domain separation
 // node  = BLAKE3( 0x01 ‖ left(32) ‖ right(32) )
 // odd leaf at any level propagates up unchanged
+function leafHash(digest) {
+  const buf = new Uint8Array(33);
+  buf[0] = 0x00;
+  buf.set(digest, 1);
+  return blake3(buf);
+}
+
 function merkleNode(left, right) {
   const buf = new Uint8Array(65);
   buf[0] = 0x01;
@@ -269,8 +276,9 @@ function merkleNode(left, right) {
 }
 
 function buildMerkleRoot(leafHashBytes) {
-  // leafHashBytes: Array of Uint8Array(32) in chunk order
-  let nodes = leafHashBytes.slice();
+  // leafHashBytes: Array of Uint8Array(32) raw chunk BLAKE3 digests
+  // Apply RFC 6962 leaf domain tag before building tree
+  let nodes = leafHashBytes.map(d => leafHash(d));
   while (nodes.length > 1) {
     const next = [];
     for (let i = 0; i < nodes.length; i += 2) {

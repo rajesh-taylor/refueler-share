@@ -17,6 +17,7 @@ import { handleClientErrorsLog, appendClientError } from './handlers/client_erro
 import { handleApiStats } from './handlers/api_stats.js';                      // Share-Dash-2
 import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
 import { handleOrphanSweep } from './handlers/orphan_sweep.js';               // Share-6-6a
+import { handlePatchMerkleRoot } from './handlers/patch_merkle_root.js';  // Share-6-6a
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleTestCredential } from './handlers/test_credential.js';                // Share-Admin-1
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
@@ -542,6 +543,13 @@ export default {
       // No deletion — report only. Deletion gate is Share-6-6b.
       if (request.method === 'GET' && path === '/admin/orphan-sweep') {
         return timed('admin_orphan_sweep', () => handleOrphanSweep(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── Share-6-6a: patch stored merkle_root — POST /admin/patch-merkle-root ─
+      // Admin-key gated. Reads {uuid}/hashes from R2, recomputes the correct root
+      // (RFC 6962 0x00 leaf domain tag), patches {uuid}/manifest.json if wrong.
+      if (request.method === 'POST' && path === '/admin/patch-merkle-root') {
+        return timed('admin_patch_merkle_root', () => handlePatchMerkleRoot(request, env).then(r => addCors(r, request)));
       }
 
       // ── Share-Admin-1: test credential — POST /admin/test-credential ─────────
