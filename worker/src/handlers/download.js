@@ -361,7 +361,6 @@ function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlRespons
         env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
           console.error('DAD: dock_index KV delete failed:', e)
         );
-        );
       })()
     );
   }
