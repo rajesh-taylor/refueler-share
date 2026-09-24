@@ -66,6 +66,12 @@ export async function handleDeleteTransfer(request, env, uuid) {
   const tombstone = buildTombstone(nowSeconds);
   await putManifest(env.BUCKET, uuid, tombstone);
 
+  // Share-B12-1 (B12 §0.3): recipient delete clears the index exactly as DAD and
+  // owner-delete do, so all three are indistinguishable in dock_index (absence).
+  env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
+    console.error('Execution Dock KV delete failed (bearer path):', e)
+  );
+
   return json({
     destroyed:   true,
     consumed_at: nowSeconds,

@@ -296,7 +296,8 @@ function logEventStatic(env, status, chunkIndex, errorMsg) {
 //   4. Delete {uuid}/date-seal.ots.enc (OTS anchor, matches bearer delete path).
 //   5. Delete KV root_verified:{uuid} (B10-3 cache key; self-expiring but clean to remove).
 //   6. Write tombstone as the final manifest state.
-//
+//   7. Remove KV dock_index:{uuid} — the same call owner-delete makes, so DAD and
+//      owner-delete are indistinguishable in the Execution Dock (absence). B12 §6.5.
 // The response is returned to the recipient immediately; destruction is background.
 // The receipt tail (SW5 cargo.discharged) fires independently — DAD does not suppress it.
 function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse) {
@@ -350,10 +351,16 @@ function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlRespons
           console.error('DAD: root_verified KV delete failed:', e)
         );
 
-        // Step 6: write tombstone — final manifest state.
+                // Step 6: write tombstone — final manifest state.
         const tombstone = buildTombstone(nowSeconds);
         putManifest(env.BUCKET, uuid, tombstone).catch(e =>
           console.error('DAD: tombstone write failed:', e)
+        );
+
+        // Step 7: remove the Execution Dock entry (Share-B12-1, B12 §6.5).
+        env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
+          console.error('DAD: dock_index KV delete failed:', e)
+        );
         );
       })()
     );

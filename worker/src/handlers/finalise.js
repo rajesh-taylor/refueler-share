@@ -13,7 +13,8 @@
  * chunk order — merkle-spec §1/§2), records the browser-supplied
  * ciphertext-chunk merkle_root + tree_algo, flips upload_complete:true,
  * spends the session token, and enriches the Execution Dock KV entry with
- * size_bytes · rail · merkle_root.
+ * rail · merkle_root. size_bytes is deliberately NOT written (B12-SR X4:
+ * plaintext size is never persisted in KV).
  *
  * The root is TRUSTED here and RECONSTRUCTED at download (Share-6-5 / B9-3):
  * finalise writes, download verifies. The sidecar is written here and MUST
@@ -246,9 +247,10 @@ export async function handleFinalise(request, env, uuid) {
 
   // ── 6. Enrich the Execution Dock entry (Share-Dash-2) ──────────────────────
   // The dock_index:{uuid} entry was created at initiate with
-  // expiry_timestamp · tier · file_name · created_at. Add the three fields
-  // known only now: size_bytes (from the manifest), rail (from the tier), and
-  // merkle_root (the ciphertext-chunk root recorded at lodgement).
+  // expiry_timestamp · tier · file_name · created_at. Add the two fields
+  // known only now: rail (from the tier) and merkle_root (the ciphertext-chunk
+  // root recorded at lodgement). size_bytes is NOT written (B12-SR X4) — legacy
+  // entries that carry it age out on TTL; no backfill.
   //
   // READ-THEN-MERGE — never clobber. collected / collected_at are written at
   // collection by a different path; overwriting the whole key would erase them.
@@ -259,7 +261,7 @@ export async function handleFinalise(request, env, uuid) {
     const dockKey  = `dock_index:${uuid}`;
     const existing = await env.STATUS_KV.get(dockKey, { type: 'json' });
     if (existing && typeof existing === 'object') {
-      existing.size_bytes  = manifest.total_bytes ?? 0;
+      delete existing.size_bytes;   // X4: never carry a plaintext size forward
       existing.rail        = railForTier(existing.tier ?? manifest.tier);
       existing.merkle_root = merkleRoot; // ciphertext-chunk root — never the plaintext root
       const now = Math.floor(Date.now() / 1000);

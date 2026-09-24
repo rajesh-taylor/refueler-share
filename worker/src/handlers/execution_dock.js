@@ -14,7 +14,10 @@
  *     tier:              string,
  *     collected:         boolean,
  *     collected_at:      number | null,
+ *     purged_at:         number | null,   // B12-1: set by a sweep that purged the objects
  *   }
+ *   size_bytes is NOT part of the schema (B12-SR X4). Legacy entries may still
+ *   carry it in KV until TTL; it is never returned.
  *
  * Badge trigger thresholds — proportional to expiry window:
  *   1-day  expiry → no badge (too short to be meaningful)
@@ -26,7 +29,9 @@
  *   'active'       — not expired, not collected
  *   'active_nudge' — active AND elapsed ≥ badge threshold for this expiry window
  *   'collected'    — recipient confirmed download
- *   'expired'      — past expiry_timestamp, not collected (R2 lifecycle handles chunks)
+ *   'expired'      — past expiry_timestamp, not collected, objects not yet purged
+ *   'purged'       — a sweep deleted the objects (purged_at set); wins over every
+ *                    other status. Expires column keeps the original date.
  *
  * Display cap: 200 most recent transfers by created_at desc.
  */
@@ -58,6 +63,7 @@ function badgeThreshold(createdAt, expiryTimestamp) {
 }
 
 function computeStatus(entry, nowSeconds) {
+  if (entry.purged_at) return 'purged';
   if (entry.collected) return 'collected';
   if (nowSeconds > entry.expiry_timestamp) return 'expired';
 
@@ -126,8 +132,9 @@ export async function handleExecutionDock(request, env) {
       collected_at:     entry.collected_at ?? null,
       status,
       days_remaining:   daysRemaining,
+      purged_at:        entry.purged_at ?? null,
       // Share-Dash-2 enrichment — written into dock_index at finalise.
-      size_bytes:       entry.size_bytes ?? null,
+      // (size_bytes removed in B12-1 — plaintext size is never persisted.)
       rail:             entry.rail ?? null,
       // merkle_root IS captured in dock_index at finalise (ciphertext-chunk root),
       // but is deliberately WITHHELD here until Share-6-5 download verify is live
