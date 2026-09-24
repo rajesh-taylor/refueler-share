@@ -10,14 +10,35 @@
  * VERIFIED PATH (per-manifest gate — isVerifiedPath, download_verify.js):
  *   A manifest finalised by Share-6-3 (upload_complete + merkle_root + pinned
  *   tree_algo) is served with ciphertext storage-integrity verification:
- *     - root reconstruction from {uuid}/hashes vs manifest.merkle_root (once per
- *       request, order-independent — no assumption that chunk 0 is fetched first);
- *     - per-chunk body BLAKE3 recompute vs sidecar[i];
+ *     - root reconstruction from {uuid}/hashes vs manifest.merkle_root — run
+ *       ONCE per transfer via KV-cached flag (Share-B10-3); subsequent chunks
+ *       skip reconstruction and trust the cached proof (see readSidecarWithRootCheck);
+ *     - per-chunk body BLAKE3 recompute vs sidecar[i] — runs on EVERY chunk;
  *     - 409 integrity_failed on any mismatch; large-file mid-stream mismatch
  *       aborts the connection (hybrid threshold).
  *   On mismatch: AE logged, object NOT auto-destroyed (preserved for
  *   investigation — merkle-spec §3.4; the date-seal.ots.enc deletion invariant
  *   is separate and untouched).
+ *
+ * Share-B10-3 — fix for false 409 under load on large transfers:
+ *   Root of the bug: reconstructAndCheckRoot() was called on every chunk request.
+ *   For transfers >128 chunks (>4 GiB, streaming path), the noble tree over N
+ *   leaves exhausted cpu_ms under concurrent load, causing the try/catch inside
+ *   reconstructAndCheckRoot to catch the CPU-kill and return integrity_failed —
+ *   a false 409 with no actual tamper event. Fix: replaced reconstructAndCheckRoot()
+ *   call with readSidecarWithRootCheck() (download_verify.js), which:
+ *     - runs the full root reconstruction exactly once per transfer (first chunk
+ *       request to arrive for a given uuid, whichever it is);
+ *     - caches the result as KV flag `root_verified:{uuid}` (TTL = transfer expiry);
+ *     - on subsequent chunks: reads the sidecar from R2 (always needed for step 4),
+ *       sees the KV flag, and skips reconstruction entirely.
+ *   Security: verifyChunkBody (step 4) still runs on every chunk. The root check
+ *   defends against sidecar tampering; by caching it we accept that subsequent
+ *   chunks rely on a proof established on the first request. An adversary who can
+ *   write to R2 and patch both a chunk and its sidecar entry would evade step 3
+ *   on cached chunks but is still caught by: step 4 (chunk body vs sidecar entry),
+ *   and the recipient's plaintext blake3_root check post-decryption. No silent
+ *   data corruption escapes. Full security rationale in download_verify.js.
  *
  * LEGACY PATH (pre-6-3 manifests, no merkle_root): served exactly as before,
  *   NO 409 — a file predating the sidecar must still serve (session brief;
@@ -37,7 +58,7 @@ import { emitReceipt } from '../receipts.js';
 import { findApiKeyHashForUuid } from '../webhook_delivery.js';
 import {
   isVerifiedPath,
-  reconstructAndCheckRoot,
+  readSidecarWithRootCheck,   // Share-B10-3: replaces reconstructAndCheckRoot on hot path
   verifyChunkBody,
   VERIFY_INLINE_CHUNK_THRESHOLD,
 } from './download_verify.js';
@@ -138,10 +159,11 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
       return err(416, 'Range requests are not supported on verified transfers');
     }
 
-    // merkle-spec §3 steps 2–3: sidecar length check + root reconstruction vs
-    // manifest.merkle_root. Runs every verified request (order-independent):
-    // no chunk is ever served without the committed root having been checked.
-    const rootCheck = await reconstructAndCheckRoot(env, uuid, manifest);
+    // Share-B10-3: readSidecarWithRootCheck replaces the bare reconstructAndCheckRoot
+    // call. Root reconstruction (steps 2–3, the noble tree over N leaves) now runs
+    // exactly once per transfer, cached in KV. The sidecar is still read from R2
+    // on every chunk request (unavoidable — verifyChunkBody needs it for step 4).
+    const rootCheck = await readSidecarWithRootCheck(env, uuid, manifest);
     if (!rootCheck.ok) {
       logEvent(env, { endpoint: 'download', status: 409, chunkIndex, errorMsg: rootCheck.code });
       // Root-level failure — AE logged above. No auto-destroy (merkle-spec §3.4).

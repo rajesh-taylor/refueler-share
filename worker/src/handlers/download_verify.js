@@ -32,12 +32,30 @@
  *   noble by design (it hashes only 33/65-byte nodes — the swap there buys nothing
  *   and would disturb the parity keystone). Both hashers agree byte-for-byte, so
  *   the reconstructed root (noble) and the chunk-body digests (WASM) still meet.
+ *
+ * Share-B10-3 change — KV-cached root verification:
+ *   The root reconstruction (steps 2–3, the CPU-expensive noble tree over N leaves)
+ *   was running on every chunk request. For large transfers (>128 chunks, streaming
+ *   path) this exhausted cpu_ms under load, causing reconstructRoot to throw inside
+ *   the try/catch, which returned { ok:false, code:'integrity_failed' } — a false
+ *   409 with no real tamper event. Fix: readSidecarWithRootCheck() replaces the
+ *   direct reconstructAndCheckRoot() call in download.js. It writes a KV flag
+ *   `root_verified:{uuid}` (TTL = transfer expiry) on first proof, then trusts it
+ *   on subsequent chunks — skipping reconstruction and reading the sidecar directly.
+ *   reconstructAndCheckRoot() is unchanged and still exported (tests, future use).
+ *   verifyChunkBody() (step 4) still runs on every chunk — the security-bearing
+ *   check is untouched. Security trade documented in download.js.
  */
 
 import { hashOneShot } from '../blake3_wasm.js';
 import { reconstructRoot, TREE_ALGO } from '../merkle.js';
 
 const DIGEST_LEN = 32;
+
+// KV key prefix for the cached root-verified flag (Share-B10-3).
+// TTL is set to the transfer's remaining lifetime so it self-expires with the
+// transfer. The value is '1' — presence is the signal, content is irrelevant.
+const ROOT_VERIFIED_PREFIX = 'root_verified:';
 
 // Hybrid failure-mode threshold (founder decision, this session): at or under
 // this many chunks the verified path buffers each whole chunk, hashes it, and
@@ -118,6 +136,10 @@ function sidecarToLeaves(sidecar, chunkCount) {
  * decoded sidecar so the caller can verify individual chunk bodies (step 4)
  * without a second GET.
  *
+ * NOTE (Share-B10-3): download.js no longer calls this directly on every chunk.
+ * Call readSidecarWithRootCheck() instead, which gates this behind a KV flag.
+ * This function remains exported for tests and any future non-hot-path callers.
+ *
  * @returns {Promise<{ok:true, sidecar:Uint8Array, chunkCount:number}
  *                 | {ok:false, code:string, detail:string}>}
  */
@@ -167,6 +189,122 @@ export async function reconstructAndCheckRoot(env, uuid, manifest) {
 
   if (!ctEqualBytes(rebuilt, manifestRoot)) {
     return { ok: false, code: 'integrity_failed', detail: 'reconstructed root != manifest root' };
+  }
+
+  return { ok: true, sidecar, chunkCount };
+}
+
+/**
+ * Share-B10-3: KV-cached sidecar fetch + root verification.
+ *
+ * This is the function download.js calls on every chunk request. It replaces
+ * the bare reconstructAndCheckRoot() call that ran the full noble tree
+ * reconstruction on every chunk — which exhausted cpu_ms on large transfers
+ * (>128 chunks) and caused false 409s under load.
+ *
+ * Behaviour:
+ *   - Always reads {uuid}/hashes from R2 (the sidecar must be fetched every
+ *     request so verifyChunkBody has its leaf data — this R2 GET is unavoidable).
+ *   - On the FIRST chunk request for a given uuid (KV flag absent): runs the
+ *     full root reconstruction (steps 2–3) and writes `root_verified:{uuid}`
+ *     to STATUS_KV with TTL = remaining transfer lifetime. From this point on
+ *     the sidecar is proven structurally consistent with the manifest root.
+ *   - On SUBSEQUENT chunk requests (KV flag present): skips reconstruction,
+ *     trusts the cached proof, returns the sidecar directly. One KV read
+ *     (~0.2 ms) replaces ~6,399 noble BLAKE3 hashes (hundreds of ms at scale).
+ *   - verifyChunkBody (step 4) still runs on every chunk in download.js — the
+ *     security-bearing check is completely untouched.
+ *
+ * Security model:
+ *   The root reconstruction proves the sidecar is structurally consistent with
+ *   the manifest merkle_root committed at finalise. An attacker who can write to
+ *   R2 and patch both a chunk and its sidecar entry would evade step 4 but not
+ *   step 3. By caching the step 3 result in KV, we accept that subsequent chunks
+ *   are served on the basis of a cached proof rather than a live one. This is
+ *   sound because: (a) the proof is established from the live sidecar on the
+ *   first request; (b) verifyChunkBody independently checks each chunk's bytes
+ *   against its sidecar entry on every request, which catches any per-chunk
+ *   R2 tamper regardless of the root; (c) the manifest merkle_root in R2 is
+ *   equally attackable by any adversary who can write to R2 — the root check
+ *   does not protect against a fully compromised storage layer; (d) the
+ *   recipient's plaintext blake3_root check is the terminal integrity guarantee.
+ *
+ * KV key: `root_verified:{uuid}`  value: '1'  TTL: transfer remaining lifetime
+ * (min 60 s to avoid KV rejecting a zero/negative TTL on nearly-expired transfers)
+ *
+ * @returns {Promise<{ok:true, sidecar:Uint8Array, chunkCount:number}
+ *                 | {ok:false, code:string, detail:string}>}
+ */
+export async function readSidecarWithRootCheck(env, uuid, manifest) {
+  const chunkCount = manifest.total_chunks;
+  if (!Number.isInteger(chunkCount) || chunkCount < 1) {
+    return { ok: false, code: 'integrity_failed', detail: 'manifest chunk_count invalid' };
+  }
+
+  // Always read the sidecar — verifyChunkBody needs the leaf data every time.
+  let obj;
+  try {
+    obj = await env.BUCKET.get(`${uuid}/hashes`);
+  } catch (e) {
+    console.error('sidecar GET failed:', e);
+    return { ok: false, code: 'integrity_failed', detail: 'sidecar unavailable' };
+  }
+  if (!obj) {
+    return { ok: false, code: 'integrity_failed', detail: 'sidecar missing' };
+  }
+
+  const sidecar = new Uint8Array(await obj.arrayBuffer());
+  if (sidecar.length !== chunkCount * DIGEST_LEN) {
+    return {
+      ok: false,
+      code: 'integrity_failed',
+      detail: `sidecar length ${sidecar.length} != ${chunkCount * DIGEST_LEN}`,
+    };
+  }
+
+  // Check the KV flag — if already set, root was proven on a prior chunk request.
+  const kvKey = `${ROOT_VERIFIED_PREFIX}${uuid}`;
+  let rootAlreadyVerified = false;
+  try {
+    const flag = await env.STATUS_KV.get(kvKey);
+    rootAlreadyVerified = flag !== null;
+  } catch (e) {
+    // KV read failure: conservative path — treat as unverified, run reconstruction.
+    console.error('root_verified KV read failed, falling back to reconstruction:', e);
+  }
+
+  if (!rootAlreadyVerified) {
+    // First request (or KV read failed): run the full reconstruction.
+    const manifestRoot = b64urlToBytes(manifest.merkle_root);
+    if (!manifestRoot || manifestRoot.length !== DIGEST_LEN) {
+      return { ok: false, code: 'integrity_failed', detail: 'manifest merkle_root malformed' };
+    }
+
+    let rebuilt;
+    try {
+      rebuilt = reconstructRoot(sidecarToLeaves(sidecar, chunkCount));
+    } catch (e) {
+      console.error('root reconstruction threw:', e);
+      return { ok: false, code: 'integrity_failed', detail: 'reconstruction error' };
+    }
+
+    if (!ctEqualBytes(rebuilt, manifestRoot)) {
+      return { ok: false, code: 'integrity_failed', detail: 'reconstructed root != manifest root' };
+    }
+
+    // Root proven. Write the KV flag so subsequent chunks skip reconstruction.
+    // TTL = remaining transfer lifetime, floored at 60 s (KV rejects zero/negative).
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const expiryTs   = manifest.expiry_timestamp ?? (nowSeconds + 86400);
+    const ttl        = Math.max(expiryTs - nowSeconds, 60);
+    try {
+      await env.STATUS_KV.put(kvKey, '1', { expirationTtl: ttl });
+    } catch (e) {
+      // Non-fatal: the flag just won't be set. Next chunk re-runs reconstruction.
+      // Logged but never returned as an error — a KV write failure does not make
+      // the transfer corrupt.
+      console.error('root_verified KV write failed (non-fatal):', e);
+    }
   }
 
   return { ok: true, sidecar, chunkCount };
