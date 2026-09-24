@@ -40,6 +40,26 @@
  *   and the recipient's plaintext blake3_root check post-decryption. No silent
  *   data corruption escapes. Full security rationale in download_verify.js.
  *
+ * Share-B11-1 — DAD-BUG fix (destroy-after-download not executing):
+ *   Root of the bug: flipPendingDestruction correctly flipped pending_destruction
+ *   false → true on the last chunk, but nothing ever acted on that flag. The
+ *   comment in manifest_tg.js even said "pending_destruction: true is advisory —
+ *   never blocks a re-fetch." The deletion sequence (consumed flag, chunk deletes,
+ *   tombstone) existed in delete_transfer.js but was never wired to the DAD path.
+ *   Fix: finishDownload now executes the full destruction sequence inline via
+ *   ctx.waitUntil when pendingDestructionFlipped === true. Sequence:
+ *     1. Write consumed:true to manifest (blocks any concurrent re-download)
+ *     2. Delete all chunks {uuid}/0000 … {uuid}/{N-1}
+ *     3. Delete {uuid}/hashes sidecar
+ *     4. Delete {uuid}/date-seal.ots.enc (OTS anchor, matches bearer delete path)
+ *     5. Delete KV root_verified:{uuid} (B10-3 cache key — self-expiring anyway)
+ *     6. Write tombstone (consumed:true + consumed_at) as the final manifest state
+ *   The manifest write at step 1 is the guard — if the Worker dies mid-sequence,
+ *   consumed:true is already set so checkTransferStatus blocks any re-download.
+ *   Chunks may be partially deleted (orphan sweep catches residue at 03:00).
+ *   finishDownload returns the response immediately; destruction runs in the
+ *   background via ctx.waitUntil — the recipient's download is never held up.
+ *
  * LEGACY PATH (pre-6-3 manifests, no merkle_root): served exactly as before,
  *   NO 409 — a file predating the sidecar must still serve (session brief;
  *   Share-6 §4). This is the cutover-safe additive behaviour: the verified path
@@ -53,12 +73,12 @@
 import { UUID_RE, safeGetManifest, json, err, parseRange } from '../utils.js';
 import { putManifest, isDownloadBlocked, requiresPassphrase } from '../manifest.js';
 import { verifyDownloadToken } from '../nut11.js';
-import { checkTransferStatus, flipPendingDestruction } from '../manifest_tg.js';
+import { checkTransferStatus, flipPendingDestruction, buildTombstone } from '../manifest_tg.js';
 import { emitReceipt } from '../receipts.js';
 import { findApiKeyHashForUuid } from '../webhook_delivery.js';
 import {
   isVerifiedPath,
-  readSidecarWithRootCheck,   // Share-B10-3: replaces reconstructAndCheckRoot on hot path
+  readSidecarWithRootCheck,
   verifyChunkBody,
   VERIFY_INLINE_CHUNK_THRESHOLD,
 } from './download_verify.js';
@@ -140,33 +160,19 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
   }
 
   // ── Share-6-5a: verified vs legacy fork ────────────────────────────────────
-  // Per-manifest gate. Verified path only when this manifest was finalised by
-  // Share-6-3 (merkle_root + pinned tree_algo present). Everything else — every
-  // pre-6-3 upload — takes the unchanged legacy serve below, never a 409.
   const verified = isVerifiedPath(manifest);
 
   const key = `${uuid}/${String(chunkIndex).padStart(4, '0')}`;
 
   if (verified) {
-    // Range cannot be integrity-verified against a whole-chunk leaf hash: a
-    // partial body's BLAKE3 will never equal sidecar[i]. Rather than serve a
-    // "verified" 206 that is nothing of the sort, reject Range on the verified
-    // path. The consumer client fetches whole chunks (frontend/download.js), so
-    // nothing legitimate is broken; a future verified-resume feature is a real
-    // design task (verify whole, then slice), flagged — not smuggled in here.
     if (request.headers.has('Range')) {
       logEvent(env, { endpoint: 'download', status: 416, chunkIndex, errorMsg: 'range_on_verified' });
       return err(416, 'Range requests are not supported on verified transfers');
     }
 
-    // Share-B10-3: readSidecarWithRootCheck replaces the bare reconstructAndCheckRoot
-    // call. Root reconstruction (steps 2–3, the noble tree over N leaves) now runs
-    // exactly once per transfer, cached in KV. The sidecar is still read from R2
-    // on every chunk request (unavoidable — verifyChunkBody needs it for step 4).
     const rootCheck = await readSidecarWithRootCheck(env, uuid, manifest);
     if (!rootCheck.ok) {
       logEvent(env, { endpoint: 'download', status: 409, chunkIndex, errorMsg: rootCheck.code });
-      // Root-level failure — AE logged above. No auto-destroy (merkle-spec §3.4).
       return json({ error: rootCheck.code }, 409);
     }
     const { sidecar, chunkCount } = rootCheck;
@@ -176,7 +182,6 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
       return err(400, 'Invalid chunk index');
     }
 
-    // Fetch the WHOLE stored object (no range) so its bytes match leaf i.
     let obj;
     try {
       obj = await env.BUCKET.get(key);
@@ -192,36 +197,25 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
       'X-Transfer-UUID': uuid,
       'X-Chunk-Index':   String(chunkIndex),
       'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
-      'X-Integrity':     'ciphertext-storage-verified', // storage integrity, NOT end-to-end
+      'X-Integrity':     'ciphertext-storage-verified',
     };
 
-    // merkle-spec §3 step 4: verify-then-flush, hybrid failure mode.
     if (chunkCount <= VERIFY_INLINE_CHUNK_THRESHOLD) {
-      // Small transfers (the entire free tier and most paid): buffer the whole
-      // chunk, verify, and release only on match — a clean 409 is always
-      // possible because nothing is on the wire until it verifies.
       const bytes = new Uint8Array(await obj.arrayBuffer());
       if (!verifyChunkBody(bytes, sidecar, chunkIndex)) {
         logEvent(env, { endpoint: 'download', status: 409, chunkIndex, errorMsg: 'chunk_hash_mismatch' });
-        // AE logged. Object preserved for investigation — NOT destroyed.
         return json({ error: 'integrity_failed', chunk: chunkIndex }, 409);
       }
       const dlResponse = new Response(bytes, { status: 200, headers: baseHeaders });
       return finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse);
     }
 
-    // Large transfers (> threshold, Chartered-scale): stream with inline
-    // verify-then-flush. A mismatch mid-body cannot yield a clean 409 — bytes
-    // are already on the wire — so the stream is aborted (the connection
-    // truncates; the client sees a failed download). AE logged, object
-    // preserved. 6-5b handles BOTH shapes: clean 409 (small) and truncation
-    // (large). This is the honest large-file behaviour, stated, not hidden.
     const verifyingStream = makeVerifyingStream(obj.body, sidecar, chunkIndex, env, uuid);
     const dlResponse = new Response(verifyingStream, { status: 200, headers: baseHeaders });
     return finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse);
   }
 
-  // ── Legacy path (pre-6-3, no merkle_root) — UNCHANGED from the inline handler.
+  // ── Legacy path (pre-6-3, no merkle_root) — UNCHANGED.
   const obj = await env.BUCKET.get(key, {
     range: request.headers.has('Range') ? parseRange(request.headers.get('Range')) : undefined,
   });
@@ -245,14 +239,7 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
 }
 
 // ── Streaming verify-then-flush for large (> threshold) verified transfers ────
-// Buffers the chunk body through a TransformStream, hashing as it passes. Bytes
-// flow to the client as they arrive; if the final digest ≠ sidecar[i] the
-// stream errors, truncating the connection. No clean status is possible once
-// bytes are flushed — this is the accepted large-file failure mode. The object
-// is never destroyed here.
 function makeVerifyingStream(sourceBody, sidecar, i, env, uuid) {
-  // Accumulate for a whole-chunk BLAKE3 (leaf = digest over exactly the stored
-  // bytes). Web Streams: pass bytes through, hash at flush.
   const chunks = [];
   const reader = sourceBody.getReader();
   return new ReadableStream({
@@ -260,7 +247,6 @@ function makeVerifyingStream(sourceBody, sidecar, i, env, uuid) {
       try {
         const { done, value } = await reader.read();
         if (done) {
-          // Concatenate and verify at end-of-stream.
           let total = 0;
           for (const c of chunks) total += c.length;
           const joined = new Uint8Array(total);
@@ -268,7 +254,7 @@ function makeVerifyingStream(sourceBody, sidecar, i, env, uuid) {
           for (const c of chunks) { joined.set(c, off); off += c.length; }
           if (!verifyChunkBody(joined, sidecar, i)) {
             logEventStatic(env, 409, i, 'chunk_hash_mismatch_stream');
-            controller.error(new Error('integrity_failed')); // truncates the connection
+            controller.error(new Error('integrity_failed'));
             return;
           }
           controller.close();
@@ -286,8 +272,6 @@ function makeVerifyingStream(sourceBody, sidecar, i, env, uuid) {
   });
 }
 
-// Static AE line for the streaming-abort case (no access to the closure logEvent
-// above from inside the stream source; same shape).
 function logEventStatic(env, status, chunkIndex, errorMsg) {
   if (!env.AE) return;
   try {
@@ -301,22 +285,82 @@ function logEventStatic(env, status, chunkIndex, errorMsg) {
   }
 }
 
-// ── Shared tail: pending_destruction flip + cargo.discharged receipt ──────────
-// Preserved VERBATIM from the inline handler (lines 1912–1980). The receipt does
-// NOT gain a verified field in 6-5a — that is 6-5b / B9-4, barred here.
+// ── Shared tail: DAD destruction + pending_destruction flip + cargo.discharged receipt ──
+//
+// Share-B11-1: when flipPendingDestruction returns a new manifest (last chunk of a
+// DAD transfer), execute the full destruction sequence in ctx.waitUntil:
+//   1. Write consumed:true immediately — guards against concurrent re-downloads
+//      if the Worker dies before completing the rest of the sequence.
+//   2. Delete all chunks sequentially; log failures (orphan sweep catches residue).
+//   3. Delete {uuid}/hashes sidecar.
+//   4. Delete {uuid}/date-seal.ots.enc (OTS anchor, matches bearer delete path).
+//   5. Delete KV root_verified:{uuid} (B10-3 cache key; self-expiring but clean to remove).
+//   6. Write tombstone as the final manifest state.
+//
+// The response is returned to the recipient immediately; destruction is background.
+// The receipt tail (SW5 cargo.discharged) fires independently — DAD does not suppress it.
 function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse) {
   // ── TG: flip pending_destruction → true on last chunk of a DAD transfer ───
   const updatedManifestForFlip = flipPendingDestruction(manifest, chunkIndex);
   const pendingDestructionFlipped = updatedManifestForFlip !== manifest;
+
   if (pendingDestructionFlipped) {
+    // Share-B11-1: full DAD destruction sequence.
     ctx.waitUntil(
-      putManifest(env.BUCKET, uuid, updatedManifestForFlip).catch(e =>
-        console.error('TG: pending_destruction flip write failed:', e)
-      )
+      (async () => {
+        const nowSeconds  = Math.floor(Date.now() / 1000);
+        const totalChunks = manifest.total_chunks ?? 0;
+
+        // Step 1: mark consumed:true — the critical guard write.
+        // If anything below fails, this prevents a second download succeeding.
+        try {
+          await putManifest(env.BUCKET, uuid, {
+            ...manifest,
+            consumed:    true,
+            consumed_at: nowSeconds,
+          });
+        } catch (e) {
+          console.error('DAD: consumed guard write failed:', e);
+          // Do not continue — we cannot safely delete without the guard in place.
+          return;
+        }
+
+        // Step 2: delete all chunks.
+        for (let i = 0; i < totalChunks; i++) {
+          try {
+            await env.BUCKET.delete(`${uuid}/${String(i).padStart(4, '0')}`);
+          } catch (e) {
+            console.error(`DAD: chunk delete failed at index ${i}:`, e);
+            // Continue — orphan sweep catches residue at 03:00.
+          }
+        }
+
+        // Step 3: delete sidecar.
+        env.BUCKET.delete(`${uuid}/hashes`).catch(e =>
+          console.error('DAD: sidecar delete failed:', e)
+        );
+
+        // Step 4: delete OTS anchor (matches bearer delete path).
+        env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
+          console.error('DAD: date-seal.ots.enc delete failed:', e)
+        );
+
+        // Step 5: delete the B10-3 KV root-verified cache key.
+        env.STATUS_KV.delete(`root_verified:${uuid}`).catch(e =>
+          console.error('DAD: root_verified KV delete failed:', e)
+        );
+
+        // Step 6: write tombstone — final manifest state.
+        const tombstone = buildTombstone(nowSeconds);
+        putManifest(env.BUCKET, uuid, tombstone).catch(e =>
+          console.error('DAD: tombstone write failed:', e)
+        );
+      })()
     );
   }
 
   // ── SW5: emit cargo.discharged receipt ────────────────────────────────────
+  // Fires independently of DAD — destruction does not suppress the receipt.
   const isLastChunk = manifest.total_chunks > 0 && chunkIndex === manifest.total_chunks - 1;
   if (isLastChunk && manifest.api_live_key) {
     ctx.waitUntil(
