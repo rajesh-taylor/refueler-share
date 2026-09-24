@@ -18,6 +18,7 @@ import { handleApiStats } from './handlers/api_stats.js';                      /
 import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
 import { handleOrphanSweep } from './handlers/orphan_sweep.js';               // Share-6-6a
 import { handlePatchMerkleRoot } from './handlers/patch_merkle_root.js';  // Share-6-6a
+import { handlePurgeTestTransfers } from './handlers/purge_test_transfers.js'; // Share-7-1
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleTestCredential } from './handlers/test_credential.js';                // Share-Admin-1
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
@@ -550,6 +551,13 @@ export default {
       // (RFC 6962 0x00 leaf domain tag), patches {uuid}/manifest.json if wrong.
       if (request.method === 'POST' && path === '/admin/patch-merkle-root') {
         return timed('admin_patch_merkle_root', () => handlePatchMerkleRoot(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── Share-7-1: purge complete test transfers — DELETE /admin/purge-test-transfers ─
+      // Admin-key gated. Deletes all R2 objects for complete UUIDs (upload_complete: true).
+      // Use after soak tests to reset R2 to a clean state. dry_run=true by default.
+      if (request.method === 'DELETE' && path === '/admin/purge-test-transfers') {
+        return timed('admin_purge_test_transfers', () => handlePurgeTestTransfers(request, env).then(r => addCors(r, request)));
       }
 
       // ── Share-Admin-1: test credential — POST /admin/test-credential ─────────
