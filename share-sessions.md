@@ -639,3 +639,86 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 
 
 *"Nothing stops this train."*
+
+## Share-6-6a · 24–25 Sep 2026 — Soak result + open Download-409 bug
+
+**Soak result (100 GiB):**
+- Upload: ✅ PASS — 3200/3200 chunks, 5h 35m, 5.09 MiB/s
+- Transfer UUID: 27038a69-54d8-468d-a9fd-829de9c1aedf
+- Merkle root: hJjM8BR0CNETLlAYZOEALbhLGrOzuPlHKAAo39DAB4c
+- Download-verify: ❌ FAIL — 5/5 sample chunks HTTP 409
+
+**409 diagnosis (not yet fixed):**
+- Not a payment gate (B8/Locke not built). Likely Worker state-machine blocks downloads on transfers in FINALISED state, or download endpoint requires a token the test harness doesn't send.
+- Check download handler: what transfer state does it require? Is FINALISED → READY transition missing?
+
+**Remaining before Share-6 closes:**
+1. Diagnose and fix 409 — rerun download-verify against existing UUID
+2. Run orphan sweep: `curl -X DELETE "https://api.share.refueler.io/admin/orphan-sweep?dry_run=false" -H "X-Admin-Key: <key>"`
+3. Close Share-6 block
+
+---
+
+## Catch-up — B10-2 → B12 · logged 24 Sep 2026
+
+| Session | Commit | Summary |
+|---|---|---|
+| Share-B10-2 | `bc5e163` (refueler-io) | Navy Office: KV timestamp ×1000 fix; Execution Dock tier display names. Dashboard design decisions locked (Master Context §User-facing). |
+| Share-B10-3 | `49399ca` (deploy `b81116e2`) | **Download-409 fixed.** `reconstructAndCheckRoot` ran on every chunk and exhausted `cpu_ms` on >128-chunk transfers → false `integrity_failed`. `readSidecarWithRootCheck()` gates reconstruction behind KV `root_verified:{uuid}` (TTL = expiry). `verifyChunkBody` untouched. Supersedes the open item in Share-6-6a above. |
+| Share-B11-1 | `76799ae` (deploy `28d43b55`) | **DAD fixed.** `finishDownload` runs the destruction sequence in `ctx.waitUntil`: consumed guard → chunks → sidecar → `date-seal.ots.enc` → `root_verified` → tombstone. Second download = 410. `dock_index` not cleared on DAD (B12-1 fixes). Open: DAD-ERROR-TEXT ("0%" on error screen). |
+| Share-B12 | `cc14d21` | Storage / quota / surfaces / billing design (Opus). `docs/B12-spec-v1.1.md`. |
+
+---
+
+## Share-B12-SR · 24 Sep 2026 — Security review of B12 (Opus, no code)
+
+**Commit:** `4564730` · **Spec:** `B12-SR-spec-v1.md` (repo ROOT, not docs/) · wins over B12-spec-v1.1 on any conflict.
+
+**Verdict:** S1–S7 all locked, no continuation session. Amendments A1–A18 to B12-spec-v1.1.
+
+| Item | Outcome |
+|---|---|
+| S1 Quota bypass | Presigned URLs didn't bound object size (1 reserved chunk → ~5 GiB). Fix: signed `content-length`, tail URL at initiate only, one 6-day `UPLOAD_WINDOW` clock, bound in session-token MAC, R2 conditional-put latch, optimistic reconcile, new sweep rules. Drift now only in user's disfavour. |
+| S2 Test credential | Bypass authorised by a KV flag. Fix: MAC'd `X-Test-Credential` (`TEST_CRED_KEY`); soak shown on its own Navy Office line. |
+| S3 Linkage at rest | Raw `quota_ref` → sealed `qref_ct`. `org_dock` single-value KV lost updates could resurrect DAD'd entries. Fix: one sealed KV entry per transfer, `SHARE_SEAL_KEY_<kid>`, AAD binds org + entry + kid. Raw-UUID fallback rejected. |
+| S4 Lodgement ref | 6 chars display only; actions on 128-bit handle. No stored per-org key. |
+| S5 Differencing | Daily 5 % bands; "<3" floor dropped; day-granular dates; Chartered 402 returns band. |
+| S6 Registered auth | Magic link (fragment + click, 15 min, single-use) · Supabase sessions · `__Host-` cookie · CSRF + Origin · exact credentialed CORS · Stripe portal email editing off. Citizen initiate → subscriber mapping must be verified (B12-3 task 0). |
+| S7 Sovereign | Refueler never holds the ledger blob. Deed + user-held backup file (device holds `backup_pub` only); QR pairing with 6-digit check code. Same protocol as refueler.io merchants — separate domain tags. |
+
+**Cross-cutting:** X1 KV is write-compromised too · X2 Chartered can be Bearer-rail (follows Sovereign) · X3 "Harbourmaster" triple-booked — auth follows rail · X4 `dock_index` stores `size_bytes` (live leak) · X5 Chambers shares an origin with the whole site · X6 client-chosen UUID at initiate.
+
+**Rajesh decisions (in-session):** fix KV (X1); welcomes Bearer-rail Chartered inheriting Bearer features (X2); agrees X3–X5; **B12-1b squeezed in before 30 Sep**; 250 GiB soak left running in Brave (S2 doesn't invalidate it), Safari 100 + 250 GiB repeats to follow, Brave 250 GiB transfer deleted after Safari passes.
+
+**New Worker secrets (planned, not set):** `QUOTA_REF_KEY` · `SHARE_SEAL_KEY_1` (+ var `SHARE_SEAL_CURRENT`) · `TEST_CRED_KEY` · `UPLOAD_SESSION_KEY` (conditional) · `AUTH_PEPPER` · email-provider key.
+
+**Cross-spec flags:** B8 §4 Locke pubkey set needs a MAC (reopens B8 — fold into KV-Audit-Opus). Other KV-authorising records to audit: `api_quota_*`, `rfs_live_` → org map.
+
+**Do-not-retry (B12-SR):**
+- DO NOT let any KV value authorise access / lift a limit / select a privileged branch without a Worker-secret MAC.
+- DO NOT sign presigned PUTs `host`-only.
+- DO NOT persist `size_bytes` in `dock_index`.
+- DO NOT store a Chambers/ledger blob server-side.
+- DO NOT offer magic links to Bearer principals.
+- DO NOT act on the 6-char `LR-` display ref.
+- DO NOT write raw `quota_ref` into manifests or KV keys.
+
+### B12 build plan (sessions)
+
+| Block | Sessions | Model | When |
+|---|---|---|---|
+| B12-1 · B12-1b · B12-2 | 3 (+1 buffer) | Sonnet | Pre-Berlin |
+| KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
+| B12-3 quota | 3 (+1) | Sonnet | Week 2 |
+| B12-4a auth | 2 (+1) | Sonnet | Week 2 |
+| B12-4b Chambers · B12-6 billing + 3 open bugs | 3 | Sonnet | Week 3 |
+| B12-Audit (built quota + auth) | 1 + 1 | Opus + Sonnet | Week 3 |
+| B12-5 Harbourmaster | 2 | Sonnet | When a Chartered client is in sight |
+| B12-4c Sovereign ledger | 2–3 | Sonnet | With SD-block (needs B8-1 + B7) |
+
+## Locked block sequence (updated Share-B12-SR · 24 Sep 2026)
+
+`B12-1 → B12-1b → B12-2 → [Berlin 30 Sep–3 Oct] → KV-Audit-Opus + fixes · X3 · X5 → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
+```
+
+---

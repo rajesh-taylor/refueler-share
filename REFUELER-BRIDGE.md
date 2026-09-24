@@ -1,5 +1,5 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 9.6 | **Created:** 28 July 2026 | **Updated:** Share-Dash-2 · 2026-09-18
+> **Version:** 9.8 | **Created:** 28 July 2026 | **Updated:** Share-B12-SR · 2026-09-24
 > Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
@@ -153,8 +153,33 @@ manual sed patches to `refueler.io/src/share/index.njk` — the script owns that
 | **Share-1 · 11 Sep 2026** | refueler-share | **Tier logic keys decoupled from display names in code.** `worker/src/tiers.js` introduced: `TIERS` enum + `TIER_DISPLAY`/`TIER_RAIL` maps + helpers `displayName`/`isPaidTier`/`isBearerTier`/`isCharteredTier`. **Key discovery:** `index.js` never held `citizen`/`sovereign` strings — live Worker vocabulary is `free`/`creative`/`max` (Stripe axis) + `'api'` (Chartered). `citizen`/`sovereign` are display-layer + S89 rename narrative only; the hazard in the Share-1 brief could not occur. Share-1 wired the one real gate: `'api'` → `TIERS.CHARTERED`/`isCharteredTier` in `index.js` (6 sites) and `webhook_reg.js` (1 site). **`TIERS.CHARTERED` wire value stays `'api'`** — `isCharteredTier(x) === (x === 'api')`, no data migration required; `'chartered'` wire rename deferred. `free`/`creative`/`max` → `paid_*` and test-fixture rewrite (`manifest_tg.js`/`lightning.js` contracts) deferred to Share-2. Stripe lookup keys, price IDs, `.njk`, `refueler-io` untouched. **BRIDGE v9.2.** |
 | **SW-MCP-1–6 · 12 Sep 2026** | refueler-mcp (new repo) | **MCP server built from scaffold to functionally complete on the identity rail in one day.** SW-MCP-1 (`ab7e010`): repo scaffold, HMAC signing, API client, `refueler_capabilities` tool, 32 tests. SW-MCP-2 (`bc64298`): `crypto.js` (AES-256-GCM, BLAKE3 rolling root), `fragment.js` (grammar v1), `hashSecret()` parity confirmed against `worker/src/nut11.js` — bare SHA-256, no domain tag. SW-MCP-3 (`817afa7`): `rate-card.js`, `refueler_quote`, `refueler_balance`. SW-MCP-4 (`d5fc84d`): `refueler_send_file`, D-1 filename fix (X-File-Name = constant `"encrypted-payload"`, real filename in URL fragment only) applied to MCP tool and consumer `frontend/upload.js` simultaneously. SW-MCP-5 (`e78e953`): `refueler_check_transfer`, `deriveState()`, path traversal guard on send. SW-MCP-6 (`713156a`): `docs/DEMO.md` on-stage runbook (pre-flight, happy path, failure modes, honesty script), `scripts/demo-send.js` (runnable demo, Carbon/Paper terminal output, exits 0/1), `scripts/demo-payload.txt`. 228 tests passing. SW-MCP-7 gates on B7/NB-4. SW-MCP-8 next (npm distribution, Apache 2.0). **BRIDGE v9.3.** |
 | **B9-Opus · 12 Sep 2026** | refueler-share · refueler-legend · refueler-pass (forward notes) | **Merkle / MMR / SMT / ZK design locked. Seven decisions (D-1…D-7). Full spec: `merkle-spec-v1.md` (refueler-share repo root).** Two roots, never conflated: ciphertext-chunk `merkle_root` (Worker-verifiable, storage integrity) ≠ plaintext `blake3PlaintextRoot` (recipient-only, end-to-end, permanently barred from Worker + receipts). Tree: RFC 6962 unbalanced, domain-separated (`0x00`/`0x01`), BLAKE3 node hash, `tree_algo: "rfc6962-unbalanced-blake3-v1"`. Chunk hashes in sidecar `{uuid}/hashes` — never inline in manifest (64 KB ceiling). Download = sidecar-root check + verify-then-flush per chunk + 409 on mismatch. Receipt `merkle_root`/`verified` fields: unblocked post-B9-3, ciphertext root only. MMR on-device by default; published root opt-in via Share OTS relay — "smart contract" framing retired as inaccurate. Leaf encryption AES-256-GCM, on-device key. SMT = complement to Supabase (public verifiability layer), never the live arbiter, no build slot without a design partner. ZK build slot only where it hides which set member satisfied a predicate, no NUT-22/nutroot primitive covers it, and a buyer is committed. Due-diligence proof = FCA SYSC 6.3 / MLR 2017 reg. 40 record-keeping evidence — NOT FATF travel rule compliance. Open Banking leaves self-asserted; bank-signed leaves required before "verified" language. Both MLRO-flagged. Five-vertical use-case matrix and B9 session plan (B9-1…B9-8, 3-session buffer) in `merkle-spec-v1.md`. **BRIDGE v9.4.** |
+| **Share-B12 · 24 Sep 2026** | refueler-share · refueler-io | **Storage, quota, surfaces & billing designed.** Quota = occupancy (32 MiB chunks) vs credits = throughput. Harbourmaster = Chartered section set inside one Chambers build. Stripe Customer Portal is the only invoice surface. `docs/B12-spec-v1.1.md`. |
+| **Share-B12-SR · 24 Sep 2026** | all repos (X1, X3, S7 are cross-product) | **Security review of B12.** KV is write-compromised too — nothing in KV may authorise without a Worker-secret MAC (X1, ecosystem-wide). "Harbourmaster" triple-booked — auth follows the rail (X3). Deed + QR ledger portability locked (S7) — same protocol as refueler.io merchants, separate domain tags. `B12-SR-spec-v1.md` (refueler-share root). **BRIDGE v9.8** (v9.7 was recorded at B10-2 in Master Context only). |
 
 ---
+
+---
+
+## File delivery protocol — mandatory for all Refueler sessions
+
+**Root causes (B10-1 · 23 Sep 2026):**
+- Bare `.js` `SendUserFile` → desktop app blocks download ("This file type cannot be opened"). Applies across all projects.
+- Desktop app folder-save icon → drops files into `Claude outputs/` inside the repo with `-1` collision suffixes. Never use it.
+- `device_commit_files` once silently no-op'd — reported success, bytes unchanged. Byte-verify is mandatory.
+
+**Code files** (`.js`, `.ts`, `.json`, config, worker scripts):
+1. Write directly to the exact repo path via `device_commit_files`.
+2. Immediately byte-verify: `device_bash "wc -c <path> && shasum -a 256 <path>"` — must match expected size/hash.
+3. Show `git -C <repo> diff HEAD -- <file>` so Rajesh reviews the exact change.
+4. Never auto-commit, never auto-push. Rajesh commits manually with `git commit && git push`.
+
+**Docs and text files** (`.md`, `.html`, `.css`):
+- `SendUserFile` only — these download fine. Rajesh places manually.
+
+**Escape hatch when repos not connected:**
+- Wrap code in a `.zip` and `SendUserFile`. Never a bare `.js` via `SendUserFile`.
+
+**Never use the desktop app folder-save / "Show in Folder" icon** — always drops into `Claude outputs/` with `-1` collision suffixes.
 
 ## Active action items (Rajesh)
 
@@ -865,6 +890,20 @@ Four surfaces, four names, each a real Pool-of-London institution:
 - Growth-signal card: three-line sparkline (free/paid/API from `admin:news_events`), tick-mark annotations, click-to-add form.
 - Execution Dock detail modal: flip `size_bytes` and `rail` from pending to live; `merkle_root` and Download count remain pending.
 
-**BRIDGE v9.6.**
+---
+
+## Share-B12-SR decisions — locked 24 Sep 2026 (cross-product)
+
+**Full spec: `B12-SR-spec-v1.md` (refueler-share repo root). Only the cross-product residue is here.**
+
+- **KV is compromised for write, not just read (X1) — applies to every product on Cloudflare KV.** Any KV value whose forgery grants access, lifts a limit, or selects a privileged branch must carry a MAC under a Worker secret, or move to Supabase. Sessions and sign-in tokens never live in KV. **Pass/SD3 note:** B8's `locke_pubkeys_*` set is such a value — it needs a MAC before SD3 builds. That reopens `B8-spec-v1.md` per its own rule; scheduled in KV-Audit-Opus (first week after Berlin).
+- **"Harbourmaster" is triple-booked (X3, naming 🟡).** (1) The internal live-transfer view inside Navy Office (§Canonical term map, §Share-Dash-2 above). (2) The Silent Drop Quay owner who logs in with a Locke (§Locke, B8). (3) The Chartered org-admin surface (B12). Until renamed, **authentication follows the rail, never the surface name:** Registered → email magic link; Bearer → Locke challenge-response. No magic link ever reaches a Bearer principal.
+- **Chartered can be Bearer-rail (X2).** Bearer-rail Chartered follows the Sovereign model: no Supabase row, no server-side org index, device-held admin surface. It inherits every Bearer-rail feature.
+- **Ledger portability protocol (S7) — shared with refueler.io merchants.** Refueler never holds the encrypted ledger in any form. Recovery = Deed + user-held backup file (device stores only a Deed-derived *public* key, so it can write backups but not read them). Second device = QR pairing (ephemeral secp256k1 ECDH, 6-digit check code, one use, 10-minute expiry). Each product uses its own domain tags (`refueler.share.chambers.*` vs the merchant equivalent) — no shared master keys across products.
+- **Encoding convention (all new HMAC/HKDF inputs, all products):** `utf8(tag) ‖ 0x00 ‖ fixed-length binary fields`, variable-length field last, big-endian integers. BLAKE3 unkeyed for high-entropy secrets; BLAKE3 keyed for low-entropy identifiers (emails, IPs).
+
+**BRIDGE v9.8.**
+
+---
 
 *"Nothing stops this train."*

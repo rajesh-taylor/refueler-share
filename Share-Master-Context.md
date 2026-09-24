@@ -1,8 +1,5 @@
-
-
-Share master context · MD
 # Share-Master-Context — refueler-share
-> **Version:** 9.6 | **Last updated:** Share-B10-2 · 24 Sep 2026
+> **Version:** 9.7 | **Last updated:** Share-B12-SR · 24 Sep 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
  
 ---
@@ -34,6 +31,8 @@ Project: `tihgvdokeofnjxjkenmm`
 | `double_spend_attempts` | `id BIGSERIAL PK`, `serial`, `uuid`, `attempted_at` | RLS deny-all · fire-and-forget on 409 |
  
 Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Content-Range: 0-0/TOTAL`.
+
+**Planned (B12-SR — not built):** `quota_accounts`, `quota_reservations` (B12-3) · `auth_tokens`, `auth_sessions`, `chartered_orgs` (B12-4a). All RLS deny-all, service-role RPCs only. Registered rail only — never a row for Bearer (incl. Bearer-rail Chartered).
  
 ---
  
@@ -53,6 +52,8 @@ Worker secrets (all set): `MINT_PRIVATE_KEY`, `TURNSTILE_SECRET_KEY`, `SUPABASE_
 `STRIPE_WEBHOOK_SECRET` (rotated 21 Jul), `ADMIN_KEY`,
 `CF_ACCOUNT_ID` (fc4f3e5aeebe483677d14185daf544f5), `CF_AE_TOKEN` (Account Analytics Read).
 `WEBHOOK_SIGNING_MASTER_KEY` (SW4a, stateless webhook signing master). Do not rotate without cause.
+
+**Planned secrets (B12-SR §B — NOT yet set; the build session that first needs each one sets it):** `QUOTA_REF_KEY` (naming root — never rotate without a migration session) · `SHARE_SEAL_KEY_1` + var `SHARE_SEAL_CURRENT="1"` (sealing root, replaces proposed `ORG_DOCK_KEY`) · `TEST_CRED_KEY` · `UPLOAD_SESSION_KEY` (only if the live session token isn't already a Worker-secret MAC) · `AUTH_PEPPER` · email-provider key (B12-4a).
  
 **Cloudflare Workers Paid ($5/mo)** — required for verified-download CPU (pure-JS BLAKE3 over 32 MiB chunks). `[limits] cpu_ms = 300000` in worker/wrangler.toml. $6 billing budget alert active. Standing infra cost as of Share-6-5c (22 Sep 2026).
  
@@ -171,6 +172,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Individual users see their own per-transfer file size (it's their file)
 - No Collected at, no Download count, no Rail visibility
 **Chartered — full Harbourmaster, everything unlocked.**
+
+**⚠️ Naming collision (B12-SR X3, unresolved 🟡):** "Harbourmaster" means three things — BRIDGE: internal live-transfer view inside Navy Office; B8/Silent Drop: the Quay owner who logs in with a Locke; B12: the Chartered org-admin surface. **Auth follows the rail, never the surface name:** Registered principals → magic link (B12-SR S6); Bearer principals → Locke (B8 §4). Resolve naming before B12-5.
+**Bearer-rail Chartered (B12-SR X2):** follows Sovereign — no quota row, no `org_dock`, device-held Harbourmaster. Inherits every Bearer feature.
  
 **UUID as identifier — privacy principle:**
 - Superadmin (Navy Office) can see UUIDs but must not relay them to org admins to identify users
@@ -193,14 +197,22 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 - DO NOT present `index.js` edits without full repo path — `refueler-mcp/src/index.js` ≠ `refueler-share/worker/src/index.js`
 - DO NOT claim "end-to-end file integrity" — chunk integrity only (BLAKE3 per ciphertext chunk)
 - DO NOT run `npm publish` in a session — dry-run only; Rajesh publishes manually
-- OPEN (6-6b): `frontend/crypto.js` `WORKER_URL` = `https://api.share.refueler.io` — the custom hostname whose consumer cutover is 6-6b (not done). Serves most requests but intermittently 503s (no CORS on a 503 → browser mislabels "CORS"); downloads hit it most. Fix: revert to `https://refueler-share.rt-fc4.workers.dev` (one line, staged) OR finish 6-6b.
+- CLOSED at 6-6b (SHARE-503; direct-to-R2 unconditional). Historical note kept for the Brave diagnosis: `frontend/crypto.js` `WORKER_URL` = `https://api.share.refueler.io` — the custom hostname whose consumer cutover is 6-6b (not done). Serves most requests but intermittently 503s (no CORS on a 503 → browser mislabels "CORS"); downloads hit it most. Fix: revert to `https://refueler-share.rt-fc4.workers.dev` (one line, staged) OR finish 6-6b.
 - DO NOT re-chase "finalise rejects the opaque session token (HMAC)" — false; `finalise.js` byte-compares vs KV like `handleUploadUrls`; fresh uploads finalise 200. Live-verified 20–21 Sep.
+- **B12-SR (24 Sep 2026) — do-not-retry:**
+  - DO NOT let any KV value authorise access, lift a limit, or select a privileged branch unless it is MAC'd under a Worker secret. KV is compromised for **write** as well as read (X1). Live offenders pending the KV audit: `test_credential:{uuid}` flag, `api_quota_*`, the `rfs_live_` → org mapping, B8 Locke pubkey set.
+  - DO NOT sign presigned PUT URLs `host`-only — `content-length` must be signed; tail-chunk URL minted at initiate only (B12-1b).
+  - DO NOT persist `size_bytes` in `dock_index` (X4 — fixed in B12-1).
+  - DO NOT store a Chambers/Sovereign ledger blob server-side in any form (S7).
+  - DO NOT offer a magic link to a Bearer principal (X3).
+  - DO NOT act on the 6-char `LR-` lodgement ref — display only; actions use the 128-bit handle (S4).
+  - DO NOT write raw `quota_ref` into manifests — sealed `qref_ct` only (S3a).
 - DO NOT re-chase "Worker omits CORS on `/download`" — false; `index.js` wraps every download response (+500 catch) in `addCors`, OPTIONS → 204+CORS. curl confirmed ACAO on the "failing" chunk. Browser-side "CORS/503" download failures were **Brave** + the 503 above; Safari downloads cleanly.
 ---
  
 ## Current state
  
-**Share-B10-2 ✓ (24 Sep 2026) — Navy Office: KV timestamp fix (×1000), Execution Dock tier display names (Pro Bono/Citizen/Sovereign/API/MCP). Dashboard design decisions locked (see above). Next: Download-409 fix (new session).**
+**Share-B12-SR ✓ (24 Sep 2026) — Security review of B12 locked (S1–S7 + X1–X6, amendments A1–A18). `B12-SR-spec-v1.md` in repo ROOT (`4564730`). Next: B12-1 → B12-1b → B12-2 (pre-Berlin). 250 GiB soak running in Brave; Safari 100 + 250 GiB repeats queued; delete the Brave 250 GiB transfer once Safari passes.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -218,7 +230,12 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-6-5b ✓ | `8761e7c` · `75d15c5`/`2e8e632`/`237bdb3` | Download-verify consumer half — recipient card reads `X-Integrity` + `integrity_failed` 409s. `WORKER_URL` flip deferred to 6-6b. |
 | Share-B10-1 ✓ | `7c874ed` (refueler-io) | Navy Office: Growth Signal Pro Bono blue, axis labels, annotation flags, issuances modal subtitle. |
 | Share-B10-2 ✓ | `bc5e163` (refueler-io) | Navy Office: KV timestamp ×1000 fix, Execution Dock tier display names. |
-| Share-6-6a → | next session | Download-409 fix + orphan sweep (spec §9). |
+| Share-6-6a ✓ | — | 100 GiB soak upload ✓ (3200/3200). Download-409 fixed at B10-3. |
+| Share-B10-3 ✓ | `49399ca` (deploy `b81116e2`) | Download-409 fixed: root reconstruction gated by KV `root_verified:{uuid}`, once per transfer. |
+| Share-B11-1 ✓ | `76799ae` (deploy `28d43b55`) | DAD destruction sequence wired in `finishDownload` (6 steps, `ctx.waitUntil`). 410 on second download. |
+| Share-B12 ✓ | `cc14d21` | Storage/quota/surfaces/billing design locked — `docs/B12-spec-v1.1.md`. |
+| Share-B12-SR ✓ | `4564730` | Security review — `B12-SR-spec-v1.md` (root). Amends B12 A1–A18. |
+| B12-1 → | next session | PURGED status, DAD clears `dock_index`, drop `size_bytes` (X4), sweep rules S1.10. |
  
 ---
  
@@ -228,6 +245,11 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
+| 11a | **B12 pre-Berlin** — B12-1, B12-1b, B12-2 | ❌ | Before 30 Sep. Closes the live Pro Bono size hole (1b). |
+| 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
+| 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ CAP-WARNING-LINK, UPGRADE-CSS, DAD-ERROR-TEXT) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
+| 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
+| 11e | B12-4c Sovereign ledger + portability | ✅ | Needs B8-1 (Deed derivation) + B7 live. Runs alongside SD-block. |
 | 12 | B8-Opus → B8 build — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. B8-Opus first. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
 | 13 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
@@ -266,6 +288,8 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 - **B9-Opus:** Merkle/MMR/SMT/ZK design locked. Full spec: `merkle-spec-v1.md`. Two-roots distinction permanent. RFC 6962 unbalanced BLAKE3 tree. Sidecar `{uuid}/hashes`. MLRO flag on due-diligence proof framing. BRIDGE v9.4.
 - **B8-Opus:** NUT-11 Mode 2 (Locke) design locked. Full spec: `B8-spec-v1.md`. Deed→Locke HKDF derivation (scalar reject-sampled); Schnorr BIP-340 x-only verify; check order sig→BDHKE→double-spend; Locke KV challenge-response (SD3 primitive); `hashSecret()` unchanged/independent; CDK stays 0.17.2; builds direct in refueler-share (ecash-lab Mode 2 flag retired). BRIDGE v9.5.
 - **Share-Dash-2 (18 Sep 2026):** Surface naming locked — **Navy Office** (admin/ops, Pepys/Seething Lane mnemonic), **Chambers** (Citizen/Sovereign account area — already theirs), **Custom House** (Chartered API/MCP, reserved — additive on upgrade, not a move), **Harbourmaster** (Execution Dock view inside Navy Office). `handleFinalise` folded to `handlers/finalise.js` with dock enrichment (size_bytes · rail · merkle_root stored, response-withheld until Share-6-5). Three new handlers: `client_errors_kv.js` · `api_stats.js` · `news_events.js`. `by_rail` `none` → renders as "Pro Bono" in dashboard (carry to Dash-3). sandbox_to_live stubbed honestly — wire when first Chartered client onboarded (add `live_at` to `sandbox_meta_` record). BRIDGE v9.6.
+- **Share-B12 (24 Sep 2026):** Quota = occupancy (32 MiB chunks), credits = throughput, never merged. Supabase `reserve_quota` RPC at initiate, R2 manifests as truth, nightly reconcile. Harbourmaster = Chartered section set inside one Chambers build. PURGED status. Stripe Customer Portal is the only invoice surface. Full spec: `docs/B12-spec-v1.1.md`.
+- **Share-B12-SR (24 Sep 2026):** Security review. Signed `content-length` on presigned URLs; one 6-day `UPLOAD_WINDOW` clock; bound in the session-token MAC; R2 conditional-put deletion latch; optimistic-concurrency reconcile; MAC'd test credentials; sealed `qref_ct` in manifests; per-entry sealed `org_dock` under `SHARE_SEAL_KEY_<kid>`; 128-bit lodgement handles; Harbourmaster shows daily 5 % bands; magic-link + Supabase sessions + `__Host-` cookie + CSRF for Registered rail only; Sovereign portability = Deed + user-held backup file / QR pairing with 6-digit check, Refueler never holds the blob. Cross-cutting X1–X6 (KV write-compromise, Bearer-rail Chartered, Harbourmaster naming, `dock_index` size leak, shared origin, client-chosen UUID). Full spec: `B12-SR-spec-v1.md` (root).
 - **Share-B10-2 (24 Sep 2026):** Dashboard design decisions locked — see §User-facing dashboard design decisions above. Single-build progressive-unlock model for Chambers/Harbourmaster. Storage & Billing / Capacity scoping deferred to dedicated Opus session. BRIDGE v9.7.
 
 *"Nothing stops this train."*

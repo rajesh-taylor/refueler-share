@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.5 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B9-Opus · 12 Sep 2026
+> **Version:** 2.6 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-B12-SR · 24 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -148,6 +148,24 @@ remains unimplemented — do not claim end-to-end file integrity until B9 build 
 
 ---
 
+## B12 / B12-SR security locks (24 Sep 2026)
+
+Full specs: `docs/B12-spec-v1.1.md` (design) + `B12-SR-spec-v1.md` (repo root — security review; **wins on any conflict**). Build sessions read B12-SR §C first.
+
+- **KV is compromised for write, not just read (X1).** Nothing in KV may authorise access, lift a limit, or select a privileged branch unless MAC'd under a Worker secret. Auth sessions and magic-link tokens live in Supabase, never KV.
+- **Presigned PUTs sign `content-length`** (full chunks `CHUNK_SIZE + 16`; tail URL minted at initiate only, so tail length is never stored). Session token, URL expiry and quota reservation share one clock: `UPLOAD_WINDOW = 6 days`.
+- **Deletion latch = R2 conditional put** (`onlyIf etagMatches`) on the manifest. All five deletion paths (DAD, owner-delete, strike-off, grace sweep, orphan sweep) call the same release with the same args; tombstones are identical and strip `qref_ct`.
+- **No raw `quota_ref` at rest in R2 or KV.** Manifests carry sealed `qref_ct`; `org_dock` is one sealed KV entry per transfer under `SHARE_SEAL_KEY_<kid>` (per-dock HKDF subkey, AAD binds org + entry + kid).
+- **Lodgement refs:** `LR-` + 6 Crockford chars is display only; every action uses the 128-bit handle.
+- **Auth follows rail, not surface name.** Registered → magic link (15-min, single-use, fragment + click) + `__Host-rfs_session` cookie + CSRF + exact-origin credentialed CORS. Bearer → Locke (B8). No magic link ever reaches a Bearer principal. The `localhost` CORS echo is never combined with `Allow-Credentials`.
+- **Bearer-rail Chartered follows Sovereign (X2):** no Supabase row, no `org_dock`, no `qref_ct`.
+- **Sovereign ledger never leaves the user's control.** Refueler never stores a Chambers blob. Portability = Deed + user-held backup file, or QR pairing with a 6-digit check code (ephemeral secp256k1 ECDH via `@noble/secp256k1` — no new curve lib). Domain tags `refueler.share.chambers.*` — never shared with the refueler.io merchant implementation of the same protocol.
+- **Chambers + lodge page move to a dedicated origin with strict CSP (X5)** before the Sovereign ledger ships.
+- **Harbourmaster aggregates:** daily 5 % bands of quota; no hourly GiB; no "<3" floor; dates day-granular. Chartered 402 bodies return the band too.
+- **Encoding rule for every HMAC/HKDF input:** `utf8(tag) ‖ 0x00 ‖ fixed-length binary fields`; UUID 16 raw bytes; `quota_ref` 32 raw bytes; big-endian integers; variable-length field last. BLAKE3 unkeyed for high-entropy secrets, BLAKE3 keyed for low-entropy identifiers.
+
+---
+
 ## Session queue
 
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
@@ -163,14 +181,18 @@ Session count is a guide not a constraint — split early, never overload. Plann
 **SW-block ✓ complete (11 Sep 2026):**
 - SW1–SW9 ✓ — CF for SaaS, HMAC auth, credential issuance, badge, webhooks, receipts, dashboard, sandbox, hostname health. 484 tests passing.
 
-**SW-MCP block in progress:**
+**SW-MCP block ✓ (prep complete):**
 - SW-MCP-1–6 ✓ — MCP server scaffold through demo hardening. 228 tests passing (`refueler-mcp` repo).
-- **Next: SW-MCP-8** — npm package distribution, Apache 2.0, trust-boundary README.
+- SW-MCP-8 ✓ — package prepared; `npm publish --access public` is a manual one-liner Rajesh runs from `~/Documents/refueler-mcp`.
 - SW-MCP-7 gates on B7/NB-4 (anonymous rail send).
 
 **B9-Opus ✓ complete (12 Sep 2026):** Merkle / MMR / SMT / ZK design locked. `merkle-spec-v1.md` produced (repo root).
 
-Locked block sequence: `SW-MCP-8 → B8-Opus → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-1…B9-8) → B10+`
+**B12 block (opened 24 Sep 2026):** B12 design ✓ (`cc14d21`) · B12-SR security review ✓ (`4564730`). Pre-Berlin: **B12-1 → B12-1b → B12-2.**
+
+Locked block sequence (updated Share-B12-SR · 24 Sep 2026):
+`B12-1 → B12-1b → B12-2 → [Berlin 30 Sep–3 Oct] → KV-Audit-Opus + fixes · X3 naming · X5 app origin → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
+B12-5 (Harbourmaster) slots in when a Chartered client is in sight.
 
 ---
 
