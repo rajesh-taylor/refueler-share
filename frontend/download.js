@@ -694,8 +694,13 @@ async function _showConfirmGate(uuid, isPassphrase, domRefs, state) {
 }
 
 function _showDownloadError(msg, domRefs) {
-  domRefs.downloadCard.classList.remove('hidden');
-  domRefs.dlStageTag.textContent = `Error — ${msg}`;
+  const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = `Error — ${msg}`;
+  // Suppress stray progress display alongside the error (DAD-ERROR-TEXT, Share-B10-3).
+  // Same fix _showIntegrityFailure already applies — kept consistent across both error paths.
+  dlPct.textContent = '—';
+  dlBar.style.width = '0%';
 }
 
 function _logReceiverEvent(event, variant) {
