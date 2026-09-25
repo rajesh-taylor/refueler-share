@@ -63,6 +63,22 @@ function randomChunk(size) {
   return buf;
 }
 
+// Plain Node fetch() has NO default timeout — unlike browser fetch, a stalled
+// TCP connection or a server that accepts the connection but never responds
+// will hang the promise forever, with no resolution and no throw, so it never
+// enters the retry path. This wraps every request with a hard deadline so a
+// stall surfaces as a normal AbortError, which the retry loop already handles.
+const FETCH_TIMEOUT_MS = 30000; // 30s — generous for a 32 MiB PUT, short enough to notice a real stall
+async function fetchWithTimeout(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Merkle tree (rfc6962-unbalanced-blake3-v1) — identical to test-upload.html
 function leafHash(digest) {
   const buf = new Uint8Array(33);
@@ -116,7 +132,7 @@ async function fetchBatch(uuid, batchStart) {
   if (batchStart in urlCache) return;
   if (!(batchStart in batchFetching)) {
     batchFetching[batchStart] = (async () => {
-      const res = await fetch(`${workerUrl}/upload/${uuid}/urls`, {
+      const res = await fetchWithTimeout(`${workerUrl}/upload/${uuid}/urls`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
         body: JSON.stringify({ from: batchStart, count: 256 }),
@@ -156,7 +172,7 @@ async function uploadOneChunk(i) {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const putRes = await fetch(presignedUrl, {
+        const putRes = await fetchWithTimeout(presignedUrl, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: payload,
@@ -230,7 +246,7 @@ function printFinalTally() {
 
     // Step 1: credential
     const { blinded_message } = await blindedMessage();
-    const credRes = await fetch(`${workerUrl}/admin/test-credential`, {
+    const credRes = await fetchWithTimeout(`${workerUrl}/admin/test-credential`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
       body: JSON.stringify({ blinded_message, cap_bytes: capBytes, expires_in_seconds: credExpiry }),
@@ -243,7 +259,7 @@ function printFinalTally() {
 
     // Step 2: initiate
     const expiryTs = Math.floor(Date.now() / 1000) + 90 * 24 * 3600;
-    const initiateRes = await fetch(`${workerUrl}/upload/${uuid}/initiate`, {
+    const initiateRes = await fetchWithTimeout(`${workerUrl}/upload/${uuid}/initiate`, {
       method: 'POST',
       headers: {
         'Content-Type':            'application/json',
@@ -263,7 +279,15 @@ function printFinalTally() {
     log(`Session token obtained. Batch 0: ${initData.urls.length} URLs.`);
 
     // Step 3: parallel upload
+    // Heartbeat — a stall now shows up in the log within 60s instead of
+    // being silent until the process is manually checked. Cleared once the
+    // upload phase (success or failure) is done.
+    const heartbeat = setInterval(() => {
+      log(`… still running: ${succeeded}/${totalChunks} succeeded, ${attempted}/${totalChunks} attempted, ${failedChunks.size} failed, paused=${paused}`);
+    }, 60000);
+
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    clearInterval(heartbeat);
 
     if (failedChunks.size > 0) {
       log(`✗ Upload stopped: ${failedChunks.size} chunk(s) failed after retries. Not proceeding to finalise.`);
@@ -280,11 +304,11 @@ function printFinalTally() {
     log(`Merkle root: ${merkleRoot}`);
 
     // Step 5: finalise
-    const finaliseRes = await fetch(`${workerUrl}/upload/${uuid}/finalise`, {
+    const finaliseRes = await fetchWithTimeout(`${workerUrl}/upload/${uuid}/finalise`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
       body: JSON.stringify({ hashes: chunkHashes, merkle_root: merkleRoot }),
-    });
+    }, 120000);
     if (!finaliseRes.ok) throw new Error(`finalise ${finaliseRes.status}: ${await finaliseRes.text()}`);
     finaliseReached = true;
     const finaliseData = await finaliseRes.json();
