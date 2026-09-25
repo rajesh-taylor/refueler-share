@@ -11,47 +11,43 @@
 
 Refueler Share is not a file host. It is a cryptographic pipeline.
 
-Files are encrypted in your browser before a single byte leaves your machine. The server is architecturally blind — not by policy, but by design. The key never exists on our infrastructure. A court order compelling us to hand over file contents would be complied with immediately, and yield nothing readable.
+Files are encrypted in your browser before a single byte leaves your machine. The key goes into the share link, never to us. A court order for file contents would be complied with, and would yield ciphertext.
 
-No account is required on the free tier. The anonymous rail requires no account at any tier, ever.
+No account is needed on the free tier. The anonymous (Bearer) rail will need no account at any tier.
 
 ---
 
 ## The Architecture
 
-### Three layers. Three jobs. Never conflated.
+### Three hashes. Three jobs. Never conflated.
 
-**BLAKE3 — Chunk Integrity**
+**BLAKE3 — ciphertext storage integrity**
 
-Every file is split into chunks before upload. Each chunk is fingerprinted with BLAKE3, computed client-side via a compiled WebAssembly module. The Worker independently verifies every received chunk against the client-declared hash before writing to R2. A corrupted or tampered chunk is rejected at the boundary.
+Every file is split into 32 MiB chunks and encrypted in the browser. Each encrypted chunk is fingerprinted with BLAKE3 (WebAssembly, compiled from the official Rust `blake3` crate), and the fingerprints form a Merkle tree (RFC 6962 shape, domain-separated, `rfc6962-unbalanced-blake3-v1`).
 
-The BLAKE3 module is compiled from the official Rust `blake3` crate via `wasm-pack`, checked into `worker/blake3-wasm/`, and imported statically. No CDN dependency at runtime.
+The browser uploads chunks straight to Cloudflare R2 through short-lived signed URLs; the Worker is not in the upload path. When the upload finishes, the Worker checks every chunk is present and records the chunk fingerprints and the Merkle root. On download, the Worker checks each stored chunk against that record before sending it, and refuses (`409`) on any mismatch.
 
-BLAKE3 handles chunk integrity. It is not the authentication layer. Full Merkle-root verification — where the Worker reconstructs the complete ciphertext tree on download and compares it against the root committed at upload — is in build (B9).
+What this proves: the encrypted object served is the encrypted object stored. It is **not** an end-to-end integrity claim. The Worker never sees plaintext, so it cannot vouch for the file you meant to send; only the recipient's browser can check the decrypted bytes.
 
-**Cashu Blind Signatures — Anonymous Upload Authentication**
+**Cashu blind signatures — anonymous upload credentials**
 
-Upload credentials are issued using the blind signature scheme from the Cashu protocol (NUT-00). The server signs a blinded credential without learning its serial number. The client presents the unblinded proof to authorise a transfer — the server cannot link any identity to any transfer.
+Upload credentials use the blind signature scheme from the Cashu protocol (NUT-00). The server signs a blinded value without seeing what it signs. There is no account and no email behind a free upload, so there is no identity for us to attach to it.
 
-This is not a monetary application of Cashu. There is no external mint. The blind signature primitive is used as an anonymous credential system.
+This is not a monetary use of Cashu. There is no external mint; the blind signature is used as an anonymous credential. We are moving credentials onto the standard Cashu proof format, checked with the Cashu developers' reviewed library code rather than our own, which also opens the door to DLEQ proofs (NUT-12) and keypair-bound credentials (NUT-11). In build.
 
-> This combination — BLAKE3 chunk integrity with Cashu blind signatures as anonymous authentication — has not been publicly implemented before. The Apache 2.0 patent grant clause in this repository protects this combination.
+**SHA-256 + OpenTimestamps — Bitcoin-anchored existence proof**
 
-**SHA-256 + OpenTimestamps — Bitcoin-Anchored Existence Proof**
+On paid tiers, a sender can attach a permanent record to a transfer. A commitment derived from the file and a private nonce is submitted to the OpenTimestamps calendars and anchored in Bitcoin.
 
-For Sovereign and Chartered subscribers who opt in, a permanent record can be attached to any transfer. A commitment — derived from the file's BLAKE3 root and a private nonce — is submitted to the OpenTimestamps calendar network and anchored to the Bitcoin blockchain.
+The Worker is a blind relay: it forwards opaque bytes to the calendars and stores the encrypted result. It never sees the plaintext, the nonce, or the file. The nonce lives in the URL fragment, like the AES key.
 
-The Worker is a blind relay throughout: it forwards opaque encrypted bytes to calendar servers and stores the encrypted result. It never sees the plaintext, the nonce, or the file. The nonce lives in the URL fragment only — the same privacy guarantee as the AES key.
+The result proves a file existed on or before a Bitcoin block date. It proves *when*, not *who*, and not that anyone received it.
 
-The result: a tamper-proof, third-party-verified record that a specific file existed on or before a specific Bitcoin block date. It proves *when*, not *who*. No notary. No trusted third party beyond Bitcoin itself.
+### Why "we can't read your files" is an architectural claim
 
-### Why "we can't read your files" is an architectural claim, not a policy promise
+The AES-256-GCM key is generated in your browser with the Web Crypto API and placed in the URL fragment (the part after `#`). Per RFC 3986, browsers do not send the fragment to the server. The real filename travels there too; the Worker only ever sees the placeholder `encrypted-payload`.
 
-The AES-256 session key is generated inside your browser using the Web Crypto API and placed in the URL fragment — the `#` portion of the link. Per RFC 3986, browsers never transmit the fragment to a server. It does not appear in HTTP requests, Worker logs, or anywhere in our infrastructure.
-
-Our Worker receives encrypted bytes. It stores encrypted bytes. It has no key.
-
-This is not a policy choice. It is the consequence of how the code is written.
+The Worker stores encrypted bytes. It has no key.
 
 ---
 
@@ -60,59 +56,63 @@ This is not a policy choice. It is the consequence of how the code is written.
 | Layer | Technology |
 |-------|-----------|
 | Frontend | HTML5 / ES Modules / Web Crypto API / BLAKE3 WASM |
-| Backend | Cloudflare Workers |
-| Storage | Cloudflare R2 |
-| Ledger | Supabase PostgreSQL (spent-token tracking only) |
-| Payments (fiat) | Stripe — GBP, live mode |
-| Payments (Lightning) | LNbits on self-hosted Hetzner (phoenixd) — B7 |
-| Encryption | AES-GCM 256-bit, client-side only |
-| Integrity | BLAKE3 WASM, client + server |
+| Backend | Cloudflare Workers (Paid plan) |
+| Storage | Cloudflare R2, direct browser upload via signed URLs |
+| Ledger | Supabase PostgreSQL (spent-credential tracking) |
+| Payments (card) | Stripe, GBP |
+| Payments (Lightning) | LNbits, self-hosted on Hetzner — planned (B7) |
+| Encryption | AES-256-GCM, client-side only |
+| Integrity | BLAKE3 WASM + Merkle root, ciphertext only |
 | Existence proof | SHA-256 / OpenTimestamps / Bitcoin |
-| Anonymous auth | Cashu NUT-00 blind signatures |
+| Anonymous credentials | Cashu NUT-00 blind signatures |
 | API auth | HMAC-SHA256 per-request signing |
 
 ---
 
 ## Tiers
 
-| Tier | Rail | Storage cap | Expiry options |
-|------|------|-------------|----------------|
-| **Pro Bono** | — | 4 GB | 7 days |
-| **Citizen** | Registered (Stripe) | 100 GB | 7 / 30 / 90 days |
-| **Sovereign** | Bearer (Lightning) | 100 GB | 7 / 30 / 90 days |
-| **Chartered** | Registered or Bearer | 250 GB + overage | 90 days |
+| Tier | Rail | Storage cap | Expiry | Status |
+|------|------|-------------|--------|--------|
+| **Pro Bono** | — | 4 GB | 7 days | Live |
+| **Citizen** | Registered (Stripe) | 100 GB | 7 / 30 / 90 days | Account sign-in in build (B12) |
+| **Sovereign** | Bearer (Lightning) | 100 GB | 7 / 30 / 90 days | Needs Lightning (B7) |
+| **Chartered** | Registered or Bearer | 250 GB + overage | 90 days | Registered-rail API live; Bearer with B7 |
 
-Citizen and Sovereign are the same price and feature set for everything currently live. The rail is a privacy choice, not a tier upgrade — features may diverge naturally as the product develops.
+Until Citizen sign-in ships, web uploads run on Pro Bono limits. Registered users will sign in with a single-use email link and a secure session; the tier comes from that session, never from anything the browser claims.
 
-The Chartered tier is invoiceable — firms that cannot pay by card or Lightning can be invoiced directly. API and MCP access is Chartered only.
+Citizen and Sovereign are the same price and feature set. The rail is a privacy choice, not an upgrade. Chartered is invoiceable, and API and MCP access is Chartered only.
 
-No free trials. No discounts. No savings framing. The price is the price.
+No free trials. No discounts. The price is the price.
 
 ---
 
 ## Transfer Features
 
-**Destroy after download** — the transfer is deleted the moment it is collected. The recipient cannot return to it.
+**Large transfers** — chunks go straight from the browser to storage, so size is bounded by the tier cap, not the Worker. Tested with 100 GiB transfers.
 
-**Availability window** — restrict the window during which a transfer can be collected. Set an open-from time, a close-by time, or both. Paid tiers only.
+**Destroy after download** — the transfer is deleted once collected; a second attempt gets `410 Gone`.
 
-**Permanent record** — attach a Bitcoin-anchored date stamp to a transfer. Proves the file existed on or before a specific block date. Verifiable independently via OpenTimestamps. Paid tiers only.
+**Availability window** — set an open-from time, a close-by time, or both. Paid tiers.
 
-**Passphrase gate** — require a passphrase before the recipient can download. The passphrase hash is stored in the manifest; the passphrase itself never touches the server in plaintext.
+**Permanent record** — Bitcoin-anchored date stamp, verifiable independently with OpenTimestamps. Paid tiers.
 
-**Folder upload** — drag a folder or use the folder picker. Files are compressed client-side using fflate (streaming, up to 2,000 files and 20 directory levels) and uploaded as a single encrypted transfer.
+**Passphrase gate** — the recipient needs a passphrase to download. Only its hash is stored.
 
-**Resumable uploads** — interrupted uploads can be resumed without restarting. State is held in IndexedDB on the sender's device, never on our servers.
+**Folder upload** — folders are zipped in the browser (streaming, fflate) and sent as one encrypted transfer.
+
+**Resumable uploads** — an interrupted single-file upload resumes where it stopped. Resume state lives in your browser (IndexedDB), not on our servers.
+
+**Owner delete** — the sender can delete a transfer early. Deletion is batched and resumable, so very large transfers delete completely.
 
 ---
 
 ## API and MCP
 
-Refueler Share exposes a HMAC-authenticated API at `api.share.refueler.io`. Every request is signed with HMAC-SHA256 over `method + path + timestamp + body_hash`. Three credentials per commercial relationship: a live key, a signing key, and a webhook signing key.
+The API lives at `api.share.refueler.io`. Every request is signed with HMAC-SHA256 over `method + path + timestamp + body_hash`. Each commercial relationship gets three credentials: a live key, a signing key, and a webhook signing key.
 
-The API ships a companion MCP (Model Context Protocol) server as an Apache 2.0 npm package — [`@refueler/mcp-server`](https://github.com/rajesh-taylor/refueler-mcp). Operators install it in their own infrastructure; Refueler never sees their keys or plaintext. Full documentation, trust boundary details, and installation instructions are in that repo.
+A companion MCP (Model Context Protocol) server, [`refueler-mcp`](https://github.com/rajesh-taylor/refueler-mcp), is in development under Apache 2.0. It is not yet published to npm. It runs in the operator's own infrastructure and handles ciphertext only.
 
-**Credit model:** 1 credit = 1 sat. Rate card v1.0: 10 credits/transfer · 100 credits/GB · 20 credits/permanent record. Identity-rail clients hold a server-side credit pool; anonymous-rail clients hold bearer Cashu tokens locally — the server cannot see their balance.
+**Credit model:** rate card v1.0 — 10 credits per transfer, 100 credits per GB, 20 credits per permanent record. Registered-rail clients draw on a server-side credit pool. Bearer-rail clients will hold their credits locally as Cashu tokens the server cannot see (B7).
 
 ---
 
@@ -122,45 +122,49 @@ The API ships a companion MCP (Model Context Protocol) server as an Apache 2.0 n
 
 | Data | Held by us? | Readable under compulsion or breach? |
 |------|------------|--------------------------------------|
-| File contents | No — ciphertext only in R2 | No — key never existed on our servers |
-| AES-GCM session key | No — URL fragment, never transmitted | No — does not exist in our infrastructure |
+| File contents | Ciphertext only, in R2 | No — the key never reaches us |
+| AES-GCM key | No — URL fragment, never transmitted | No |
+| Real filename | No — URL fragment | No |
 | Sender / recipient identity (Bearer rail) | No | No |
-| Sender / recipient identity (Registered rail) | No | No |
 | File sizes and transfer timestamps | Yes | Yes |
+| Client IP addresses | Briefly — rate-limit counters, about a minute | Yes, within that window |
 | Stripe subscriber email (Registered rail) | Yes | Yes |
-| Lightning payment hashes | Yes, 25h TTL | Yes, within TTL window |
+| Lightning payment hashes (from B7) | Yes, 25 h | Yes, within that window |
 
-A full exfiltration of our R2 storage returns encrypted noise. The key was in the link. We never held it.
+Cloudflare, as our host, also sees connecting IP addresses.
 
-### Incident response
+A full copy of our R2 storage is encrypted noise. The key was in the link.
 
-- `docs/incident-response.md` — severity tiers (S1/S2/S3), pre-written communication templates, UK GDPR Article 33 obligations, status page schema, tabletop simulation checklist.
-- `security-breach.md` — living breach register. Currently empty.
+### How we work on security
+
+Designs are written down before they are built, and security-sensitive blocks get their own review first (for example the B12 storage and sign-in review, `docs/B12-SR-spec-v1.md`). When a review or a soak test finds a problem, the fix and the lesson go into the next build rather than into a footnote.
+
+- `incident-response.md` — severity tiers, communication templates, UK GDPR Article 33 duties.
+- `security-breach.md` — breach register. Currently empty.
 
 ---
 
 ## Build Status
 
-**SW-MCP-8 complete · 484 tests passing (refueler-share) · 228 tests passing (refueler-mcp)**
+**596 tests passing (refueler-share) · 228 (refueler-mcp)**
 
 | Block | Status | Scope |
 |-------|--------|-------|
-| B1 | ✅ | SSG scaffold, Cloudflare Pages deploy, Cashu NUT-00 credential issuance |
-| B2 | ✅ | Analytics Engine, Supabase aggregation, admin dashboard |
-| B3 | ✅ | Stripe checkout, webhook handler, Customer Portal |
-| B4 | ✅ | BLAKE3 WASM, server-side chunk verification, AES-GCM AAD, rate limiting, MIME denylist, UUID validation |
-| B5 | ✅ | Paper/Carbon design system, FSAA streaming download, receiver landing page |
-| B6 | ✅ | Folder upload, resumable uploads, 212 tests, k6 load tests, CI Level 1 |
-| TG-block | ✅ | Destroy after download, tidal availability window, Execution Dock, owner DELETE |
-| TH-block | ✅ | Permanent record (OTS + Bitcoin), JS refactor (5-module split) |
-| SW-block | ✅ | CF for SaaS, HMAC API auth, credential issuance, webhooks, receipts, sandbox, hostname health |
-| SW-MCP-1…8 | ✅ | MCP server scaffold through npm distribution — [`@refueler/mcp-server`](https://github.com/rajesh-taylor/refueler-mcp) |
+| B1–B6 | ✅ | Credential issuance, analytics, Stripe, BLAKE3 WASM + chunk checks, AES-GCM AAD, rate limiting, design system, folder upload, resume, CI |
+| TG-block | ✅ | Destroy after download, availability window, Execution Dock, owner delete |
+| TH-block | ✅ | Permanent record (OpenTimestamps + Bitcoin), frontend module split |
+| SW-block | ✅ | Custom API hostname, HMAC API auth, webhooks, receipts, sandbox |
+| Share-6 | ✅ | Direct-to-R2 uploads, Merkle root at upload, ciphertext storage verification at download (B9-1…B9-3) |
+| Ops | ✅ | Navy Office admin dashboard; batched, resumable deletes; one-command frontend deploy with byte-level live check, pre-push guard and CI mirror check |
+| B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done; first build session shipped |
 
-| Block | Scope |
-|-------|-------|
-| B7 | Lightning BOLT11 payments via self-hosted LNbits + phoenixd |
-| B8 | NUT-11 Mode 2 keypair authentication |
-| B9 | Full Merkle-root verification, ciphertext storage integrity, security whitepaper |
+| Next | Scope |
+|------|-------|
+| Credential hardening | Standard Cashu proof format, reviewed library code, DLEQ |
+| B8 | NUT-11 keypair-bound credentials (the Locke) |
+| B7 | Lightning via self-hosted LNbits; Bearer rail |
+| Silent Drop | Standing, anonymous intake for receiving files |
+| B9 (rest) | Receipts carrying the ciphertext Merkle root, transfer history, security whitepaper |
 | B10 | ML-KEM post-quantum key wrapping |
 
 ---
@@ -168,24 +172,29 @@ A full exfiltration of our R2 storage returns encrypted noise. The key was in th
 ## Repo Layout
 
 ```
-worker/src/       Cloudflare Worker — upload, download, auth, receipts,
-                  webhooks, OTS relay, tiers, rate limiting
-frontend/         Browser JS and CSS (canonical source)
-  share.js        Entry point, DOM, mode detection
-  crypto.js       AES-GCM, BLAKE3, NUT-00, SHA-256, config constants
-  upload.js       Upload state machine, IDB resume, folder handling
-  download.js     Download state machine, OTS offer
-  timestamp.js    OTS pipeline
-bin/sync-share.sh Asset sync from frontend/ to refueler-io/src/share/assets/
-docs/             Incident response, security documentation
+worker/src/          Cloudflare Worker — issue, initiate/finalise, download
+                     verification, delete, receipts, webhooks, OTS relay, tiers
+worker/test/         Unit tests (Vitest, workerd pool)
+frontend/            Browser JS and CSS (canonical source)
+  share.js           Entry point, DOM, mode detection
+  crypto.js          AES-GCM, BLAKE3, NUT-00, SHA-256, config constants
+  merkle.js          Browser Merkle tree (twin of worker/src/merkle.js)
+  upload.js          Upload state machine, IDB resume, folder handling
+  download.js        Download state machine, OTS offer
+  timestamp.js       OTS pipeline
+bin/ship-frontend.sh Commit, mirror into refueler-io, push both, prove bytes live
+bin/sync-share.sh    Mirror step and --check / --live diagnostics
+bin/githooks/        Pre-push guard: main can't drift from the live site
+docs/                Design specs and security reviews
+merkle-spec-v1.md    Merkle tree specification
 ```
 
-Frontend assets are canonical here and mirrored into the `refueler-io` repo by `bin/sync-share.sh`. Never edit the mirror directly.
+Frontend files are canonical here and served from `refueler.io/share/` via the `refueler-io` repo. Ship with `bin/ship-frontend.sh`; never edit the mirror directly.
 
 ---
 
 ## Licence
 
-Apache 2.0. The patent grant clause protects the novel BLAKE3 + Cashu blind signature combination.
+Apache 2.0. The licence includes an express patent grant from contributors, and publishing the design here puts it on the public record.
 
-The Cashu blind signature implementation is a closed-loop, non-monetary application. No external Cashu mint is used or connected.
+The Cashu blind signature use is closed-loop and non-monetary. No external Cashu mint is used or connected.
