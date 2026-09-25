@@ -244,7 +244,7 @@ Applies to ANY change to a mirrored path: `frontend/*.js`, `frontend/*.css`, `fr
 - `bin/githooks/pre-push` blocks pushing `main` unless refueler.io's PUSHED `main` matches.
   Activated by `git config core.hooksPath bin/githooks`; `ship-frontend.sh` re-asserts it every run.
 - `--no-verify` is pointless: `.github/workflows/mirror-check.yml` re-checks on every push and every
-  6 h, including the live site byte-for-byte. Red = run `ship-frontend.sh`.
+  6 h (committed mirror only — the live byte check runs in ship-frontend.sh from the Mac). Red = run `ship-frontend.sh`.
 - `bin/sync-share.sh` on its own only copies into refueler.io's working tree. It deploys NOTHING.
 - Never edit refueler.io's `src/share/assets/*`, `src/share/index.njk` or
   `src/share/admin/test-upload.html` directly. Refueler.io-owned exceptions: `plans.css`, `navy-office.*`.
