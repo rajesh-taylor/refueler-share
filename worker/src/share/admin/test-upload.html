@@ -327,9 +327,21 @@ $('btnStart').addEventListener('click', async () => {
   const { signal } = abortController;
 
   const tStart       = Date.now();
-  let chunksUploaded = 0;
   let bytesUploaded  = 0;
-  let hadError       = false;
+
+  // Resilient tallies — updated defensively, never assumed to reach any
+  // particular value; the finally-block summary reads these, not a single
+  // "did the whole run throw" flag.
+  let attempted        = 0;
+  let succeeded         = 0;
+  const failedChunks    = new Set(); // chunk indices that exhausted retries
+  let paused             = false;    // true once a chunk exhausts retries
+  let pauseReason        = '';
+  let finaliseReached    = false;
+
+  const injectFail = new URLSearchParams(location.search).get('inject_fail') === '1';
+  const injectedOnce = new Set(); // chunk indices already given their one fake failure
+  if (injectFail) emit(`   ⚠ FAILURE INJECTION ACTIVE (?inject_fail=1) — chunks 3 & 7 forced to fake 500 once`, 'warn');
 
   // Shared state for parallel uploader
   const chunkHashes = new Array(totalChunks); // filled by index as chunks complete
@@ -384,6 +396,20 @@ $('btnStart').addEventListener('click', async () => {
     $('statElapsed').textContent = fmtSeconds(elapsed);
     $('statSpeed').textContent   = `${fmtBytes(speed)}/s`;
     $('statEta').textContent     = eta > 0 ? fmtSeconds(eta) : '—';
+  }
+
+  // Emit the unambiguous final tally. Called from the outer finally, so it
+  // runs whatever else happened — a throw anywhere above must not prevent
+  // this from printing.
+  function printFinalTally() {
+    emit('\n─── Final tally ───', 'head');
+    emit(`Attempted           : ${attempted} / ${totalChunks}`, 'info');
+    emit(`Succeeded           : ${succeeded}`, succeeded === totalChunks ? 'ok' : 'warn');
+    emit(`Failed after retries: ${failedChunks.size}` +
+         (failedChunks.size ? ` (chunks: ${[...failedChunks].sort((a,b)=>a-b).join(', ')})` : ''),
+         failedChunks.size ? 'err' : 'ok');
+    emit(`Finalise reached    : ${finaliseReached ? 'yes' : 'no'}`, finaliseReached ? 'ok' : 'warn');
+    if (paused) emit(`Paused              : yes — ${pauseReason}`, 'warn');
   }
 
   try {
@@ -449,75 +475,135 @@ $('btnStart').addEventListener('click', async () => {
     // Track chunk progress for periodic log lines
     let lastLogChunk = 0;
 
+    // Returns true if the chunk ultimately succeeded, false if it exhausted
+    // retries. NEVER throws (except on user Abort) — a chunk-level failure
+    // must not propagate and must not take down sibling chunks already in
+    // flight in the same concurrency batch (this was the previous
+    // Promise.all(index 3) crash where one rejection killed the whole run).
     async function uploadOneChunk(i) {
-      if (signal.aborted) throw new Error('Aborted');
-      if (hadError)        return; // another worker failed; bail
+      attempted++;
+      try {
+        const isLast     = i === totalChunks - 1;
+        const chunkBytes = isLast ? (totalBytes - i * CHUNK_SIZE) : CHUNK_SIZE;
 
-      const isLast     = i === totalChunks - 1;
-      const chunkBytes = isLast ? (totalBytes - i * CHUNK_SIZE) : CHUNK_SIZE;
+        // Generate payload and compute hash in parallel with URL fetch
+        const payload = randomChunk(chunkBytes);
+        const [hashBytes, presignedUrl] = await Promise.all([
+          Promise.resolve(blake3(payload)), // synchronous, wrapped for .all
+          getUrl(i),
+        ]);
 
-      // Generate payload and compute hash in parallel with URL fetch
-      const payload = randomChunk(chunkBytes);
-      const [hashBytes, presignedUrl] = await Promise.all([
-        Promise.resolve(blake3(payload)), // synchronous, wrapped for .all
-        getUrl(i),
-      ]);
+        chunkHashes[i] = toB64url(hashBytes);
 
-      chunkHashes[i] = toB64url(hashBytes);
+        // PUT with up to 3 attempts, exponential backoff (1s / 4s / 10s).
+        // Retries on BOTH a 5xx response AND a network-level throw (fetch
+        // rejecting outright — e.g. "TypeError: Failed to fetch"), which the
+        // previous version did not — that gap is what let a mid-run network
+        // blip skip the retry loop entirely and kill the batch.
+        const BACKOFFS = [1000, 4000, 10000];
+        let lastErr = null;
 
-      // PUT with up to 3 retries
-      let putRes;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        putRes = await fetch(presignedUrl, {
-          method: 'PUT',
-          signal,
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: payload,
-        });
-        if (putRes.ok || putRes.status < 500) break;
-        const body = await putRes.text();
-        console.warn(`PUT chunk ${i} attempt ${attempt+1} → ${putRes.status}`, body);
-        emit(`   ⚠ chunk ${i} attempt ${attempt+1} → ${putRes.status} — retrying…`, 'warn');
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-      }
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            let putRes;
+            if (injectFail && (i === 3 || i === 7) && !injectedOnce.has(i)) {
+              // Verification-run failure injector (Step 4 of the soak
+              // scope). Simulates a genuine R2 500 on first attempt only,
+              // for chunks 3 and 7. Active only with ?inject_fail=1 in the
+              // page URL — remove before the real soak by dropping the
+              // query param, nothing to edit in the file.
+              injectedOnce.add(i);
+              putRes = new Response('injected failure', { status: 500 });
+            } else {
+              putRes = await fetch(presignedUrl, {
+                method: 'PUT',
+                signal,
+                headers: { 'Content-Type': 'application/octet-stream' },
+                body: payload,
+              });
+            }
 
-      if (!putRes.ok) {
-        const errText = await putRes.text().catch(() => '');
-        emit(`✗ PUT chunk ${i} → ${putRes.status}: ${errText.slice(0, 200)}`, 'err');
-        hadError = true;
-        return;
-      }
+            if (putRes.ok) { lastErr = null; break; }
+            if (putRes.status < 500) {
+              // Non-retryable (4xx) — fail immediately, no point retrying.
+              const body = await putRes.text().catch(() => '');
+              lastErr = new Error(`HTTP ${putRes.status}: ${body.slice(0, 200)}`);
+              break;
+            }
+            const body = await putRes.text().catch(() => '');
+            lastErr = new Error(`HTTP ${putRes.status}: ${body.slice(0, 200)}`);
+          } catch (netErr) {
+            if (netErr.name === 'AbortError') throw netErr; // user-initiated, propagate
+            lastErr = netErr;
+          }
 
-      chunksUploaded++;
-      bytesUploaded += chunkBytes;
+          if (attempt < 2) {
+            console.warn(`PUT chunk ${i} attempt ${attempt + 1} failed`, lastErr);
+            emit(`   ⚠ chunk ${i} attempt ${attempt + 1} → ${lastErr.message} — retrying in ${BACKOFFS[attempt] / 1000}s…`, 'warn');
+            await new Promise(r => setTimeout(r, BACKOFFS[attempt]));
+          }
+        }
 
-      // Log every 100 chunks
-      if (chunksUploaded - lastLogChunk >= 100 || chunksUploaded === totalChunks) {
-        lastLogChunk = chunksUploaded;
-        updateStats();
-        const elapsed = Math.round((Date.now() - tStart) / 1000);
-        emit(`   ${chunksUploaded}/${totalChunks} chunks — ${fmtBytes(bytesUploaded)} in ${fmtSeconds(elapsed)}`, 'info');
+        if (lastErr) {
+          emit(`✗ chunk ${i} exhausted 3 attempts: ${lastErr.message}`, 'err');
+          failedChunks.add(i);
+          return false;
+        }
+
+        succeeded++;
+        bytesUploaded += chunkBytes;
+
+        // Log every 100 chunks
+        if (succeeded - lastLogChunk >= 100 || succeeded === totalChunks) {
+          lastLogChunk = succeeded;
+          updateStats();
+          const elapsed = Math.round((Date.now() - tStart) / 1000);
+          emit(`   ${succeeded}/${totalChunks} chunks — ${fmtBytes(bytesUploaded)} in ${fmtSeconds(elapsed)}`, 'info');
+        }
+        return true;
+      } catch (e) {
+        if (e.name === 'AbortError') throw e; // user-initiated, propagate to stop the pool
+        // Anything else unexpected: log, count as a chunk failure, do NOT
+        // let it escape and kill sibling workers.
+        console.error(`chunk ${i} unexpected error`, e);
+        emit(`✗ chunk ${i} unexpected error: ${e.message}`, 'err');
+        failedChunks.add(i);
+        return false;
       }
     }
 
-    // Worker pool: N concurrent workers each pulling the next chunk index
+    // Worker pool: N concurrent workers each pulling the next chunk index.
+    // A chunk that exhausts retries sets `paused` — the pool stops pulling
+    // NEW chunk indices (in-flight siblings are allowed to finish) rather
+    // than the whole run silently continuing or silently aborting.
     let nextChunk = 0;
     async function worker() {
       while (true) {
+        if (paused || signal.aborted) break;
         const i = nextChunk++;
         if (i >= totalChunks) break;
-        await uploadOneChunk(i);
-        if (hadError || signal.aborted) break;
+        const ok = await uploadOneChunk(i);
+        if (!ok && !paused) {
+          paused = true;
+          pauseReason = `chunk ${i} exhausted retries — run paused for review`;
+          emit(`\n⏸ PAUSED: ${pauseReason}`, 'err');
+          emit('   In-flight sibling chunks are being allowed to finish; no new chunks will start.', 'warn');
+        }
       }
     }
 
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
     if (signal.aborted) throw new Error('Aborted by user');
-    if (hadError) throw new Error('Upload failed — see log above');
-    if (chunkHashes.some(h => !h)) throw new Error('Internal: missing chunk hashes after upload');
 
     updateStats();
+
+    if (failedChunks.size > 0) {
+      emit(`\n✗ Upload stopped: ${failedChunks.size} chunk(s) failed after retries. Not proceeding to finalise.`, 'err');
+      return;
+    }
+    if (chunkHashes.some(h => !h)) throw new Error('Internal: missing chunk hashes after upload');
+
     emit(`   All ${totalChunks} chunks uploaded.`, 'ok');
 
     // ── Step 4: compute merkle root ───────────────────────────────────────────
@@ -545,6 +631,7 @@ $('btnStart').addEventListener('click', async () => {
     }
 
     const finaliseData = await finaliseRes.json();
+    finaliseReached = true;
     const elapsed = Math.round((Date.now() - tStart) / 1000);
     emit(`   Finalise OK — ${JSON.stringify(finaliseData)}`, 'ok');
     emit(`\n✓ Upload soak complete. ${fmtBytes(totalBytes)} in ${fmtSeconds(elapsed)}.`, 'ok');
@@ -635,6 +722,7 @@ $('btnStart').addEventListener('click', async () => {
       console.error(e);
     }
   } finally {
+    printFinalTally();
     $('btnStart').disabled = false;
     $('btnAbort').disabled = true;
     abortController = null;
