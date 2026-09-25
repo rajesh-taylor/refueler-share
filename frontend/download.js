@@ -287,9 +287,9 @@ async function _parse409Body(res) {
 function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
   const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
 
-  // Stop the progress bar where it is — don't snap to 100%
-  dlPct.textContent  = '—';
-  dlBar.style.width  = '0%';
+  // Hide progress entirely — no stray percentage/bar alongside a failure state.
+  dlPct.classList.add('hidden');
+  dlBar.parentElement.classList.add('hidden');
   dlStageTag.textContent = 'Transfer failed';
   downloadCard.classList.remove('hidden');
 
@@ -348,6 +348,8 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
   if (!totalChunks || totalChunks < 1) { _showDownloadError('Transfer metadata is incomplete. Please try again.', domRefs); return; }
 
   downloadCard.classList.remove('hidden');
+  dlPct.classList.remove('hidden');
+  dlBar.parentElement.classList.remove('hidden');
   dlStageTag.textContent = 'Downloading';
   dlPct.textContent = '0%';
   dlBar.style.width = '0%';
@@ -488,6 +490,8 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
   if (!totalChunks || totalChunks < 1) { _showDownloadError('Transfer metadata is incomplete. Please try again.', domRefs); return; }
 
   downloadCard.classList.remove('hidden');
+  dlPct.classList.remove('hidden');
+  dlBar.parentElement.classList.remove('hidden');
   dlStageTag.textContent = 'Downloading';
   dlPct.textContent = '0%';
   dlBar.style.width = '0%';
@@ -697,10 +701,12 @@ function _showDownloadError(msg, domRefs) {
   const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
   downloadCard.classList.remove('hidden');
   dlStageTag.textContent = `Error — ${msg}`;
-  // Suppress stray progress display alongside the error (DAD-ERROR-TEXT, Share-B10-3).
-  // Same fix _showIntegrityFailure already applies — kept consistent across both error paths.
-  dlPct.textContent = '—';
-  dlBar.style.width = '0%';
+  // Hide progress entirely on error (DAD-ERROR-TEXT, Share-B10-3) — no stray "0%".
+  // #dl-pct is a sibling span in the same flex-row as #dl-stage-tag; #dl-bar's
+  // parent (.progress-bar-wrap) is the separate row underneath. Hiding both
+  // matches the pattern _showIntegrityFailure now also uses.
+  dlPct.classList.add('hidden');
+  dlBar.parentElement.classList.add('hidden');
 }
 
 function _logReceiverEvent(event, variant) {
