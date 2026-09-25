@@ -188,10 +188,10 @@ Session count is a guide not a constraint — split early, never overload. Plann
 
 **B9-Opus ✓ complete (12 Sep 2026):** Merkle / MMR / SMT / ZK design locked. `merkle-spec-v1.md` produced (repo root).
 
-**B12 block (opened 24 Sep 2026):** B12 design ✓ (`cc14d21`) · B12-SR security review ✓ (`4564730`). Pre-Berlin: **B12-1 → B12-1b → B12-2.**
+**B12 block (opened 24 Sep 2026):** B12 design ✓ (`cc14d21`) · B12-SR security review ✓ (`4564730`). B12-1 ✓. **B12-1b and B12-2 moved post-Berlin (decided 25 Sep): only small ad hoc sessions until back 4 Oct.** Live Pro Bono size hole (S1.1, B12-1b) stays open until then.
 
 Locked block sequence (updated Share-B12-SR · 24 Sep 2026):
-`B12-1 → B12-1b → B12-2 → [Berlin 30 Sep–3 Oct] → KV-Audit-Opus + fixes · X3 naming · X5 app origin → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
+`B12-1 ✓ → [Berlin 30 Sep–3 Oct; back Sun 4 Oct; small ad hoc sessions only until then] → B12-1b → B12-2 → KV-Audit-Opus + fixes · X3 naming · X5 app origin → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
 B12-5 (Harbourmaster) slots in when a Chartered client is in sight.
 
 ---

@@ -212,7 +212,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-B12-SR ✓ (24 Sep 2026) — Security review of B12 locked (S1–S7 + X1–X6, amendments A1–A18). `B12-SR-spec-v1.md` in repo ROOT (`4564730`). Next: B12-1 → B12-1b → B12-2 (pre-Berlin). 250 GiB soak running in Brave; Safari 100 + 250 GiB repeats queued; delete the Brave 250 GiB transfer once Safari passes.**
+**Share-B12-SR ✓ (24 Sep 2026) — Security review of B12 locked (S1–S7 + X1–X6, amendments A1–A18). `docs/B12-SR-spec-v1.md` (`4564730`). Next: Berlin (30 Sep–3 Oct), then B12-1b → B12-2 (moved post-Berlin 25 Sep). 250 GiB soak running in Brave; Safari 100 + 250 GiB repeats queued; delete the Brave 250 GiB transfer once Safari passes.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -245,7 +245,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 pre-Berlin** — B12-1, B12-1b, B12-2 | ❌ | Before 30 Sep. Closes the live Pro Bono size hole (1b). |
+| 11a | **B12 post-Berlin start** — B12-1b, B12-2 (B12-1 ✓) | ❌ | First sessions after 4 Oct. B12-1b closes the live Pro Bono size hole — open until then. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ CAP-WARNING-LINK, UPGRADE-CSS, DAD-ERROR-TEXT) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |

@@ -708,7 +708,7 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 | Block | Sessions | Model | When |
 |---|---|---|---|
 | B12-1 | 1 (done) | Sonnet | Pre-Berlin |
-| B12-1b | 1 (+1 buffer) | Sonnet | Pre-Berlin |
+| B12-1b | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) |
 | B12-2 | 1 (+1 buffer) | Sonnet | Pre-Berlin |
 | KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
 | B12-3 quota | 3 (+1) | Sonnet | Week 2 |
@@ -722,7 +722,7 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 
 ## Locked block sequence (updated Share-B12-SR · 24 Sep 2026)
 
-`B12-1 → B12-1b → B12-2 → [Berlin 30 Sep–3 Oct] → KV-Audit-Opus + fixes · X3 · X5 → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
+`B12-1 ✓ → [Berlin 30 Sep–3 Oct; back Sun 4 Oct; small ad hoc sessions only until then] → B12-1b → B12-2 → KV-Audit-Opus + fixes · X3 · X5 → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
 
 ---
 
@@ -737,5 +737,5 @@ CI Level 1 green (`b96910e`; Mirror workflow untouched). Three causes, all in un
 
 ### Next sessions (queued Share-Sync-1 · 25 Sep 2026; Share-CI-1 done)
 1. **Share-Soak-2** (Sonnet) — read `worker/scripts/soak-headless.mjs`; fix ~30 s fetch timeout (32 MiB × concurrency 8 cannot finish on home upload); remove failed transfer `2c796eba-60f3-4c28-b2f1-29cfc76358e5` via the Worker delete path (never `wrangler r2 object delete` — bypasses the deletion latch); smoke run, then 100 GiB re-run.
-2. **B12-1b** (Sonnet) — per locked block sequence, then **B12-2**. Both pre-Berlin (30 Sep).
+2. **B12-1b** (Sonnet) — first session back (after Sun 4 Oct); prompt ready on Rajesh's Desktop (`Share-B12-1b-prompt.md`, Part 0 corrected). Then **B12-2**. Both moved post-Berlin 25 Sep — only small ad hoc sessions until then.
 **Supabase rule (from 30 Oct 2026):** every migration that creates a table in `public` must include explicit GRANTs in the same migration. Server-only tables (ledger, auth sessions, magic links, quota) grant `service_role` ONLY — never `anon`/`authenticated`.
