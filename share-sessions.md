@@ -709,7 +709,7 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 |---|---|---|---|
 | B12-1 | 1 (done) | Sonnet | Pre-Berlin |
 | B12-1b | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) |
-| B12-2 | 1 (+1 buffer) | Sonnet | Pre-Berlin |
+| B12-2 | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) — no prompt yet; needs Navy Office files from Rajesh |
 | KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
 | B12-3 quota | 3 (+1) | Sonnet | Week 2 |
 | B12-4a auth | 2 (+1) | Sonnet | Week 2 |
@@ -737,5 +737,5 @@ CI Level 1 green (`b96910e`; Mirror workflow untouched). Three causes, all in un
 
 ### Next sessions (queued Share-Sync-1 · 25 Sep 2026; Share-CI-1 done)
 1. **Share-Soak-2** (Sonnet) — read `worker/scripts/soak-headless.mjs`; fix ~30 s fetch timeout (32 MiB × concurrency 8 cannot finish on home upload); remove failed transfer `2c796eba-60f3-4c28-b2f1-29cfc76358e5` via the Worker delete path (never `wrangler r2 object delete` — bypasses the deletion latch); smoke run, then 100 GiB re-run.
-2. **B12-1b** (Sonnet) — first session back (after Sun 4 Oct); prompt ready on Rajesh's Desktop (`Share-B12-1b-prompt.md`, Part 0 corrected). Then **B12-2**. Both moved post-Berlin 25 Sep — only small ad hoc sessions until then.
+2. **B12-1b** (Sonnet) — first session back (after Sun 4 Oct); prompt in repo root `Share-B12-1b-prompt.md` (Part 0 corrected 25 Sep). Then **B12-2**. Both moved post-Berlin 25 Sep — only small ad hoc sessions until then.
 **Supabase rule (from 30 Oct 2026):** every migration that creates a table in `public` must include explicit GRANTs in the same migration. Server-only tables (ledger, auth sessions, magic links, quota) grant `service_role` ONLY — never `anon`/`authenticated`.
