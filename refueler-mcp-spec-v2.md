@@ -399,6 +399,21 @@ was set (recommended here), the agent tells the user to pass it to the recipient
 a separate channel. Acceptance receipt immediately; collection receipt on download.
 **Fully buildable on v1.**
 
+**Status lookup (gap identified 25 Sep 2026 — not yet speced).** A solo Chartered
+credential has no team, no quay allocation, nothing to administer — a Harbourmaster-
+style dashboard is the wrong shape for it. What it needs is a single scoped tool:
+
+`check_transfer_status(transfer_ref)` → { status: active | collected | expired | purged,
+expiry_timestamp }
+
+Scoped to `api_transfer_ref` (already written into the manifest at finalise —
+see `finalise.js`). Returns status for transfers created under the calling
+credential only; the Worker route handler enforces this the same way any other
+API-tier endpoint is scoped — no new permission model, no dock browsing.
+Explicitly OUT: no `list_my_transfers`, no row browsing, no dashboard. If a solo
+user wants history beyond "is this one done", that's a `dashboard_url` visit,
+not an MCP tool.
+
 ### B. Two Claude users, different companies, agent-to-agent
 
 **v1 reality:** this is scenario A with a machine recipient. The sender's agent
