@@ -1,0 +1,36 @@
+# Share-Sync-1 · 25 Sep 2026 — independent backstop to bin/githooks/pre-push.
+# A local hook can be skipped (--no-verify, fresh clone, another machine). This cannot.
+# Red here = refueler.io/share/ is not serving refueler-share main. Fix: bin/ship-frontend.sh "msg"
+name: Mirror — refueler.io/share/ serves canonical frontend
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 */6 * * *'   # catches direct edits to the refueler.io mirror and failed Pages builds
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout refueler-share (canonical)
+        uses: actions/checkout@v4
+
+      - name: Checkout refueler-io (mirror, public)
+        uses: actions/checkout@v4
+        with:
+          repository: rajesh-taylor/refueler-io
+          ref: main
+          path: _io
+
+      - name: Committed mirror matches canonical
+        env:
+          REFUELER_IO_ROOT: ${{ github.workspace }}/_io
+        run: bin/sync-share.sh --check
+
+      - name: Public site serves canonical, byte for byte
+        env:
+          LIVE_TIMEOUT: ${{ github.event_name == 'push' && '900' || '120' }}
+        run: bin/sync-share.sh --live

@@ -14,6 +14,10 @@ yarn-error.log*
 
 # Build output
 dist/
+# …except the vendored BLAKE3 WASM bundle: it ships to refueler.io/share/ and must be
+# canonical + verifiable here (Share-Sync-1). Without these, the live WASM had no source in git.
+!frontend/blake3/dist/
+!src/blake3/dist/
 build/
 .wrangler/
 
