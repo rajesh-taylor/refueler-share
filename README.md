@@ -110,7 +110,7 @@ No free trials. No discounts. The price is the price.
 
 The API lives at `api.share.refueler.io`. Every request is signed with HMAC-SHA256 over `method + path + timestamp + body_hash`. Each commercial relationship gets three credentials: a live key, a signing key, and a webhook signing key.
 
-A companion MCP (Model Context Protocol) server, [`refueler-mcp`](https://github.com/rajesh-taylor/refueler-mcp), is in development under Apache 2.0. It is not yet published to npm. It runs in the operator's own infrastructure and handles ciphertext only.
+A companion MCP (Model Context Protocol) server lives at [`refueler-mcp`](https://github.com/rajesh-taylor/refueler-mcp) — source public, Apache 2.0. It runs in the operator's own infrastructure and handles ciphertext only; encryption, the key and the real filename stay on the operator's side. The npm package (`@refueler/mcp-server`) is prepared but not yet published: the send tool is being moved onto the direct-to-R2 upload path first.
 
 **Credit model:** rate card v1.0 — 10 credits per transfer, 100 credits per GB, 20 credits per permanent record. Registered-rail clients draw on a server-side credit pool. Bearer-rail clients will hold their credits locally as Cashu tokens the server cannot see (B7).
 
@@ -131,7 +131,7 @@ A companion MCP (Model Context Protocol) server, [`refueler-mcp`](https://github
 | Stripe subscriber email (Registered rail) | Yes | Yes |
 | Lightning payment hashes (from B7) | Yes, 25 h | Yes, within that window |
 
-Cloudflare, as our host, also sees connecting IP addresses.
+Cloudflare, as our host, also sees connecting IP addresses. If that matters to you, connect through Tor Browser or a multi-hop VPN: then the address we and Cloudflare see is an exit relay's, not yours. That protects your location, not your behaviour — a transfer's size and timing are still visible, and anything you sign into still identifies you. Tor users may see extra bot checks.
 
 A full copy of our R2 storage is encrypted noise. The key was in the link.
 
