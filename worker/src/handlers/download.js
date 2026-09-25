@@ -300,7 +300,7 @@ function logEventStatic(env, status, chunkIndex, errorMsg) {
 //      owner-delete are indistinguishable in the Execution Dock (absence). B12 §6.5.
 // The response is returned to the recipient immediately; destruction is background.
 // The receipt tail (SW5 cargo.discharged) fires independently — DAD does not suppress it.
-function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse) {
+export function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse) {
   // ── TG: flip pending_destruction → true on last chunk of a DAD transfer ───
   const updatedManifestForFlip = flipPendingDestruction(manifest, chunkIndex);
   const pendingDestructionFlipped = updatedManifestForFlip !== manifest;

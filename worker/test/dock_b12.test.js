@@ -7,19 +7,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { makeBucket, makeKV } from './_r2_mock.js';
 
 // Isolate the units under test from heavy siblings (WASM, crypto, receipts).
-vi.mock('src/nut11.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
-vi.mock('src/receipts.js',                  () => ({ emitReceipt: vi.fn() }));
-vi.mock('src/webhook_delivery.js',          () => ({ findApiKeyHashForUuid: vi.fn() }));
-vi.mock('src/handlers/download_verify.js',  () => ({ isVerifiedPath: vi.fn(), readSidecarWithRootCheck: vi.fn(), verifyChunkBody: vi.fn(), VERIFY_INLINE_CHUNK_THRESHOLD: 0 }));
+vi.mock('../src/nut11.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
+vi.mock('../src/receipts.js',                  () => ({ emitReceipt: vi.fn() }));
+vi.mock('../src/webhook_delivery.js',          () => ({ findApiKeyHashForUuid: vi.fn() }));
+vi.mock('../src/handlers/download_verify.js',  () => ({ isVerifiedPath: vi.fn(), readSidecarWithRootCheck: vi.fn(), verifyChunkBody: vi.fn(), VERIFY_INLINE_CHUNK_THRESHOLD: 0 }));
 // DAD flips on the last chunk of an armed transfer — pin that predicate so this
 // test exercises the destruction SEQUENCE, not manifest_tg's internals.
-vi.mock('src/manifest_tg.js', () => ({
+vi.mock('../src/manifest_tg.js', () => ({
   buildTombstone:         (n) => ({ consumed: true, consumed_at: n }),
   flipPendingDestruction: (m, i) => (m.pending_destruction === false && i === m.total_chunks - 1) ? { ...m, pending_destruction: true } : m,
   checkTransferStatus:    vi.fn(),
 }));
 // Read the manifest straight from the mock bucket (keeps real json/err/UUID_RE).
-vi.mock('src/utils.js', async (importOriginal) => {
+vi.mock('../src/utils.js', async (importOriginal) => {
   const real = await importOriginal();
   return {
     ...real,
@@ -30,10 +30,10 @@ vi.mock('src/utils.js', async (importOriginal) => {
   };
 });
 
-import { finishDownload }                             from 'src/handlers/download.js';
-import { handleDeleteTransfer, handleOwnerDelete }    from 'src/handlers/delete_transfer.js';
-import { handleFinalise }                             from 'src/handlers/finalise.js';
-import { handleExecutionDock }                        from 'src/handlers/execution_dock.js';
+import { finishDownload }                             from '../src/handlers/download.js';
+import { handleDeleteTransfer, handleOwnerDelete }    from '../src/handlers/delete_transfer.js';
+import { handleFinalise }                             from '../src/handlers/finalise.js';
+import { handleExecutionDock }                        from '../src/handlers/execution_dock.js';
 
 const NOW  = 1_800_000_000;
 const DAY  = 86400;
