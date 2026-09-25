@@ -1,19 +1,25 @@
 # Share-Sync-1 · 25 Sep 2026 — independent backstop to bin/githooks/pre-push.
 # A local hook can be skipped (--no-verify, fresh clone, another machine). This cannot.
-# Red here = refueler.io/share/ is not serving refueler-share main. Fix: bin/ship-frontend.sh "msg"
+# Red here = refueler.io's committed mirror does not match refueler-share main.
+# Fix: /Users/rajeshtaylor/Documents/refueler-share/bin/ship-frontend.sh "msg"
+#
+# No live-site step here, deliberately: Cloudflare bot protection challenges GitHub's
+# datacenter IPs on non-static paths (.wasm, .html), so a live check from CI reports
+# false failures. Live byte-proof runs from Rajesh's Mac inside ship-frontend.sh, and
+# on demand via: bin/sync-share.sh --live
 name: Mirror — refueler.io/share/ serves canonical frontend
 
 on:
   push:
     branches: [main]
   schedule:
-    - cron: '17 */6 * * *'   # catches direct edits to the refueler.io mirror and failed Pages builds
+    - cron: '17 */6 * * *'   # catches direct edits pushed to the refueler.io mirror
   workflow_dispatch:
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - name: Checkout refueler-share (canonical)
         uses: actions/checkout@v4
@@ -29,8 +35,3 @@ jobs:
         env:
           REFUELER_IO_ROOT: ${{ github.workspace }}/_io
         run: bin/sync-share.sh --check
-
-      - name: Public site serves canonical, byte for byte
-        env:
-          LIVE_TIMEOUT: ${{ github.event_name == 'push' && '900' || '120' }}
-        run: bin/sync-share.sh --live
