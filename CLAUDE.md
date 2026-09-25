@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.6 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-B12-SR · 24 Sep 2026
+> **Version:** 2.7 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-Sync-1 · 25 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -102,7 +102,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - `X-Email` header dropped from upload path entirely.
 - Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
 - `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html`.
-- `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Never produce index.njk as a download — always edit via sed directly on `refueler-io/src/share/index.njk`.
+- `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Both are produced by `bin/sync-share.sh` rendering canonical `src/index.njk` — never edit the refueler.io copy directly (CI and the pre-push hook flag it stale; the next ship overwrites it).
 
 **API feature gates (locked SW-Opus-1 · 7 Sep 2026):**
 - **v1 (ships in SW block):** capability discovery (`GET /api/v1/capabilities`), OTS-confirmation webhook, acceptance receipts + collection receipts. "Proof of delivery" retired — unprovable, never claim it.
@@ -150,7 +150,7 @@ remains unimplemented — do not claim end-to-end file integrity until B9 build 
 
 ## B12 / B12-SR security locks (24 Sep 2026)
 
-Full specs: `docs/B12-spec-v1.1.md` (design) + `B12-SR-spec-v1.md` (repo root — security review; **wins on any conflict**). Build sessions read B12-SR §C first.
+Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (security review; **wins on any conflict**). Build sessions read B12-SR §C first. B8 and Share-6 specs also live in `docs/` (moved 25 Sep 2026).
 
 - **KV is compromised for write, not just read (X1).** Nothing in KV may authorise access, lift a limit, or select a privileged branch unless MAC'd under a Worker secret. Auth sessions and magic-link tokens live in Supabase, never KV.
 - **Presigned PUTs sign `content-length`** (full chunks `CHUNK_SIZE + 16`; tail URL minted at initiate only, so tail length is never stored). Session token, URL expiry and quota reservation share one clock: `UPLOAD_WINDOW = 6 days`.
@@ -207,67 +207,61 @@ git commit -m "message" && git push
 Rajesh consistently forgets the push step. Claude must always include `&& git push` in the
 commit command at session close, without being asked.
 
-**Correction (Share-DAD-1 · 25 Sep 2026):** the line previously here — "commits that stay
-local mean Cloudflare Pages never deploys" — was wrong and caused a real incident. There are
-THREE separate deploy surfaces for this repo, not one:
+**Deploy surfaces (corrected Share-DAD-1, enforced Share-Sync-1 · 25 Sep 2026):**
 
-1. **`refueler-share` Worker** (`api.share.refueler.io`) — deployed manually via `wrangler
-   deploy`. Not Git-connected. Pushing to `main` does nothing here.
-2. **`refueler-share.pages.dev`** — a Cloudflare Pages project with **no Git connection**
-   (confirmed 25 Sep 2026). Pushing to `main` does nothing here either. Only a manual
-   `wrangler pages deploy frontend --project-name=refueler-share` updates it, and this URL
-   is NOT what `refueler.io/share/` serves — see below.
-3. **`refueler.io`** (the actual public frontend, `refueler.io/share/`) — served from the
-   **separate `refueler-io` repo**, which IS Git-connected and auto-deploys on push. But
-   `refueler-io` only sees `refueler-share/frontend/` changes after `bin/sync-share.sh`
-   has copied them into `refueler-io/src/share/assets/` AND `refueler-io` itself has been
-   committed and pushed — a second, separate `git push` in a second, separate repo.
+1. **`refueler-share` Worker** (`api.share.refueler.io`) — `npm run deploy` from `worker/`. Not
+   Git-connected; pushing does nothing here.
+2. **`refueler.io/share/`** — the ONLY public frontend, served by the Git-connected `refueler-io`
+   repo. Share frontend reaches it ONLY via `bin/ship-frontend.sh`.
+3. **`refueler-share.pages.dev`** — orphaned Pages project (Share's pre-`refueler.io/share/` home,
+   retired for SEO — one domain for the suite). No Git connection, CORS-blocked from the API.
+   Deletion blocked by Cloudflare (too many deployments, code 8000076) — parked. Dead wood:
+   NEVER `wrangler pages deploy` to it, never verify against it. A "success" there proves nothing.
 
-`git push` in `refueler-share` alone deploys NOTHING the public ever sees for frontend
-changes. Do not say or imply otherwise. See "Frontend change checklist" below — the live
-verify step there is not optional, and it must be done against `refueler.io/share/`, never
-`refueler-share.pages.dev` or localhost.
+`git push` in `refueler-share` deploys nothing public — and pushing `main` is **blocked** by the
+pre-push hook unless refueler.io's pushed `main` already serves the same frontend.
 
 ---
 ## Frontend change checklist — mandatory
 
-Before considering ANY change to frontend/upload.js, frontend/download.js, frontend/share.js,
-or frontend/fragment.js complete — including bugfixes, not just new features:
+Applies to ANY change to a mirrored path: `frontend/*.js`, `frontend/*.css`, `frontend/blake3/`,
+`src/index.njk`, `src/blake3/`, `worker/src/share/admin/test-upload.html`.
 
-1. `npm run build && bin/sync-share.sh` must complete without errors — this copies the
-   change into `refueler-io/src/share/assets/`. It does NOT deploy anything by itself.
-2. `git commit && git push` **in `refueler-share`** — this is required for repo hygiene
-   but does NOT put the change in front of a single user. See "Session hygiene" above.
-3. `cd` into the **`refueler-io`** repo, `git status` to confirm the synced file shows as
-   modified, then `git commit && git push` **there too**. This second push is what
-   actually triggers deploy — `refueler-io` is Git-connected, `refueler-share` is not.
-4. Only after that push completes: manually verify at **https://refueler.io/share/**
-   (never `refueler-share.pages.dev`, never localhost — different deploy pipelines, a
-   clean result on one proves nothing about the others):
+1. Ship with ONE command — commits, syncs, pushes both repos, then proves the bytes are live:
+   `/Users/rajeshtaylor/Documents/refueler-share/bin/ship-frontend.sh "message"`
+   It must end `✓ SHIPPED`. Anything else = not shipped, whatever GitHub or wrangler says.
+2. Then eyeball behaviour at **https://refueler.io/share/** (the script proves bytes, not behaviour):
    a. Share URL contains `?uuid=` and a non-empty `#` fragment
    b. Pasting that URL in a new tab shows the receiver card — NOT the upload screen
    c. File name, size, and expiry are populated on the receiver card
    d. For error-state changes: trigger the actual error condition live and read the
       rendered text/UI directly — do not infer correctness from the diff alone
-5. If the change touches passphrase flow: verify unlock screen appears on paste
+3. If the change touches passphrase flow: verify unlock screen appears on paste.
 
-DO NOT commit frontend JS based on code review alone — always verify live, on refueler.io,
-after both pushes. **Incident record:** DAD-ERROR-TEXT (Share-DAD-1, 25 Sep 2026) shipped a
-correct code fix, deployed it to the wrong project three separate times (`refueler-share`
-Worker, then `refueler-share.pages.dev`), and only reached `refueler.io` after this full
-sequence was followed. A code review or a green deploy log on the wrong project is not
-verification.
+**Enforced, not remembered (Share-Sync-1):**
+- The mirrored file list lives in ONE place: `bin/lib/share-mirror.sh`. A new `frontend/*.js` or
+  `*.css` not listed fails every check loudly (the merkle.js / Share-6-3d trap). Add it there, same session.
+- `bin/githooks/pre-push` blocks pushing `main` unless refueler.io's PUSHED `main` matches.
+  Activated by `git config core.hooksPath bin/githooks`; `ship-frontend.sh` re-asserts it every run.
+- `--no-verify` is pointless: `.github/workflows/mirror-check.yml` re-checks on every push and every
+  6 h, including the live site byte-for-byte. Red = run `ship-frontend.sh`.
+- `bin/sync-share.sh` on its own only copies into refueler.io's working tree. It deploys NOTHING.
+- Never edit refueler.io's `src/share/assets/*`, `src/share/index.njk` or
+  `src/share/admin/test-upload.html` directly. Refueler.io-owned exceptions: `plans.css`, `navy-office.*`.
+- `test-upload.html` is now in the pipeline (to `src/share/admin/`, never `assets/`) — supersedes the
+  Share-Admin-1 "never add to sync-share.sh" rule; its intent (never in the public assets mirror) holds.
+- Diagnostics: `bin/sync-share.sh --check` (repos) · `bin/sync-share.sh --live` (public site).
+  Status codes prove nothing — refueler.io answers a missing asset with 200 + the homepage.
+- Pipeline doubt? Edit `frontend/mirror-canary.txt` and ship. Never test the pipeline with app code.
+
+**Incident record:** DAD-ERROR-TEXT (Share-DAD-1, 25 Sep 2026) — a correct fix deployed to the wrong
+target three times before reaching refueler.io. A green log on the wrong project is not verification.
+DO NOT commit frontend JS based on code review alone — verify behaviour live after `✓ SHIPPED`.
 DO NOT assume manifest fields exist — `curl /meta/{uuid}` to verify before coding against them.
 DO NOT change fragment.js without verifying upload.js and download.js handle IV, key, and filename end-to-end.
-DO NOT ship a NEW frontend/*.js module without adding its filename to the JS copy loop in bin/sync-share.sh — the sync silently SKIPS unlisted files (no error), the refueler.io mirror 404s the module, and the whole share.js graph collapses (dead drop zone, dead pickers, Turnstile onload undefined). merkle.js hit this at Share-6-3d.
-PLANNED: a pre-push hook in `refueler-share` (session `Share-Sync-1`, not yet built as of
-25 Sep 2026) will block any push touching frontend/*.js or *.css if `refueler-io/src/share/
-assets/` is out of sync — catching the sync step by force. It will NOT automate the second
-`git push` in `refueler-io` — that remains manual and must still be done + verified per the
-checklist above.
 DO NOT introduce a NEW request header the browser sends to the Worker without adding it to Access-Control-Allow-Headers in worker/src/utils.js corsHeaders() — the CORS preflight blocks it (net::ERR_FAILED, "field x-… is not allowed"). X-Upload-Session hit this at Share-6-3d; /urls will hit it on >256-chunk transfers.
 NOTE (browser + hostname, Share-6 live-test 21 Sep): download "CORS/ERR_FAILED/503" failures were **Brave** + the api.share.refueler.io custom hostname (6-6b cutover not done) intermittently 503-ing; a 503 carries no CORS header so the browser mislabels it "CORS". Safari downloads the same link cleanly, and curl shows the Worker DOES send CORS on the failing chunk. DO NOT edit Worker CORS or finalise token logic for this — both are correct. Real fix lives in 6-6b (or revert frontend/crypto.js WORKER_URL to https://refueler-share.rt-fc4.workers.dev). Test downloads in Safari before assuming a code fault.
-NOTE (verifying R2 at step 2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
+NOTE (verifying R2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
 Claude must ask for all relevant files before writing any fix — never assume and code blind.
 
 ---
