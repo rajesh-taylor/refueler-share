@@ -385,13 +385,13 @@ $('btnStart').addEventListener('click', async () => {
 
   function updateStats() {
     const elapsed = Math.round((Date.now() - tStart) / 1000) || 1;
-    const pct     = Math.round((chunksUploaded / totalChunks) * 100);
+    const pct     = Math.round((succeeded / totalChunks) * 100);
     const speed   = bytesUploaded / elapsed; // bytes/s
     const remaining = totalBytes - bytesUploaded;
     const eta     = speed > 0 ? Math.round(remaining / speed) : 0;
 
     $('prog').value            = pct;
-    $('statChunks').textContent  = `${chunksUploaded} / ${totalChunks}`;
+    $('statChunks').textContent  = `${succeeded} / ${totalChunks}`;
     $('statBytes').textContent   = fmtBytes(bytesUploaded);
     $('statElapsed').textContent = fmtSeconds(elapsed);
     $('statSpeed').textContent   = `${fmtBytes(speed)}/s`;
