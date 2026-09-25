@@ -725,3 +725,6 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 `B12-1 → B12-1b → B12-2 → [Berlin 30 Sep–3 Oct] → KV-Audit-Opus + fixes · X3 · X5 → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
 
 ---
+
+## Share-Soak-1 (25 Sep 2026)
+Fixed test-upload.html retry crash (Promise.all(index 3) killing whole run on any chunk network throw) — per-chunk retry/backoff with pause-not-abort on exhausted retries, resilient attempted/succeeded/failed tally, headless Node soak driver (worker/scripts/soak-headless.mjs) for terminal-survivable runs. Also found + fixed TEST-HARNESS-NOT-ROUTED: test-upload.html had never been placed in refueler.io/src/share/admin/ (Eleventy passthrough copies from there, not from refueler-share) — placed, pushed, verified clean with ?inject_fail=1 (16/16 chunks, 0 failed after retries, finalise reached) from https://refueler.io/share/admin/test-upload.html. Real 100 GiB soak launched via headless driver, PID 51432.
