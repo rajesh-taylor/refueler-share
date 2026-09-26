@@ -254,6 +254,7 @@ Applies to ANY change to a mirrored path: `frontend/*.js`, `frontend/*.css`, `fr
 - Diagnostics: `bin/sync-share.sh --check` (repos) · `bin/sync-share.sh --live` (public site).
   Status codes prove nothing — refueler.io answers a missing asset with 200 + the homepage.
 - Pipeline doubt? Edit `frontend/mirror-canary.txt` and ship. Never test the pipeline with app code.
+- **Browser cache (Share-Cache-1 · 26 Sep 2026):** Cloudflare Cache Rule on refueler.io — `(http.host eq "refueler.io" and starts_with(http.request.uri.path, "/share/assets/"))`, Browser TTL = Respect origin TTL. Without it the zone Browser Cache TTL rewrites Pages' `max-age=0` to 4 h and browsers run old/mixed ES modules after a ship. Dashboard-only (off-repo); `sm_live_cache` fails `ship-frontend.sh` if it's lost. Never delete it; never add `max-age` > 0 for `/share/assets/*` in refueler.io `_headers`.
 
 **Incident record:** DAD-ERROR-TEXT (Share-DAD-1, 25 Sep 2026) — a correct fix deployed to the wrong
 target three times before reaching refueler.io. A green log on the wrong project is not verification.
