@@ -1,0 +1,383 @@
+<title>Share Plans</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=IBM+Plex+Mono:wght@300;400;500;600&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500&display=swap">
+<style>
+/* Tokens: refueler.io/src/assets/css/global.css. Paper default; Carbon via the page pill,
+   or when the viewer is in dark mode (unless the pill has chosen Paper). */
+:root{
+  --bg:#E8E2D8; --surface:#DAD4CA; --surface-raised:#D0C9BE;
+  --fg:#1A1A1A; --fg-muted:#5A5550; --fg-subtle:#9A9590;
+  --border:rgba(26,26,26,0.12); --border-mid:#B8B2A8; --rule-strong:#1A1A1A;
+  --submit-bg:#1A1A1A; --submit-fg:#E8E2D8;
+  --accent:#C8A96E;
+  --font-heading:'Satoshi','DM Sans',sans-serif;
+  --font-sans:'DM Sans',system-ui,sans-serif;
+  --font-serif:'Source Serif 4',Georgia,serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --hair:0.5px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-rs="paper"]){
+    color-scheme:dark;
+    --bg:#1A1917; --surface:#26282C; --surface-raised:#2E3035;
+    --fg:#F5F0E8; --fg-muted:#B0AAA2; --fg-subtle:#6A6560;
+    --border:rgba(245,240,232,0.10); --border-mid:#4A4D52; --rule-strong:#F5F0E8;
+    --submit-bg:#E8E2D8; --submit-fg:#1A1A1A;
+  }
+}
+:root[data-theme="dark"]:not([data-rs="paper"]),
+:root[data-rs="carbon"]{
+  color-scheme:dark;
+  --bg:#1A1917; --surface:#26282C; --surface-raised:#2E3035;
+  --fg:#F5F0E8; --fg-muted:#B0AAA2; --fg-subtle:#6A6560;
+  --border:rgba(245,240,232,0.10); --border-mid:#4A4D52; --rule-strong:#F5F0E8;
+  --submit-bg:#E8E2D8; --submit-fg:#1A1A1A;
+}
+:root[data-rs="paper"]{color-scheme:light}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:300;font-size:15px;line-height:1.6;padding-inline:16px;padding-block:0 72px;-webkit-font-smoothing:antialiased;transition:background-color .35s ease,color .25s ease}
+.wrap{max-width:1080px;margin:0 auto}
+h1,h2,h3{margin:0;font-family:var(--font-serif);font-weight:400;text-wrap:balance}
+p{margin:0}
+a{color:inherit}
+:focus-visible{outline:1px solid var(--fg);outline-offset:3px}
+
+/* Labels: small caps in mono, middot separated */
+.lbl{font-family:var(--font-mono);font-size:10.5px;font-weight:400;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+.lbl b{font-weight:500;color:var(--fg)}
+
+/* Status, by weight only */
+.st{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg);white-space:nowrap}
+.st-live{font-weight:600}
+.st-build{font-weight:500;color:var(--fg-muted)}
+.st-coming{font-weight:400;color:var(--fg-muted)}
+.st-proposed{font-weight:300;color:var(--fg-muted);font-style:italic}
+
+.mark{font-family:var(--font-serif);font-size:.8em;vertical-align:super;line-height:0;color:var(--fg-muted);margin-left:1px}
+
+/* ── Masthead ── */
+.mast{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-block:18px 14px;border-bottom:var(--hair) solid var(--border)}
+.pill{font-family:var(--font-heading);font-size:.65rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase;border:var(--hair) solid var(--border-mid);border-radius:100px;padding:.35rem .85rem;background:transparent;color:var(--fg-muted);cursor:pointer;white-space:nowrap;transition:border-color .2s,color .2s}
+.pill:hover{border-color:var(--fg-muted);color:var(--fg)}
+
+.title{display:grid;gap:10px;padding-block:44px 28px;max-width:62ch}
+.title h1{font-weight:300;font-size:clamp(34px,5vw,48px);line-height:1.05;letter-spacing:-.01em}
+.title p{color:var(--fg-muted);font-size:16px}
+
+/* ── The register: a ruled schedule ── */
+.reg-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px 20px;padding-bottom:10px}
+.reg-head h2{font-size:22px}
+.key{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.key .sep{color:var(--fg-subtle);font-family:var(--font-mono);font-size:10px}
+.scroll{overflow-x:auto;border-top:1px solid var(--rule-strong);border-bottom:1px solid var(--rule-strong)}
+table.reg{border-collapse:collapse;width:100%;min-width:780px;font-size:14px;font-variant-numeric:tabular-nums lining-nums}
+.reg th,.reg td{text-align:left;vertical-align:top;padding:11px 14px;border-bottom:var(--hair) solid var(--border)}
+.reg th:first-child{padding-left:0}
+.reg tbody th{font-weight:300;color:var(--fg-muted)}
+.reg thead th{vertical-align:bottom;padding-top:22px;padding-bottom:16px;border-bottom:var(--hair) solid var(--border-mid)}
+.reg .pname{display:block;font-family:var(--font-serif);font-weight:400;font-size:21px;line-height:1.15;color:var(--fg)}
+.reg .price{display:block;margin-top:8px;font-family:var(--font-serif);font-weight:300;font-size:30px;line-height:1;color:var(--fg)}
+.reg .price small{font-family:var(--font-sans);font-size:12.5px;font-weight:300;color:var(--fg-muted);margin-left:4px}
+.reg .price.word{font-size:19px;font-weight:400}
+.reg .sub{display:block;margin-top:8px}
+.reg thead .paid{border-top:1px solid var(--accent)}
+.reg .split{border-left:var(--hair) solid var(--border)}
+.reg tr.part th,.reg tr.part td{padding-top:24px;padding-bottom:8px;border-bottom:var(--hair) solid var(--border-mid)}
+.reg tr.part th{font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--fg)}
+.reg tr.part td{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+.reg .v{display:block;color:var(--fg)}
+.reg .v + .st{display:block;margin-top:3px}
+.reg .nil{color:var(--fg-subtle)}
+.reg tfoot td,.reg tfoot th{border-bottom:0;padding-top:18px;padding-bottom:20px}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-family:var(--font-sans);font-size:13px;font-weight:500;letter-spacing:.03em;padding:9px 16px;text-decoration:none;cursor:pointer;border:0;white-space:nowrap;transition:opacity .2s,border-color .2s,color .2s}
+.btn-primary{background:var(--submit-bg);color:var(--submit-fg)}
+.btn-primary:hover{opacity:.85}
+.btn-ghost{background:transparent;color:var(--fg-muted);border:var(--hair) solid var(--border-mid)}
+.btn-ghost:hover{color:var(--fg);border-color:var(--fg-muted)}
+
+/* ── Agents & credits ── */
+.agents{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px 48px;padding-block:64px 0}
+.agents > header{grid-column:1/-1;display:grid;gap:6px;padding-bottom:4px;border-bottom:var(--hair) solid var(--border-mid)}
+.agents h2{font-size:24px;padding-bottom:12px}
+.col{display:grid;gap:14px;align-content:start}
+.col h3{font-size:18px;font-weight:400}
+.col > p{color:var(--fg-muted);max-width:52ch}
+@media (max-width:860px){.agents{grid-template-columns:1fr}}
+
+table.fees{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums lining-nums;border-top:1px solid var(--rule-strong)}
+.fees td{padding:10px 0;border-bottom:var(--hair) solid var(--border);vertical-align:baseline}
+.fees td:last-child{text-align:right;font-family:var(--font-mono);font-size:14px;font-weight:400;padding-left:16px;white-space:nowrap}
+.fees .calc{display:block;font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);margin-top:2px}
+.fees caption{caption-side:bottom;text-align:left;padding-top:10px;font-size:12.5px;color:var(--fg-muted)}
+.fees caption .lbl{display:block;margin-bottom:2px}
+
+.code{background:var(--surface);border-radius:10px;overflow:hidden}
+.code .bar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;padding:10px 16px;border-bottom:var(--hair) solid var(--border)}
+.code pre{margin:0;padding:14px 16px 16px;overflow-x:auto;font:12.5px/1.7 var(--font-mono);color:var(--fg)}
+.code .c{color:var(--fg-muted)}
+
+.own{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 48px;padding-block:18px;border-top:var(--hair) solid var(--border-mid);border-bottom:var(--hair) solid var(--border-mid)}
+.own h3{font-size:18px;font-weight:400;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.own p{color:var(--fg-muted);max-width:52ch}
+@media (max-width:860px){.own{grid-template-columns:1fr}}
+
+/* ── Notes to the schedule ── */
+.notes{margin-top:64px;padding-top:14px;border-top:1px solid var(--accent);display:grid;gap:12px;max-width:760px}
+.notes ol{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.notes li{display:grid;grid-template-columns:22px 1fr;font-size:13.5px;color:var(--fg-muted)}
+.notes li span:first-child{font-family:var(--font-serif);color:var(--fg)}
+.draft{margin-top:36px;display:grid;gap:4px}
+.draft p{font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);line-height:1.6}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="mast">
+    <span class="lbl"><b>Refueler Share</b> · Plans · Draft v2 · not live copy</span>
+    <button type="button" class="pill" id="themePill" aria-label="Switch theme">Paper</button>
+  </div>
+
+  <header class="title">
+    <h1>Plans</h1>
+    <p>Files are sealed in your browser, or by your agent, before they leave. We hold what we cannot read.</p>
+  </header>
+
+  <!-- ═══ The register ═══ -->
+  <section aria-labelledby="regTitle">
+    <div class="reg-head">
+      <h2 id="regTitle">The register</h2>
+      <div class="key" aria-label="Status key">
+        <span class="st st-live">Live</span><span class="sep">·</span>
+        <span class="st st-build">In build</span><span class="sep">·</span>
+        <span class="st st-coming">Coming</span><span class="sep">·</span>
+        <span class="st st-proposed">Proposed</span>
+      </div>
+    </div>
+
+    <div class="scroll">
+      <table class="reg">
+        <colgroup>
+          <col style="width:25%"><col style="width:15%"><col style="width:17%"><col style="width:17%"><col style="width:26%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col"><span class="lbl">Plan</span></th>
+            <th scope="col">
+              <span class="pname">Pro Bono</span>
+              <span class="price">£0</span>
+              <span class="sub lbl">No account</span>
+            </th>
+            <th scope="colgroup" colspan="2" class="paid">
+              <span class="pname">Citizen or Sovereign</span>
+              <span class="price">£24<small>a month</small></span>
+              <span class="sub lbl">One plan · choose how you appear</span>
+            </th>
+            <th scope="col">
+              <span class="pname">Chartered</span>
+              <span class="price word">Share credits<span class="mark">§</span></span>
+              <span class="sub lbl">API · MCP</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="part"><th scope="rowgroup" colspan="5">Sending</th></tr>
+          <tr>
+            <th scope="row">Sealed before it leaves you</th>
+            <td><span class="st st-live">Live</span></td>
+            <td colspan="2"><span class="st st-live">Live</span></td>
+            <td><span class="st st-live">Live</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Size</th>
+            <td><span class="v">4 GB a transfer</span></td>
+            <td colspan="2"><span class="v">100 GB storage</span><span class="st st-build">In build</span></td>
+            <td><span class="v">250 GB storage, then per GB</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Time to collect</th>
+            <td><span class="v">7 days</span></td>
+            <td colspan="2"><span class="v">Up to 90 days</span><span class="st st-build">In build</span></td>
+            <td><span class="v">Set per transfer</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Passphrase · struck off after collection</th>
+            <td><span class="st st-live">Live</span></td>
+            <td colspan="2"><span class="st st-live">Live</span></td>
+            <td><span class="st st-live">Live</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Permanent record<span class="mark">*</span></th>
+            <td class="nil">—</td>
+            <td colspan="2"><span class="st st-live">Live</span></td>
+            <td><span class="st st-live">Live</span></td>
+          </tr>
+
+          <tr class="part">
+            <th scope="rowgroup">How you appear</th>
+            <td></td>
+            <td>Citizen · Registered</td>
+            <td class="split">Sovereign · Bearer</td>
+            <td></td>
+          </tr>
+          <tr>
+            <th scope="row">On our register</th>
+            <td><span class="v">Nothing</span></td>
+            <td><span class="v">Email and billing details</span></td>
+            <td class="split"><span class="v">That a payment was made</span></td>
+            <td><span class="v">Your firm, or nothing on Bearer</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Payment</th>
+            <td class="nil">—</td>
+            <td><span class="v">Card</span><span class="st st-live">Live</span></td>
+            <td class="split"><span class="v">Lightning</span><span class="st st-coming">Coming</span></td>
+            <td><span class="v">Invoice or card</span><span class="st st-live">Live</span></td>
+          </tr>
+          <tr>
+            <th scope="row">If access is lost</th>
+            <td class="nil">—</td>
+            <td><span class="v">Recover by email</span></td>
+            <td class="split"><span class="v">Restore from your backup file<span class="mark">‡</span></span></td>
+            <td><span class="v">Rotate your keys</span></td>
+          </tr>
+
+          <tr class="part"><th scope="rowgroup" colspan="5">Agents</th></tr>
+          <tr>
+            <th scope="row">Your own assistant</th>
+            <td class="nil">—</td>
+            <td colspan="2"><span class="v">Personal agent key</span><span class="st st-proposed">Proposed</span></td>
+            <td><span class="v">Included</span><span class="st st-live">Live</span></td>
+          </tr>
+          <tr>
+            <th scope="row">MCP server, run on your side</th>
+            <td class="nil">—</td>
+            <td colspan="2" class="nil">—</td>
+            <td><span class="st st-build">In build</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Signed keys · webhooks · collection receipts<span class="mark">†</span></th>
+            <td class="nil">—</td>
+            <td colspan="2" class="nil">—</td>
+            <td><span class="st st-live">Live</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Bearer credits · agent-to-agent inbox</th>
+            <td class="nil">—</td>
+            <td colspan="2" class="nil">—</td>
+            <td><span class="st st-coming">Coming</span></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row"></th>
+            <td><div class="acts"><a class="btn btn-ghost" href="#">Lodge a file</a></div></td>
+            <td><div class="acts"><a class="btn btn-primary" href="#">Enrol as Citizen</a></div></td>
+            <td class="split"><div class="acts"><a class="btn btn-ghost" href="#">Waiting list</a></div></td>
+            <td><div class="acts"><a class="btn btn-ghost" href="#">Talk to us</a></div></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══ Agents and credits ═══ -->
+  <section class="agents" aria-labelledby="agTitle">
+    <header>
+      <span class="lbl">Chartered · for agents</span>
+      <h2 id="agTitle">Your agent seals the file. We relay it.</h2>
+    </header>
+
+    <div class="col">
+      <h3>Share credits</h3>
+      <p>Paid per transfer, for what is held and for how long.</p>
+      <table class="fees">
+        <tbody>
+          <tr><td>Board pack · 20 MB · a week<span class="calc">1 block × 1 week + 10</span></td><td>11</td></tr>
+          <tr><td>Contract bundle · 600 MB · 30 days<span class="calc">18 blocks × 5 weeks + 10</span></td><td>100</td></tr>
+          <tr><td>Footage · 40 GB · 90 days<span class="calc">1,193 blocks × 13 weeks + 10</span></td><td>15,519</td></tr>
+          <tr><td>Permanent record<span class="mark">*</span>, any transfer<span class="calc">flat</span></td><td>+20</td></tr>
+        </tbody>
+        <caption>
+          <span class="lbl">Credits · illustrative draft rate<span class="mark">§</span></span>
+          10 per transfer, plus 1 per 32 MiB block for each week held.
+        </caption>
+      </table>
+    </div>
+
+    <div class="col">
+      <h3>From an agent</h3>
+      <div class="code" aria-label="Example request and response for refueler_send_file">
+        <div class="bar"><span class="lbl"><b>refueler_send_file</b> · example</span><span class="st st-build">In build</span></div>
+<pre><span class="c">// runs on your side; only sealed data leaves</span>
+{
+  "file_path": "./Q3-board-pack.pdf",
+  "destroy_after_download": true,
+  "passphrase": "sent separately"
+}
+<span class="c">// response</span>
+{
+  "share_url": "https://refueler.io/share/?uuid=…#…",
+  "expires_at": "in 7 days",
+  "cost_credits": 11,
+  "collection_receipt_available": true
+}</pre>
+      </div>
+      <p>The MCP server is open source and runs in your own infrastructure.</p>
+    </div>
+
+    <div class="own">
+      <h3>Your own assistant <span class="st st-proposed">Proposed</span></h3>
+      <p>A personal key lets your assistant lodge files from your Citizen or Sovereign allowance, within a daily limit you set.</p>
+    </div>
+  </section>
+
+  <!-- ═══ Notes ═══ -->
+  <section class="notes" aria-labelledby="notesTitle">
+    <span class="lbl" id="notesTitle">Notes to the register</span>
+    <ol>
+      <li><span>*</span><span>A permanent record proves a file existed on or before a Bitcoin block date. It does not prove who wrote it, or that it is true.</span></li>
+      <li><span>†</span><span>A collection receipt records that the sealed file was served to whoever opened the link. It does not record who read it.</span></li>
+      <li><span>‡</span><span>Sovereign keeps your allowance on your device. Without the backup file it cannot be restored.</span></li>
+      <li><span>§</span><span>Credits are for Share only. The rate shown is a working draft, not a published price.</span></li>
+    </ol>
+  </section>
+
+  <div class="draft">
+    <p>Draft v2 · 26 Sep 2026 · layout B, agents first · for mark-up.</p>
+    <p>Satoshi is not on Google Fonts; its roles (theme pill) fall back to DM Sans here.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const root=document.documentElement, pill=document.getElementById('themePill');
+  const mq=window.matchMedia('(prefers-color-scheme: dark)');
+  try{ const s=localStorage.getItem('rs-theme'); if(s==='paper'||s==='carbon') root.dataset.rs=s; }catch(e){}
+  function current(){
+    if(root.dataset.rs) return root.dataset.rs;
+    const v=root.getAttribute('data-theme');
+    if(v==='dark') return 'carbon';
+    if(v==='light') return 'paper';
+    return mq.matches?'carbon':'paper';
+  }
+  function label(){
+    const c=current();
+    pill.textContent=c==='carbon'?'Carbon':'Paper';
+    pill.setAttribute('aria-label','Theme: '+pill.textContent+'. Switch to '+(c==='carbon'?'Paper':'Carbon'));
+  }
+  pill.addEventListener('click',()=>{
+    const next=current()==='carbon'?'paper':'carbon';
+    root.dataset.rs=next;
+    try{localStorage.setItem('rs-theme',next)}catch(e){}
+    label();
+  });
+  try{ mq.addEventListener('change',label); }catch(e){}
+  new MutationObserver(label).observe(root,{attributes:true,attributeFilter:['data-theme']});
+  label();
+})();
+</script>

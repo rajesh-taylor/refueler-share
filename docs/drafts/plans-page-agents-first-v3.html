@@ -1,0 +1,361 @@
+<title>Share Plans</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400&display=swap">
+<style>
+/* Tokens: refueler.io/src/assets/css/global.css. Paper default; Carbon via the page pill,
+   or when the viewer is in dark mode (unless the pill has chosen Paper). Chip colours are
+   derived from the global.css status tokens (--success, --warn, --accent). */
+:root{
+  --bg:#E8E2D8; --surface:#DAD4CA; --surface-raised:#D0C9BE; --pair:#E0D9CE;
+  --fg:#1A1A1A; --fg-muted:#5A5550; --fg-subtle:#9A9590;
+  --border:rgba(26,26,26,0.12); --border-mid:#B8B2A8;
+  --submit-bg:#1A1A1A; --submit-fg:#E8E2D8;
+  --accent:#C8A96E; --accent-ink:#7A5F28;
+  --live-fg:#1D6B3E; --live-bg:#CDDBC7;
+  --build-fg:#8A4F1C; --build-bg:#E0D0BE;
+  --soon-fg:#5A5550; --soon-bg:#D0C9BE;
+  --font-heading:'Satoshi','DM Sans',sans-serif;
+  --font-sans:'DM Sans',system-ui,sans-serif;
+  --font-serif:'Source Serif 4',Georgia,serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --hair:0.5px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-rs="paper"]){
+    color-scheme:dark;
+    --bg:#1A1917; --surface:#26282C; --surface-raised:#2E3035; --pair:#2A2C30;
+    --fg:#F5F0E8; --fg-muted:#B0AAA2; --fg-subtle:#6A6560;
+    --border:rgba(245,240,232,0.10); --border-mid:#4A4D52;
+    --submit-bg:#E8E2D8; --submit-fg:#1A1A1A;
+    --accent-ink:#E0C48A;
+    --live-fg:#6FCF97; --live-bg:#1C2E22;
+    --build-fg:#D9A066; --build-bg:#33271A;
+    --soon-fg:#B0AAA2; --soon-bg:#34363B;
+  }
+}
+:root[data-theme="dark"]:not([data-rs="paper"]),
+:root[data-rs="carbon"]{
+  color-scheme:dark;
+  --bg:#1A1917; --surface:#26282C; --surface-raised:#2E3035; --pair:#2A2C30;
+  --fg:#F5F0E8; --fg-muted:#B0AAA2; --fg-subtle:#6A6560;
+  --border:rgba(245,240,232,0.10); --border-mid:#4A4D52;
+  --submit-bg:#E8E2D8; --submit-fg:#1A1A1A;
+  --accent-ink:#E0C48A;
+  --live-fg:#6FCF97; --live-bg:#1C2E22;
+  --build-fg:#D9A066; --build-bg:#33271A;
+  --soon-fg:#B0AAA2; --soon-bg:#34363B;
+}
+:root[data-rs="paper"]{color-scheme:light}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-weight:400;font-size:15px;line-height:1.55;padding-inline:16px;padding-block:0 64px;-webkit-font-smoothing:antialiased;transition:background-color .35s ease,color .25s ease}
+.wrap{max-width:1080px;margin:0 auto}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-muted)}
+.chip{display:inline-block;font:500 10.5px/1 var(--font-mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;vertical-align:1px}
+.chip.live{color:var(--live-fg);background:var(--live-bg)}
+.chip.build{color:var(--build-fg);background:var(--build-bg)}
+.chip.soon{color:var(--soon-fg);background:var(--soon-bg)}
+.chip.prop{color:var(--accent-ink);background:transparent;box-shadow:inset 0 0 0 0.5px var(--accent)}
+.mark{font-family:var(--font-serif);font-size:.85em;vertical-align:super;line-height:0;color:var(--accent-ink);margin-left:1px}
+.muted{color:var(--fg-muted)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-family:var(--font-sans);font-size:13.5px;font-weight:500;letter-spacing:.02em;padding:10px 18px;text-decoration:none;cursor:pointer;border:0;white-space:nowrap;transition:opacity .2s,border-color .2s,color .2s}
+.btn-primary{background:var(--submit-bg);color:var(--submit-fg)}
+.btn-primary:hover{opacity:.85}
+.btn-ghost{background:transparent;color:var(--fg);border:var(--hair) solid var(--border-mid)}
+.btn-ghost:hover{border-color:var(--fg-muted)}
+
+/* ── Site header (copy of refueler.io chrome, for context) ── */
+.site{border-bottom:var(--hair) solid var(--border);margin-inline:-16px;padding-inline:16px}
+.site .wrap{height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.wordmark{font-family:var(--font-heading);font-weight:600;font-size:.875rem;letter-spacing:.06em;white-space:nowrap}
+.wordmark .div{font-weight:300;opacity:.5;margin:0 .5rem}
+.wordmark .sec{font-weight:400;letter-spacing:.08em;opacity:.55}
+.site-right{display:flex;align-items:center;gap:14px}
+.draft-tag{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted)}
+.pill{font-family:var(--font-heading);font-size:.65rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase;border:var(--hair) solid var(--border-mid);border-radius:100px;padding:.35rem .85rem;background:transparent;color:var(--fg-muted);cursor:pointer;white-space:nowrap;transition:border-color .2s,color .2s}
+.pill:hover{border-color:var(--fg-muted);color:var(--fg)}
+@media (max-width:520px){.draft-tag{display:none}}
+
+/* ── Hero ── */
+.hero{display:grid;grid-template-columns:1fr 1.05fr;gap:40px;align-items:center;padding-block:52px 44px}
+.hero h1{font-family:var(--font-serif);font-weight:300;font-size:clamp(32px,5vw,46px);line-height:1.08;margin-top:12px}
+.hero .lede{font-size:16.5px;color:var(--fg-muted);max-width:46ch;margin-top:14px}
+.hero .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+@media (max-width:860px){.hero{grid-template-columns:1fr}}
+.code{background:var(--surface);border-radius:10px;overflow:hidden;border:var(--hair) solid var(--border)}
+.code .bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 12px;padding:9px 16px;border-bottom:var(--hair) solid var(--border)}
+.code .bar span:first-child{font-family:var(--font-mono);font-size:11px;letter-spacing:.05em;color:var(--fg-muted)}
+.code pre{margin:0;padding:14px 16px 16px;overflow-x:auto;font:12.5px/1.7 var(--font-mono);color:var(--fg)}
+.code .c{color:var(--fg-muted)}
+
+/* ── Register ── */
+.sec-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;padding-block:8px 16px}
+.sec-head h2{font-family:var(--font-serif);font-weight:400;font-size:28px}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.scroll{overflow-x:auto;border:var(--hair) solid var(--border-mid);border-radius:10px;background:var(--surface)}
+table.reg{border-collapse:collapse;width:100%;min-width:800px;font-size:14px;font-variant-numeric:tabular-nums lining-nums}
+.reg th,.reg td{padding:12px 16px;text-align:left;vertical-align:top;border-bottom:var(--hair) solid var(--border)}
+.reg thead th{background:var(--bg);vertical-align:bottom}
+.reg thead .one{background:var(--surface-raised);border-top:1px solid var(--accent);padding-block:10px;font-family:var(--font-serif);font-weight:400;font-size:15px;color:var(--fg);text-align:center}
+.reg thead .one span{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);margin-left:8px}
+.reg thead .blank{border-bottom-color:transparent;padding-block:10px}
+.reg .tname{font-family:var(--font-serif);font-weight:400;font-size:22px;display:block}
+.reg .trail{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);display:block;margin-top:2px}
+.reg .tprice{display:block;margin-top:10px;font-family:var(--font-serif);font-size:22px;font-variant-numeric:tabular-nums lining-nums}
+.reg .tprice small{font-family:var(--font-sans);font-size:12.5px;color:var(--fg-muted);margin-left:3px}
+.reg .tprice.word{font-size:18px}
+.reg thead .p{background:var(--surface-raised)}
+.reg tbody .p,.reg tfoot .p{background:var(--pair)}
+.reg tbody th{font-weight:400;color:var(--fg-muted);width:24%}
+.reg tr.group th,.reg tr.group td{font-family:var(--font-mono);font-size:11px;font-weight:400;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-muted);padding-top:18px;background:var(--bg)}
+.reg tr.group td.p{background:var(--surface-raised);color:var(--fg)}
+.reg .v{display:block;margin-bottom:5px}
+.reg .dash{color:var(--fg-subtle)}
+.reg tfoot td,.reg tfoot th{border-bottom:0;padding-block:16px 18px}
+.pair-note{font-size:13.5px;color:var(--fg-muted);margin-top:10px}
+
+/* ── Agents ── */
+.agents{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px 44px;padding-block:56px 0}
+.agents > .sec-head{grid-column:1/-1;padding-block:0}
+.col{display:grid;gap:12px;align-content:start}
+.col h3{font-family:var(--font-serif);font-weight:400;font-size:20px}
+.col > p{color:var(--fg-muted);max-width:52ch}
+@media (max-width:860px){.agents{grid-template-columns:1fr}}
+.rows{border:var(--hair) solid var(--border-mid);border-radius:10px;overflow:hidden}
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:12px 16px;border-bottom:var(--hair) solid var(--border);align-items:baseline}
+.row:last-child{border-bottom:0}
+.row code{font-family:var(--font-mono);font-size:13px}
+.row small{display:block;font-size:13px;color:var(--fg-muted);margin-top:2px}
+.row .amt{font-family:var(--font-mono);font-size:15px;text-align:right;font-variant-numeric:tabular-nums}
+.row .amt small{font-size:11px}
+.row .calc{font-family:var(--font-mono);font-size:11.5px}
+.cap{background:var(--surface);padding:10px 16px;font-size:12.5px;color:var(--fg-muted);border-top:var(--hair) solid var(--border)}
+.own{grid-column:1/-1;display:grid;grid-template-columns:1fr auto;gap:10px 24px;align-items:center;padding:16px 20px;border:0.5px dashed var(--accent);border-radius:10px}
+.own h3{font-family:var(--font-sans);font-weight:500;font-size:15px;margin-bottom:3px}
+.own p{font-size:13.5px;color:var(--fg-muted)}
+@media (max-width:640px){.own{grid-template-columns:1fr}}
+
+/* ── IT and procurement ── */
+.proc{margin-top:56px;padding:26px 28px;background:var(--surface);border:var(--hair) solid var(--border);border-radius:10px;display:grid;gap:16px}
+.proc h2{font-family:var(--font-serif);font-weight:400;font-size:24px}
+.proc dl{margin:0;display:grid}
+.proc .item{display:grid;grid-template-columns:190px 1fr;gap:6px 24px;padding-block:12px;border-top:var(--hair) solid var(--border)}
+.proc dt{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-muted);padding-top:3px}
+.proc dd{margin:0;max-width:62ch}
+.proc dd .chip{margin-left:6px}
+@media (max-width:640px){.proc{padding:20px 18px}.proc .item{grid-template-columns:1fr}}
+
+/* ── Notes ── */
+.notes{margin-top:48px;padding-top:14px;border-top:var(--hair) solid var(--border-mid);display:grid;gap:10px;max-width:780px}
+.notes ol{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.notes li{display:grid;grid-template-columns:20px 1fr;font-size:13.5px;color:var(--fg-muted)}
+.notes li span:first-child{font-family:var(--font-serif);color:var(--accent-ink)}
+.draft{margin-top:28px;font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);display:grid;gap:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header class="site">
+  <div class="wrap">
+    <span class="wordmark">Refueler<span class="div">|</span><span class="sec">Share</span></span>
+    <div class="site-right">
+      <span class="draft-tag">Draft v3 · not live copy</span>
+      <button type="button" class="pill" id="themePill" aria-label="Switch theme">Paper</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <span class="eyebrow">Refueler Share · Plans</span>
+      <h1>Private file transfer for people, and for the agents that work for them.</h1>
+      <p class="lede">Files are sealed before they leave your machine, whether a person or an agent sends them. We relay data we can't read.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#register">Compare plans</a>
+        <a class="btn btn-ghost" href="#agents">Connect an agent</a>
+      </div>
+    </div>
+    <div class="code" aria-label="Example request and response for refueler_send_file">
+      <div class="bar"><span>refueler_send_file · example</span><span class="chip build">In build</span></div>
+<pre><span class="c">// runs on your side; only sealed data leaves</span>
+{
+  "file_path": "./Q3-board-pack.pdf",
+  "destroy_after_download": true,
+  "passphrase": "sent separately"
+}
+<span class="c">// response</span>
+{
+  "share_url": "https://refueler.io/share/?uuid=…#…",
+  "expires_at": "in 7 days",
+  "cost_credits": 11,
+  "collection_receipt_available": true
+}</pre>
+    </div>
+  </section>
+
+  <!-- ═══ Register ═══ -->
+  <section id="register" aria-labelledby="regTitle">
+    <div class="sec-head">
+      <h2 id="regTitle">The register</h2>
+      <div class="legend" aria-label="Status key">
+        <span class="chip live">Live</span><span class="chip build">In build</span><span class="chip soon">Coming</span><span class="chip prop">Proposed</span>
+      </div>
+    </div>
+    <div class="scroll">
+      <table class="reg">
+        <colgroup><col style="width:24%"><col style="width:15%"><col style="width:18%"><col style="width:18%"><col style="width:25%"></colgroup>
+        <thead>
+          <tr>
+            <th class="blank"></th><th class="blank"></th>
+            <th colspan="2" scope="colgroup" class="one">One plan. Choose your rail: Registered or Bearer.</th>
+            <th class="blank"></th>
+          </tr>
+          <tr>
+            <th scope="col"><span class="eyebrow">Plan</span></th>
+            <th scope="col"><span class="tname">Pro Bono</span><span class="trail">No account</span><span class="tprice">£0</span></th>
+            <th scope="col" class="p"><span class="tname">Citizen</span><span class="trail">Registered · card</span><span class="tprice">£24<small>a month</small></span></th>
+            <th scope="col" class="p"><span class="tname">Sovereign</span><span class="trail">Bearer · Lightning</span><span class="tprice">£24<small>a month</small></span></th>
+            <th scope="col"><span class="tname">Chartered</span><span class="trail">API · MCP · either rail</span><span class="tprice word">Share credits<span class="mark">§</span></span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group"><th colspan="5" scope="rowgroup">Sending</th></tr>
+          <tr><th scope="row">Sealed before it leaves you</th><td><span class="chip live">Live</span></td><td class="p"><span class="chip live">Live</span></td><td class="p"><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">Size</th><td><span class="v">4 GB a transfer</span></td><td class="p"><span class="v">100 GB storage</span><span class="chip build">In build</span></td><td class="p"><span class="v">100 GB storage</span><span class="chip build">In build</span></td><td><span class="v">250 GB storage, then per GB</span></td></tr>
+          <tr><th scope="row">Time to collect</th><td><span class="v">7 days</span></td><td class="p"><span class="v">Up to 90 days</span><span class="chip build">In build</span></td><td class="p"><span class="v">Up to 90 days</span><span class="chip build">In build</span></td><td><span class="v">Set per transfer</span></td></tr>
+          <tr><th scope="row">Passphrase · struck off after collection</th><td><span class="chip live">Live</span></td><td class="p"><span class="chip live">Live</span></td><td class="p"><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">Permanent record<span class="mark">*</span></th><td class="dash">—</td><td class="p"><span class="chip live">Live</span></td><td class="p"><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td></tr>
+
+          <tr class="group"><th scope="rowgroup">Your rail</th><td></td><td class="p">Registered</td><td class="p">Bearer</td><td></td></tr>
+          <tr><th scope="row">On our register</th><td><span class="v">Nothing</span></td><td class="p"><span class="v">Email and billing details</span></td><td class="p"><span class="v">That a payment was made</span></td><td><span class="v">Your firm, or nothing on Bearer</span></td></tr>
+          <tr><th scope="row">Payment</th><td class="dash">—</td><td class="p"><span class="v">Card</span><span class="chip live">Live</span></td><td class="p"><span class="v">Lightning</span><span class="chip soon">Coming</span></td><td><span class="v">Invoice or card</span><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">If access is lost</th><td class="dash">—</td><td class="p"><span class="v">Recover by email</span></td><td class="p"><span class="v">Restore from your backup file<span class="mark">‡</span></span></td><td><span class="v">Rotate your keys</span></td></tr>
+
+          <tr class="group"><th colspan="5" scope="rowgroup">Agents</th></tr>
+          <tr><th scope="row">Your own assistant</th><td class="dash">—</td><td class="p"><span class="v">Personal agent key</span><span class="chip prop">Proposed</span></td><td class="p"><span class="v">Personal agent key</span><span class="chip prop">Proposed</span></td><td><span class="v">Included</span><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">MCP server, runs on your side</th><td class="dash">—</td><td class="p dash">—</td><td class="p dash">—</td><td><span class="chip build">In build</span></td></tr>
+          <tr><th scope="row">Signed keys · webhooks · collection receipts<span class="mark">†</span></th><td class="dash">—</td><td class="p dash">—</td><td class="p dash">—</td><td><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">Bearer credits · agent-to-agent inbox</th><td class="dash">—</td><td class="p dash">—</td><td class="p dash">—</td><td><span class="chip soon">Coming</span></td></tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row"></th>
+            <td><a class="btn btn-ghost" href="#">Lodge a file</a></td>
+            <td class="p"><a class="btn btn-primary" href="#">Enrol as Citizen</a></td>
+            <td class="p"><a class="btn btn-ghost" href="#">Waiting list</a></td>
+            <td><a class="btn btn-ghost" href="#">Talk to us</a></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="pair-note">Citizen and Sovereign are the same plan at the same price. The rail decides how you appear to us.</p>
+  </section>
+
+  <!-- ═══ Agents ═══ -->
+  <section class="agents" id="agents" aria-labelledby="agTitle">
+    <div class="sec-head">
+      <div style="display:grid;gap:6px">
+        <span class="eyebrow">Chartered · for agents</span>
+        <h2 id="agTitle">Your agent seals the file. We relay it.</h2>
+      </div>
+    </div>
+
+    <div class="col">
+      <h3>MCP server <span class="chip build">In build</span></h3>
+      <p>Open source. Runs in your own infrastructure, so only sealed data reaches us.</p>
+      <div class="rows">
+        <div class="row"><div><code>refueler_capabilities</code><small>What the server can do, and the current rate card</small></div></div>
+        <div class="row"><div><code>refueler_quote</code><small>The cost in credits, before anything is sent</small></div></div>
+        <div class="row"><div><code>refueler_send_file</code><small>Seal a file on your side and lodge it. Returns the link.</small></div></div>
+        <div class="row"><div><code>refueler_check_transfer</code><small>Whether it has been collected, and the receipt</small></div></div>
+        <div class="cap">Sandbox: free, no time limit, test keys only (<code>rfs_test_…</code>). Don't send real cargo to it. <span class="chip live">Live</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h3>Share credits</h3>
+      <p>Paid per transfer, for what is held and for how long. Your agent can quote before it sends.</p>
+      <div class="rows">
+        <div class="row"><div>Board pack · 20 MB · a week<small class="calc">1 block × 1 week + 10</small></div><div class="amt">11<small> credits</small></div></div>
+        <div class="row"><div>Contract bundle · 600 MB · 30 days<small class="calc">18 blocks × 5 weeks + 10</small></div><div class="amt">100<small> credits</small></div></div>
+        <div class="row"><div>Footage · 40 GB · 90 days<small class="calc">1,193 blocks × 13 weeks + 10</small></div><div class="amt">15,519<small> credits</small></div></div>
+        <div class="row"><div>Permanent record<span class="mark">*</span>, any transfer<small class="calc">flat</small></div><div class="amt">+20<small> credits</small></div></div>
+        <div class="cap">Illustrative draft rate<span class="mark">§</span>: 10 per transfer, plus 1 per 32 MiB block for each week held.</div>
+      </div>
+    </div>
+
+    <div class="own">
+      <div>
+        <h3>Your own assistant <span class="chip prop">Proposed</span></h3>
+        <p>A personal key lets your assistant lodge files from your Citizen or Sovereign allowance, within a daily limit you set.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ IT and procurement ═══ -->
+  <section class="proc" aria-labelledby="procTitle">
+    <div style="display:grid;gap:6px">
+      <span class="eyebrow">Chartered · for your review</span>
+      <h2 id="procTitle">For IT and procurement</h2>
+    </div>
+    <dl>
+      <div class="item"><dt>What we hold</dt><dd>Sealed data, its size, and when it moved. Never the key. On the Registered rail, also your firm's billing details.</dd></div>
+      <div class="item"><dt>How long</dt><dd>Until the transfer expires, or it is struck off after collection. A cancelled account doesn't cut a transfer short.</dd></div>
+      <div class="item"><dt>Billing</dt><dd>Invoice or purchase order, in GBP. Card also accepted.<span class="chip live">Live</span></dd></div>
+      <div class="item"><dt>Price protection</dt><dd>Yearly prepay locks the rate for 12 months. Monthly billing gets 30 days' notice of any change. Registered rail.</dd></div>
+      <div class="item"><dt>Source</dt><dd>Apache 2.0. The MCP server is open source and runs on your side, so you can read what it sends.</dd></div>
+      <div class="item"><dt>Not yet offered</dt><dd>Single sign-on. An independent security audit. Team seats.</dd></div>
+    </dl>
+  </section>
+
+  <section class="notes" aria-labelledby="notesTitle">
+    <span class="eyebrow" id="notesTitle">Notes</span>
+    <ol>
+      <li><span>*</span><span>A permanent record proves a file existed on or before a Bitcoin block date. It does not prove who wrote it, or that it is true.</span></li>
+      <li><span>†</span><span>A collection receipt records that the sealed file was served to whoever opened the link. It does not record who read it.</span></li>
+      <li><span>‡</span><span>Sovereign keeps your allowance on your device. Without the backup file it cannot be restored.</span></li>
+      <li><span>§</span><span>Credits are for Share only. The rate shown is a working draft, not a published price.</span></li>
+    </ol>
+  </section>
+
+  <div class="draft">
+    <p>Draft v3 · 26 Sep 2026 · layout B, agents first · for mark-up.</p>
+    <p>Satoshi is not on Google Fonts; its roles (wordmark, theme pill) fall back to DM Sans here.</p>
+  </div>
+</main>
+
+<script>
+(function(){
+  const root=document.documentElement, pill=document.getElementById('themePill');
+  const mq=window.matchMedia('(prefers-color-scheme: dark)');
+  try{ const s=localStorage.getItem('rs-theme'); if(s==='paper'||s==='carbon') root.dataset.rs=s; }catch(e){}
+  function current(){
+    if(root.dataset.rs) return root.dataset.rs;
+    const v=root.getAttribute('data-theme');
+    if(v==='dark') return 'carbon';
+    if(v==='light') return 'paper';
+    return mq.matches?'carbon':'paper';
+  }
+  function label(){
+    const c=current(), name=c==='carbon'?'Carbon':'Paper';
+    pill.textContent=name;
+    pill.setAttribute('aria-label','Theme: '+name+'. Switch to '+(c==='carbon'?'Paper':'Carbon'));
+  }
+  pill.addEventListener('click',()=>{
+    const next=current()==='carbon'?'paper':'carbon';
+    root.dataset.rs=next;
+    try{localStorage.setItem('rs-theme',next)}catch(e){}
+    label();
+  });
+  try{ mq.addEventListener('change',label); }catch(e){}
+  new MutationObserver(label).observe(root,{attributes:true,attributeFilter:['data-theme']});
+  label();
+})();
+</script>
