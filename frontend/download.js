@@ -98,6 +98,13 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
     return;
   }
 
+  // Deleted transfer (Share-DAD-2): the tombstone manifest is { consumed, consumed_at }
+  // only, so /meta answers 200 with every field null. Say so before showing the card.
+  if (meta.total_chunks == null && meta.total_bytes == null && meta.expiry_timestamp == null) {
+    _showDeletedLink(domRefs);
+    return;
+  }
+
   // ── Resolve IV ────────────────────────────────────────────────────────────
   // v1: IV is in the fragment (detected.ivBytes Uint8Array) — never in manifest.
   // v0: IV came from the fragment iv param (hex string) — backward compat.
@@ -233,7 +240,7 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
     };
 
     if (willSelfDestruct) {
-      _showPreDownloadModal(() => _proceed());
+      _showPreDownloadModal(meta.total_bytes ? formatBytes(meta.total_bytes) : null, () => _proceed());
     } else {
       await _proceed();
     }
@@ -454,7 +461,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 
     dlSignoff.classList.remove('hidden');
     try { _logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
-    if (willSelfDestruct) _showConfirmGate(uuid, !!state.downloadToken, domRefs, state);
+    if (willSelfDestruct) _showDeletedNotice(domRefs);
 
   } catch (e) {
     try { await writable.abort(); } catch {}
@@ -468,7 +475,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 
     reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
     if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
-    else if (e.status === 410)  _showDownloadError('This transfer has expired. The file is no longer available.', domRefs);
+    else if (e.status === 410)  _showDownloadError('This transfer has expired or been deleted. The file is no longer available.', domRefs);
     else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
     else                        _showDownloadError('Download failed. Please try again.', domRefs);
   }
@@ -520,7 +527,7 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
     if (res.status === 401 || res.status === 410) {
       _showDownloadError(res.status === 401
         ? 'Access denied. This transfer may have expired or the link is incorrect.'
-        : 'This transfer has expired. The file is no longer available.', domRefs);
+        : 'This transfer has expired or been deleted. The file is no longer available.', domRefs);
       return;
     }
     if (!res.ok) {
@@ -582,7 +589,7 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
 
   dlSignoff.classList.remove('hidden');
   try { _logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
-  if (willSelfDestruct) _showConfirmGate(uuid, !!state.downloadToken, domRefs, state);
+  if (willSelfDestruct) _showDeletedNotice(domRefs);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -637,7 +644,10 @@ function _formatDatetime(unixSecs) {
   return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function _showPreDownloadModal(onConfirm) {
+// Share-DAD-2: the Worker deletes a DAD transfer as soon as the last chunk is
+// served (Share-B11-1, finishDownload) — not on a recipient confirm. The copy
+// says exactly that; there is no confirm step to ask for.
+function _showPreDownloadModal(sizeText, onConfirm) {
   const overlay = document.createElement('div');
   overlay.id = 'pre-dl-modal';
   overlay.className = 'pre-dl-modal';
@@ -647,54 +657,35 @@ function _showPreDownloadModal(onConfirm) {
   overlay.innerHTML = `
     <div class="pre-dl-modal-card">
       <div class="pre-dl-modal-icon" aria-hidden="true">⚠️</div>
-      <p class="pre-dl-modal-heading">This transfer will be permanently deleted</p>
-      <p class="pre-dl-modal-body">Once you confirm you have saved the file, it will be removed from Refueler's servers. Make sure you have a safe place to save it before you continue.</p>
+      <p class="pre-dl-modal-heading">This transfer is deleted after download</p>
+      <p class="pre-dl-modal-body"></p>
       <button id="pre-dl-modal-btn" class="btn btn-primary btn-full">I understand — download</button>
     </div>`;
+  overlay.querySelector('.pre-dl-modal-body').textContent =
+    'It is removed from Refueler\'s servers as soon as the download finishes, and this link stops working. '
+    + (sizeText ? `Size: ${sizeText} — make sure you have room to save it.` : 'Make sure you have room to save it.');
   document.body.appendChild(overlay);
   document.getElementById('pre-dl-modal-btn').addEventListener('click', () => { overlay.remove(); onConfirm(); }, { once: true });
 }
 
-async function _showConfirmGate(uuid, isPassphrase, domRefs, state) {
+function _showDeletedNotice(domRefs) {
   const { dlSignoff } = domRefs;
   const gate = document.createElement('div');
   gate.id = 'dl-confirm-gate';
-  gate.className = 'dl-confirm-gate';
-  gate.innerHTML = `
-    <p class="dl-confirm-question">Have you saved the file?</p>
-    <button id="dl-confirm-btn" class="btn btn-primary">I've saved it — delete this transfer</button>
-    <p id="dl-confirm-status" class="dl-confirm-status hidden"></p>`;
+  gate.className = 'dl-confirm-gate dl-confirm-gate--done';
+  const line = document.createElement('p');
+  line.className = 'dl-confirm-question';
+  line.textContent = 'Transfer permanently deleted from Refueler\'s servers.';
+  gate.appendChild(line);
   dlSignoff.insertAdjacentElement('beforebegin', gate);
+}
 
-  document.getElementById('dl-confirm-btn').addEventListener('click', async () => {
-    const btn    = document.getElementById('dl-confirm-btn');
-    const status = document.getElementById('dl-confirm-status');
-    btn.disabled = true;
-    try {
-      let res;
-      if (isPassphrase) {
-        res = await fetch(`${WORKER_URL}/transfer/${uuid}`, {
-          method: 'DELETE',
-          headers: state.downloadToken ? { 'Authorization': `Bearer ${state.downloadToken}` } : {},
-        });
-      } else {
-        res = await fetch(`${WORKER_URL}/confirm/${uuid}`, { method: 'POST' });
-      }
-      if (res.ok) {
-        gate.classList.add('dl-confirm-gate--done');
-        btn.remove();
-        status.textContent = 'Transfer permanently deleted.';
-        status.classList.remove('hidden');
-        status.classList.add('dl-confirm-status--success');
-      } else { throw new Error(`HTTP ${res.status}`); }
-    } catch {
-      btn.disabled = false;
-      const status2 = document.getElementById('dl-confirm-status');
-      status2.textContent = 'Could not confirm deletion — the transfer will expire naturally.';
-      status2.classList.remove('hidden');
-      status2.classList.add('dl-confirm-status--error');
-    }
-  }, { once: true });
+function _showDeletedLink(domRefs) {
+  const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
+  downloadCard.classList.remove('hidden');
+  dlStageTag.textContent = 'This transfer has been deleted. The link no longer works.';
+  dlPct.classList.add('hidden');
+  dlBar.parentElement.classList.add('hidden');
 }
 
 function _showDownloadError(msg, domRefs) {

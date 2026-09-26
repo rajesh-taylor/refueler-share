@@ -334,7 +334,7 @@ function _injectTransferOptions(domRefs, transferOpts) {
   const notice = document.createElement('div');
   notice.id = 'destroy-notice';
   notice.className = 'destroy-notice hidden';
-  notice.innerHTML = `<strong>Once downloaded, this transfer is gone.</strong> The recipient cannot return to it. Send only when you are certain.`;
+  notice.innerHTML = `<strong>Once downloaded, this transfer is gone.</strong> The recipient cannot return to it. Send only when you are certain.<br>Our servers store only encrypted data we can't open. We never hold the encryption key.`;
   destroyRow.insertAdjacentElement('afterend', notice);
   transferOpts.destroyNotice = notice;
 
