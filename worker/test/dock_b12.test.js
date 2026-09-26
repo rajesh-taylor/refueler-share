@@ -80,6 +80,52 @@ describe('DAD — finishDownload step 7 (B12 §6.5)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Share-DAD-2: DAD runs the shared destroyTransfer — everything under {uuid}/
+// goes (chunks, hashes, date-seal), batched, tombstone last, all awaited.
+describe('DAD — shared destroyTransfer (Share-DAD-2)', () => {
+  function bigArmed(chunks, seal = true) {
+    const seed = { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify({ uuid: UUID, total_chunks: chunks, total_bytes: chunks * 100, expiry_timestamp: NOW + DAY, upload_complete: true, pending_destruction: false }) } };
+    for (let i = 0; i < chunks; i++) seed[`${UUID}/${String(i).padStart(4, '0')}`] = { size: 100, uploaded: NOW };
+    seed[`${UUID}/hashes`] = { size: 32 * chunks, uploaded: NOW };
+    if (seal) seed[`${UUID}/date-seal.ots.enc`] = { size: 50, uploaded: NOW };
+    return makeBucket(seed);
+  }
+  async function run(bucket) {
+    const kv   = makeKV({ [`dock_index:${UUID}`]: dockEntry(), [`root_verified:${UUID}`]: '1' });
+    const jobs = [];
+    const manifest = await (await bucket.get(`${UUID}/manifest.json`)).json();
+    finishDownload(new Request('https://w.test/'), { BUCKET: bucket, STATUS_KV: kv }, { waitUntil: (p) => jobs.push(p) },
+      UUID, manifest.total_chunks - 1, manifest, new Response('x'));
+    await Promise.all(jobs);                      // no extra tick — every step must be inside the awaited job
+    return { kv, manifest: JSON.parse(bucket._store.get(`${UUID}/manifest.json`).body) };
+  }
+
+  it('deletes chunks, hashes and date-seal, then writes a bare tombstone', async () => {
+    const bucket = bigArmed(3);
+    const { kv, manifest } = await run(bucket);
+    expect([...bucket._store.keys()]).toEqual([`${UUID}/manifest.json`]);
+    expect(manifest).toEqual({ consumed: true, consumed_at: NOW });   // no size, expiry or chunk count left
+    expect(kv._store.has(`dock_index:${UUID}`)).toBe(false);
+    expect(kv._store.has(`root_verified:${UUID}`)).toBe(false);
+  });
+
+  it('batches large transfers (2,500 chunks = 3 delete calls, not 2,500)', async () => {
+    const bucket = bigArmed(2500);
+    await run(bucket);
+    expect(bucket._log.deletes.length).toBe(3);
+    expect(bucket._store.size).toBe(1);
+  });
+
+  it('a failed batch leaves the transfer blocked and resumable, never tombstoned', async () => {
+    const bucket = bigArmed(3);
+    bucket.delete = async () => { throw new Error('R2 down'); };
+    const { manifest } = await run(bucket);
+    expect(manifest.consumed).toBe(true);        // downloads stay blocked
+    expect(manifest.total_chunks).toBe(3);       // in-progress, so owner/bearer delete resumes it
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 describe('every deletion path leaves the same trace in dock_index: absence', () => {
   const setup = () => ({ bucket: armedTransfer(false), kv: makeKV({ [`dock_index:${UUID}`]: dockEntry() }) });
 

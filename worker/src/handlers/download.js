@@ -40,6 +40,9 @@
  *   and the recipient's plaintext blake3_root check post-decryption. No silent
  *   data corruption escapes. Full security rationale in download_verify.js.
  *
+ * Share-DAD-2 — the inline sequence below was replaced by the shared
+ *   destroyTransfer() from delete_transfer.js (see finishDownload). History:
+ *
  * Share-B11-1 — DAD-BUG fix (destroy-after-download not executing):
  *   Root of the bug: flipPendingDestruction correctly flipped pending_destruction
  *   false → true on the last chunk, but nothing ever acted on that flag. The
@@ -73,9 +76,10 @@
 import { UUID_RE, safeGetManifest, json, err, parseRange } from '../utils.js';
 import { putManifest, isDownloadBlocked, requiresPassphrase } from '../manifest.js';
 import { verifyDownloadToken } from '../nut11.js';
-import { checkTransferStatus, flipPendingDestruction, buildTombstone } from '../manifest_tg.js';
+import { checkTransferStatus, flipPendingDestruction } from '../manifest_tg.js';
 import { emitReceipt } from '../receipts.js';
 import { findApiKeyHashForUuid } from '../webhook_delivery.js';
+import { destroyTransfer } from './delete_transfer.js';
 import {
   isVerifiedPath,
   readSidecarWithRootCheck,
@@ -306,62 +310,16 @@ export function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dl
   const pendingDestructionFlipped = updatedManifestForFlip !== manifest;
 
   if (pendingDestructionFlipped) {
-    // Share-B11-1: full DAD destruction sequence.
+    // Share-DAD-2: the shared owner/bearer destruction (delete_transfer.js) —
+    // consumed guard first, batched deletes of everything under {uuid}/, every
+    // step awaited, tombstone last and only when nothing remains, dock_index
+    // cleared. A partial run leaves the manifest in-progress: downloads stay
+    // blocked (consumed:true) and a later delete or sweep resumes it.
+    // Replaces the Share-B11-1 inline sequence, which deleted chunks one at a
+    // time and never awaited its tombstone/sidecar/seal/dock writes.
     ctx.waitUntil(
-      (async () => {
-        const nowSeconds  = Math.floor(Date.now() / 1000);
-        const totalChunks = manifest.total_chunks ?? 0;
-
-        // Step 1: mark consumed:true — the critical guard write.
-        // If anything below fails, this prevents a second download succeeding.
-        try {
-          await putManifest(env.BUCKET, uuid, {
-            ...manifest,
-            consumed:    true,
-            consumed_at: nowSeconds,
-          });
-        } catch (e) {
-          console.error('DAD: consumed guard write failed:', e);
-          // Do not continue — we cannot safely delete without the guard in place.
-          return;
-        }
-
-        // Step 2: delete all chunks.
-        for (let i = 0; i < totalChunks; i++) {
-          try {
-            await env.BUCKET.delete(`${uuid}/${String(i).padStart(4, '0')}`);
-          } catch (e) {
-            console.error(`DAD: chunk delete failed at index ${i}:`, e);
-            // Continue — orphan sweep catches residue at 03:00.
-          }
-        }
-
-        // Step 3: delete sidecar.
-        env.BUCKET.delete(`${uuid}/hashes`).catch(e =>
-          console.error('DAD: sidecar delete failed:', e)
-        );
-
-        // Step 4: delete OTS anchor (matches bearer delete path).
-        env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
-          console.error('DAD: date-seal.ots.enc delete failed:', e)
-        );
-
-        // Step 5: delete the B10-3 KV root-verified cache key.
-        env.STATUS_KV.delete(`root_verified:${uuid}`).catch(e =>
-          console.error('DAD: root_verified KV delete failed:', e)
-        );
-
-                // Step 6: write tombstone — final manifest state.
-        const tombstone = buildTombstone(nowSeconds);
-        putManifest(env.BUCKET, uuid, tombstone).catch(e =>
-          console.error('DAD: tombstone write failed:', e)
-        );
-
-        // Step 7: remove the Execution Dock entry (Share-B12-1, B12 §6.5).
-        env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
-          console.error('DAD: dock_index KV delete failed:', e)
-        );
-      })()
+      destroyTransfer(env, uuid, manifest, Math.floor(Date.now() / 1000), 'DAD')
+        .catch(e => console.error('DAD: destruction failed:', e))
     );
   }
 

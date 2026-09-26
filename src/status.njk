@@ -103,10 +103,10 @@ activePage: ""
 
       <div class="integrity-card">
         <div class="integrity-card-label">Technical: Cloudflare R2 lifecycle rules · 92-day hard cap</div>
-        <div class="integrity-card-value">✓ Files delete themselves</div>
+        <div class="integrity-card-value">✓ Expired files can't be downloaded</div>
         <div class="integrity-card-note">
-          Every transfer has an expiry. When it passes, the file is deleted automatically
-          by Cloudflare's storage layer — no manual intervention, no exceptions, no lingering copies.
+          Every transfer has an expiry. When it passes, the link stops working at once.
+          The encrypted data is then cleared by Cloudflare's storage layer no later than 92 days after upload.
         </div>
       </div>
 

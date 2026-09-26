@@ -1446,6 +1446,13 @@ async function handleMeta(request, env, uuid) {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
   }
+  // Share-DAD-2: deleted (tombstone) or being deleted (consumed guard written,
+  // tombstone not yet) → 410 and nothing else — no size, expiry or chunk count.
+  if (manifest.consumed === true) {
+    return new Response(JSON.stringify({ error: 'deleted' }), {
+      status: 410, headers: { 'Content-Type': 'application/json' },
+    });
+  }
   return new Response(JSON.stringify({
     file_name:                manifest.file_name               ?? null,
     total_bytes:              manifest.total_bytes             ?? null,

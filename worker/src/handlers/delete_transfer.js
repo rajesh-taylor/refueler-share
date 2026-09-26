@@ -30,7 +30,8 @@ import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
 // ─────────────────────────────────────────────────────────────────────────────
 const isTombstone = (m) => m.consumed === true && !Number.isFinite(m.total_chunks);
 
-async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
+// Also the DAD path (Share-DAD-2): finishDownload calls this inside waitUntil.
+export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
   const consumedAt = manifest.consumed === true ? (manifest.consumed_at ?? nowSeconds) : nowSeconds;
 
   if (manifest.consumed !== true) {
@@ -59,7 +60,8 @@ async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
   await putManifest(env.BUCKET, uuid, buildTombstone(consumedAt));
 
   // Share-B12-1 (B12 §0.3): every deletion path clears the index — absence is the trace.
-  env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
+  // Awaited (Share-DAD-2): an un-awaited write can be dropped once waitUntil settles.
+  await env.STATUS_KV.delete(`dock_index:${uuid}`).catch(e =>
     console.error(`${logTag}: Execution Dock KV delete failed:`, e)
   );
 
