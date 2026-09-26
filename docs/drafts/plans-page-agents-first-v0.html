@@ -1,0 +1,477 @@
+<title>Share Plans A/B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#F7F4EF; --surface:#EDEAE4; --surface-raised:#E4E1DA;
+  --text:#3D3A36; --text-2:#5A5751; --text-3:#8A847D;
+  --border:#D6D1C8; --border-mid:#B8B2A8;
+  --accent:#C8A96E; --accent-ink:#8C6D2E; --action:#D4690A; --action-ink:#FFFFFF;
+  --green:#1C7C4A; --green-bg:#EBF7F0; --amber:#B85C00; --amber-bg:#FEF3E6;
+  --grey-bg:#E9E5DE;
+  --band:#1A1A1A; --band-text:#E4E2DC; --band-2:#9C978F; --band-border:#34363A;
+  --code-bg:#1E1F22; --code-text:#E4E2DC; --code-dim:#8A8680; --code-key:#E0C48A; --code-str:#9FD7B0;
+  --sans:'DM Sans',system-ui,sans-serif;
+  --serif:'Source Serif 4',Georgia,serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#1E1F22; --surface:#26282C; --surface-raised:#2E3035;
+    --text:#E4E2DC; --text-2:#A9A59E; --text-3:#7A766F;
+    --border:#35373B; --border-mid:#4A4D52;
+    --accent-ink:#E0C48A; --action:#F5820A; --action-ink:#1A1A1A;
+    --green:#3DCA7A; --green-bg:#0D2B1A; --amber:#E8A23A; --amber-bg:#2B1D08; --grey-bg:#2E3035;
+    --band:#141517; --band-border:#2E3035;
+    --code-bg:#141517;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#1E1F22; --surface:#26282C; --surface-raised:#2E3035;
+  --text:#E4E2DC; --text-2:#A9A59E; --text-3:#7A766F;
+  --border:#35373B; --border-mid:#4A4D52;
+  --accent-ink:#E0C48A; --action:#F5820A; --action-ink:#1A1A1A;
+  --green:#3DCA7A; --green-bg:#0D2B1A; --amber:#E8A23A; --amber-bg:#2B1D08; --grey-bg:#2E3035;
+  --band:#141517; --band-border:#2E3035;
+  --code-bg:#141517;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:1040px;margin:0 auto}
+h1,h2,h3{text-wrap:balance;margin:0}
+p{margin:0}
+a{color:var(--accent-ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Review bar ── */
+.review{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:0.5px solid var(--border);margin-inline:-16px;padding:10px 16px}
+.review .wrap{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.review-note{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--text-3);text-transform:uppercase}
+.seg{display:inline-flex;border:0.5px solid var(--border-mid);border-radius:8px;padding:3px;gap:3px;background:var(--surface)}
+.seg button{font:500 13px var(--sans);color:var(--text-2);background:none;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--text);box-shadow:0 0 0 0.5px var(--border-mid)}
+.seg small{font-family:var(--mono);font-size:10.5px;color:var(--text-3);margin-left:6px}
+
+/* ── Shared bits ── */
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3)}
+.chip{display:inline-block;font:500 10.5px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;vertical-align:1px}
+.chip.live{color:var(--green);background:var(--green-bg)}
+.chip.build{color:var(--amber);background:var(--amber-bg)}
+.chip.soon{color:var(--text-2);background:var(--grey-bg)}
+.chip.prop{color:var(--accent-ink);background:transparent;box-shadow:inset 0 0 0 0.5px var(--accent)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:500 14px var(--sans);border-radius:8px;padding:11px 18px;border:0;cursor:pointer;text-decoration:none;transition:background .15s ease,color .15s ease}
+.btn-action{background:var(--action);color:var(--action-ink)}
+.btn-ghost{background:transparent;color:var(--text);box-shadow:inset 0 0 0 0.5px var(--border-mid)}
+.btn-ghost:hover{box-shadow:inset 0 0 0 0.5px var(--accent)}
+.fig{font-family:var(--serif);font-weight:400;font-variant-numeric:tabular-nums lining-nums}
+.muted{color:var(--text-2)}
+.fine{font-size:13px;color:var(--text-3)}
+ul.plain{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+ul.plain li{display:flex;gap:10px;align-items:baseline;justify-content:space-between}
+ul.plain li span:first-child{flex:1}
+
+/* ═════════ Variant A — Choose how you appear ═════════ */
+.a-head{padding-block:56px 36px;display:grid;gap:14px;max-width:640px}
+.a-head h1{font-family:var(--serif);font-weight:300;font-size:clamp(34px,5.4vw,52px);line-height:1.08;letter-spacing:-.01em}
+.a-head p{font-size:17px;color:var(--text-2);max-width:56ch}
+
+.probono{display:grid;grid-template-columns:auto 1fr auto;gap:12px 28px;align-items:center;padding-block:18px;border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border)}
+.probono .name{font-family:var(--serif);font-size:22px}
+.probono .name small{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--text-3);text-transform:uppercase}
+.probono .facts{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--text-2);font-size:14px}
+.probono .facts b{font-weight:500;color:var(--text)}
+@media (max-width:720px){.probono{grid-template-columns:1fr}}
+
+.pair-wrap{padding-block:48px 12px;display:grid;gap:20px}
+.pair-top{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:16px}
+.pair-top h2{font-family:var(--serif);font-weight:400;font-size:28px}
+.price-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.price-line .fig{font-size:44px;line-height:1}
+.billing{display:inline-flex;gap:4px;border:0.5px solid var(--border-mid);border-radius:8px;padding:3px}
+.billing button{font:500 12.5px var(--sans);background:none;border:0;border-radius:6px;padding:5px 10px;color:var(--text-2);cursor:pointer}
+.billing button[aria-pressed="true"]{background:var(--surface-raised);color:var(--text)}
+
+.pair{display:grid;grid-template-columns:1fr auto 1fr;border:0.5px solid var(--border-mid);border-radius:10px;background:var(--surface);overflow:hidden}
+.side{padding:28px;display:grid;gap:18px;align-content:start}
+.side h3{font-family:var(--serif);font-weight:400;font-size:30px;line-height:1}
+.side .rail{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink)}
+.side .pitch{color:var(--text-2);max-width:40ch}
+.side .how{display:grid;gap:8px;font-size:14px;padding-top:16px;border-top:0.5px solid var(--border)}
+.side .how div{display:grid;grid-template-columns:110px 1fr;gap:12px}
+.side .how dt,.side .how .k{font-family:var(--mono);font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;padding-top:2px}
+.or{display:grid;place-items:center;position:relative;width:1px;background:var(--border-mid)}
+.or span{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg);border:0.5px solid var(--border-mid);border-radius:50%;width:38px;height:38px;display:grid;place-items:center;font-family:var(--serif);font-style:italic;color:var(--text-2)}
+.shared{grid-column:1/-1;border-top:0.5px solid var(--border-mid);background:var(--bg);padding:22px 28px;display:grid;gap:12px}
+.shared ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 36px}
+@media (max-width:760px){
+  .pair{grid-template-columns:1fr}
+  .or{width:auto;height:1px}
+  .shared ul{grid-template-columns:1fr}
+  .side .how div{grid-template-columns:96px 1fr}
+}
+.side .cta{display:flex;gap:10px;flex-wrap:wrap}
+
+.agent-key{display:grid;grid-template-columns:1fr auto;gap:12px 24px;align-items:center;padding:18px 22px;margin-top:4px;border:0.5px dashed var(--accent);border-radius:10px}
+.agent-key h4{margin:0 0 4px;font:500 15px var(--sans)}
+@media (max-width:640px){.agent-key{grid-template-columns:1fr}}
+
+.band{margin-top:56px;margin-inline:-16px;background:var(--band);color:var(--band-text);padding-block:52px;padding-inline:16px}
+.band .wrap{display:grid;grid-template-columns:1.1fr 1fr;gap:40px}
+.band h2{font-family:var(--serif);font-weight:300;font-size:clamp(28px,4vw,38px);line-height:1.12}
+.band .eyebrow{color:var(--accent)}
+.band p{color:var(--band-2);max-width:48ch}
+.band ul.plain li{border-bottom:0.5px solid var(--band-border);padding-bottom:9px}
+.band .chip.live{background:#0D2B1A;color:#3DCA7A}
+.band .chip.build{background:#2B1D08;color:#E8A23A}
+.band .chip.soon{background:#2E3035;color:#A9A59E}
+.band .btn-ghost{color:var(--band-text);box-shadow:inset 0 0 0 0.5px #4A4D52}
+.band .stack{display:grid;gap:18px;align-content:start}
+@media (max-width:800px){.band .wrap{grid-template-columns:1fr}}
+
+/* ═════════ Variant B — Agents first, the register ═════════ */
+.b-hero{display:grid;grid-template-columns:1fr 1.05fr;gap:40px;align-items:center;padding-block:56px 44px}
+.b-hero h1{font-family:var(--serif);font-weight:300;font-size:clamp(32px,5vw,48px);line-height:1.08}
+.b-hero .lede{font-size:17px;color:var(--text-2);max-width:48ch;margin-top:14px}
+.b-hero .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+@media (max-width:860px){.b-hero{grid-template-columns:1fr}}
+.term{background:var(--code-bg);color:var(--code-text);border-radius:10px;font:12.5px/1.65 var(--mono);overflow:hidden;border:0.5px solid var(--band-border)}
+.term-bar{display:flex;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:0.5px solid #2E3035;color:var(--code-dim);font-size:11px;letter-spacing:.05em}
+.term pre{margin:0;padding:14px 16px;overflow-x:auto;white-space:pre}
+.term .c{color:var(--code-dim)} .term .k{color:var(--code-key)} .term .s{color:var(--code-str)}
+
+.register-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;padding-block:8px 16px}
+.register-head h2{font-family:var(--serif);font-weight:400;font-size:28px}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.table-scroll{overflow-x:auto;border:0.5px solid var(--border-mid);border-radius:10px;background:var(--surface)}
+table.reg{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+table.reg th,table.reg td{padding:13px 16px;text-align:left;vertical-align:top;border-bottom:0.5px solid var(--border)}
+table.reg thead th{background:var(--bg);vertical-align:bottom}
+table.reg thead .tname{font-family:var(--serif);font-weight:400;font-size:22px;display:block;color:var(--text)}
+table.reg thead .trail{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);display:block;margin-top:2px}
+table.reg thead .tprice{display:block;margin-top:10px;font-family:var(--serif);font-size:20px;color:var(--text);font-variant-numeric:tabular-nums}
+table.reg thead .tprice small{font-family:var(--sans);font-size:12px;color:var(--text-3)}
+table.reg tbody th{font-weight:400;color:var(--text-2);width:24%}
+table.reg tbody tr.group th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);padding-top:18px;background:var(--bg)}
+table.reg tbody tr.group td{background:var(--bg)}
+table.reg td .v{display:block;margin-bottom:4px}
+table.reg tr:last-child td,table.reg tr:last-child th{border-bottom:0}
+table.reg .pairhead{background:var(--surface-raised)!important}
+table.reg .dash{color:var(--text-3)}
+.pair-note{font-size:13px;color:var(--text-3);margin-top:10px}
+
+.credits{display:grid;grid-template-columns:1fr 1.2fr;gap:36px;padding-block:52px 0}
+.credits h2{font-family:var(--serif);font-weight:400;font-size:28px;margin-bottom:12px}
+.credits p{color:var(--text-2);max-width:46ch}
+.credits p + p{margin-top:12px}
+.worked{border:0.5px solid var(--border-mid);border-radius:10px;overflow:hidden}
+.worked-row{display:grid;grid-template-columns:1fr auto;gap:16px;padding:14px 18px;border-bottom:0.5px solid var(--border);align-items:baseline}
+.worked-row:last-child{border-bottom:0}
+.worked-row .what{font-size:14px}
+.worked-row .what small{display:block;font-family:var(--mono);font-size:11.5px;color:var(--text-3);margin-top:3px}
+.worked-row .amt{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;text-align:right}
+.worked-row .amt small{display:block;font-size:11px;color:var(--text-3)}
+.worked-cap{background:var(--surface);padding:10px 18px;font-size:12.5px;color:var(--text-3)}
+@media (max-width:820px){.credits{grid-template-columns:1fr}}
+
+.connect{margin-top:52px;display:grid;grid-template-columns:1fr 1fr;gap:28px;padding:28px;border-radius:10px;background:var(--surface);border:0.5px solid var(--border)}
+.connect h3{font-family:var(--serif);font-weight:400;font-size:24px;margin-bottom:10px}
+.connect p{color:var(--text-2)}
+.switch-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 16px;background:var(--bg);border:0.5px solid var(--border-mid);border-radius:8px}
+.switch{position:relative;width:42px;height:24px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.switch span{position:absolute;inset:0;border-radius:12px;background:var(--border-mid);transition:background .15s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--bg);transition:transform .15s}
+.switch input:checked + span{background:var(--accent)}
+.switch input:checked + span::after{transform:translateX(18px)}
+.switch input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+.keybox{margin-top:12px;display:grid;gap:10px}
+.keyline{font-family:var(--mono);font-size:12.5px;padding:10px 12px;border-radius:6px;background:var(--code-bg);color:var(--code-text);overflow-x:auto;white-space:nowrap}
+@media (max-width:760px){.connect{grid-template-columns:1fr}}
+
+.foot{margin-top:56px;padding-top:18px;border-top:0.5px solid var(--border);display:grid;gap:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="review">
+  <div class="wrap">
+    <span class="review-note">Draft mockup · not live copy</span>
+    <div class="seg" role="group" aria-label="Choose a layout">
+      <button type="button" id="pickA" aria-pressed="true">A · Choose how you appear</button>
+      <button type="button" id="pickB" aria-pressed="false">B · Agents first</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ VARIANT A ═══════════════════════ -->
+<main id="variantA" class="wrap">
+  <header class="a-head">
+    <span class="eyebrow">Refueler Share · Plans</span>
+    <h1>Same plan, same price. You choose how you appear.</h1>
+    <p>Every transfer is sealed in your browser. The key stays in the link, so our servers only ever hold encrypted data we can't open.</p>
+  </header>
+
+  <section class="probono" aria-label="Pro Bono, the free tier">
+    <div class="name"><small>Free · no account</small>Pro Bono</div>
+    <div class="facts">
+      <span><b>4 GB</b> per transfer</span>
+      <span><b>7 days</b> to collect</span>
+      <span>Passphrase</span>
+      <span>Destroy after download</span>
+    </div>
+    <a class="btn btn-ghost" href="#">Lodge a file</a>
+  </section>
+
+  <section class="pair-wrap" aria-labelledby="pairTitle">
+    <div class="pair-top">
+      <div style="display:grid;gap:6px">
+        <span class="eyebrow">The paid plan</span>
+        <h2 id="pairTitle">Citizen or Sovereign</h2>
+      </div>
+      <div style="display:grid;gap:10px;justify-items:end">
+        <div class="price-line">
+          <span class="fig" id="aPrice">£24</span>
+          <span class="muted" id="aPeriod">a month, either way</span>
+        </div>
+        <div class="billing" role="group" aria-label="Billing period">
+          <button type="button" data-bill="m" aria-pressed="true">Monthly</button>
+          <button type="button" data-bill="q" aria-pressed="false">3 months</button>
+          <button type="button" data-bill="y" aria-pressed="false">Yearly</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pair">
+      <div class="side">
+        <div>
+          <div class="rail">Registered</div>
+          <h3>Citizen</h3>
+        </div>
+        <p class="pitch">For people who want a paper trail: an invoice, a sign-in, and a way back in if you lose a device.</p>
+        <div class="how">
+          <div><span class="k">Pay with</span><span>Card, through Stripe</span></div>
+          <div><span class="k">Sign in</span><span>Email link <span class="chip build">In build</span></span></div>
+          <div><span class="k">We know</span><span>Your email and billing details</span></div>
+          <div><span class="k">If you lose it</span><span>Recover through your email</span></div>
+        </div>
+        <div class="cta"><a class="btn btn-action" href="#">Become a Citizen</a></div>
+      </div>
+
+      <div class="or" aria-hidden="true"><span>or</span></div>
+
+      <div class="side">
+        <div>
+          <div class="rail">Bearer</div>
+          <h3>Sovereign</h3>
+        </div>
+        <p class="pitch">For people who'd rather not be on anyone's register. Your allowance lives on your device, not in our records.</p>
+        <div class="how">
+          <div><span class="k">Pay with</span><span>Lightning <span class="chip soon">Coming</span></span></div>
+          <div><span class="k">Sign in</span><span>Your device key. No email.</span></div>
+          <div><span class="k">We know</span><span>That a payment was made</span></div>
+          <div><span class="k">If you lose it</span><span>Restore from your backup file. Without it, the allowance is gone.</span></div>
+        </div>
+        <div class="cta"><a class="btn btn-ghost" href="#">Join the waitlist</a></div>
+      </div>
+
+      <div class="shared">
+        <span class="eyebrow">Both include</span>
+        <ul class="plain">
+          <li><span>100 GB of storage</span><span class="chip build">In build</span></li>
+          <li><span>Collection windows up to 90 days</span><span class="chip build">In build</span></li>
+          <li><span>Permanent record, anchored to Bitcoin</span><span class="chip live">Live</span></li>
+          <li><span>Scheduled availability windows</span><span class="chip live">Live</span></li>
+          <li><span>Chambers, your account page</span><span class="chip build">In build</span></li>
+          <li><span>Everything in Pro Bono</span><span class="chip live">Live</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="agent-key">
+      <div>
+        <h4>Use it from your AI assistant too <span class="chip prop">Proposed</span></h4>
+        <p class="fine">Turn on a personal agent key and your assistant can lodge files from your own allowance, with a daily limit you set.</p>
+      </div>
+      <a class="btn btn-ghost" href="#">How it works</a>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="charteredTitle">
+    <div class="wrap">
+      <div class="stack">
+        <span class="eyebrow">Chartered · API and MCP</span>
+        <h2 id="charteredTitle">For agents, and the firms that run them.</h2>
+        <p>Your agent encrypts files in your own infrastructure and hands the recipient a link. Pay from a pool of Share credits on a monthly invoice, or hold credits on your own systems with no account behind them.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <a class="btn btn-action" href="#">Talk to us</a>
+          <a class="btn btn-ghost" href="#">Read the API docs</a>
+        </div>
+      </div>
+      <ul class="plain">
+        <li><span>Signed API keys and a free sandbox</span><span class="chip live">Live</span></li>
+        <li><span>Acceptance and collection receipts</span><span class="chip live">Live</span></li>
+        <li><span>Webhooks on lodge and collection</span><span class="chip live">Live</span></li>
+        <li><span>Invoice and purchase-order billing</span><span class="chip live">Live</span></li>
+        <li><span>MCP server, open source, runs on your side</span><span class="chip build">In build</span></li>
+        <li><span>Bearer credits, no account behind them</span><span class="chip soon">Coming</span></li>
+        <li><span>Standing inbox for agent-to-agent transfers</span><span class="chip soon">Coming</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p class="fine">Collection receipts confirm the encrypted file was served to whoever opened the link. They don't prove who read it.</p>
+    <p class="fine">Permanent record proves a file existed on or before a Bitcoin block date. It doesn't prove who wrote it or whether it's true.</p>
+  </footer>
+</main>
+
+<!-- ═══════════════════════ VARIANT B ═══════════════════════ -->
+<main id="variantB" class="wrap" hidden>
+  <section class="b-hero">
+    <div>
+      <span class="eyebrow">Refueler Share · Plans</span>
+      <h1 style="margin-top:12px">Private file transfer for people, and for the agents that work for them.</h1>
+      <p class="lede">Files are encrypted before they leave your machine, whether a person or an agent sends them. We relay data we can't read, and on the Bearer rail we don't know who sent it.</p>
+      <div class="cta">
+        <a class="btn btn-action" href="#register">Compare plans</a>
+        <a class="btn btn-ghost" href="#">Connect an agent</a>
+      </div>
+    </div>
+    <div class="term" aria-label="Example: an agent sends a file through the Share MCP server">
+      <div class="term-bar"><span>agent · refueler_send_file</span><span>example</span></div>
+<pre><span class="c">// runs on your side; only ciphertext leaves</span>
+{
+  <span class="k">"file_path"</span>: <span class="s">"./Q3-board-pack.pdf"</span>,
+  <span class="k">"destroy_after_download"</span>: true,
+  <span class="k">"passphrase"</span>: <span class="s">"sent separately"</span>
+}
+<span class="c">// ← response</span>
+{
+  <span class="k">"share_url"</span>: <span class="s">"https://refueler.io/share/?uuid=…#…"</span>,
+  <span class="k">"expires_at"</span>: <span class="s">"in 7 days"</span>,
+  <span class="k">"cost_credits"</span>: 11,
+  <span class="k">"collection_receipt_available"</span>: true
+}</pre>
+    </div>
+  </section>
+
+  <section id="register" aria-labelledby="regTitle">
+    <div class="register-head">
+      <h2 id="regTitle">The register</h2>
+      <div class="legend">
+        <span class="chip live">Live</span><span class="chip build">In build</span><span class="chip soon">Coming</span><span class="chip prop">Proposed</span>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table class="reg">
+        <thead>
+          <tr>
+            <th scope="col"><span class="eyebrow">Plan</span></th>
+            <th scope="col"><span class="tname">Pro Bono</span><span class="trail">No account</span><span class="tprice">£0</span></th>
+            <th scope="col" class="pairhead"><span class="tname">Citizen</span><span class="trail">Registered · card</span><span class="tprice">£24 <small>/ month</small></span></th>
+            <th scope="col" class="pairhead"><span class="tname">Sovereign</span><span class="trail">Bearer · Lightning</span><span class="tprice">£24 <small>/ month</small></span></th>
+            <th scope="col"><span class="tname">Chartered</span><span class="trail">API · MCP</span><span class="tprice"><small>Pay in Share credits</small></span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group"><th colspan="5">Sending</th></tr>
+          <tr><th scope="row">Encrypted in your browser or agent</th><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">File size</th><td><span class="v">4 GB</span></td><td><span class="v">100 GB storage</span><span class="chip build">In build</span></td><td><span class="v">100 GB storage</span><span class="chip build">In build</span></td><td><span class="v">Up to 250 GB per transfer</span></td></tr>
+          <tr><th scope="row">Time to collect</th><td><span class="v">7 days</span></td><td><span class="v">Up to 90 days</span><span class="chip build">In build</span></td><td><span class="v">Up to 90 days</span><span class="chip build">In build</span></td><td><span class="v">You set it</span></td></tr>
+          <tr><th scope="row">Passphrase and destroy after download</th><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">Permanent record, anchored to Bitcoin</th><td class="dash">—</td><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td><td><span class="chip live">Live</span></td></tr>
+
+          <tr class="group"><th colspan="5">Who we know you are</th></tr>
+          <tr><th scope="row">What's on our register</th><td><span class="v">Nothing</span></td><td><span class="v">Email and billing</span></td><td><span class="v">That a payment was made</span></td><td><span class="v">Your firm, or nothing on the Bearer rail</span></td></tr>
+          <tr><th scope="row">If you lose access</th><td class="dash">—</td><td><span class="v">Recover by email</span></td><td><span class="v">Restore from your backup file</span></td><td><span class="v">Rotate your keys</span></td></tr>
+          <tr><th scope="row">How you pay</th><td class="dash">—</td><td><span class="v">Card</span><span class="chip live">Live</span></td><td><span class="v">Lightning</span><span class="chip soon">Coming</span></td><td><span class="v">Invoice, card, or Lightning</span></td></tr>
+
+          <tr class="group"><th colspan="5">Agents</th></tr>
+          <tr><th scope="row">Your own AI assistant</th><td class="dash">—</td><td><span class="v">Personal agent key</span><span class="chip prop">Proposed</span></td><td><span class="v">Personal agent key</span><span class="chip prop">Proposed</span></td><td><span class="chip live">Included</span></td></tr>
+          <tr><th scope="row">MCP server, runs on your side</th><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip build">In build</span></td></tr>
+          <tr><th scope="row">Signed API keys, receipts, webhooks</th><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip live">Live</span></td></tr>
+          <tr><th scope="row">Standing inbox for agent-to-agent</th><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip soon">Coming</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="pair-note">Citizen and Sovereign are the same plan at the same price. The only difference is how you appear to us.</p>
+  </section>
+
+  <section class="credits" aria-labelledby="credTitle">
+    <div>
+      <span class="eyebrow">Share credits</span>
+      <h2 id="credTitle" style="margin-top:8px">Agents pay for what they hold, for as long as they hold it.</h2>
+      <p>Credits are a prepaid allowance for Share and nothing else. Top up by card or Lightning, and your agent spends them one transfer at a time.</p>
+      <p>A small file collected the same day costs almost nothing. A large file kept for three months costs more, because it takes up storage for three months.</p>
+    </div>
+    <div class="worked">
+      <div class="worked-row"><div class="what">Board pack, 20 MB, collected within a week<small>1 block × 1 week + 10 per transfer</small></div><div class="amt">11<small>credits</small></div></div>
+      <div class="worked-row"><div class="what">Contract bundle, 600 MB, 30 days<small>18 blocks × 5 weeks + 10</small></div><div class="amt">100<small>credits</small></div></div>
+      <div class="worked-row"><div class="what">Footage, 40 GB, 90 days<small>1,193 blocks × 13 weeks + 10</small></div><div class="amt">15,519<small>credits</small></div></div>
+      <div class="worked-row"><div class="what">Permanent record on any transfer<small>flat</small></div><div class="amt">+20<small>credits</small></div></div>
+      <div class="worked-cap">Illustrative rate card v2 draft: 10 credits per transfer, plus 1 credit per 32 MiB block per week held. Not a published price.</div>
+    </div>
+  </section>
+
+  <section class="connect" aria-labelledby="connectTitle">
+    <div>
+      <span class="eyebrow">Onboarding</span>
+      <h3 id="connectTitle" style="margin-top:8px">Plug in your assistant</h3>
+      <p>Citizen and Sovereign members can give their own AI assistant a key that spends from their allowance. You set a daily limit, and you can switch it off at any time.</p>
+    </div>
+    <div>
+      <div class="switch-row">
+        <div><strong style="font-weight:500">Personal agent key</strong><div class="fine">Off by default</div></div>
+        <label class="switch" aria-label="Personal agent key">
+          <input type="checkbox" id="agentKeyToggle">
+          <span></span>
+        </label>
+      </div>
+      <div class="keybox" id="keybox" hidden>
+        <div class="keyline">rfs_test_7Hq…c2Wd · daily limit 500 credits</div>
+        <p class="fine">On Sovereign, the key holds a small stack of credits instead. Your assistant can't spend more than you've given it.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p class="fine">Collection receipts confirm the encrypted file was served to whoever opened the link. They don't prove who read it.</p>
+    <p class="fine">Permanent record proves a file existed on or before a Bitcoin block date. It doesn't prove who wrote it or whether it's true.</p>
+  </footer>
+</main>
+
+<script>
+(function(){
+  const A=document.getElementById('variantA'), B=document.getElementById('variantB');
+  const pA=document.getElementById('pickA'), pB=document.getElementById('pickB');
+  function show(v){
+    const isA=v!=='b';
+    A.hidden=!isA; B.hidden=isA;
+    pA.setAttribute('aria-pressed',String(isA));
+    pB.setAttribute('aria-pressed',String(!isA));
+    try{localStorage.setItem('plansVariant',isA?'a':'b')}catch(e){}
+  }
+  pA.addEventListener('click',()=>{show('a');window.scrollTo({top:0})});
+  pB.addEventListener('click',()=>{show('b');window.scrollTo({top:0})});
+  let start='a';
+  if(location.hash==='#b') start='b';
+  else { try{ start=localStorage.getItem('plansVariant')||'a' }catch(e){} }
+  show(start);
+
+  const bill={m:['£24','a month, either way'],q:['£72','every 3 months'],y:['£288','a year, either way']};
+  document.querySelectorAll('.billing button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('.billing button').forEach(x=>x.setAttribute('aria-pressed','false'));
+      b.setAttribute('aria-pressed','true');
+      const [p,t]=bill[b.dataset.bill];
+      document.getElementById('aPrice').textContent=p;
+      document.getElementById('aPeriod').textContent=t;
+    });
+  });
+
+  const t=document.getElementById('agentKeyToggle'), kb=document.getElementById('keybox');
+  t.addEventListener('change',()=>{kb.hidden=!t.checked});
+})();
+</script>
