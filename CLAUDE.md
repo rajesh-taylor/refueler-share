@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.7 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-Sync-1 · 25 Sep 2026
+> **Version:** 2.8 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Cred-Fix-1 · 26 Sep 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -59,7 +59,8 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Node bootstrap is B7 pre-work, not B9.** No dark provisioning — instance goes live only when runbook is ready and test suite passes.
 - No custodial wallet. Payment settled via self-hosted LNbits.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
-- Content-Type header validated against execution-capable denylist at upload boundary. Header check reflects declared intent only. MIME type never stored.
+- **No upload-time file-type (MIME) check exists.** The Content-Type denylist lived only on the Worker-relay chunk path, retired at Share-6-6b; direct-to-R2 uploads never sent a type. Retired as a claim (Rajesh, Cred-Fix-1 · 26 Sep 2026) — do not assert it in any copy. The Worker never learns or stores the file type. `MIME_DENYLIST` in `utils.js` is unused; Share-MIME-1 removes it and re-checks public copy.
+- **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
 - DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.

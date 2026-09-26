@@ -1,7 +1,7 @@
 /* eslint-disable no-undef, no-use-before-define */
 import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyCredential } from './nut00.js';
-import { verifyChunkHash } from './blake3.js';
+import { computeCommitment } from './commitment.js';
 import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 // verifyStripeWebhook, createCheckoutSession — imported by ./handlers/stripe_sub.js
@@ -28,9 +28,9 @@ import { handleAdminBtcRatePost, handleAdminBtcRateGet, refreshBtcRate } from '.
 import { handleAdminBtcPrice }  from './handlers/btc_price.js';        // Share-B10-1: live display ticker
 import { handleGrowthSnapshot } from './handlers/growth_snapshot.js';  // Share-B10-1: growth chart lines
 import { handleWebhookRegister }        from './webhook_reg.js';
-import { findApiKeyHashForUuid, deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
+import { deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
 // SW5: acceptance + collection receipts
-import { buildSignedReceipt, emitReceipt, handleApiReceipt } from './receipts.js';
+import { buildSignedReceipt, handleApiReceipt } from './receipts.js';
 import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
 // SW5b: webhook status + hostname health cards
 import { handleWebhookStatus }  from './handlers/webhook_status.js';
@@ -39,7 +39,7 @@ import { handleHostnameHealth } from './handlers/hostname_health.js';
 import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleSandboxSpend, isSandboxRequest, consumeSandboxCredit, lookupSandboxClient } from './sandbox.js';
 // SW9: shared utilities extracted from index.js
 import {
-  UUID_RE, CHUNK_SIZE_MAX, MANIFEST_SIZE_MAX, MIME_DENYLIST,
+  UUID_RE, MANIFEST_SIZE_MAX,
   corsHeaders, safeGetManifest, supabaseFetch,
   json, err, addCors, parseRange,
 } from './utils.js';
@@ -302,8 +302,7 @@ export default {
       // Any client hitting this path is pre-6-2 and must re-upload.
 
       // ── Share-6-1: initiate direct-to-R2 upload — POST /upload/:uuid/initiate ──
-      // Additive. The legacy PUT /upload/:uuid/:chunk path above is untouched and
-      // stays live; this runs alongside it. Cashu verify+spend once here, size-cap
+      // Cashu verify+spend once here, size-cap
       // via resolvedTier, manifest create, first presigned-URL batch + session token.
       const initiateMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/initiate$/i);
       if (request.method === 'POST' && initiateMatch) {
@@ -1027,6 +1026,12 @@ async function handleApiCredentialIssue(request, env) {
 
   const rail = client.rail ?? 'identity';
 
+  // Fail closed before any quota or token spend if the commitment key is absent.
+  if (!env.COMMITMENT_KEY) {
+    console.error('api_credential_issue: COMMITMENT_KEY not configured');
+    return err(500, 'Credential issuance not configured');
+  }
+
   // ── Validate body ──────────────────────────────────────────────────────────
   const { blinded_message, transfer_ref } = body;
   if (!blinded_message) return err(400, 'Missing blinded_message');
@@ -1168,6 +1173,8 @@ async function handleApiCredentialIssue(request, env) {
     }
 
     // Verify the presented token was signed by the API keyset.
+    // Do not change until Cred-Fix-2 — see cred-fix-tracker. This site fails
+    // closed today; it must only change together with full token verification.
     let tokenSerial;
     try {
       const verified = await verifyCredential(cashuToken, env.MINT_API_PRIVATE_KEY);
@@ -1240,7 +1247,7 @@ async function handleApiCredentialIssue(request, env) {
     ? env.MINT_API_PRIVATE_KEY
     : env.MINT_PRIVATE_KEY;
 
-  const commitment = await computeApiCommitment(uuid, issuedTier, API_EXPIRY_WINDOW);
+  const commitment = await computeCommitment(env.COMMITMENT_KEY, uuid, issuedTier, API_EXPIRY_WINDOW);
 
   let signedPoint, mintPubkey;
   try {
@@ -1282,57 +1289,35 @@ async function handleApiCredentialIssue(request, env) {
   });
 }
 
-// computeApiCommitment — same pattern as consumer computeCommitment.
-// Kept separate to avoid confusion with the consumer EXPIRY_WINDOWS map.
-async function computeApiCommitment(uuid, tier, expiryWindow) {
-  const input = new TextEncoder().encode(`${uuid}:${tier}:${expiryWindow}`);
-  const hash  = await crypto.subtle.digest('SHA-256', input);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Credential issue — POST /credential/issue
 //
 // S42c: UUID-bound credential issuance.
 //
 // The Worker generates the transfer UUID here — the client no longer generates
-// it client-side. A commitment H(uuid‖issued_tier‖expiry_window_seconds) is
-// computed and returned alongside the blind signature. The frontend echoes this
+// it client-side. A commitment HMAC(COMMITMENT_KEY, uuid‖window‖tier) is
+// computed (./commitment.js) and returned alongside the blind signature. The frontend echoes this
 // commitment and issued_tier on chunk 0; the Worker recomputes and verifies.
 //
 // This closes the cross-transfer credential farming vector: a credential farmed
 // for one UUID is cryptographically invalid for any other UUID.
 //
-// Nothing is stored. The binding lives in the commitment itself.
+// Nothing is stored. The binding lives in the commitment itself; only the
+// Worker holds COMMITMENT_KEY, so only this endpoint (Turnstile-gated) and the
+// HMAC-authed API issue path can mint a (uuid, commitment) pair.
 // Full NUT-20 quote signatures deferred to B8 Rust mint.
 //
-// RU2c: resume path bypasses Turnstile.
-// When body.resume === true, Turnstile verification and nonce binding are
-// skipped. Instead, the Worker verifies a real partial upload exists in R2
-// (HEAD check on chunk 0000) before issuing. This prevents the bypass being
-// used as a free credential farm — you need a real partial upload to resume.
-// Turnstile was already solved when the original upload began; requiring it
-// again after a connection drop is security theatre that breaks the flow.
+// Resume-issue path removed (Cred-Fix-1). Resume uses the IDB-stored upload
+// session token (Share-6); no client sends resume:true. It now returns 400.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Canonical expiry windows (seconds) — mirrored in handleUpload.
-// These constants must stay in sync. A mismatch breaks commitment verification.
+// Canonical expiry windows (seconds). Issue and /initiate both read this map;
+// a change invalidates every outstanding commitment.
 const EXPIRY_WINDOWS = {
   free:     7  * 24 * 3600,  //    604,800 s
   creative: 30 * 24 * 3600,  //  2,592,000 s
   max:      90 * 24 * 3600,  //  7,776,000 s
 };
-
-/**
- * computeCommitment(uuid, tier, expiryWindow) → hex string
- * SHA-256( utf8(uuid) || utf8(':') || utf8(tier) || utf8(':') || utf8(expiryWindow) )
- * Simple, deterministic, no parsing ambiguity (UUID contains only hex+hyphen; tier is alpha).
- */
-async function computeCommitment(uuid, tier, expiryWindow) {
-  const input = new TextEncoder().encode(`${uuid}:${tier}:${expiryWindow}`);
-  const hash  = await crypto.subtle.digest('SHA-256', input);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 async function handleCredentialIssue(request, env) {
   let body;
@@ -1342,57 +1327,49 @@ async function handleCredentialIssue(request, env) {
     return err(400, 'Invalid JSON');
   }
 
-  const { blinded_message, tier = 'free', resume = false, resume_uuid = null } = body;
+  const { blinded_message, tier = 'free' } = body;
   if (!blinded_message) return err(400, 'Missing blinded_message');
 
-  // ── Resume path (RU2c) ───────────────────────────────────────────────────
-  if (resume === true) {
-    if (!resume_uuid || !UUID_RE.test(resume_uuid)) {
-      return err(400, 'resume_uuid is required and must be a valid UUID');
-    }
-    let chunkExists = false;
-    try {
-      const obj = await env.BUCKET.head(`${resume_uuid}/0000`);
-      chunkExists = obj !== null;
-    } catch (e) {
-      console.error('R2 head check failed on resume:', e);
-      return err(502, 'Could not verify partial upload');
-    }
-    if (!chunkExists) {
-      logEvent(env, { endpoint: 'credential_issue', tier: 'resume_rejected', status: 403, errorMsg: 'resume_no_partial_upload' });
-      return err(403, 'No partial upload found for this transfer');
-    }
-    logEvent(env, { endpoint: 'credential_issue', tier: tier === 'free' ? 'free' : tier, status: 200, errorMsg: 'resume' });
-  } else {
-    // ── Normal path — Turnstile required ──────────────────────────────────
-    const { turnstile_token } = body;
-    if (!turnstile_token) return err(400, 'Missing turnstile_token or blinded_message');
-
-    const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
-    if (!turnstileOk) return err(403, 'Turnstile verification failed');
-
-    // ── Turnstile nonce binding (S42d) ──────────────────────────────────────
-    const nonceHash = await (async () => {
-      const bytes = new TextEncoder().encode(turnstile_token);
-      const hash  = await crypto.subtle.digest('SHA-256', bytes);
-      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-    })();
-    const nonceKey = `tt_nonce:${nonceHash}`;
-    let nonceSeen = false;
-    try {
-      const existing = await env.STATUS_KV.get(nonceKey);
-      nonceSeen = existing !== null;
-    } catch (e) {
-      console.error('Turnstile nonce KV read failed, proceeding:', e);
-    }
-    if (nonceSeen) {
-      logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: 0, errorMsg: 'turnstile_nonce_replay' });
-      return err(429, 'Turnstile token already used');
-    }
-    env.STATUS_KV.put(nonceKey, '1', { expirationTtl: 600 }).catch(e =>
-      console.error('Turnstile nonce KV write failed:', e)
-    );
+  // Resume-issue path removed (Cred-Fix-1) — resume uses the upload session token.
+  if (body.resume === true) {
+    logEvent(env, { endpoint: 'credential_issue', tier: 'resume_rejected', status: 400, errorMsg: 'resume_issue_removed' });
+    return err(400, 'Resume credential issuance is no longer supported');
   }
+
+  // Fail closed before Turnstile is consumed if the commitment key is absent.
+  if (!env.COMMITMENT_KEY) {
+    console.error('credential_issue: COMMITMENT_KEY not configured');
+    return err(500, 'Credential issuance not configured');
+  }
+
+  // ── Turnstile required ───────────────────────────────────────────────
+  const { turnstile_token } = body;
+  if (!turnstile_token) return err(400, 'Missing turnstile_token or blinded_message');
+
+  const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
+  if (!turnstileOk) return err(403, 'Turnstile verification failed');
+
+  // ── Turnstile nonce binding (S42d) ──────────────────────────────────────
+  const nonceHash = await (async () => {
+    const bytes = new TextEncoder().encode(turnstile_token);
+    const hash  = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  })();
+  const nonceKey = `tt_nonce:${nonceHash}`;
+  let nonceSeen = false;
+  try {
+    const existing = await env.STATUS_KV.get(nonceKey);
+    nonceSeen = existing !== null;
+  } catch (e) {
+    console.error('Turnstile nonce KV read failed, proceeding:', e);
+  }
+  if (nonceSeen) {
+    logEvent(env, { endpoint: 'credential_issue', tier: 'rate_limited', status: 429, latency: 0, errorMsg: 'turnstile_nonce_replay' });
+    return err(429, 'Turnstile token already used');
+  }
+  env.STATUS_KV.put(nonceKey, '1', { expirationTtl: 600 }).catch(e =>
+    console.error('Turnstile nonce KV write failed:', e)
+  );
 
   const issuedTier      = EXPIRY_WINDOWS[tier] !== undefined ? tier : 'free';
   const expiryWindow    = EXPIRY_WINDOWS[issuedTier];
@@ -1400,7 +1377,7 @@ async function handleCredentialIssue(request, env) {
 
   const uuid = crypto.randomUUID();
 
-  const commitment = await computeCommitment(uuid, issuedTier, expiryWindow);
+  const commitment = await computeCommitment(env.COMMITMENT_KEY, uuid, issuedTier, expiryWindow);
 
   let signedPoint, mintPubkey;
   try {
@@ -1418,402 +1395,6 @@ async function handleCredentialIssue(request, env) {
     issued_tier:      issuedTier,
     commitment,
   });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Upload — PUT /upload/:uuid/:chunk
-//
-// SW5 additions:
-//   - Reads X-Transfer-Ref header at chunk 0; stored in manifest as
-//     api_transfer_ref for API-tier transfers (used in acceptance receipt).
-//   - Reads X-Api-Live-Key header at chunk 0; stored in manifest as
-//     api_live_key for API-tier transfers (used in receipts).
-//   - After manifest-write (chunk 0 putManifest): emits cargo.accepted receipt
-//     via ctx.waitUntil for API-tier transfers with a registered webhook.
-//   - After upload_complete (subsequent chunks): receipt emission already
-//     happened at chunk 0 — no re-emit needed here.
-// ─────────────────────────────────────────────────────────────────────────────
-// Share-6-6b: handleUpload is DEAD CODE — route retired above. Kept for reference; remove in a future cleanup pass.
-async function handleUpload(request, env, ctx, uuid, chunkIndex) {
-  // ── UUID format validation (S41) ──────────────────────────────────────────
-  if (!UUID_RE.test(uuid)) {
-    logEvent(env, { endpoint: 'upload', status: 400, errorMsg: 'invalid_uuid' });
-    return err(400, 'Invalid transfer ID');
-  }
-
-  const isFirstChunk = chunkIndex === 0;
-
-  // ── MIME type gate (S40) — chunk 0 only ───────────────────────────────────
-  if (isFirstChunk) {
-    const rawContentType = request.headers.get('Content-Type') ?? '';
-    const mimeType = rawContentType.split(';')[0].trim().toLowerCase();
-
-    if (!mimeType) {
-      logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 415, errorMsg: 'mime_missing' });
-      return err(415, 'Content-Type header is required');
-    }
-
-    if (MIME_DENYLIST.has(mimeType)) {
-      logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 415, errorMsg: 'mime_denied' });
-      return err(415, `File type '${mimeType}' is not permitted`);
-    }
-  }
-
-  // ── Chunk size hard cap ────────────────────────────────────────────────────
-  const declaredLength = parseInt(request.headers.get('Content-Length') ?? '0', 10);
-  if (declaredLength > CHUNK_SIZE_MAX) {
-    logEvent(env, { endpoint: 'upload', tier: 'unknown', status: 413, errorMsg: 'chunk_too_large' });
-    return err(413, `Chunk exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
-  }
-
-  // ── Resolve tier from Supabase (S39) ──────────────────────────────────────
-  const email = (request.headers.get('X-Email') ?? '').trim().toLowerCase();
-  let resolvedTier = 'free';
-  if (email) {
-    try {
-      const subRes = await supabaseFetch(
-        env, 'GET',
-        `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&status=eq.active&select=tier&limit=1`
-      );
-      if (subRes.ok) {
-        const rows = await subRes.json();
-        if (rows.length > 0 && rows[0].tier) {
-          resolvedTier = rows[0].tier;
-        }
-      }
-    } catch (e) {
-      console.error('Tier resolution failed, defaulting to free:', e);
-    }
-  }
-
-  const tierCap = TIER_CAPS[resolvedTier] ?? TIER_CAPS.free;
-
-  // ── Cumulative byte cap via KV (S39) ──────────────────────────────────────
-  const kvKey = `upload_bytes:${uuid}`;
-  let bytesAlreadyWritten = 0;
-  try {
-    const stored = await env.STATUS_KV.get(kvKey);
-    bytesAlreadyWritten = stored ? parseInt(stored, 10) : 0;
-  } catch (e) {
-    console.error('KV byte counter read failed, proceeding:', e);
-  }
-
-  const projectedTotal = bytesAlreadyWritten + declaredLength;
-  if (projectedTotal > tierCap) {
-    logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'tier_cap_exceeded' });
-    return err(413, `Upload would exceed ${resolvedTier} tier cap of ${tierCap} bytes`);
-  }
-
-  if (isFirstChunk) {
-    const credential  = request.headers.get('X-Cashu-Credential');
-    const blake3Root  = request.headers.get('X-Blake3-Root');
-    const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
-    const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
-    const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
-    const chunkHash   = request.headers.get('X-Blake3-Chunk-Hash');
-    const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
-    const rawFileName = request.headers.get('X-File-Name') ?? '';
-
-    // ── SW5: read transfer_ref and live_key for API-tier receipt emission ─
-    // X-Transfer-Ref: client attribution string (max 128 chars, sanitised).
-    // X-Api-Live-Key: rfs_live_… — identifies the API client for receipt sig.
-    // Both stored in manifest for API-tier transfers only. Never for consumer tier.
-    const rawTransferRef = request.headers.get('X-Transfer-Ref') ?? null;
-    const apiTransferRef = rawTransferRef
-      ? String(rawTransferRef).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
-      : null;
-    const apiLiveKey = request.headers.get('X-Api-Live-Key') ?? null;
-
-    const sanitisedFileName = rawFileName
-      .replace(/[/\\]/g, '')
-      .replace(/[\u0000-\u001F\u007F]/g, '')
-      .replace(/[\u202A-\u202E\u2066-\u2069]/g, '')
-      .trim();
-    const fileNameBytes = new TextEncoder().encode(sanitisedFileName);
-    const fileName = fileNameBytes.length > 255
-      ? new TextDecoder().decode(fileNameBytes.slice(0, 255))
-      : (sanitisedFileName || `refueler-${uuid.slice(0, 8)}`);
-
-    const commitment = request.headers.get('X-Credential-Commitment') ?? '';
-    const issuedTier = (request.headers.get('X-Issued-Tier') ?? 'free').trim().toLowerCase();
-
-    if (!credential || !blake3Root || !totalChunks || !totalBytes || !expiryTs || !chunkHash) {
-      return err(400, 'Missing required headers');
-    }
-
-    // ── UUID-bound commitment verification (S42c) ─────────────────────────
-    if (!commitment) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 401, errorMsg: 'credential_commitment_missing' });
-      return err(401, 'Missing credential commitment');
-    }
-
-    let expectedCommitment;
-    if (isCharteredTier(issuedTier)) {
-      const API_EXPIRY_WINDOW = 90 * 24 * 3600;
-      expectedCommitment = await computeApiCommitment(uuid, TIERS.CHARTERED, API_EXPIRY_WINDOW);
-    } else {
-      const canonicalTier  = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
-      const expectedWindow = EXPIRY_WINDOWS[canonicalTier];
-      expectedCommitment   = await computeCommitment(uuid, canonicalTier, expectedWindow);
-    }
-
-    const commitmentBytes         = new TextEncoder().encode(commitment);
-    const expectedCommitmentBytes = new TextEncoder().encode(expectedCommitment);
-    const commitmentMatch = commitmentBytes.length === expectedCommitmentBytes.length &&
-      crypto.subtle.timingSafeEqual
-        ? await (async () => {
-            try { return crypto.subtle.timingSafeEqual(commitmentBytes, expectedCommitmentBytes); }
-            catch { return commitment === expectedCommitment; }
-          })()
-        : commitment === expectedCommitment;
-    if (!commitmentMatch) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 401, errorMsg: 'credential_uuid_mismatch' });
-      return err(401, 'Credential commitment mismatch');
-    }
-
-    // ── Total chunks upper bound (S42) ────────────────────────────────────
-    const TOTAL_CHUNKS_MAX = 10_000;
-    if (totalChunks > TOTAL_CHUNKS_MAX) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'total_chunks_exceeded' });
-      return err(400, `X-Total-Chunks exceeds maximum of ${TOTAL_CHUNKS_MAX}`);
-    }
-
-    // ── Expiry timestamp tier validation (S42) ────────────────────────────
-    const EXPIRY_MAX_SECONDS = {
-      free:     7  * 24 * 3600,
-      creative: 30 * 24 * 3600,
-      max:      90 * 24 * 3600,
-      api:      90 * 24 * 3600,
-    };
-    const nowSeconds  = Math.floor(Date.now() / 1000);
-    const maxWindow   = EXPIRY_MAX_SECONDS[resolvedTier] ?? EXPIRY_MAX_SECONDS.free;
-    const maxExpiryTs = nowSeconds + maxWindow;
-    if (expiryTs <= nowSeconds) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'expiry_in_past' });
-      return err(400, 'X-Expiry-Timestamp is in the past');
-    }
-    if (expiryTs > maxExpiryTs) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'expiry_exceeds_tier' });
-      return err(400, `X-Expiry-Timestamp exceeds maximum window for ${resolvedTier} tier (${maxWindow / 86400} days)`);
-    }
-
-    // ── Early cap check against declared total (S39) ───────────────────────
-    if (totalBytes > tierCap) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'declared_total_exceeds_cap' });
-      return err(413, `Declared total ${totalBytes} bytes exceeds ${resolvedTier} tier cap of ${tierCap} bytes`);
-    }
-
-    let serial;
-    try {
-      const credentialObj = JSON.parse(credential);
-      serial = await verifyCredential(credentialObj, env.MINT_PRIVATE_KEY);
-    } catch {
-      return err(401, 'Invalid credential');
-    }
-
-    const spentRes = await supabaseFetch(env, 'GET', `/rest/v1/spent_tokens?serial=eq.${encodeURIComponent(serial)}&select=serial`);
-    if (!spentRes.ok) return err(502, 'Ledger unavailable');
-    const spent = await spentRes.json();
-
-    if (spent.length > 0) {
-      supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
-        serial,
-        uuid,
-        attempted_at: new Date().toISOString(),
-      }).then(r => {
-        if (!r.ok) r.text().then(t => console.error('double_spend_attempts write failed:', t));
-      }).catch(e => console.error('double_spend_attempts fetch error:', e));
-
-      return err(409, 'Credential already spent');
-    }
-
-    const chunkBody = await request.arrayBuffer();
-
-    if (chunkBody.byteLength > CHUNK_SIZE_MAX) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 413, errorMsg: 'chunk_body_too_large' });
-      return err(413, `Chunk body exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
-    }
-
-    const hashOk = await verifyChunkHash(new Uint8Array(chunkBody), chunkHash);
-    if (!hashOk) return err(400, 'Chunk hash mismatch');
-
-    await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
-
-    try {
-      await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
-    } catch (e) {
-      console.error('KV byte counter write failed:', e);
-    }
-
-    // ── TG: tidal header processing (chunk 0 only) ────────────────────────
-    const destroyAfterDownload = request.headers.get('X-Destroy-After-Download') === '1';
-    const availableFromHeader  = request.headers.get('X-Available-From');
-    const availableUntilHeader = request.headers.get('X-Available-Until');
-    const hasTidalHeaders = availableFromHeader !== null || availableUntilHeader !== null;
-
-    if (hasTidalHeaders && !isTidalPermitted(resolvedTier)) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 403, errorMsg: 'tidal_tier_gate' });
-      return err(403, 'Availability scheduling requires a paid subscription');
-    }
-
-    let availableFromTs = null;
-    let availableUntilTs = null;
-
-    if (availableFromHeader !== null) {
-      availableFromTs = parseInt(availableFromHeader, 10);
-      if (isNaN(availableFromTs)) return err(400, 'X-Available-From must be a unix timestamp (integer)');
-    }
-    if (availableUntilHeader !== null) {
-      availableUntilTs = parseInt(availableUntilHeader, 10);
-      if (isNaN(availableUntilTs)) return err(400, 'X-Available-Until must be a unix timestamp (integer)');
-    }
-
-    const tidalInvariantError = validateTidalHeaders(
-      availableFromTs,
-      availableUntilTs,
-      Math.floor(Date.now() / 1000),
-      expiryTs
-    );
-    if (tidalInvariantError) {
-      logEvent(env, { endpoint: 'upload', tier: resolvedTier, status: 400, errorMsg: 'tidal_invariant_violation' });
-      return err(400, tidalInvariantError);
-    }
-
-    const manifest = createManifest({
-      uuid,
-      tier: resolvedTier,
-      totalChunks,
-      totalBytes,
-      expiryTimestamp: expiryTs,
-      blake3Root,
-      p2shSecretHash: p2shHash,
-    });
-    manifest.file_name = fileName;
-    manifest.chunks_received = [0];
-
-    // Apply TG fields
-    if (destroyAfterDownload) manifest.pending_destruction = false; // armed
-    if (availableFromTs !== null)  manifest.available_from_timestamp  = availableFromTs;
-    if (availableUntilTs !== null) manifest.available_until_timestamp = availableUntilTs;
-
-    // ── SW5: store API-tier receipt fields in manifest ────────────────────
-    // api_live_key and api_transfer_ref are stored for API-tier transfers only.
-    // They are needed when emitting the collection receipt at download time
-    // (manifest is the only durable store at that point).
-    // Consumer-tier manifests never carry these fields.
-    const manifestNowSeconds = Math.floor(Date.now() / 1000);
-    if (isCharteredTier(issuedTier) && apiLiveKey) {
-      manifest.api_live_key      = apiLiveKey;
-      manifest.api_accepted_at   = manifestNowSeconds;
-      if (apiTransferRef) manifest.api_transfer_ref = apiTransferRef;
-    }
-
-    await putManifest(env.BUCKET, uuid, manifest);
-
-    // ── Execution Dock: write dock_index KV entry (TG-4) ──────────────────
-    const dockTtl = (expiryTs - Math.floor(Date.now() / 1000)) + 48 * 3600 + 3600;
-    env.STATUS_KV.put(
-      `dock_index:${uuid}`,
-      JSON.stringify({
-        expiry_timestamp: expiryTs,
-        tier:             resolvedTier,
-        file_name:        fileName,
-        created_at:       Math.floor(Date.now() / 1000),
-      }),
-      { expirationTtl: Math.max(dockTtl, 3600) }
-    ).catch(e => console.error('Execution Dock KV write failed:', e));
-
-    const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
-    if (!meltRes.ok) console.error('NUT-07 melt failed:', serial, await meltRes.text());
-
-    // ── SW5: emit cargo.accepted receipt ─────────────────────────────────
-    // Fired at manifest-write transition (chunk 0 putManifest above).
-    // API-tier only: we need a live_key + webhook registration to sign and deliver.
-    // A 409 resume-of-complete does not re-emit — this path only reached on
-    // fresh chunk-0 writes that are not resume paths (upload_complete guard).
-    // ctx.waitUntil — receipt is notification, never control flow.
-    if (isCharteredTier(issuedTier) && apiLiveKey) {
-      ctx.waitUntil(
-        (async () => {
-          try {
-            const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
-            if (apiKeyHash) {
-              emitReceipt(env, ctx, {
-                receipt_type:     'acceptance',
-                event:            'cargo.accepted',
-                live_key:         apiLiveKey,
-                uuid,
-                transfer_ref:     apiTransferRef,
-                size_bytes:       totalBytes,
-                chunk_count:      totalChunks,
-                issued_at:        manifestNowSeconds,
-                accepted_at:      manifestNowSeconds,
-                expiry_timestamp: expiryTs,
-                apiKeyHash,
-                // wh_created_at resolved inside emitReceipt via wh_config_ KV lookup
-              });
-            }
-          } catch (e) {
-            console.error('SW5 cargo.accepted emit error:', e);
-          }
-        })()
-      );
-    }
-
-    return json({ ok: true, chunk: 0, uuid });
-
-  } else {
-    // ── Subsequent chunks ──────────────────────────────────────────────────
-    const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
-    if (oversize) {
-      logEvent(env, { endpoint: 'upload', status: 502, errorMsg: 'manifest_oversize' });
-      return err(502, 'Transfer manifest exceeds size limit');
-    }
-    if (!manifest) return err(404, 'Transfer not found');
-    if (manifest.upload_complete) return err(409, 'Upload already complete');
-
-    const now = Math.floor(Date.now() / 1000);
-    if (now > manifest.expiry_timestamp) return err(410, 'Transfer expired');
-
-    const chunkHashHeader = request.headers.get('X-Blake3-Chunk-Hash');
-    if (!chunkHashHeader) return err(400, 'Missing X-Blake3-Chunk-Hash');
-
-    const chunkBody = await request.arrayBuffer();
-
-    if (chunkBody.byteLength > CHUNK_SIZE_MAX) {
-      logEvent(env, { endpoint: 'upload', tier: manifest.tier ?? resolvedTier, status: 413, errorMsg: 'chunk_body_too_large' });
-      return err(413, `Chunk body exceeds maximum size of ${CHUNK_SIZE_MAX} bytes`);
-    }
-
-    const hashOk = await verifyChunkHash(new Uint8Array(chunkBody), chunkHashHeader);
-    if (!hashOk) return err(400, 'Chunk hash mismatch');
-
-    await env.BUCKET.put(`${uuid}/${String(chunkIndex).padStart(4, '0')}`, chunkBody);
-
-    try {
-      await env.STATUS_KV.put(kvKey, String(bytesAlreadyWritten + chunkBody.byteLength), { expirationTtl: 86400 });
-    } catch (e) {
-      console.error('KV byte counter write failed:', e);
-    }
-
-    if (chunkIndex >= manifest.total_chunks) {
-      logEvent(env, { endpoint: 'upload', tier: manifest.tier ?? resolvedTier, status: 400, errorMsg: 'chunk_index_out_of_bounds' });
-      return err(400, 'Chunk index exceeds declared total');
-    }
-
-    manifest.chunks_received.push(chunkIndex);
-    if (manifest.chunks_received.length === manifest.total_chunks) {
-      manifest.upload_complete = true;
-      try {
-        await env.STATUS_KV.delete(kvKey);
-      } catch (e) {
-        console.error('KV byte counter delete failed:', e);
-      }
-    }
-    await putManifest(env.BUCKET, uuid, manifest);
-
-    return json({ ok: true, chunk: chunkIndex, uuid });
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1903,9 +1484,8 @@ async function handleMeta(request, env, uuid) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Share-6-1 — direct-to-R2 upload: initiate + next-batch + presign smoke test.
 //
-// Additive block. The legacy PUT /upload/:uuid/:chunk path (handleUpload above)
-// is untouched and remains the live consumer path until the Share-6-6 cutover
-// (gated on Share-6-5 / B9-3 download verification). Nothing here changes it.
+// The legacy PUT /upload/:uuid/:chunk path was retired at Share-6-6b and its
+// handler removed at Cred-Fix-1. This is the only upload path.
 //
 // Flow (Share-6-spec §3):
 //   POST /upload/:uuid/initiate  → Cashu verify+spend once, size-cap, credit
@@ -1916,9 +1496,8 @@ async function handleMeta(request, env, uuid) {
 //   POST /upload/:uuid/finalise  → Share-6-3 (not this session).
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Canonical expiry ceilings (seconds), keyed on resolvedTier. Mirrors the local
-// EXPIRY_MAX_SECONDS inside handleUpload — kept separate so the live path is
-// untouched. free/creative/max/api are the live Stripe-axis logic keys.
+// Canonical expiry ceilings (seconds), keyed on resolvedTier.
+// free/creative/max/api are the live Stripe-axis logic keys.
 const INITIATE_EXPIRY_MAX = {
   free:     7  * 24 * 3600,
   creative: 30 * 24 * 3600,
@@ -2016,6 +1595,12 @@ async function handleInitiate(request, env, ctx, uuid) {
     logEvent(env, { endpoint: 'upload_initiate', status: 401, errorMsg: 'credential_commitment_missing' });
     return err(401, 'Missing credential commitment');
   }
+  // Fail closed (before the test-credential flag is consumed) if the key is absent.
+  if (!env.COMMITMENT_KEY) {
+    console.error('upload_initiate: COMMITMENT_KEY not configured');
+    logEvent(env, { endpoint: 'upload_initiate', status: 503, errorMsg: 'commitment_key_missing' });
+    return err(503, 'Upload temporarily unavailable');
+  }
 
   // ── Share-Admin-1: test credential KV bypass ──────────────────────────────
   // Issued by POST /admin/test-credential. If present with initiated:false, skip
@@ -2044,25 +1629,10 @@ async function handleInitiate(request, env, ctx, uuid) {
     // Non-fatal — fall through to normal path
   }
 
-  // ── Resolve tier LIVE from Supabase — never issued_tier for the cap ────────
-  const email = (request.headers.get('X-Email') ?? '').trim().toLowerCase();
-  let resolvedTier = 'free';
-  if (!isTestCredential) {
-    if (email) {
-      try {
-        const subRes = await supabaseFetch(
-          env, 'GET',
-          `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&status=eq.active&select=tier&limit=1`
-        );
-        if (subRes.ok) {
-          const rows = await subRes.json();
-          if (rows.length > 0 && rows[0].tier) resolvedTier = rows[0].tier;
-        }
-      } catch (e) {
-        console.error('Tier resolution failed, defaulting to free:', e);
-      }
-    }
-  }
+  // ── Resolved tier — never issued_tier for the cap ─────────────────────────
+  // Cred-Fix-1: no request header selects a tier. Every consumer upload is
+  // 'free' until B12-4a resolves paid tiers from an authenticated session.
+  const resolvedTier = 'free';
   // For test credentials, use the stored cap_bytes directly; TIER_CAPS is not consulted.
   const tierCap = isTestCredential
     ? (testCredCapBytes ?? (250 * 1024 * 1024 * 1024))
@@ -2072,10 +1642,10 @@ async function handleInitiate(request, env, ctx, uuid) {
   let expectedCommitment;
   if (isCharteredTier(issuedTier)) {
     const API_EXPIRY_WINDOW = 90 * 24 * 3600;
-    expectedCommitment = await computeApiCommitment(uuid, TIERS.CHARTERED, API_EXPIRY_WINDOW);
+    expectedCommitment = await computeCommitment(env.COMMITMENT_KEY, uuid, TIERS.CHARTERED, API_EXPIRY_WINDOW);
   } else {
     const canonicalTier  = EXPIRY_WINDOWS[issuedTier] !== undefined ? issuedTier : 'free';
-    expectedCommitment   = await computeCommitment(uuid, canonicalTier, EXPIRY_WINDOWS[canonicalTier]);
+    expectedCommitment   = await computeCommitment(env.COMMITMENT_KEY, uuid, canonicalTier, EXPIRY_WINDOWS[canonicalTier]);
   }
   if (!ctEqual(commitment, expectedCommitment)) {
     logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 401, errorMsg: 'credential_uuid_mismatch' });

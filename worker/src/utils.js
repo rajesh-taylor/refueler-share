@@ -81,7 +81,7 @@ export function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Email, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Upload-Session, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Api-Sign-Key, X-Transfer-Ref',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Upload-Session, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Api-Sign-Key, X-Transfer-Ref',
     'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp',
   };
 }

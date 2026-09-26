@@ -38,6 +38,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { issueBlindSignature } from '../nut00.js';
+import { computeCommitment } from '../commitment.js';
 import { TIERS, isCharteredTier } from '../tiers.js';
 
 // ─── Module-local helpers (mirrors index.js / admin.js) ─────────────────────
@@ -60,13 +61,6 @@ const DEFAULT_CAP_BYTES       = 250 * 1024 * 1024 * 1024; // 250 GiB
 const DEFAULT_EXPIRES_SECONDS = 2 * 3600;                 // 2 h
 const MAX_EXPIRES_SECONDS     = 24 * 3600;                // 24 h hard ceiling
 const API_EXPIRY_WINDOW       = 90 * 24 * 3600;           // chartered commitment window (mirrors index.js)
-
-// ─── Commitment — mirrors computeApiCommitment in index.js ──────────────────
-async function computeApiCommitment(uuid, tier, expiryWindow) {
-  const input = new TextEncoder().encode(`${uuid}:${tier}:${expiryWindow}`);
-  const hash  = await crypto.subtle.digest('SHA-256', input);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
 export async function handleTestCredential(request, env) {
@@ -109,7 +103,13 @@ export async function handleTestCredential(request, env) {
   // ── UUID + commitment ─────────────────────────────────────────────────────
   const uuid       = crypto.randomUUID();
   const issuedTier = TIERS.CHARTERED;
-  const commitment = await computeApiCommitment(uuid, issuedTier, API_EXPIRY_WINDOW);
+  let commitment;
+  try {
+    commitment = await computeCommitment(env.COMMITMENT_KEY, uuid, issuedTier, API_EXPIRY_WINDOW);
+  } catch (e) {
+    console.error('handleTestCredential: commitment error:', e);
+    return err(500, 'Credential issuance not configured');
+  }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   const expiresAt  = nowSeconds + expiresInSeconds;

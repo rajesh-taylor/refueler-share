@@ -1,6 +1,7 @@
 // blake3.js — server-side BLAKE3 chunk verification
 // Replaces the passthrough stub. Calls blake3Hash() from the Workers WASM wrapper.
-// verifyChunkHash is called per-chunk in handleUpload (index.js lines 326 + 353).
+// verifyChunkHash had its only caller in handleUpload (removed Cred-Fix-1); kept
+// with its tests. Live chunk verification is handlers/download_verify.js.
 
 import { blake3Hash } from './blake3_worker.js';
 
