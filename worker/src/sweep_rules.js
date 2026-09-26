@@ -30,9 +30,9 @@ export const ACTION_CAP              = 25;                                  // t
 export const DELETE_BATCH            = 1000;                                // R2 delete() max keys per call
 
 // UUIDs the sweep must never touch, whatever dry_run says. Add / remove here.
-export const SWEEP_PROTECTED_UUIDS = new Set([
-  '3dcccb35-5463-46ed-9f23-41cf217421d9', // 250 GiB soak transfer (Share-Admin-2) — Rajesh confirms before removal
-]);
+// Empty since Share-Soak-3: the 250 GiB soak (3dcccb35…) was deleted at Soak-2.
+// New soaks need no entry — in-flight (<7 d) and unexpired transfers are never swept.
+export const SWEEP_PROTECTED_UUIDS = new Set([]);
 
 // ── Pure rules ───────────────────────────────────────────────────────────────
 

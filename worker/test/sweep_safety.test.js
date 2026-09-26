@@ -4,6 +4,7 @@
 //   UUID · act on more than 25 transfers in one run.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { SWEEP_PROTECTED_UUIDS } from '../src/sweep_rules.js';
 import { makeBucket, makeKV, NOW, DAY, FULL, U, SOAK, transfer, complete, partial, dock, sweep } from './_r2_mock.js';
 
 const flat = (bucket) => bucket._log.deletes.flat();
@@ -34,6 +35,10 @@ describe('an in-flight upload younger than 7 days is never touched', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('protected soak UUID', () => {
+  // The live list is empty (Share-Soak-3); protect a test UUID for these cases only.
+  beforeEach(() => SWEEP_PROTECTED_UUIDS.add(SOAK));
+  afterEach(() => SWEEP_PROTECTED_UUIDS.delete(SOAK));
+
   it.each([
     ['looks stale',   () => transfer(SOAK, { manifest: partial(SOAK, { created_at: NOW - 30 * DAY }), uploaded: NOW - 30 * DAY, hashes: true })],
     ['looks expired', () => transfer(SOAK, { manifest: complete(SOAK, { expiry_timestamp: NOW - 9 * DAY }), hashes: true })],

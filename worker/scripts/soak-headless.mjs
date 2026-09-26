@@ -68,7 +68,16 @@ function randomChunk(size) {
 // will hang the promise forever, with no resolution and no throw, so it never
 // enters the retry path. This wraps every request with a hard deadline so a
 // stall surfaces as a normal AbortError, which the retry loop already handles.
-const FETCH_TIMEOUT_MS = 30000; // 30s — generous for a 32 MiB PUT, short enough to notice a real stall
+//
+// Control calls (credential, initiate, /urls) keep a short 30 s deadline.
+// Chunk PUTs get their own, much longer one (Share-Soak-3): 32 MiB × 8 in
+// parallel on a home uplink takes ~90 s per chunk, so the old shared 30 s
+// aborted every first attempt and paused the run. Default allows an aggregate
+// upload as slow as 0.5 MiB/s (≈4 Mbit/s) before calling a PUT stalled.
+const FETCH_TIMEOUT_MS = 30000;
+const PUT_TIMEOUT_MS = 1000 * (args['put-timeout-s']
+  ? parseInt(args['put-timeout-s'], 10)
+  : Math.max(120, Math.ceil(chunkMib * concurrency * 2)));
 async function fetchWithTimeout(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -176,7 +185,7 @@ async function uploadOneChunk(i) {
           method: 'PUT',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: payload,
-        });
+        }, PUT_TIMEOUT_MS);
         if (putRes.ok) { lastErr = null; break; }
         if (putRes.status < 500) {
           const body = await putRes.text().catch(() => '');
@@ -203,8 +212,10 @@ async function uploadOneChunk(i) {
     succeeded++;
     bytesUploaded += chunkBytes;
     if (succeeded % 100 === 0 || succeeded === totalChunks) {
-      const elapsed = Math.round((Date.now() - tStart) / 1000);
-      log(`${succeeded}/${totalChunks} chunks — ${fmtBytes(bytesUploaded)} in ${elapsed}s`);
+      const elapsed = Math.max(1, Math.round((Date.now() - tStart) / 1000));
+      const rate    = bytesUploaded / elapsed;
+      const etaMin  = Math.round((totalBytes - bytesUploaded) / rate / 60);
+      log(`${succeeded}/${totalChunks} chunks — ${fmtBytes(bytesUploaded)} in ${elapsed}s — ${fmtBytes(rate)}/s — ETA ${etaMin} min`);
     }
     return true;
   } catch (e) {
@@ -242,7 +253,7 @@ function printFinalTally() {
 // ─── Main ─────────────────────────────────────────────────────────────────
 (async () => {
   try {
-    log(`▶ Starting headless soak upload — ${fmtBytes(totalBytes)}, ${totalChunks} chunks, concurrency=${concurrency}`);
+    log(`▶ Starting headless soak upload — ${fmtBytes(totalBytes)}, ${totalChunks} chunks, concurrency=${concurrency}, PUT timeout ${PUT_TIMEOUT_MS / 1000}s`);
 
     // Step 1: credential
     const { blinded_message } = await blindedMessage();

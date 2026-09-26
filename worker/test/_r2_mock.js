@@ -1,5 +1,5 @@
 import { handleOrphanSweep } from 'src/handlers/orphan_sweep.js';
-import { SWEEP_PROTECTED_UUIDS, CHUNK_SIZE } from 'src/sweep_rules.js';
+import { CHUNK_SIZE } from 'src/sweep_rules.js';
 
 // test/_r2_mock.js — in-memory R2 bucket + KV + sweep fixtures for the B12-1 tests (not a test file).
 //   bucket._log.deletes = one array per delete() call (R2 batch shape)
@@ -65,7 +65,7 @@ export function makeKV(seed = {}) {
 export const NOW  = 1_800_000_000;
 export const DAY  = 86400;
 export const FULL = CHUNK_SIZE + 16;
-export const SOAK = [...SWEEP_PROTECTED_UUIDS][0];
+export const SOAK = 'aaaaaaaa-0000-4000-8000-00000000500a'; // test-only; sweep_safety adds it to SWEEP_PROTECTED_UUIDS
 export const U = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 // ── fixtures ────────────────────────────────────────────────────────────────
