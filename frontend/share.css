@@ -497,16 +497,16 @@ main {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(26, 26, 26, 0.28);   /* Share-DAD-2: light scrim, calm not alarming */
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
 }
 .pre-dl-modal-card {
-  background: var(--card-bg);
+  background: var(--bg);                 /* solid — --card-bg is 4 % alpha and vanished on the scrim */
+  border: 1px solid var(--card-border);
   border-radius: 12px;
-  border-top: 3px solid var(--c-amber);
   max-width: 460px;
   width: 100%;
   padding: 32px 28px 28px;
@@ -525,7 +525,7 @@ main {
   font-size: 18px;
   font-weight: 600;
   color: var(--fg);
-  margin: 0;
+  margin: 0 0 8px;
 }
 .pre-dl-modal-body {
   font-family: var(--sans);

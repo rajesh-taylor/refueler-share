@@ -139,9 +139,8 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   // Populate receiver card  (fileName resolved above — fragment v1 or meta fallback)
   // Share-DAD-2: name hidden until the recipient asks — glancing eyes on a screen
   // see "Encrypted file". The saved file still gets its real name.
-  _renderHiddenFileName(rcFileName, fileName);
-
   const isZip = fileName.toLowerCase().endsWith('.zip');
+  _renderHiddenFileName(rcFileName, fileName, isZip ? 'Encrypted folder' : 'Encrypted file');
   if (isZip) { rcFileIcon.textContent = '📁'; rcFolderNote.classList.remove('hidden'); }
 
   rcSize.textContent = meta.total_bytes ? formatBytes(meta.total_bytes) : '—';
@@ -207,7 +206,7 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   uspText.textContent = 'No account. No email. No history. Your data. Not ours.';
   uspBlock.classList.remove('hidden');
 
-  rcDownloadBtn.addEventListener('click', async () => {
+  const onDownloadClick = async () => {
     receiverCard.style.display = 'none';
 
     const _proceed = async () => {
@@ -246,11 +245,16 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
     };
 
     if (willSelfDestruct) {
-      _showPreDownloadModal(meta.total_bytes ? formatBytes(meta.total_bytes) : null, () => _proceed());
+      // "Not now" returns to the card with the button armed again.
+      _showPreDownloadModal(() => _proceed(), () => {
+        receiverCard.style.display = 'flex';
+        rcDownloadBtn.addEventListener('click', onDownloadClick, { once: true });
+      });
     } else {
       await _proceed();
     }
-  }, { once: true });
+  };
+  rcDownloadBtn.addEventListener('click', onDownloadClick, { once: true });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -481,7 +485,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 
     reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
     if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
-    else if (e.status === 410)  _showDownloadError('This transfer has expired or been deleted. The file is no longer available.', domRefs);
+    else if (e.status === 410)  _showLinkInactive(domRefs);
     else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
     else                        _showDownloadError('Download failed. Please try again.', domRefs);
   }
@@ -530,10 +534,9 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
       return;
     }
 
-    if (res.status === 401 || res.status === 410) {
-      _showDownloadError(res.status === 401
-        ? 'Access denied. This transfer may have expired or the link is incorrect.'
-        : 'This transfer has expired or been deleted. The file is no longer available.', domRefs);
+    if (res.status === 410) { _showLinkInactive(domRefs); return; }
+    if (res.status === 401) {
+      _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
       return;
     }
     if (!res.ok) {
@@ -653,25 +656,22 @@ function _formatDatetime(unixSecs) {
 // Share-DAD-2: the Worker deletes a DAD transfer as soon as the last chunk is
 // served (Share-B11-1, finishDownload) — not on a recipient confirm. The copy
 // says exactly that; there is no confirm step to ask for.
-function _showPreDownloadModal(sizeText, onConfirm) {
+function _showPreDownloadModal(onConfirm, onCancel) {
   const overlay = document.createElement('div');
   overlay.id = 'pre-dl-modal';
   overlay.className = 'pre-dl-modal';
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', 'Download warning');
+  overlay.setAttribute('aria-labelledby', 'pre-dl-modal-heading');
   overlay.innerHTML = `
     <div class="pre-dl-modal-card">
-      <div class="pre-dl-modal-icon" aria-hidden="true">⚠️</div>
-      <p class="pre-dl-modal-heading">This transfer is deleted after download</p>
-      <p class="pre-dl-modal-body"></p>
-      <button id="pre-dl-modal-btn" class="btn btn-primary btn-full">I understand — download</button>
+      <p class="pre-dl-modal-heading" id="pre-dl-modal-heading">This transfer is deleted after download</p>
+      <button id="pre-dl-modal-btn" class="btn btn-primary btn-full">Download</button>
+      <button id="pre-dl-modal-cancel" class="btn btn-ghost btn-full">Not now</button>
     </div>`;
-  overlay.querySelector('.pre-dl-modal-body').textContent =
-    'It is removed from Refueler\'s servers as soon as the download finishes, and this link stops working. '
-    + (sizeText ? `Size: ${sizeText} — make sure you have room to save it.` : 'Make sure you have room to save it.');
   document.body.appendChild(overlay);
   document.getElementById('pre-dl-modal-btn').addEventListener('click', () => { overlay.remove(); onConfirm(); }, { once: true });
+  document.getElementById('pre-dl-modal-cancel').addEventListener('click', () => { overlay.remove(); onCancel(); }, { once: true });
 }
 
 function _showDeletedNotice(domRefs) {
@@ -686,8 +686,8 @@ function _showDeletedNotice(domRefs) {
   dlSignoff.insertAdjacentElement('beforebegin', gate);
 }
 
-function _renderHiddenFileName(rcFileName, fileName) {
-  rcFileName.textContent = 'Encrypted file';
+function _renderHiddenFileName(rcFileName, fileName, hiddenLabel) {
+  rcFileName.textContent = hiddenLabel;
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'rc-reveal-btn';
@@ -695,7 +695,7 @@ function _renderHiddenFileName(rcFileName, fileName) {
   btn.setAttribute('aria-pressed', 'false');
   btn.addEventListener('click', () => {
     const shown = btn.getAttribute('aria-pressed') === 'true';
-    rcFileName.textContent = shown ? 'Encrypted file' : fileName;
+    rcFileName.textContent = shown ? hiddenLabel : fileName;
     btn.textContent        = shown ? 'Show name' : 'Hide name';
     btn.setAttribute('aria-pressed', String(!shown));
   });
@@ -703,6 +703,8 @@ function _renderHiddenFileName(rcFileName, fileName) {
 }
 
 function _showLinkInactive(domRefs) {
+  domRefs.downloadCard.classList.add('hidden');   // mid-download 410 lands here too
+  if (document.getElementById('link-inactive-card')) return;
   const card = document.createElement('div');
   card.id = 'link-inactive-card';
   card.className = 'card link-inactive-card';
