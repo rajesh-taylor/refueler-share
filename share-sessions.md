@@ -130,7 +130,7 @@
 
 **Do-not-retry (RU/SYNC):**
 - DO NOT use `fflate.zip()` — `fflate.Zip` streaming only
-- DO NOT require Turnstile on resume credential path — `resume: true` + `resume_uuid` + R2 HEAD check
+- ~~DO NOT require Turnstile on resume credential path — `resume: true` + `resume_uuid` + R2 HEAD check~~ **SUPERSEDED (Cred-Fix-1)** — resume-issue path removed; `resume:true` → 400
 - DO NOT treat HTTP 409 on resume chunk PUT as generic 4xx — transfer already complete
 - DO NOT edit files in `refueler.io/src/share/assets/` directly — GENERATED; edit in `refueler-share/frontend/` then sync
 
@@ -148,7 +148,7 @@
 | TG-5 | `0e51385`+`18d2157` | Tests + smoke. 432 passing. **TG-block closed.** |
 
 **TG do-not-retry:**
-- DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation
+- ~~DO NOT auto-delete R2 on final chunk served — set `pending_destruction: true`, wait for frontend confirmation~~ **SUPERSEDED (B11-1 / DAD-2)** — deletion starts when the last chunk is served, by design
 - DO NOT use the word "Traitor" in any UI copy, tooltip, or aria-label
 - DO NOT compute `X-P2SH-Secret-Hash` with plain BLAKE3 in tests — use `hashSecret()` from `nut11.js`
 - `pending_destruction` flip not reliably observable in local wrangler — test via unit tests only
@@ -237,428 +237,68 @@
 
 ---
 
-## Share-1 · 11 Sep 2026 — Tier Constants Decoupling
+## Forward plans — moved to docs/ (Share-Hygiene-1 · 26 Sep 2026)
 
-| Item | Detail |
-|------|--------|
-| Commit | `refactor(share-1): introduce tiers.js enum, wire api→CHARTERED, decouple display from logic keys` |
-| Files | `worker/src/tiers.js` (new) · `worker/src/index.js` (6 sites) · `worker/src/webhook_reg.js` (1 site) |
-| Tests | 484 — no change (all edits identity-preserving: `TIERS.CHARTERED === 'api'`) |
+- **B7 session plan + SD-block plan** (incl. **SD do-not-retry**) → `docs/B7-SD-plan.md`
+- **Article-Rewrite-1 brief** ("What a subpoena gets") → `docs/Article-Rewrite-1-brief.md`
 
 ---
 
-## Share-2 · 11 Sep 2026 — Tidal gate: paid-vs-free
+## Share-1 → Share-6-6a — compact log (11–25 Sep 2026)
 
-| Item | Detail |
-|------|--------|
-| Commit | `8f12b4e` on branch `share-2-tidal-gate` |
-| Files | `worker/src/manifest_tg.js` (gate + comment only) |
+| Session | Commit | Summary |
+|---|---|---|
+| Share-1 · 11 Sep | `refactor(share-1)` | `worker/src/tiers.js` enum; `TIERS.CHARTERED === 'api'`; display decoupled from logic keys. 484 tests. |
+| Share-2 · 11 Sep | `8f12b4e` (branch `share-2-tidal-gate`) | `PAID_TIERS` = creative + max; availability window is a paid-vs-free gate, never rail-gated. **Deferred to Share-3:** fixture rewrites in `confirm_tg` / `lightning` / `webhook_reg` tests to live wire values, then merge; `handlers/timestamp.js:30` excludes `'citizen'` from permanent record (latent bug). |
+| B9-Opus · 12 Sep | — | Merkle / MMR / SMT / ZK design lock (D-1…D-7). Spec: `merkle-spec-v1.md` (repo root). |
+| SW-MCP-8 · 13 Sep | — | `@refueler/mcp-server` 0.1.0, Apache 2.0, `npm pack --dry-run` clean, READMEs rewritten (both repos). Publish is manual: `cd /Users/rajeshtaylor/Documents/refueler-mcp && npm publish --access public`. **SW-MCP block complete**; SW-MCP-7 gates on B7/NB-4. |
+| B8-Opus · 13 Sep | — | NUT-11 Mode 2 (Locke) design lock. Spec + do-not-retry §9: `docs/B8-spec-v1.md`. |
+| Share-6-Opus · 16 Sep | — | Direct-to-R2 upload architecture lock (presigned PUT, 32 MiB parts, Cashu spent at initiate, integrity at download). Spec + do-not-retry §10: `docs/Share-6-spec-v1.md`. |
+| Share-6-3a · 17 Sep | `b6f4dc4` | Worker `/finalise`: HEAD completeness, `{uuid}/hashes` sidecar, `merkle_root` + `tree_algo`, session spent. |
+| Share-Dash-3 · 18 Sep | reverted | Rewrote navy-office.html from scratch, destroyed the sidebar — rolled back. |
+| Share-Dash-3b · 19 Sep | `911eae8` (refueler-io) | Navy Office + Chambers rename, API & MCP card, client-errors toggle, growth card. |
+| Share-6-3b / 6-3c · 19 Sep | `ec37c17` · `frontend/merkle.js` | Worker + browser Merkle (RFC-6962-unbalanced-BLAKE3), pinned N=1..4 vectors, `selfTest()` gate. |
+| Share-6-3d · 20 Sep | `050998b` · `f97b7d9` | `upload.js` finalise wiring — first real end-to-end send. Flushed: merkle.js missing from sync, `X-Upload-Session` missing from CORS. |
+| Share-6-4a/4b · 20 Sep | — | Single-file resume close; folder auto-discard; `FOLDER_ZIP_CAP` 2 GiB + pre-zip guard. |
+| Share-6-5a · 20 Sep | deploy `f31dc124` | Worker download verification (B9-3 server half): `isVerifiedPath`, 128-chunk hybrid threshold, `X-Integrity: ciphertext-storage-verified`, 409 shapes. |
+| Share-6-5b · 20–21 Sep | `8761e7c` + refueler-io `75d15c5`/`2e8e632`/`237bdb3` | Recipient card consumes `X-Integrity` + 409s. "Ciphertext storage verified" only. |
+| Share-6-5c · 22 Sep | `ae2d391` | CF 1102 CPU limit on noble BLAKE3 → Workers Paid ($5/mo) + `cpu_ms = 300000`. $6 budget alert. |
+| Share-6-6b · 21 Sep | `418d0c9` · `1ff986b` (deploy `924184db`) | **SHARE-503 closed.** Legacy upload route + `USE_DIRECT_R2` retired. `orphan_sweep.js` with `?dry_run`. |
+| Orientation · 22 Sep | — | `@handle.share` vanity URLs parked (Registered/Chartered only). OTS committed value `SHA-256(blake3_root ‖ url_fragment_nonce)` locked. |
+| Share-6-5d · 23 Sep | (in `4e14f37`) | `verifyChunkBody()` → WASM `hashOneShot()` (`worker/src/blake3_wasm.js`); `merkle.js` stays on noble by design. |
+| Share-6-5e · 23 Sep | — | `npm test` runs in workerd (`@cloudflare/vitest-pool-workers`). 566 passed. |
+| Share-Admin-1 · 23 Sep | `35a4808` | 5 GiB soak via `test-upload.html`: 160/160 chunks. Fixed localhost CORS echo, `urls` field, 64 KiB `getRandomValues` cap, 5xx retry. |
+| Share-Admin-2 · 23 Sep | `4e14f37` · `68f1e9b` · `07e5060` | DAD-BUG (`?? null` meta, `waitUntil` flip, explicit null check) · CAP-WARNING-LINK → `/share/plans/` · PHOENIXD-TOGGLE. B10 Navy Office design decisions (now in Master Context §User-facing). |
+| Share-B10-1 · 23 Sep | `fea2690` + refueler-io `d55de19`…`fb841dc` | `/admin/btc-price`, `/admin/growth-snapshot`, billable/pro-bono split, `receiver_ab` → AE (closes B7 snag), growth card 90-day view, issuance modal axes. |
+| Share-Delivery-1 · 24 Sep | — | File delivery protocol → CLAUDE.md. |
+| Share-6-6a · 24–25 Sep | — | 100 GiB soak upload ✓ (3200/3200, 5h 35m). Download-409 → fixed at B10-3. |
 
-**What was done:** `PAID_TIERS` → `new Set(['creative', 'max'])`. Availability window confirmed as paid-vs-free gate — Citizen and Sovereign both permitted, never rail-gated.
+**Still open from this range:**
+- **BTC-PRICE-503** — CoinGecko unreachable from the Worker; `/admin/btc-price` + `refreshBtcRate` cron 503; BTC overlay never renders; `admin_btc_price 503` rows fill the Worker-90d card. Options: longer last-good cache + back-off, CoinGecko demo key, or node feed (post-B7). Both display and governed rate share it.
+- **GROWTH-AXES** — no x date ticks; y max unlabelled (= cumulative Free credentials issued). Add ticks + "credentials issued, cumulative".
+- **GROWTH-FLAG-TOOLTIP** — hover cramped; date to the x-axis at the flag's foot, label + note only, fix right-edge clipping.
+- Navy Office: OTS aggregate widget (scope decision first) · Sandbox → Live stub (wire KV signal from `sandbox.js`).
+- Deferred: rs-theme cookie migration · UPGRADE-CSS · BRAVE-THEME.
+- (CLIENT-ERR-TS-1970 fixed — `navy-office.js` renders `r.ts * 1000`.)
 
-**Deferred to Share-3:** Rewrite `confirm_tg.test.js` (lines 145–147, 151, 474, 478, 482) + `lightning.test.js` (123, 131, 216, 223) + `webhook_reg.test.js` (391) to live wire values (`creative`/`max`) — then merge branch to `main`. `handlers/timestamp.js:30` excludes `'citizen'` from permanent record — latent bug (Citizen is now paid; fix alongside fixtures).
-
----
-
-## B9-Opus · 12 Sep 2026 — Merkle / MMR / SMT / ZK design lock
-
-| Item | Detail |
-|------|--------|
-| Session type | Architecture + design, no code produced |
-| Output | `merkle-spec-v1.md` (refueler-share repo root) |
-| BRIDGE | v9.4 |
-
-Seven decisions locked (D-1…D-7) — full detail in `merkle-spec-v1.md`. Key outcomes:
-- RFC 6962 unbalanced BLAKE3 tree, domain-separated, `chunk_count` committed
-- Chunk hashes in R2 sidecar `{uuid}/hashes` — never inline in manifest
-- Download: sidecar GET → reconstruct root → verify-then-flush per chunk → 409 on mismatch
-- Two-roots distinction permanent: `merkle_root` (ciphertext, Worker-verifiable) vs `blake3PlaintextRoot` (recipient-only, permanently barred from Worker + all receipts)
-- Due-diligence proof = FCA SYSC 6.3 / MLR reg. 40 (not travel rule). MLRO confirmation required.
-
----
-
-## SW-MCP-8 · 13 Sep 2026 — npm distribution, Apache 2.0, trust-boundary READMEs
-
-| Item | Detail |
-|------|--------|
-| Session type | Bounded build — no architecture decisions |
-| Repos | `refueler-mcp` (primary) · `refueler-share` (README only) |
-
-**What was done:**
-- `refueler-mcp/package.json` — `name: "@refueler/mcp-server"`, `version: "0.1.0"`, `license: "Apache-2.0"`, `private: false`, `engines: { node: ">=18" }`, `files: ["src/", "README.md", "LICENSE"]`.
-- `refueler-mcp/LICENSE` — Apache 2.0 full text, copyright 2026 Rajesh Taylor.
-- `refueler-mcp/.npmignore` — excludes `test/`, `scripts/`, `docs/`, `.env*`, `*.test.js`, context files.
-- `npm pack --dry-run` verified: 4 files. Output confirmed clean.
-- `refueler-mcp/README.md` — full rewrite: trust-boundary operator document. All honesty constraints applied.
-- `refueler-share/README.md` — full rewrite: public-facing repo README.
-
-**Publish command (manual — Rajesh runs when ready):**
-```
-cd /Users/rajeshtaylor/Documents/refueler-mcp && npm publish --access public
-```
-
-**SW-MCP block: complete.** SW-MCP-7 (anonymous rail) gates on B7/NB-4. Next: B8-Opus.
-
----
-
-## B7 session plan — Lightning/LNbits + anonymous paid tier
-
-**All B7 sessions from S74 gate on NB-4 (node live).**
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| S74–S74c | Lightning adapter + Invoice creation I–III | `worker/src/lightning.js`. `POST /subscription/lightning`. LNbits BOLT11. KV 25h TTL. |
-| S75–S75c | Webhook endpoint I–IV | `POST /webhook/lightning`. KV lookup. Re-verify GET. Settled-flag dedup. Integration test. |
-| S76–S76d | Credential issuance I–V | NUT-00 BDHKE on settlement. KV 10-min TTL. Poll endpoint. Tier cap. Unit tests. |
-| S77–S77b | Upgrade page rail split I–III | Two-rail structure. Lightning + Stripe cards. Visual parity. |
-| S78–S79a | Frontend Lightning flow I–VI | QR. BOLT11 copy. Countdown. Live GBP/credits rate. Credential poll. Error states. |
-| S80–S80b | Payment privacy table I–III | JSON data. Eleventy partial. Collapsible on upgrade page. |
-| S81–S81b | Dashboard Lightning cards I–III | AE datapoint at settlement. Stub cards. Design pass. Unit tests. |
-| S82–S82a | KV Lightning admin toggle | `lightning_available` flag. Dashboard toggle. Graceful degradation. |
-| S83–S83b | Renewal banner + paid tier activation | 7-day pre-expiry banner. Both rails confirmed live. |
-| S84–S84d | B7 security audit I–V | Invoice expiry. KV races. Credential farming. Webhook replay. Double-issuance. |
-| S85–S87 | LNbits ops verification + LNURL-withdraw + LNbits skinning | Post-node sanity. Gift architecture design. Paper/Carbon decisions. |
-| S91–S92 | CI Level 2 + Article 6 prep | Integration suite in GitHub Actions. "Paying anonymously for file transfer" structure. |
-| S93–S95 | B7 snag sweeps I–III | Theme toggle in modals. `receiver_ab` AE routing fix. Manifest-field minimalism. |
-| S96 | Context file maintenance | `Share-Master-Context.md` split → working memory (≤350L) + `Share-Archive.md`. |
-| S100 | B7 close | Final snag sweep. Context files at target. B8 brief. |
-
-**Buffer pool (5 sessions):** S74d · S76e · S84e · S85b · S100a
-
-**B7 open snags (resolve at S93–S95):**
-- Theme toggle absent from modals
-- `receiver_ab_shown` / `receiver_ab_downloaded` events routed to `/log/error` instead of AE
-
----
-
-## SD-block — Silent Drop (post-B8, post-NB-4)
-
-**S88 complete · 4 Sep 2026.** All design decisions locked. Full Locke (NUT-11 Mode 2) required.
-
-**Prerequisites:** B8 complete. NB-4 (node live). 7-day friend-group soft launch gates public Sovereign access.
-
-**SD-Opus-pre · 12 Sep 2026** — Quay management + multi-client attribution design locked. Per-client Quay link confirmed. Notification model confirmed (webhook API/MCP; polling Sovereign web). Anonymous API/MCP rail market locked. Harbourmaster design pass required before SD4.
-
-| Session | Label | Scope |
-|---------|-------|-------|
-| SD1–SD1b | Lighthouse architecture | KV schema. Opaque token → inbox key. Worker endpoints. UUID isolation. |
-| SD2–SD2b | Sender upload flow | Worker validates token, one-time credential, cargo arrived AE event. |
-| SD3–SD3c | Harbourmaster auth + Deed | NUT-11 Mode 2 login. Keypair + BIP-39 mnemonic. Recovery flow. |
-| SD4–SD4b | Harbourmaster dashboard I–III + mid-block audit | Receipt ledger. Quay management. **Design pass required before SD4.** |
-| SD5–SD5a | Notification + renewal | API/MCP: webhook (`cargo.accepted` per Quay). Sovereign web: polling + badge. SimpleX stub. |
-| SD6–SD6a | Soft launch + findings | 7-day friend-group. P0/P1 fixes. |
-| SD7–SD7a | Source-protection copy + final audit | Gated: SD shipped + VPN scope stated. |
-| SD8 | SD close | Snag sweep. Context trim. B9 brief. Public Sovereign Lightning access enabled. |
-
-**SD do-not-retry:**
-- DO NOT reuse upload credential UUID as cargo UUID — generate separately at Lighthouse layer
-- DO NOT return 402 at `GET /inbox/{token}` — defer quota errors to upload attempt
-- DO NOT use Math.random() in Deed generation — `crypto.getRandomValues()` only
-- DO NOT use "anonymous" for Stripe-rail Silent Drop — private, not anonymous
-- DO NOT design a single shared inbox for multi-client practices — one Quay per client relationship
-
-**Buffer pool (3 sessions):** SD1c · SD3d · SD4c
-
----
-
-## Locked block sequence (updated B8-Opus · 13 Sep 2026)
-
-`Share-6 block (large-upload direct-to-R2) → B8 build → [Hetzner commitment] → NB-2–NB-4 → B7 → SD-block → B9 build (B9-4…B9-8) → B10+`
-
-*(SW-MCP block complete. SW-MCP-7 anonymous-rail tail gates on B7/NB-4. Share-6 is Priority-1 — SHARE-503 blocks all large uploads — and front-loads B9-1/B9-2/B9-3, so the later B9 build resumes at B9-4. B9-Opus design complete; sequenced in `merkle-spec-v1.md` §9.)*
-
-## B8-Opus · 13 Sep 2026 — NUT-11 Mode 2 (Locke) design lock
-
-| Item | Detail |
-|------|--------|
-| Session type | Architecture + design, no code produced |
-| Output | `B8-spec-v1.md` (refueler-share repo root) |
-| BRIDGE | v9.5 |
-
-Seven decisions locked (D-1…D-7) — full detail in `B8-spec-v1.md`. Key outcomes:
-- Deed→Locke derivation: **HKDF** (`salt="refueler.locke.v1"`), reduce/reject-sample to valid secp256k1 scalar. Not BIP-32.
-- Worker check order: **sig → BDHKE → double-spend** (Supabase INSERT always last).
-- Schnorr **BIP-340**, x-only key from the 33-byte P2PK `data`; witness `{signatures:[…]}` verbatim.
-- Locke lifecycle: primary Locke Deed-derived + immutable recovery anchor; KV challenge-response login. **This is the SD3 primitive.**
-- `hashSecret()` (Mode 1, bare SHA-256) unchanged and independent of Mode 2.
-- CDK stays **0.17.2**.
-- Build **direct in refueler-share**, B9-style.
-
-**Do-not-retry additions:** see `B8-spec-v1.md` §9.
-
-## Share-6-Opus · 16 Sep 2026 — Large-upload direct-to-R2 architecture lock
-
-| Item | Detail |
-|------|--------|
-| Session type | Architecture + design, no code produced |
-| Output | `Share-6-spec-v1.md` (refueler-share repo root) |
-| BRIDGE | v9.6 |
-
-Six decisions locked (D-1…D-6) — full detail in `Share-6-spec-v1.md`. Key outcomes:
-- **Upload moves off the Worker edge to R2 direct** via presigned S3 `PutObject` URLs. Worker `initiate`s + `finalise`s only.
-- **Not S3 multipart** — per-object PUT preserves `{uuid}/{iiii}` layout.
-- **Part size 32 MiB, uniform across tiers.**
-- **Cashu verified + spent once at `initiate`** (moved off chunk-0).
-- **Integrity moves entirely to download-time (B9-3):** browser writes `merkle_root` + `{uuid}/hashes` at finalise; Worker reconstructs + 409 on download.
-- **aws4fetch** (in-Worker SigV4 signer). Presigned expiry 6 days; URL batches of 256.
-
-**Do-not-retry additions:** see `Share-6-spec-v1.md` §10.
-
-## Share-6-3a — POST /upload/{uuid}/finalise (Worker only) · 17 Sep 2026
-
-Worker /finalise: X-Upload-Session auth, HEAD completeness sweep, {uuid}/hashes sidecar (raw N×32), manifest merkle_root + tree_algo + upload_complete:true, session KV spent. Commit: `b6f4dc4`
-
-**Do-not-retry / wire contract:**
-- Auth header is `X-Upload-Session` — never `X-Upload-Session-Token`.
-- Finalise body: `{ hashes: [b64url(32B) × N], merkle_root: b64url(32B) }` — hashes is an ARRAY.
-- tree_algo pinned `rfc6962-unbalanced-blake3-v1`.
+**Do-not-retry / wire contract (Share-6):**
+- Finalise auth header is `X-Upload-Session` — never `X-Upload-Session-Token`.
+- Finalise body: `{ hashes: [b64url(32B) × N], merkle_root: b64url(32B) }` — `hashes` is an ARRAY. `tree_algo` pinned `rfc6962-unbalanced-blake3-v1`, not sent by the browser.
 - Sidecar is WRITE-AND-KEEP.
+- New served module ⇒ add it to `bin/lib/share-mirror.sh`. New browser header ⇒ add it to `corsHeaders()`.
+- DO NOT re-chase: finalise HMAC mismatch (false) · Worker missing CORS on `/download` (false — curl confirmed) · Brave "CORS / ERR_FAILED" (Shields / 503 — test in Safari first).
 
-## Build sequence re-chunked · 17 Sep 2026
-
-Model rule: Opus only for first-time crypto; Sonnet for everything specified.
-
-### Navy Office + API & MCP tile (Dash-3 plan)
-
-- Navy Office rename (`dashboard.html` → `navy-office.html`). Chambers h1 fixed. Client-errors modal toggle (Worker 90d / Browser 24h). API & MCP card replacing CPU-time stub. Growth signal card full-width. Dock enrichment live.
-
-## Catch-up: Dash-3 → 6-3c · logged 20 Sep 2026
-
-| Session | Commit | Outcome |
-|---------|--------|---------|
-| Share-Dash-3 (Sonnet · 18 Sep) | — (reverted) | Rewrote navy-office.html from scratch, destroyed the sidebar. **Git-rolled-back.** |
-| Share-Dash-3b (Opus · 19 Sep) | `911eae8` | Recovered genuine navy-office.js (1662 lines); surgical HTML edits. hh-* DORMANT. |
-| Share-6-3b (Opus · 19 Sep) | `ec37c17` | `worker/src/merkle.js` — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors. |
-| Share-6-3c (Opus · 19 Sep) | frontend/merkle.js | Browser Merkle twin — WASM BLAKE3, same pinned vectors, selfTest() hard gate. |
-
-## Share-6-3d — upload.js finalise wiring + first real end-to-end send · 20 Sep 2026
-
-Sonnet · frontend only (plus one CORS fix). Wired `POST /upload/{uuid}/finalise`. Body `{ hashes:[b64url(32B)×N], merkle_root:b64url }`, header `X-Upload-Session`; tree_algo NOT sent (Worker pins it). Commit `050998b`.
-
-**First genuine end-to-end send on the live site.** article-a-research-notes.md, 16,818 B, 1 chunk, free tier, password-protected. Manifest: `upload_complete:true` · `tree_algo rfc6962-unbalanced-blake3-v1` · `merkle_root 43 chars` · `blake3_root null` · `file_name "encrypted-payload"`.
-
-**Two latent integration bugs flushed:**
-- merkle.js never in `bin/sync-share.sh` → mirror 404. **Rule: new served module ⇒ add to sync-share.sh.**
-- `X-Upload-Session` absent from `corsHeaders` → finalise preflight blocked. **Rule: new browser header ⇒ add to corsHeaders.** Commit `f97b7d9`.
-
-## Share-6-4a — upload resume close + folder auto-discard + folder RAM cap (6-4b) · 20 Sep 2026
-
-Opus · `frontend/upload.js`. Folder auto-discard: `record.sourceType === 'folder'` → clear IDB + copy "Folder uploads cannot be resumed". Folder RAM cap: `FOLDER_ZIP_CAP = 2 * 1024 ** 3`; pre-zip input-bytes guard added after live test. `node --check` clean.
-
-## Share-6-5a — Worker download verification (B9-3 server half) · 20 Sep 2026
-
-**Deployed:** Version `f31dc124`. **Files:** `download_verify.js` (new) · `download.js` (new, extracted from index.js) · `index.js` (dispatch stub). 19 unit pass.
-
-Gate predicate (`isVerifiedPath`): `upload_complete === true && typeof merkle_root === 'string' && merkle_root.length > 0 && tree_algo === 'rfc6962-unbalanced-blake3-v1'`. Hybrid threshold: 128 chunks. 409 shapes locked. `X-Integrity: ciphertext-storage-verified` on verified 200. No `verified:true`, no `blake3_root`, no "end-to-end".
-
-## Share-6-5b — download verification: recipient/consumer half (B9-3 client half) · 20–21 Sep 2026
-
-**Commits:** `8761e7c` (refueler-share) · `75d15c5` · `2e8e632` · `237bdb3` (refueler-io).
-
-Consumes `X-Integrity: ciphertext-storage-verified` header + 409 shapes from 6-5a. Surfaces storage-verified state on recipient card. Honesty rails held: "ciphertext storage verified" only, no "end-to-end".
-
-## Share-6 live-test diagnostics — 20–21 Sep 2026
-
-**Verified working (live):** Single-file resume ✓ · Folder auto-discard + RAM cap ✓ · Passphrase download in Safari ✓.
-
-**Browser note (do not re-chase):** "CORS / ERR_FAILED" failures in Brave — Brave Shields suspect. Test in Safari before assuming code fault.
-
-**Dead ends ruled out:** finalise HMAC mismatch (false) · Worker missing CORS on `/download` (false — curl confirmed).
-
-## Share-6-5c — 22 Sep 2026 (Road A: Workers Paid + cpu_ms)
-
-Root cause: Worker CPU limit (CF error 1102 → 503) on pure-JS noble BLAKE3 over 32 MiB chunks. Free tier 10 ms cap trips deterministically. Fix: Workers Paid ($5/mo) + `[limits] cpu_ms = 300000`. Commit `ae2d391`. $6 billing budget alert set.
-
-## Catch-up — 6-6b through Orientation · logged 23 Sep 2026
-
-**Share-6-6b · 21 Sep 2026 — SHARE-503 closed.** `418d0c9` · `1ff986b` · `924184db`. Legacy upload route retired. `USE_DIRECT_R2` flag retired. `orphan_sweep.js` with `?dry_run` param. Dry run: 3,166 objects / 126 UUIDs. Live deletion: 869 objects.
-
-**Paid-plan backlog (Workers Paid live).** Durable Objects · Queues · Hyperdrive · Workers Builds. Not a fit: D1, Workers AI, Vectorize, Workers Assets.
-
-**Ops constants:** Share Worker deploy = `npm run deploy` from `worker/`. API host `api.share.refueler.io`. R2 SigV4 secret = SHA-256 of the R2 API Token Value.
-
-## Share — Orientation & Ideas · 22 Sep 2026 (non-coding)
-
-- **`@handle.share` vanity URLs** — Registered/Chartered-rail only. Park it (zero API customers yet).
-- **OTS relay (TH-1) is NOT built** — only the TH-0 spike. Committed value `SHA-256(blake3_root ‖ url_fragment_nonce)` locked — do not change.
-- **btc++ Berlin (1–3 Oct).** Payments Edition. Rajesh attends as AV volunteer, flies Wed 30 Sep. Direction only — start cold, do not pre-build.
-
-## Share-6-5d — WASM BLAKE3 swap on the verified download path · 23 Sep 2026
-
-**Session type:** Build (Opus). `verifyChunkBody()` → `hashOneShot()` from `worker/src/blake3_wasm.js`. WASM hash byte-for-byte identical to noble. `merkle.js` left on noble by design. New file `blake3_wasm.js` exports `hashOneShot(bytes) → Uint8Array(32)`.
-
-## Share-6-5e — workerd test pool · 23 Sep 2026
-
-**Session type:** Test infrastructure only. **Problem:** CompiledWasm broke plain Node Vitest. **Fix:** `@cloudflare/vitest-pool-workers@^0.5.41` — `npm test` now runs inside workerd. Files: `vitest.config.js` → `defineWorkersConfig`; `package.json` devDep added; `share-6-5d.test.js` workaround reverted. **Result:** 18 test files · 566 passed · 29 skipped. TEST-HARNESS-WASM snag: resolved.
-
----
-
-## Share-Admin-1 · 23 Sep 2026 — 5 GiB streaming soak test
-
-**Commit:** `35a4808`
-
-**Bugs fixed:**
-
-| Bug | Fix |
-|-----|-----|
-| Worker CORS rejected localhost | `corsHeaders()` echoes `http://localhost:*` / `http://127.0.0.1:*` |
-| Field name `presigned_urls` vs `urls` | Renamed to `urls` (matches `/initiate` response) |
-| URL element object not string | Added `.url` suffix |
-| `crypto.getRandomValues()` 64 KiB cap | IIFE loop in 65,536-byte increments |
-| No retry on 5xx | 3-retry loop with 2s/4s/6s backoff |
-
-**R2 CORS:** wrangler `cors set` broken — set via Cloudflare dashboard.
-
-**Soak result:** 160 / 160 chunks · 5.000 GiB · 30m 7s · Merkle root: `xsuFUutgB9ROLa2HqT7ZO6GD0xEZtnFn-tw59vkf1WA` · UUID: `554b5551-e093-482e-b28d-7464eee7dab1`
-
-**Do-not-retry:**
-- DO NOT use `wrangler r2 bucket cors set` (wrangler ≤4.137.0) — broken, use Cloudflare dashboard
+**Do-not-retry (Share-Admin-1):**
+- DO NOT use `wrangler r2 bucket cors set` (wrangler ≤4.137.0) — broken, use the Cloudflare dashboard
 - `crypto.getRandomValues()` hard cap is 65,536 bytes per call — always loop for buffers >64 KiB
-- NEVER add `test-upload.html` to `bin/sync-share.sh`
-- NEVER serve `/share/admin/test-upload.html` via the public mirror
+- ~~NEVER add `test-upload.html` to `bin/sync-share.sh`~~ **SUPERSEDED (Share-Sync-1)** — it is in the pipeline, to `src/share/admin/`
+- NEVER serve `/share/admin/test-upload.html` via the public assets mirror
+
+**Model rule (17 Sep 2026):** Opus only for first-time crypto; Sonnet for everything specified.
+**Ops constants:** Share Worker deploy = `npm run deploy` from `worker/`. API host `api.share.refueler.io`. R2 SigV4 secret = SHA-256 of the R2 API Token Value. Orphan sweep: `curl -X DELETE "https://api.share.refueler.io/admin/orphan-sweep?dry_run=false" -H "X-Admin-Key: <key>"`.
+**Paid-plan backlog (Workers Paid live):** Durable Objects · Queues · Hyperdrive · Workers Builds (CLAUDE.md still bars DO/Queues/D1 for webhooks). Not a fit: D1, Workers AI, Vectorize, Workers Assets.
 
 ---
-
-## Share-Admin-2 · 23 Sep 2026 — Bug board + Navy Office walkthrough + B10 design lock
-
-**Session type:** Bug fixes + design decisions. **Commits:** `4e14f37` · `68f1e9b` · `07e5060`
-
-### Bugs fixed
-
-| Bug | Commits | Root cause + fix |
-|-----|---------|-----------------|
-| **DAD-BUG** — destroy-after-download not deleting | `4e14f37` | Three causes: (1) `handleMeta` `?? false` collapsed `null` (not DAD) and `false` (armed); fixed to `?? null`. (2) `finishDownload` `putManifest` flip lacked `ctx.waitUntil`; wrapped. (3) Frontend `!!meta.pending_destruction` treated `false` (armed) as non-DAD; fixed to explicit null/undefined check. |
-| **CAP-WARNING-LINK** — capacity warning links to `/upgrade.html` | `68f1e9b` | Three `href="/upgrade.html"` → `href="/share/plans/"` in `frontend/index.html`. |
-| **PHOENIXD-TOGGLE** — Lightning Availability "Phoenixd" button returned 400 | `07e5060` | `'phoenixd'` missing from `validLightning` array; coercion collapsed non-`'true'` strings to `false`. Fix: added `'phoenixd'`; rewrote coercion to preserve named backend strings (`lv === 'true' ? true : lv === 'false' ? false : lv`). Toggle now correctly stores `lightning_available: 'phoenixd'` and turns green. |
-
-**Also in `4e14f37`:** BLAKE3 WASM swap in `download_verify.js` (Share-6-5d) + `blake3_wasm.js` new file. `handleStatus` default object gains `phoenixd: null`.
-
-### Soak test status (DO NOT sweep until complete)
-
-100 GiB soak (3,200 × 32 MiB, 8 parallel) in progress at session close. Orphan sweep command when complete:
-```
-curl -X DELETE "https://api.share.refueler.io/admin/orphan-sweep?dry_run=false" -H "X-Admin-Key: <key>"
-```
-
-### Navy Office walkthrough — card triage
-
-**Client Errors (Worker-observed 90d):** Five Jan 21 `admin_status` 400s = Phoenixd button clicks (now fixed). `Message` column empty — Worker AE logs don't include message text. B10: remove column.
-
-**Client Errors (Browser-reported 24h):** Five `receiver_ab_downloaded` via `/log/error` — legitimate download-complete events, miscategorised. B7 snag (S93–S95). `Browser: Unknown / Unknown` pre-Aug 2026 (UA field `blob4` only exists from S73/5 Aug). B10: hide/remove column or add tooltip.
-
-**API & MCP card:** 6,307 = ALL Worker requests (6,300 Pro Bono, ~7 Registered). Not API-tier subscriber activity. B10: relabel or filter to Registered+Bearer.
-
-**Credential Issuances card:** Trend chart is placeholder stub. B10: replace with daily AE line graph.
-
-### B10 design decisions locked
-
-**Growth Signal chart — redesign spec:**
-
-1. **Auto-populate from AE.** New endpoint `GET /admin/growth-snapshot` queries AE for cumulative user counts by tier. Manual entry form becomes annotations-only.
-2. **BTC/GBP price overlay.** Worker proxy `GET /admin/btc-price` → CoinGecko free API (`https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=gbp`) with **10–15 min KV cache** (key `btc:price:gbp`, TTL 600–900s). No auth required.
-3. **D/W/M/Y time-axis toggle.** In-memory only. Default: Month.
-4. **Manual entry = annotations only.** `POST /admin/news-events` retained; Free/Paid/API counter fields removed. Entries become vertical tick-mark overlays (date + label) on the chart.
-5. **Line graph:** Free (gold) / Paid (green) / API (amber) + BTC/GBP right Y-axis. Annotation ticks with hover tooltip.
-
-**B10 dashboard card punch list:**
-
-| # | Card | Issue | Fix |
-|---|------|-------|-----|
-| 1 | Client Errors (Worker 90d) | `Message` column empty | Remove column |
-| 2 | Client Errors (Browser 24h) | `Browser` column Unknown pre-Aug 2026 | Hide rows where Unknown / add tooltip |
-| 3 | Client Errors (Browser 24h) | `receiver_ab_downloaded` via `/log/error` | Fix routing → AE `logEvent()` (B7 snag S93–S95) |
-| 4 | API & MCP | 6,307 = ALL requests, not API-tier | Relabel "Requests (30d)" or filter to Registered+Bearer; add Pro Bono sub-line |
-| 5 | Credential Issuances | Trend chart placeholder | Replace with daily AE line graph |
-| 6 | Growth Signal | Manual-only; no BTC price; no time toggle | Full redesign per spec above |
-| 7 | OTS aggregate | No widget | Scope decision: founder-only aggregate in Navy Office? Confirm before building. |
-| 8 | Sandbox → Live | Stub pending | Wire KV signal from `sandbox.js` |
-
-**Deferred (explicitly out of scope for now):**
-- rs-theme cookie migration (command-centre `localStorage` → cookie)
-- UPGRADE-CSS (`/upgrade` unstyled)
-- BRAVE-THEME (non-dashboard pages)
-
-**Next after soak completes:** orphan sweep, then B10 planning session.
-
----
-
-## Share-B10-1 · 23 Sep 2026 — Navy Office dashboard build + live-review snags
-
-**Session type:** Build (Opus) + live review. **Repos:** `refueler-share` (Worker) · `refueler.io` (Navy Office frontend).
-**Commits:** refueler-share `fea2690` (+ junk cleanup `0008a5f`) · refueler.io `d55de19` → `08d8641` → `bdef6bd` → `fb841dc`.
-
-### Built (B10-1 punch list items 1–4)
-- **`GET /admin/btc-price`** (new `worker/src/handlers/btc_price.js`) — CoinGecko `simple/price` proxy, KV `btc:price:gbp` TTL 900s + no-TTL `btc:price:gbp:last` backstop, returns `{price_gbp, cached_at, source, stale?}`, X-Admin-Key gated. (Dash-2 design note said no-auth; shipped admin-gated per the session prompt — the chart is behind the admin gate anyway. Distinct from the governed `/admin/btc-rate` reference rate.)
-- **`GET /admin/growth-snapshot?range=D|W|M|Y`** (new `worker/src/handlers/growth_snapshot.js`) — AE cumulative credentials-issued per tier (free→Free, creative+max→Paid, api→API), `toStartOfInterval` bucketing, cumulative-within-retained-window. AE-only; operator chose "Year truncated to ~90d" over manual backfill.
-- **`api_stats.js`** — added `billable` (identity+anonymous) + `pro_bono` (none) to `requests_30d`; card headline is billable-only with a Pro Bono sub-line.
-- **`receiver_ab_*` → AE routing (B7 snag S93–S95, now closed)** — Worker `handleLogError` routes `context:'receiver_ab'` to `logEvent()` (blob1 = the real event from `message`, blob3 = variant) instead of the `client_error` blob. No new browser header/endpoint (consumer frontend unchanged); receiver_ab drops out of the client-errors card within 24h.
-- **Navy Office frontend** — growth card redesigned to a single **Last 90 days** view (D/W/M/Y toggle dropped after review), three auto lines + BTC overlay + **annotation flag markers seated on the Free line** with two-way hover highlight (flag ↔ list row), annotations-only form, **Print chart** (landscape one-page archive). Client-errors: Worker-90d Message column removed; Browser column dropped from the 24h table. Credential Issuances modal: real daily AE line with labelled X/Y axes.
-
-### B10 live-review snags (found post-deploy — DO NOT FIX until B10 sessions)
-1. **BTC-PRICE-503 — CoinGecko unreachable from the Worker.** `GET /admin/btc-price` (and the `refreshBtcRate` cron on `/admin/btc-rate`) return 503 live — CoinGecko unreachable from the CF Worker with empty cache. Effect: the growth-chart **BTC/GBP overlay never renders**, and the Worker-90d client-errors card fills with `admin_btc_price 503` rows. Likely CoinGecko free-API rate-limiting/blocking Worker egress IPs (or a demo-key requirement now). B10: confirm via `wrangler tail`; options — longer last-good cache + back-off polling, a CoinGecko demo key, or move the BTC feed to the node (Tier-2, post-B7). Both btc-price (display) AND btc-rate (governed rate card) share this dependency.
-2. **CLIENT-ERR-TS-1970 — Worker-90d timestamps show "21 Jan 1970".** `appendClientError` stores `ts` in unix **seconds**; `navy-office.js` KV-table render does `new Date(r.ts)` (expects **ms**) → seconds read as ms → every row collapses to ~21 Jan 1970 18:16. Fix: `new Date(r.ts * 1000)` in the KV client-errors row render only. (The AE/24h table uses `double1` in ms and is correct — do not touch.)
-3. **GROWTH-AXES — main growth chart has no readable axes.** No x-axis date ticks (doesn't read as "90 days"); the y-axis max (e.g. 156) is unlabelled. 156 = the top of the Free cumulative line = cumulative Free-tier credentials issued (≈ upload sessions started) over the retained window. B10: add x date ticks/gridlines + a labelled y-axis ("credentials issued, cumulative"), matching the issuance-modal chart's axes.
-4. **GROWTH-FLAG-TOOLTIP — hover overlay cramped.** date+label+note stack and wrap one-word-per-line against the right edge. B10 (founder-preferred design): move the **date onto the x-axis** at the flag's foot; show **only label + note** in the hover; widen the tooltip and fix right-edge positioning/clipping.
-
-**Delivery process note (not product):** desktop `.js` downloads fail ("This file type cannot be opened"); repo-folder saves landed in a stray `Claude outputs/` folder with `-1` suffixes; bridge `device_commit_files` silently no-op'd one JS write (reported success, bytes unchanged) — byte-verify every bridge write. Dedicated file-delivery-workflow session queued before further Navy Office work.
-
-## Share-Delivery-1 · 24 Sep 2026 — File delivery protocol
-
-Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatch→.zip. Written to CLAUDE.md §File delivery protocol.
-
-## Article-Rewrite-1 — "What a subpoena gets" rewrite (planned, post-B8 build)
-
-**Slot:** After B8 build sessions, before Hetzner/NB-2. Target: complete before Berlin (30 Sep 2026).
-**URL:** https://refueler.io/notes/what-a-subpoena-gets/
-**Source file:** refueler.io repo — locate via grep.
-
-### What's wrong with the current version
-
-- Opening line is a cliché ("Most privacy policies are written by lawyers…"). Cut entirely.
-- Stacked aphorisms ("The flag is not the architecture" + "Architecture protects your content. Jurisdiction shapes the paperwork") — too many, kills the dry wit.
-- Mullvad aside appears out of nowhere mid-analysis — reads as virtue-signalling, not serving the reader.
-- "the gap between 'they say so' and 'we can check' is where legal risk lives" — calculated rhythm, performed insight.
-- Tables have verbose "Notes" column doing work the body text should do. Wasted space.
-- Competitor set (WeTransfer, Smash, SwissTransfer, Wormhole, Tresorit, Proton Drive) is stale — needs current landscape check before session.
-
-### What to keep
-
-- Structure is sound. The section headings are good.
-- Technical analysis is accurate.
-- "What a Court Order Gets from Refueler Share" section — specific, honest, earns trust. Keep the tone of that section everywhere.
-- The Proton 2021 case reference — well-used, keep.
-- Full analysis table at the end — restructure to compact tick/cross format (see screenshot, Share-Delivery-1 session), not prose Notes column.
-
-### Rewrite objectives
-
-1. **New opening:** plain statement of what the article does. No cliché warm-up.
-2. **Compact tick/cross tables** — two tables: (a) mainstream services (legal-exposure angle), (b) technical privacy competitors (direct feature comparison, compact format with ✅/❌/upcoming). "Upcoming" rows honest for Lightning + ML-KEM.
-3. **Competitor set audit** — verify each service is still live and claims are current before session. Note: Crypt.fyi has ML-KEM live (B10 target for us). Self-hostable ❌ for Share gets one honest sentence — don't bury it.
-4. **Voice:** plain declarative sentences. One dry line per piece, earned. Let tables do the persuasion. See CLAUDE.md §Editorial voice.
-5. **Dry wit:** one line, one place. Don't schedule it.
-
-
-*"Nothing stops this train."*
-
-## Share-6-6a · 24–25 Sep 2026 — Soak result + open Download-409 bug
-
-**Soak result (100 GiB):**
-- Upload: ✅ PASS — 3200/3200 chunks, 5h 35m, 5.09 MiB/s
-- Transfer UUID: 27038a69-54d8-468d-a9fd-829de9c1aedf
-- Merkle root: hJjM8BR0CNETLlAYZOEALbhLGrOzuPlHKAAo39DAB4c
-- Download-verify: ❌ FAIL — 5/5 sample chunks HTTP 409
-
-**409 diagnosis (not yet fixed):**
-- Not a payment gate (B8/Locke not built). Likely Worker state-machine blocks downloads on transfers in FINALISED state, or download endpoint requires a token the test harness doesn't send.
-- Check download handler: what transfer state does it require? Is FINALISED → READY transition missing?
-
-**Remaining before Share-6 closes:**
-1. Diagnose and fix 409 — rerun download-verify against existing UUID
-2. Run orphan sweep: `curl -X DELETE "https://api.share.refueler.io/admin/orphan-sweep?dry_run=false" -H "X-Admin-Key: <key>"`
-3. Close Share-6 block
-
----
-
 ## Catch-up — B10-2 → B12 · logged 24 Sep 2026
 
 | Session | Commit | Summary |
@@ -672,7 +312,7 @@ Protocol: code→bridge write+byte-verify+diff; docs→SendUserFile; escape-hatc
 
 ## Share-B12-SR · 24 Sep 2026 — Security review of B12 (Opus, no code)
 
-**Commit:** `4564730` · **Spec:** `B12-SR-spec-v1.md` (repo ROOT, not docs/) · wins over B12-spec-v1.1 on any conflict.
+**Commit:** `4564730` · **Spec:** `docs/B12-SR-spec-v1.md` (moved from repo root at Share-Sync-1) · wins over B12-spec-v1.1 on any conflict.
 
 **Verdict:** S1–S7 all locked, no continuation session. Amendments A1–A18 to B12-spec-v1.1.
 
@@ -773,3 +413,9 @@ Transfer commitment now HMAC-SHA256 under new Worker secret `COMMITMENT_KEY` (`w
 **Public copy (refueler.io `0414e9a`, live):** status page "✓ Files delete themselves" → "✓ Expired files can't be downloaded … cleared by Cloudflare's storage layer no later than 92 days after upload"; what-a-subpoena-gets expiry sentence corrected the same way. Live R2 rule read: `expiry-backstop` 92 days + multipart aborts. Privacy page (refueler.io POS) and README DAD line checked — true, unchanged. `src/status.njk` (refueler-share copy) aligned.
 **Worker (`8b19a65`, NOT DEPLOYED — deploy after the soak, Rajesh):** live test showed a DAD'd link still returning size + expiry — the B11-1 inline sequence deleted chunks one-by-one and never awaited tombstone/hashes/seal/dock writes (fits Soak-2's tombstone residue). Fix: `finishDownload` calls the shared `destroyTransfer` (batched, awaited, tombstone last, resumable); `destroyTransfer` awaits the dock delete; `GET /meta` on `consumed:true` → 410 `{error:'deleted'}`. +6 tests; 618 passed / 29 skipped. **After deploy:** DAD a small file in Safari, reopen link → "no longer active"; `curl /meta/{uuid}` → 410.
 **Open / found:** `/share/assets/*` served `max-age=14400` (Cloudflare zone browser TTL, not `_headers`) — browsers can run old modules up to 4 h after a ship; background task queued. `confirm_transfer.js` still has its own one-at-a-time delete loop (unused by the frontend now; API/TESTING still reference `/confirm`) — fold into Share-Expiry-1 / B12 latch. plans/upgrade pages offer "1 / 7 (/30/90) day expiry" but `upload.js` always sends 7 days — B12-4a.
+
+## Share-Cache-1 + Share-Hygiene-1 (26 Sep 2026, ad hoc during the Safari soak)
+**Cache-1 (`623aa56`, `31ebb3c`):** `/share/assets/*` was served `max-age=14400` — the refueler.io zone Browser Cache TTL overrode Pages' `max-age=0`, so browsers could run old/mixed ES modules for 4 h after a ship. Fix: Cloudflare Cache Rule `(http.host eq "refueler.io" and starts_with(http.request.uri.path, "/share/assets/"))`, Browser TTL = Respect origin TTL (dashboard, Rajesh). Verified live: all mirrored JS/CSS + blake3 + vendor now `max-age=0, must-revalidate`; `/share/` HTML unchanged. `sm_live_cache` in `bin/lib/share-mirror.sh` fails `ship-frontend.sh` / `sync-share.sh --live` if it regresses. No cost (Free plan rule; static Pages requests free). Rule recorded in CLAUDE.md.
+**DAD-2 3rd ship eyeballed (Rajesh, Brave):** calm dialog, Not now, Encrypted file/folder, Show/Hide name, post-download line — all ✓. Reopened DAD'd link still shows size + expiry → expected until Worker `8b19a65` deploys (post-soak check). "6 days remaining" on a fresh 7-day transfer kept as is (Rajesh).
+**Hygiene-1:** `share-sessions.md` 775 → ~420 lines (Share-1…Share-6-6a compacted, do-not-retry kept); B7/SD plans → `docs/B7-SD-plan.md`, Article-Rewrite-1 brief → `docs/Article-Rewrite-1-brief.md`; three stale do-not-retry lines marked SUPERSEDED (RU resume-Turnstile, TG final-chunk delete, Admin-1 test-upload sync). Master Context: 6-4a/4b commits filled, roadmap rows point at the new docs.
+**Noticed, not resolved:** the 22 Sep Orientation note said "OTS relay (TH-1) is NOT built — only the TH-0 spike", which conflicts with the TH-1 row (deployed `a71f12fe`). The sentence was dropped in the compaction (in git history before this commit) — check the Worker before relying on either.

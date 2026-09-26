@@ -224,8 +224,8 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-6-3b ✓ | `ec37c17` | `worker/src/merkle.js` — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors (Opus). |
 | Share-6-3c ✓ | `frontend/merkle.js` | Browser Merkle twin — WASM-BLAKE3 parity, same pinned vectors, `selfTest()` gate (Opus). |
 | Share-6-3d ✓ | `050998b` · `f97b7d9` · `a00351a`/`b8906f9` | `upload.js` finalise wiring + first real end-to-end send. Worker CORS `X-Upload-Session` fix; `merkle.js` added to `sync-share.sh`. |
-| Share-6-4a ✓ | `⟨fill: frontend commit⟩` | Upload resume close: single-file resume (Sonnet, pre-session) + folder auto-discard in `checkResumeState` (Opus). |
-| Share-6-4b ✓ | `⟨fill: frontend commit⟩` | Folder RAM cap — `FOLDER_ZIP_CAP` = 2 GiB in `zipAndSelect` (post-zip) + pre-zip input-bytes guard; over-cap steers to a pre-zipped single file. |
+| Share-6-4a ✓ | `616e7b9` · `00163c7` | Upload resume close: single-file resume (Sonnet, pre-session) + folder auto-discard in `checkResumeState` (Opus). |
+| Share-6-4b ✓ | `ed4a48d` · `00163c7` | Folder RAM cap — `FOLDER_ZIP_CAP` = 2 GiB in `zipAndSelect` (post-zip) + pre-zip input-bytes guard; over-cap steers to a pre-zipped single file. |
 | Share-6-5a ✓ | `f31dc124` (deployed) | Worker download-verify server half (`handlers/download_verify.js`; `download.js` extracted). 19 unit pass. |
 | Share-6-5b ✓ | `8761e7c` · `75d15c5`/`2e8e632`/`237bdb3` | Download-verify consumer half — recipient card reads `X-Integrity` + `integrity_failed` 409s. `WORKER_URL` flip deferred to 6-6b. |
 | Share-B10-1 ✓ | `7c874ed` (refueler-io) | Navy Office: Growth Signal Pro Bono blue, axis labels, annotation flags, issuances modal subtitle. |
@@ -253,9 +253,9 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 12 | B8-Opus → B8 build — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. B8-Opus first. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
 | 13 | NB-2 → NB-4 — node bootstrap | ✅ | Provision, test, declare live. |
-| 14 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block with node live. |
-| 15 | SD-block — Silent Drop | ✅ | Sovereign (Bearer rail) + Lightning-only. Full Locke (B8) required. |
-| 16 | Article pipeline | ✅ | Unlocks after NB-4. |
+| 14 | B7 Lightning (S74–S86+) | ✅ | Full Lightning block with node live. Session plan: `docs/B7-SD-plan.md`. |
+| 15 | SD-block — Silent Drop | ✅ | Sovereign (Bearer rail) + Lightning-only. Full Locke (B8) required. Session plan + SD do-not-retry: `docs/B7-SD-plan.md`. |
+| 16 | Article pipeline | ✅ | Unlocks after NB-4. Article-Rewrite-1 ("What a subpoena gets") brief: `docs/Article-Rewrite-1-brief.md` — not gated on NB-4. |
 | 17 | B9 build (B9-1…B9-8) | — | Design locked B9-Opus. Build sessions in `merkle-spec-v1.md` §9. |
 | 18 | B10+ | — | ML-KEM + NUT-22 + Verkle forward. |
  
