@@ -191,6 +191,27 @@ sm_extract_mirror() { sm_extract "$1" "$2" "$3" $SM_M_ASSETS $SM_M_NJK $SM_M_ADM
 # Status codes prove nothing here: refueler.io answers a missing asset with 200 + the homepage.
 sm_strip_cf() { perl -0pe 's{<script>\(function\(\)\{[^\n]*?__CF\$cv\$params[^\n]*?</script>(?=</body>)}{}g' "$1"; }
 
+# Browsers must revalidate every module on each load, or they run a mix of old and new deploys
+# for hours after a ship (Share-Cache-1 · 26 Sep 2026: the zone Browser Cache TTL rewrote Pages'
+# max-age=0 to 14400). The fix is a Cache Rule on refueler.io/share/assets/* — Browser TTL "Respect origin".
+# This fails the ship if that rule is ever lost.
+sm_live_cache() {
+  local n cc age bad=0
+  for n in $SM_JS $SM_CSS; do
+    cc="$(curl -sSI --max-time 20 "$SM_LIVE_BASE/share/assets/$n?v=$(date +%s)$RANDOM" 2>/dev/null \
+          | tr -d '\r' | grep -i '^cache-control:' | cut -d: -f2- | tr 'A-Z' 'a-z')"
+    case "$cc" in *no-store*|*no-cache*) continue ;; esac
+    age="$(echo "$cc" | sed -n 's/.*max-age=\([0-9]*\).*/\1/p')"
+    if [ "$age" != "0" ]; then echo "  ✗ browser-cacheable: assets/$n →${cc:- (no cache-control)}" >&2; bad=1; fi
+  done
+  if [ "$bad" -ne 0 ]; then
+    echo "    Browsers will keep the old modules. Restore the refueler.io Cache Rule: path starts with /share/assets/," >&2
+    echo "    Browser TTL = Respect origin TTL (Cloudflare → refueler.io → Caching → Cache Rules)." >&2
+    return 1
+  fi
+  echo "  ✓ browsers revalidate every module (max-age=0) — no stale-module window"
+}
+
 sm_live() { # sm_live CANON_ROOT TIMEOUT_SECONDS
   local s="$1" timeout="$2" start now pending n f tmp url rel local_file got want still waited nap
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/sm-live.XXXXXX")"
@@ -215,7 +236,8 @@ sm_live() { # sm_live CANON_ROOT TIMEOUT_SECONDS
     done
     if [ -z "$still" ]; then
       if curl -sSL --max-time 20 "$SM_LIVE_BASE/share/?v=$(date +%s)" | grep -q 'src="/share/assets/share\.js"'; then
-        rm -rf "$tmp"; echo "  ✓ every mirrored file is live and byte-identical; /share/ loads share.js from /share/assets/"; return 0
+        rm -rf "$tmp"; echo "  ✓ every mirrored file is live and byte-identical; /share/ loads share.js from /share/assets/"
+        sm_live_cache; return $?
       fi
       still="/share/ page"
     fi
