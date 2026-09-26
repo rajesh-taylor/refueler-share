@@ -266,6 +266,32 @@ main {
   word-break: break-all;
   line-height: 1.5;
 }
+/* Share-DAD-2: filename hidden until asked */
+.rc-reveal-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* Share-DAD-2: deleted / expired link — replaces the receiver card */
+.link-inactive-card { display: flex; flex-direction: column; gap: 8px; }
+.link-inactive-heading {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+.link-inactive-body {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
 .rc-meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

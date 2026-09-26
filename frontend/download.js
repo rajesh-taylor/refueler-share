@@ -92,16 +92,20 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   try {
     const metaRes = await fetch(`${WORKER_URL}/meta/${uuid}`);
     if (metaRes.ok) meta = await metaRes.json();
-    else if (metaRes.status === 404) { _showDownloadError('Transfer not found or already expired.', domRefs); return; }
+    else if (metaRes.status === 404 || metaRes.status === 410) { _showLinkInactive(domRefs); return; }
   } catch {
     _showDownloadError('Network error — could not reach server.', domRefs);
     return;
   }
 
-  // Deleted transfer (Share-DAD-2): the tombstone manifest is { consumed, consumed_at }
-  // only, so /meta answers 200 with every field null. Say so before showing the card.
-  if (meta.total_chunks == null && meta.total_bytes == null && meta.expiry_timestamp == null) {
-    _showDeletedLink(domRefs);
+  // Dead link (Share-DAD-2) — one page, no filename/size/expiry:
+  //   - 410 from /meta: deleted transfer (Worker ≥ Share-DAD-2)
+  //   - tombstone { consumed, consumed_at } on older Workers: /meta answers 200, every field null
+  //   - expiry passed: downloads already 410, so don't offer one
+  const tombstoned = meta.total_chunks == null && meta.total_bytes == null && meta.expiry_timestamp == null;
+  const expired    = !!meta.expiry_timestamp && meta.expiry_timestamp <= Date.now() / 1000;
+  if (tombstoned || expired) {
+    _showLinkInactive(domRefs);
     return;
   }
 
@@ -133,7 +137,9 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   const hasOts = (timestampState === 'pending' || timestampState === 'complete') && !!sealNonceHex;
 
   // Populate receiver card  (fileName resolved above — fragment v1 or meta fallback)
-  rcFileName.textContent = fileName;
+  // Share-DAD-2: name hidden until the recipient asks — glancing eyes on a screen
+  // see "Encrypted file". The saved file still gets its real name.
+  _renderHiddenFileName(rcFileName, fileName);
 
   const isZip = fileName.toLowerCase().endsWith('.zip');
   if (isZip) { rcFileIcon.textContent = '📁'; rcFolderNote.classList.remove('hidden'); }
@@ -680,12 +686,35 @@ function _showDeletedNotice(domRefs) {
   dlSignoff.insertAdjacentElement('beforebegin', gate);
 }
 
-function _showDeletedLink(domRefs) {
-  const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
-  downloadCard.classList.remove('hidden');
-  dlStageTag.textContent = 'This transfer has been deleted. The link no longer works.';
-  dlPct.classList.add('hidden');
-  dlBar.parentElement.classList.add('hidden');
+function _renderHiddenFileName(rcFileName, fileName) {
+  rcFileName.textContent = 'Encrypted file';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'rc-reveal-btn';
+  btn.textContent = 'Show name';
+  btn.setAttribute('aria-pressed', 'false');
+  btn.addEventListener('click', () => {
+    const shown = btn.getAttribute('aria-pressed') === 'true';
+    rcFileName.textContent = shown ? 'Encrypted file' : fileName;
+    btn.textContent        = shown ? 'Show name' : 'Hide name';
+    btn.setAttribute('aria-pressed', String(!shown));
+  });
+  rcFileName.insertAdjacentElement('afterend', btn);
+}
+
+function _showLinkInactive(domRefs) {
+  const card = document.createElement('div');
+  card.id = 'link-inactive-card';
+  card.className = 'card link-inactive-card';
+  const heading = document.createElement('p');
+  heading.className = 'link-inactive-heading';
+  heading.textContent = 'This link is no longer active';
+  const body = document.createElement('p');
+  body.className = 'link-inactive-body';
+  body.textContent = 'The transfer was deleted after download or has expired. Ask the sender for a new link.';
+  card.appendChild(heading);
+  card.appendChild(body);
+  domRefs.receiverCard.insertAdjacentElement('beforebegin', card);
 }
 
 function _showDownloadError(msg, domRefs) {
