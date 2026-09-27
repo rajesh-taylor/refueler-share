@@ -1,6 +1,6 @@
 # Share-Receiver-1 — receiver page build list
 > **Session:** Share-Receiver-1 · 27 Sep 2026 (design, no code changed)
-> **Status:** Design approved by Rajesh (mock v5). Build sessions below are **not started**.
+> **Status:** Design approved by Rajesh (mock v5). N-1 ✅ · N-2a ✅ shipped 27 Sep (`82105b4`) · **N-2b next**.
 > **Mock:** https://claude.ai/artifact/1HRgQc8hxtcpod7ZKqE66t (private) · repo copy `docs/drafts/share-receiver-mock-v5.html`
 > **Inputs:** `receiver-page-brief.md` · `docs/Share-Download-spec-v1.md` §6 · Share-DAD-2 log entry
 
@@ -34,17 +34,32 @@ Carbon first. One primary action: Download.
 - **F-2 Status page password claim is wrong.** refueler.io `src/share/status.njk:101-102`: "The passphrase never travels the wire — only its hash is stored". The **sender** sends only a hash, but the **recipient's** browser POSTs the plain password to `/auth/{uuid}` (`download.js`), where the Worker hashes it (`worker/src/index.js` ~1411-1428). True version: only a hash is stored; the password is sent over an encrypted connection when unlocking and is not kept.
 - **F-3 `frontend/index.html` is stale.** The mirrored page is `src/index.njk` (`bin/lib/share-mirror.sh` `SM_C_NJK`). Edit receiver markup in `src/index.njk` only. `frontend/index.html` should be deleted in a cleanup session.
 - **F-4 Timed window is one window,** `available_from` → `available_until` (paid tiers only, `manifest_tg.js`), enforced by the Worker on `/auth` and `/download`. Not daily hours (9am–6pm every day would be a new feature). Today, after the window closes, the page still shows a Download button, and pressing it lands on "no longer active".
-- **F-5 Source Serif 4 is not loaded** on refueler.io (`src/_includes/head.njk` loads Satoshi, DM Sans, IBM Plex Mono). Add Source Serif 4 (opsz, wght 300) to the font link. The live site wordmark uses Satoshi; keep it.
+- **F-5 Source Serif 4 is not loaded** on refueler.io (`src/_includes/head.njk` loads Satoshi, DM Sans, IBM Plex Mono). Add Source Serif 4 (opsz, wght 300) to the font link. The live site wordmark uses Satoshi; keep it. *(N-2a: loaded for the Share page only, one `<link>` in `src/index.njk` extraHead — remove it when N-3 adds the font site-wide.)*
+
+Found in N-2a (27 Sep 2026):
+- **F-6 `share-tokens.css` is not loaded on refueler.io/share/.** refueler.io's `head.njk` loads `global.css` only, which has no `--mono`, `--serif`, `--display`, `--sans`, `--card-bg`, `--radius`, `--c-red`, `--c-amber`. Every `share.css` rule using them silently falls back live (e.g. "mono" labels on the upload page render in DM Sans). The receiver styles (`.rx-*`) set their own fonts and rules, so they're unaffected. Fix the upload-page styles in a cleanup session (map to `global.css` tokens; don't load a second token file).
+- **F-7 Theme pill label is wrong on load in Carbon** (site-wide): the head script sets the pill text before the pill exists, so it reads "Paper / Carbon" until clicked. refueler.io `head.njk`. Fold into N-3.
+- **F-8 "Refueler / Share" wordmark** (`wordmarkSection: "Share"`, N-2a) doesn't fit beside the full site nav between 961 and ~1000 px. `share.css` hides "/ Share" from 961 to 1040 px on the upload page only. Tidy when the site nav is revisited.
 
 ## 3. Build sessions, in order
 
 Berlin rule: only small ad hoc sessions until Sun 4 Oct. N-1 and N-3/N-4 are small. R-2 is medium: Rajesh decides whether it waits until after Berlin.
 
-### N-1 · Notes-List-1 (refueler.io, small) — prerequisite for the Notes card
+### N-1 · Notes-List-1 (refueler.io, small) — ✅ Done 27 Sep 2026 (refueler.io 10bc0b6). /notes/latest.json live; publishing = add src/notes/<slug>/index.njk with cardTitle, summary, topics, date, readTime.
 One list of Notes articles drives both the Notes index page and a small `/notes/latest.json`. Prompt: `Notes-List-1-prompt.md` (repo root).
 
 ### N-2 · Share-Receiver-2 (refueler-share frontend, medium) → `bin/ship-frontend.sh`
 Files: `src/index.njk` (receiver markup only), `frontend/share.css`, `frontend/download.js`. No Worker change.
+Split in two sessions:
+- **N-2a · Share-Receiver-2a** — items 1–9. ✅ **Done 27 Sep 2026** — shipped `82105b4` (refueler.io `8c9986c`). Also: password row "Needed to download"; other errors "Stopped" / "The download stopped." + today's message; wordmark "Refueler / Share"; save-dialog-cancel dead button fixed; Safari/Firefox network error no longer hangs. Dead link and failed check use the new layout with today's words (reworded in N-2b).
+- **N-2b · Share-Receiver-2b** — next:
+  - item 10 remove the date-seal offer (and drop the `decryptOts` import if unused);
+  - item 11 "Link no longer active" copy + send line;
+  - item 12 "Failed check" copy;
+  - item 14 arrival motion (`prefers-reduced-motion` respected);
+  - item 15 live verify in Safari: fresh link, password link, folder link, dead link, both themes, phone width.
+  - Item 13 (DAD line on the card + dialog removal) still gated on Share-DL-W1.
+
 1. **Receiver mode shell:** hide site nav, HTTP/3 whisper, badge, Upgrade link (R-14). Theme pill stays.
 2. **Ready card:** eyebrow "A file for you" / headline "Someone sent you a file." / ledger File (hidden name + Show name, keep) · Size · Available until (R-5). Replace `usp-text` with R-4 line.
 3. **Expiry refresh:** recompute on open and every minute (today: once at load).
@@ -71,6 +86,8 @@ Change the default from `'paper'` to `'carbon'` in: refueler.io `src/_includes/h
 - `src/share/status.njk:98-103`: passphrase → password, and fix the claim (F-2), e.g. "Only a hash of the password is stored. When the recipient unlocks, the password is sent over an encrypted connection, checked, and not kept."
 
 ### Later, not scheduled
+- **Receiver footer (R-14)** — "© 2026 Refueler · Status · Support" vs the live site-wide footer ("© 2026 Refueler Ltd (incorporating) · refueler.io" · Privacy · Support). Rajesh, 27 Sep: leave for now; do when needed or in a snag-list run.
+- Upload-page styles on refueler.io (F-6), pill label on load (F-7), wordmark band (F-8).
 - Date-seal checker a recipient can use (F-1) — design with Legend.
 - Daily availability hours — new feature, not planned.
 - Delete stale `frontend/index.html` (F-3).
