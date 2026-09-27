@@ -1,7 +1,7 @@
 # Share-Download-spec-v1.md — large downloads (100–250 GB) for paid tiers
 
 > **Session:** Share-Download-Opus · 27 Sep 2026 · Opus · design only, no Worker or frontend code
-> **Status:** **PROPOSAL — for Rajesh's approval.** Nothing here is locked until the decisions in §9 are answered.
+> **Status:** **Decisions D-1…D-9 approved by Rajesh, 27 Sep 2026 (all as recommended; D-2 clarified — see §9).** Spike S-1/S-2/S-3 results may still reopen §2.2.
 > Load alongside `CLAUDE.md`, `docs/Share-6-spec-v1.md` (upload + B9-3 download verify), `merkle-spec-v1.md` §3, `docs/B12-SR-spec-v1.md` (X1 KV rule).
 > **Scope:** the recipient side of a 100 GiB (Citizen/Sovereign) or 250 GiB (Chartered) transfer: browser save path, resume, destroy-after-download (DAD) interaction, pre-download guidance, the collector (CLI / MCP `refueler_fetch`), and the soak harness needed to test it for real.
 
@@ -23,7 +23,9 @@
 
 ### 0.1 Part 1 — raw 100 GiB download of `3a4d8828-6812-4eb9-9b5d-e31b60c72fac`
 
-Script: `worker/scripts/soak-download.mjs` (proposed; scratch-tested against a fault-injecting mock — 409, 503, 429, mid-body abort, kill-and-resume, altered sidecar hash, DAD-armed refusal — all behaved). Result: **pending run** — fill in: chunks, total time, MiB/s, retries, 409s, stream aborts, `X-Integrity` count, local Merkle root vs manifest.
+Script: `worker/scripts/soak-download.mjs` (proposed; scratch-tested against a fault-injecting mock — 409, 503, 429, mid-body abort, kill-and-resume, altered sidecar hash, DAD-armed refusal — all behaved). **Result ✓ (27 Sep 2026, 13:25–15:02 UTC, home line → USB APFS SSD):** 3,200/3,200 chunks, 100.00 GiB (107,374,182,400 B) in 97.2 min, **17.6 MiB/s** average, concurrency 4. `X-Integrity: ciphertext-storage-verified` on **all 3,200**. 0 × 409, 0 × 429, 0 × 5xx, 0 stream aborts, 0 short bodies, 0 local-hash mismatches. **1 retry:** chunk 2746 stalled with no bytes for 300 s (client timeout), then succeeded (88 s). Local Merkle root = manifest `merkle_root` (`MBOwdiqu…fu4Q`) — every byte on disk matches what the uploader committed. Transfer not deleted (`/meta` 200 after). Server half of a 100 GiB verified download: **proven**. Browser half and decrypt: untested (§8).
+
+**Lesson for Share-DL-1:** browser `fetch()` has no timeout either. A chunk that stalls silently would hang the download forever. Add a per-chunk stall timeout (no bytes for N seconds → abort + retry) to the §2.1 loop.
 
 ### 0.2 Findings from code reading (not tested live)
 
@@ -51,6 +53,7 @@ Script: `worker/scripts/soak-download.mjs` (proposed; scratch-tested against a f
 
 - **Ordered parallel fetch:** 3 chunks in flight, decrypt and write strictly in index order. The reorder buffer is at most 3 × 32 MiB. The **tail chunk is fetched only after every earlier chunk is written** (DAD rule, §5).
 - **Exact-length check** per chunk (F-2): mismatch → the integrity screen, not "retry".
+- **Stall timeout:** abort and retry a chunk that receives no bytes for 120 s (Part 1 saw one 300 s silent stall in 3,200).
 - **Longer retry budget:** 6 attempts (2/5/15/30/60 s, the Share-5 upload budget), then **pause and wait** (§4.1) instead of aborting.
 - **Error classes kept apart:** network (pause and wait), 409 or cut body (integrity screen, no retry), 410 (link inactive), write failure (the drive: "The drive you're saving to stopped responding or is full"), decrypt failure (wrong key or corrupted).
 
@@ -72,13 +75,17 @@ Constraints and guards:
 - **Where the SW lives:** `sw.js` served under `/share/assets/` with scope `/share/assets/dl/`. It stays inside the existing Cache Rule path, needs no `Service-Worker-Allowed` header, and is a new mirrored file → add it to `bin/lib/share-mirror.sh` in the same session.
 - **Never navigate before the SW is proven live.** refueler.io answers a missing path with **200 + the homepage** (CLAUDE.md), so an uncontrolled navigation would "download" an HTML page named like the file. Guard: registration active **and** a ping/pong round-trip over the channel, else fall back (2.3).
 - **Keep-alive:** Firefox stops idle service workers after ~30 s. The page pings the SW every 10 s for the whole transfer.
-- **Choosing the drive:** Safari → Settings → General → *File download location* → *Ask for each download*. Firefox → Settings → *Always ask you where to save files*. The pre-download panel (§6) shows this for the detected browser **before** the download starts. Moving a finished 100 GB file off the internal disk afterwards needs the space twice and hours of copying.
+- **Choosing the drive:** Safari → Settings → General → *File download location* → *Ask for each download*. Firefox → Settings → *Always ask you where to save files*. Not shown on the receiver card (§6, Rajesh 27 Sep): large-file senders' recipients are expected to have this set up. Covered by support/help copy instead.
 - **Trust boundary unchanged:** the SW is our own same-origin code. The key never leaves the page and the SW sees only plaintext the page already holds. No Refueler server sees plaintext.
 - **Unverified, spike before build (S-1, S-2):** that Safari (macOS, and iOS/iPadOS separately) honours `Content-Disposition` on a SW-streamed response at 100 GB; that neither download manager times out a body that stalls for minutes during a pause; that Firefox private windows have service workers at all.
 
 ### 2.3 Last-resort fallback (no FSAA, no working SW)
 
-Keep the blob path, but **cap it at 1 GiB** (about 2 GiB of RAM). Above the cap, show "This browser can't save a file this size safely" and point to Chrome/Edge or the collector (§7). The cap is a proposal (decision D-2).
+Keep the blob path, but **cap it at 1 GiB**, and have it decrypt as it goes (plaintext only, about 1× the file in RAM instead of today's 2×). Above the cap, show "This browser can't save a file this size safely" and point to Chrome/Edge or the collector (§7).
+
+**Who lands here:** only browsers with neither FSAA nor a working service worker. Mainstream Chrome, Edge, Brave, Safari and Firefox all have service workers, so this is in-app browsers (links tapped inside Instagram, Facebook, LinkedIn or some messengers), possibly Firefox private windows (unverified, S-2), and very old browsers. The fix for the common case is "Open in Safari / Chrome".
+
+**Rule (D-2):** the sender can't know the recipient's browser, so the **receiver card detects the capability before any download starts** and says what to do. A recipient must never find out at 99 %. Pro Bono stays at 4 GiB; the cap is not lowered to fit the fallback.
 
 ### 2.4 Phones and tablets
 
@@ -127,25 +134,22 @@ After the per-chunk retry budget runs out on a **network-class** error, the down
 
 ---
 
-## 6. Pre-download panel: size, free space, drive format
+## 6. Receiver card (decided by Rajesh, 27 Sep 2026: one card, no panel, no dialog)
 
-Browsers can't read free space or file system type on the user's target drive (`navigator.storage.estimate()` covers only the site's own storage). So the panel **informs**; only the collector **checks**.
+**No separate large-file panel.** The card's size line is the cue: recipients judge free space and get a drive ready from "100.0 GB". Most senders move 25 MB–4 GB; paid senders of large files have a pro setup. No free-space, FAT32 or per-browser copy on the card.
 
-Shown on the receiver card when `total_bytes > 4 GiB` (under that, the current card is unchanged). Draft copy, plain register:
+**The delete-after-download dialog ("Download" / "Not now") is removed.** Its message moves onto the card as one line, and Download starts at once:
 
-> **This is a {size} file.**
-> You'll need about **{size} free** on the drive you save it to.
-> Drives formatted **FAT32** (many USB sticks) can't hold a file over 4 GB. Use a drive formatted **exFAT**, or **APFS / Mac OS Extended** on a Mac, or **NTFS** on Windows.
-> On a Mac, **NTFS drives are read-only** — the save will fail. Use exFAT to move files between Mac and Windows.
-> At your connection speed this will take about **{eta}**. Keep this tab open.
+> Encrypted file · Show name
+> Size 100.0 GB · Expires in 6 days — Sat 3 Oct, 15:25 (recipient's local time)
+> *Deleted after download. The link works once.*  ← delete-after-download transfers only
+> [ Download ]
 
-Per-browser line:
-- Chromium: "You'll choose where to save it in the next step."
-- Safari: "To save it straight to an external drive, first set Safari → Settings → General → File download location → Ask for each download."
-- Firefox: "To choose the drive, turn on Settings → Always ask you where to save files."
-- Over the collector threshold (D-6, proposed 20 GiB): "Large transfer? The Refueler collector resumes if your connection drops. [How to use it]"
+**One card for every transfer:** the delete-after-download line appears only when the sender armed it; otherwise the card is the same without it. **Expiry shows both** the countdown and the exact local date and time — downloads stop at that second (Rajesh, 27 Sep).
 
-Chromium, after the picker: if `createWritable()` fails (a read-only NTFS drive, permissions), say so in those words, not "Could not open the save location".
+Acceptable because deletion only begins once the file has fully arrived (§5, D-DAD-2). Supersedes the Share-DAD-2 calm dialog. Mock: canvas artifact "Share receiver + homepage" (A = now, B = one card).
+
+**Still shown (not a panel):** the §2.3 capability message when the browser can't save a file this size, and on iOS/iPadOS above 4 GiB (D-8), before any download starts. Chromium: if `createWritable()` fails (read-only NTFS on a Mac, permissions), say so in those words, not "Could not open the save location".
 
 ---
 
@@ -184,7 +188,10 @@ Chromium, after the picker: if `createWritable()` fails (a read-only NTFS drive,
 
 ---
 
-## 9. Decisions for Rajesh
+## 9. Decisions — approved by Rajesh, 27 Sep 2026 (all as recommended)
+
+**D-2 discussion (27 Sep):** Rajesh asked whether a 1 GiB cap is a product killer and whether Pro Bono should drop to 1 GiB so every browser works. Answer: no. The cap applies only to the §2.3 group (no FSAA and no service worker), mainstream browsers stream, and the receiver card warns before download. The real risk is spike S-1/S-2 (SW streaming in Safari/Firefox); if it fails, the fallback is the 1× blob plus the collector, not a lower tier cap. Agent recipients (`refueler_fetch`) have no browser limit at all.
+
 
 | # | Decision | Recommendation |
 |---|---|---|
@@ -193,7 +200,7 @@ Chromium, after the picker: if `createWritable()` fails (a read-only NTFS drive,
 | D-3 | Cross-session resume in browsers | **Not in v1.** In-session pause-and-wait in browsers; full resume in the collector |
 | D-4 | DAD: tail fetched last (all clients) + Worker deletes only after the verified tail is fully sent (F-1) | **Yes.** Small Worker change; no grace period, no confirm step |
 | D-5 | Collector = MCP `refueler_fetch` + `refueler-collect` CLI in one package | **Yes.** Link via prompt/stdin, never argv |
-| D-6 | Size at which the collector is offered | **20 GiB** (offered, not forced) |
+| D-6 | Size at which the collector is offered | **20 GiB** (offered, not forced; on the capability message and help pages, not the card, per §6) |
 | D-7 | Paid cards stay "Coming Soon" until Share-DL-Soak is green | **Yes**, a launch gate alongside B12-4a / B12-6 |
 | D-8 | iOS/iPadOS above 4 GiB | "Open this link on a computer" until S-2 says otherwise |
 | D-9 | Fragment carries the chunk count (or plaintext root) so a recipient detects a truncated transfer (§0 last row) | **Raise at the fragment-grammar owner (SW-MCP-4 lineage)**, not decided here |
@@ -210,7 +217,7 @@ Paid cards go live after **B12-4a** (auth) and **B12-6** (billing). Download wor
 | **Share-DL-Spike** | Sonnet | Scratch page (not shipped): SW stream in Safari macOS/iOS + Firefox (S-1, S-2); Chrome `close()` timing + `keepExistingData` on APFS/exFAT externals (S-3). 5 GiB, then 100 GiB | scratch + refueler-share | After Soak-4 |
 | **Share-DL-W1** | Sonnet | Worker: D-DAD-2 (tail trigger on verified stream close, both paths), tests incl. mismatch-on-tail keeps the transfer | refueler-share (Worker deploy) | After B12-1b; before B12-3 touches `delete_transfer.js` |
 | **Share-DL-1** | Sonnet | Frontend: ordered parallel fetch + tail-last, exact-length check (F-2), 6-attempt budget + pause-and-wait (F-3), error classes, wake lock, SW download for Safari/Firefox, blob cap | refueler-share → `ship-frontend.sh` | After the spike; week 2–3, parallel to B12-4a |
-| **Share-DL-2** | Sonnet | Frontend: pre-download panel (§6), per-browser save guidance, collector pointer, iOS gate | refueler-share → `ship-frontend.sh` | With or after DL-1 |
+| **Share-DL-2** | Sonnet | Frontend: one receiver card (§6: DAD line on the card, dialog removed), capability message, iOS gate, collector pointer on the capability message | refueler-share → `ship-frontend.sh` | With or after DL-1 |
 | **Share-DL-3** | Sonnet | `refueler-mcp`: shared transport, `refueler_fetch`, `refueler-collect` bin | refueler-mcp | After MCP-Fix-1; parallel to B12-4b |
 | **Share-DL-Soak** | Sonnet + Rajesh | §8 matrix at 100 GiB, then 250 GiB with the postponed 250 GiB soak | — | **Before B12-6 opens the paid cards (D-7)** |
 
