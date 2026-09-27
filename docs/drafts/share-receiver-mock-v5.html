@@ -1,0 +1,489 @@
+<title>Share Receiver Page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Tokens: refueler.io/src/assets/css/global.css. Carbon first, Paper via the pill. */
+:root {
+  color-scheme: dark;
+  --bg: #1A1917;
+  --surface: #26282C;
+  --fg: #F5F0E8;
+  --fg-muted: #B0AAA2;
+  --fg-subtle: #6A6560;
+  --rule: rgba(245,240,232,0.10);
+  --rule-strong: rgba(245,240,232,0.22);
+  --input-bg: #252525;
+  --input-border: rgba(245,240,232,0.18);
+  --accent: #C8A96E;
+  --danger: #E05252;
+  --btn-bg: #F5F0E8;
+  --btn-fg: #1A1917;
+
+  /* mock chrome, outside the page */
+  --desk: #121110;
+  --desk-fg: #8A847C;
+  --desk-rule: rgba(245,240,232,0.08);
+
+  --serif: 'Source Serif 4', Georgia, serif;
+  --sans: 'DM Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --radius-btn: 8px;
+}
+.page[data-theme="paper"] {
+  color-scheme: light;
+  --bg: #E8E2D8;
+  --surface: #DAD4CA;
+  --fg: #1A1A1A;
+  --fg-muted: #5A5550;
+  --fg-subtle: #8A857F;
+  --rule: rgba(26,26,26,0.12);
+  --rule-strong: rgba(26,26,26,0.26);
+  --input-bg: #DDD7CD;
+  --input-border: rgba(26,26,26,0.18);
+  --accent: #9A7A3E;
+  --danger: #B83A3A;
+  --btn-bg: #1A1A1A;
+  --btn-fg: #E8E2D8;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--desk); color: var(--fg); font-family: var(--sans); margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; }
+
+/* ── Mock chrome ─────────────────────────────────────────── */
+.bar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+.bar h1 { font: 500 11px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--desk-fg); margin: 0; }
+.bar h1 b { color: #D8D2C8; font-weight: 500; }
+.seg { display: inline-flex; border: 1px solid var(--desk-rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--desk-fg); background: none; border: 0; padding: 7px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: rgba(245,240,232,0.08); color: #F5F0E8; }
+.states { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.states button { font: 400 12px var(--sans); color: var(--desk-fg); background: none; border: 1px solid var(--desk-rule); border-radius: 100px; padding: 6px 12px; cursor: pointer; }
+.states button:hover { color: #F5F0E8; }
+.states button[aria-pressed="true"] { color: #1A1917; background: #D8D2C8; border-color: #D8D2C8; }
+.states button.old { border-style: dashed; }
+
+.stage { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+
+.frame { border: 1px solid var(--desk-rule); border-radius: 10px; overflow: hidden; margin-inline: auto; width: 100%; transition: max-width .3s ease; }
+.frame.phone { max-width: 390px; }
+.urlbar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: #0E0D0C; border-bottom: 1px solid var(--desk-rule); }
+.urlbar i { width: 9px; height: 9px; border-radius: 50%; background: #2C2A27; flex: none; }
+.urlbar span { font: 12px var(--mono); color: var(--desk-fg); margin-left: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.notes { border-top: 1px solid var(--desk-rule); padding-top: 14px; }
+.notes h2 { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--desk-fg); margin: 0 0 10px; }
+.notes p, .notes li { font: 400 13px/1.55 var(--sans); color: #B0AAA2; margin: 0 0 8px; }
+.notes ul { padding-left: 16px; margin: 0; }
+.notes code { font: 12px var(--mono); color: #D8D2C8; }
+.notes .flag { color: #C8A96E; }
+
+/* ── The receiver page ───────────────────────────────────── */
+.page { background: var(--bg); color: var(--fg); min-height: 640px; display: flex; flex-direction: column; transition: background .35s ease, color .25s ease; }
+.p-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 56px; padding-inline: clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--rule); }
+.wordmark { font: 600 14px var(--sans); letter-spacing: .06em; color: var(--fg); text-decoration: none; white-space: nowrap; }
+.wordmark span { font-weight: 300; opacity: .5; margin: 0 .45rem; }
+.wordmark em { font-style: normal; font-weight: 400; letter-spacing: .08em; opacity: .6; margin: 0; }
+.pill { font: 500 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); background: none; border: 1px solid var(--rule-strong); border-radius: 100px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.pill:hover { color: var(--fg); }
+
+.p-main { flex: 1; display: flex; justify-content: center; padding-inline: clamp(16px, 5vw, 40px); padding-block: clamp(40px, 9vh, 88px) 56px; }
+.sheet { width: 100%; max-width: 480px; display: flex; flex-direction: column; }
+
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--fg-muted); margin: 0 0 18px; }
+.head { font: 300 clamp(30px, 5vw, 40px)/1.12 var(--serif); letter-spacing: -.01em; text-wrap: balance; margin: 0; }
+.lede { font: 300 15px/1.6 var(--sans); color: var(--fg-muted); margin: 14px 0 0; max-width: 40ch; }
+
+.ledger { margin: 36px 0 0; border-top: 1px solid var(--rule); }
+.row { display: grid; grid-template-columns: 118px minmax(0,1fr); gap: 16px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid var(--rule); }
+.row dt { font: 500 10.5px/1.6 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--fg-subtle); }
+.row dd { margin: 0; font: 400 15.5px/1.45 var(--sans); color: var(--fg); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.row dd small { display: block; font: 300 13.5px/1.5 var(--sans); color: var(--fg-muted); margin-top: 3px; }
+.fname { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.reveal { font: 400 12px var(--sans); color: var(--fg-muted); background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; cursor: pointer; }
+.reveal:hover { color: var(--fg); }
+@media (max-width: 440px) { .row { grid-template-columns: 1fr; gap: 6px; } }
+.phone .row { grid-template-columns: 1fr; gap: 6px; }
+
+.once { font: 400 14px/1.5 var(--sans); color: var(--fg); margin: 20px 0 0; padding-left: 14px; border-left: 1px solid var(--accent); }
+
+.actions { margin-top: 28px; display: flex; flex-direction: column; gap: 14px; }
+.btn { font: 500 14px var(--sans); letter-spacing: .02em; border: 0; border-radius: var(--radius-btn); padding: 15px 20px; cursor: pointer; width: 100%; background: var(--btn-bg); color: var(--btn-fg); transition: opacity .2s; }
+.btn:hover { opacity: .88; }
+.btn.ghost { background: none; color: var(--fg-muted); border: 1px solid var(--rule-strong); }
+.fine { font: 400 12.5px/1.5 var(--sans); color: var(--fg-muted); margin: 0; text-align: center; }
+
+.field { margin-top: 32px; display: flex; flex-direction: column; gap: 8px; }
+.field label { font: 500 10.5px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--fg-subtle); }
+.field input { font: 400 15px var(--sans); color: var(--fg); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--radius-btn); padding: 13px 14px; width: 100%; outline: none; }
+.field input:focus { border-color: var(--fg-muted); }
+
+.measure { margin-top: 40px; }
+.pct { font: 400 clamp(44px, 8vw, 64px)/1 var(--mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.pct sup { font-size: .4em; vertical-align: .9em; margin-left: 2px; color: var(--fg-muted); }
+.track { height: 1px; background: var(--rule-strong); margin: 22px 0 12px; position: relative; }
+.track b { position: absolute; left: 0; top: -1px; height: 3px; background: var(--fg); }
+.readout { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font: 300 13.5px var(--sans); color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+
+.seal { margin-top: 32px; border: 1px solid var(--rule); border-radius: 10px; padding: 20px 22px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px 24px; align-items: center; }
+.seal .eyebrow { margin: 0 0 8px; }
+.seal-txt { font: 300 14px/1.55 var(--sans); color: var(--fg-muted); margin: 0; max-width: 36ch; }
+.seal-txt a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
+.linkbtn { font: 500 13.5px var(--sans); color: var(--fg); background: none; border: 1px solid var(--rule-strong); border-radius: var(--radius-btn); padding: 11px 16px; cursor: pointer; white-space: nowrap; }
+.linkbtn:hover { border-color: var(--fg-muted); }
+.linkbtn.done { color: var(--fg-muted); border-color: var(--rule); }
+.phone .seal { grid-template-columns: 1fr; }
+.phone .linkbtn { width: 100%; }
+@media (max-width: 480px) { .seal { grid-template-columns: 1fr; } .linkbtn { width: 100%; } }
+.send { display: inline-block; margin-top: 48px; font: 400 14px var(--sans); color: var(--fg-muted); text-decoration: none; }
+.send span { border-bottom: 1px solid var(--rule-strong); padding-bottom: 2px; }
+.send:hover { color: var(--fg); }
+.err { font: 400 13.5px var(--sans); color: var(--danger); margin: 10px 0 0; }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.quiet { margin-top: 48px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.quiet .send { margin-top: 0; }
+.article { display: block; margin-top: 40px; border: 1px solid var(--rule); border-radius: 10px; padding: 20px 22px; text-decoration: none; color: inherit; transition: border-color .2s; }
+.article:hover { border-color: var(--rule-strong); }
+.article .eyebrow { margin: 0 0 12px; }
+.article h3 { font: 300 21px/1.3 var(--serif); color: var(--fg); margin: 0 0 8px; text-wrap: balance; }
+.article p { font: 300 14px/1.55 var(--sans); color: var(--fg-muted); margin: 0 0 14px; max-width: 46ch; }
+.article .more { font: 400 14px var(--sans); color: var(--fg); }
+.field input[aria-invalid="true"] { border-color: var(--danger); }
+.note { font: 300 14px/1.55 var(--sans); color: var(--fg-muted); margin: 14px 0 0; }
+.send:hover { color: var(--fg); }
+
+.p-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 18px clamp(16px, 4vw, 40px); border-top: 1px solid var(--rule); font: 400 12px var(--sans); letter-spacing: .02em; color: var(--fg-subtle); }
+.p-foot a { color: inherit; text-decoration: none; }
+.p-foot a:hover { color: var(--fg-muted); }
+
+/* Old dialog (live today, superseded by spec §6) */
+.scrim { position: absolute; inset: 0; background: rgba(10,9,8,.62); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dialog { background: var(--bg); border: 1px solid var(--rule-strong); border-radius: 12px; padding: 28px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+.dialog .head { font-size: 24px; }
+.dialog .meta { font: 300 14px var(--sans); color: var(--fg-muted); margin: 0 0 8px; }
+
+/* Arrival: lines settle one after another; the button comes last. Once only. */
+.arrive > * { animation: settle .5s cubic-bezier(.2,.7,.2,1) both; }
+.arrive > :nth-child(1) { animation-delay: 0ms; }
+.arrive > :nth-child(2) { animation-delay: 170ms; }
+.arrive > :nth-child(3) { animation-delay: 340ms; }
+.arrive > :nth-child(4) { animation-delay: 510ms; }
+.arrive > :nth-child(5) { animation-delay: 680ms; }
+.arrive > :nth-child(6) { animation-delay: 850ms; }
+@keyframes settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .arrive > * { animation: none; } .frame, .page { transition: none; } }
+
+:focus-visible { outline: 2px solid var(--accent, #C8A96E); outline-offset: 3px; }
+</style>
+
+<div class="wrap">
+  <div class="bar">
+    <h1><b>Share-Receiver-1</b> · mock · no repo edits</h1>
+    <div class="seg" role="group" aria-label="Frame width">
+      <button type="button" id="w-desk" aria-pressed="true">Laptop</button>
+      <button type="button" id="w-phone" aria-pressed="false">Phone</button>
+    </div>
+  </div>
+  <div class="states" id="states" role="group" aria-label="Page state"></div>
+
+  <div class="stage">
+    <div class="frame" id="frame">
+      <div class="urlbar"><i></i><i></i><i></i><span id="url">refueler.io/share/</span></div>
+      <div class="page" id="page" data-theme="carbon" style="position:relative">
+        <header class="p-head">
+          <a class="wordmark" href="https://refueler.io/share/">Refueler<span>/</span><em>Share</em></a>
+          <button class="pill" type="button" id="pill">Carbon / Paper</button>
+        </header>
+        <main class="p-main"><div class="sheet" id="sheet"></div></main>
+        <footer class="p-foot">
+          <span>© 2026 Refueler</span>
+          <span><a href="https://refueler.io/share/status/">Status</a> &nbsp;·&nbsp; <a href="https://refueler.io/support/">Support</a></span>
+        </footer>
+        <div id="overlay"></div>
+      </div>
+    </div>
+
+    <aside class="notes" id="notes"></aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const sheet = $('sheet'), notes = $('notes'), overlay = $('overlay'), page = $('page');
+  const NAME = 'Completion statement – 14 Albion Row.pdf';
+  const SIZE = '248.6 MB';
+
+  // Expiry: exact local date + time leads; countdown underneath, refreshed each minute.
+  const expiry = new Date(Date.now() + 6 * 86400000 + 3 * 3600000);
+  expiry.setSeconds(0, 0);
+  const fmtDate = (d) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  function countdown() {
+    const s = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+    if (d >= 1) return 'in ' + d + ' day' + (d === 1 ? '' : 's');
+    if (h >= 1) return 'in ' + h + ' hour' + (h === 1 ? '' : 's');
+    return 'in less than an hour';
+  }
+
+  const nameRow = (label = 'Encrypted file', name = NAME, extra = '') => `
+    <div class="row"><dt>${label === 'Encrypted folder' ? 'Folder' : 'File'}</dt><dd><span class="fname"><span data-name data-hidden="${label}" data-real="${name}">${label}</span>
+      <button class="reveal" type="button" aria-pressed="false" data-reveal>Show name</button></span>${extra}</dd></div>`;
+  // Timed window: opens in 2 h 14 min, closes 9 h after that.
+  const opens = new Date(Date.now() + 2 * 3600000 + 14 * 60000); opens.setSeconds(0, 0);
+  const closes = new Date(opens.getTime() + 9 * 3600000);
+  function untilOpen() {
+    const s = Math.max(0, Math.floor((opens - Date.now()) / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return 'in ' + (h ? h + ' h ' : '') + m + ' min';
+  }
+  const hhmm = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const sizeRow = `<div class="row"><dt>Size</dt><dd>${SIZE}</dd></div>`;
+  const expRow = () => `<div class="row"><dt>Available until</dt><dd>${fmtDate(expiry)}<small data-count>${countdown()}</small></dd></div>`;
+
+  const articleCard = `<a class="article" href="https://refueler.io/notes/what-a-subpoena-gets/">
+          <p class="eyebrow">Latest from Refueler Notes</p>
+          <h3>What a subpoena gets from eight file transfer services</h3>
+          <p>If a legal order reached your file transfer service tomorrow, what would it hand over? Eight services compared.</p>
+          <span class="more">Read the article →</span></a>`;
+
+  const S = {
+    ready: {
+      label: 'Ready',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">A file for you</p>
+        <h2 class="head">Someone sent you a file.</h2>
+        <dl class="ledger">${nameRow()}${sizeRow}${expRow()}</dl>
+        <div class="actions"><button class="btn" type="button" data-go="downloading">Download</button>
+        <p class="fine">No account or email needed.</p></div></div>`,
+      notes: `<p>The default card. One job: Download.</p>
+        <ul><li>Type rule, three roles only: serif for the one headline, small mono capitals for labels, DM Sans for everything you read. Mono appears in one other place, the big percentage while downloading.</li><li>Name hidden until asked. Live since Share-DAD-2.</li>
+        <li>Expiry shows the local date and time first, with the countdown below. It refreshes every minute (spec §6; today's code works it out once).</li>
+        <li>Address bar shows <code>refueler.io/share/</code>. The page clears the link from the address bar once it has read it. That's true today.</li>
+        <li>Bottom line is "No account or email needed." (your 27 Sep decision). I left out "No tracking": the page still reports a "downloaded" event to the Worker, and Cloudflare adds its own script to refueler.io.</li></ul>`
+    },
+    dad: {
+      label: 'Deleted after download',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">A file for you</p>
+        <h2 class="head">Someone sent you a file.</h2>
+        <dl class="ledger">${nameRow()}${sizeRow}${expRow()}</dl>
+        <p class="once">Deleted as soon as the download finishes. The link works once.</p>
+        <div class="actions"><button class="btn" type="button" data-go="done-dad">Download</button>
+        <p class="fine">No account or email needed.</p></div></div>`,
+      notes: `<p>Shown only when the sender ticked "delete after download".</p>
+        <ul><li>Spec §6 said "Deleted after download". This says when: deletion starts the moment the last piece arrives. I avoided "immediately": a large file takes a few minutes to clear, though the link stops working at once.</li>
+        <li>Download starts straight away, with no dialog.</li>
+        <li class="flag">Replaces the "Download / Not now" popup that's live today. Ship this only once Share-DL-W1 is in (the Worker waits for the last piece to arrive before deleting).</li></ul>`
+    },
+    password: {
+      label: 'Password',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">Password needed</p>
+        <h2 class="head">This file has a password.</h2>
+        <p class="lede">The sender gives you this separately from the link.</p>
+        <div class="field"><label for="pw">Password</label>
+          <input id="pw" type="password" autocomplete="current-password" value="correct horse"></div>
+        <p class="err" hidden id="pwerr">Incorrect password.</p>
+        <div class="actions"><button class="btn" type="button" data-go="downloading">Unlock and download</button>
+        <p class="fine">No account or email needed.</p></div></div>`,
+      notes: `<p>After Download on a password transfer. The card also shows a "Password" row before this (same ledger, one more line).</p>
+        <ul><li>Wrong password: "Incorrect password." under the field, in the same spot the site uses now.</li>
+        <li>The password is checked by the Worker, which gives back a short-lived download pass. That's what happens today.</li></ul>`
+    },
+    pwwrong: {
+      label: 'Wrong password',
+      html: () => S.password.html().replace('hidden id="pwerr"', 'id="pwerr"').replace('value="correct horse"', 'value="correct hose" aria-invalid="true" aria-describedby="pwerr"'),
+      notes: `<p>Wrong password: one plain line under the field, the field outlined. Nothing else moves.</p>
+        <ul><li>Live wording today: "Incorrect password." Kept.</li>
+        <li>The Worker limits how fast guesses can be made. The page doesn't mention it.</li></ul>`
+    },
+    folder: {
+      label: 'Folder',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">A folder for you</p>
+        <h2 class="head">Someone sent you a folder.</h2>
+        <dl class="ledger">${nameRow('Encrypted folder', 'Albion Row – completion pack.zip', '<small>A zipped folder. Unzip it after download.</small>')}<div class="row"><dt>Size</dt><dd>1.2 GB</dd></div>${expRow()}</dl>
+        <div class="actions"><button class="btn" type="button" data-go="downloading">Download</button>
+        <p class="fine">No account or email needed.</p></div></div>`,
+      notes: `<p>Same card. Folders are zipped in the sender's browser before upload, so the recipient gets one .zip.</p>
+        <ul><li>Live today: "Encrypted folder" and "Compressed folder — unzip after download". Reworded to plain English.</li></ul>`
+    },
+    notyet: {
+      label: 'Not available yet',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">A file for you</p>
+        <h2 class="head">Someone sent you a file.</h2>
+        <dl class="ledger">${nameRow()}${sizeRow}
+          <div class="row"><dt>Opens</dt><dd>${fmtDate(opens)}<small data-open>${untilOpen()}</small></dd></div>
+          <div class="row"><dt>Closes</dt><dd>${fmtDate(closes)}</dd></div></dl>
+        <div class="actions"><button class="btn" type="button" disabled>Download from ${hhmm(opens)}</button>
+        <p class="fine">The sender chose when this file can be downloaded. This page unlocks by itself.</p></div></div>`,
+      notes: `<p>The sender set a download window. This is before it opens.</p>
+        <ul><li class="flag">Checked in the code: it's <b>one</b> window, an "available from" time and an "available until" time. Not daily hours like 9am–6pm every day. That would be a new feature (Worker + upload page).</li>
+        <li>Paid tiers only, and paid uploads aren't open yet, so no live transfer uses it today.</li>
+        <li>The Worker refuses downloads outside the window (enforced, not just shown). Today's page already counts down and unlocks the button by itself.</li>
+        <li>Once open, the card looks like "Ready", with "Available until" showing the window's close time.</li></ul>`
+    },
+    closed: {
+      label: 'Window closed',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">Link closed</p>
+        <h2 class="head">This file is no longer available.</h2>
+        <p class="lede">The sender made it available until ${fmtDate(closes)}. Ask them for a new link.</p></div>`,
+      notes: `<p>After the sender's window has closed, before the transfer's own expiry.</p>
+        <ul><li>New. Today the card still shows a Download button, and pressing it lands on "This link is no longer active". The page already has the close time, so it can say so on arrival.</li>
+        <li>No name or size, matching the other closed page.</li></ul>`
+    },
+    downloading: {
+      label: 'Downloading',
+      html: () => `<div>
+        <p class="eyebrow">Downloading</p>
+        <h2 class="head">Downloading.</h2>
+        <div class="measure" aria-live="polite">
+          <div class="pct" data-pct>41<sup>%</sup></div>
+          <div class="track"><b data-bar style="width:41%"></b></div>
+          <div class="readout"><span data-mb>101.9 MB of ${SIZE}</span><span>Keep this tab open</span></div>
+        </div></div>`,
+      notes: `<p>A measurement, not a loading bar: one mono figure, a hairline track.</p>
+        <ul><li>"MB of MB" is new (today shows % only). The page already knows the total size, so it's a small change.</li>
+        <li>"Keep this tab open" is true: browsers can't resume a download that was cut off (spec D-3).</li>
+        <li>Safari and Firefox currently show a second "Decrypting" pass. Proposed label: "Preparing file".</li></ul>`
+    },
+    done: {
+      label: 'Downloaded',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">Complete</p>
+        <h2 class="head">Downloaded.</h2>
+        <dl class="ledger">${nameRow()}${sizeRow}</dl>
+        ${articleCard}
+        <a class="send" href="https://refueler.io/share/"><span>Send your own file, free up to 4 GB →</span></a></div>`,
+      notes: `<p>No celebration. Name still hidden until asked.</p>
+        <ul><li>The card is always the <b>newest</b> Notes article. No email list or social accounts, so this is how a new piece reaches people.</li>
+        <li>How: refueler.io publishes a small list of articles; the page reads it from refueler.io itself after the download finishes. Nothing about the recipient is sent, and it never slows the download.</li>
+        <li>If the list can't be read, the card simply doesn't appear.</li>
+        <li>"Free up to 4 GB" is today's free limit. No plan names or prices.</li></ul>`
+    },
+    'done-dad': {
+      label: 'Downloaded · deleted',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">Complete</p>
+        <h2 class="head">Downloaded.</h2>
+        <dl class="ledger">${nameRow()}${sizeRow}</dl>
+        <p class="once">Transfer permanently deleted from Refueler's servers.</p>
+        ${articleCard}
+        <a class="send" href="https://refueler.io/share/"><span>Send your own file, free up to 4 GB →</span></a></div>`,
+      notes: `<p>Delete-after-download transfers add one line. Live wording (Share-DAD-2).</p>
+        <ul><li>The date seal is no longer shown to recipients (decided 27 Sep). It can't be checked by a recipient today, and it matters mostly to the sender, who keeps it.</li>
+        <li>Build list: remove the live "Verify with opentimestamps.org" line with it.</li></ul>`
+    },
+    inactive: {
+      label: 'Link no longer active',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">Link closed</p>
+        <h2 class="head">This link is no longer active.</h2>
+        <p class="lede">The file was deleted after download, or its time ran out. Ask the sender for a new link.</p>
+        <a class="send" href="https://refueler.io/share/"><span>Send your own file, free up to 4 GB →</span></a></div>`,
+      notes: `<p>One page for deleted, expired and unknown links. No name, size or expiry, as today.</p>
+        <ul><li>Wording is the live text, made a little plainer.</li>
+        <li>The "send your own" line is optional here. Say if you'd rather this page stays bare.</li></ul>`
+    },
+    capability: {
+      label: "Can't download here",
+      html: () => `<div class="arrive">
+        <p class="eyebrow">A file for you</p>
+        <h2 class="head">Open this link on a computer.</h2>
+        <p class="note">This file is too large to save on a phone or tablet. Open the same link on a laptop or desktop.</p>
+        <dl class="ledger">${nameRow()}<div class="row"><dt>Size</dt><dd>38.2 GB</dd></div>${expRow()}</dl></div>`,
+      notes: `<p>New. Spec §2.3 and D-8: say so before the download starts, never at 99%.</p>
+        <ul><li>iPhone/iPad above 4 GB gets this until the Safari test (spike S-2) says otherwise.</li>
+        <li>A laptop browser that can't save a file this size gets the same card, naming a browser that can.</li>
+        <li>Wording is a proposal. Built in Share-DL-2.</li></ul>`
+    },
+    integrity: {
+      label: 'Failed check',
+      html: () => `<div class="arrive">
+        <p class="eyebrow">Stopped</p>
+        <h2 class="head">This file didn’t pass its check.</h2>
+        <p class="lede">The stored copy doesn’t match what the sender uploaded, so the download stopped. Nothing was saved to your device. Ask the sender for a new link.</p></div>`,
+      notes: `<p>Rare. The Worker's storage check (live since Share-6) refused the file.</p>
+        <ul><li>Claims only storage integrity: the stored copy vs. what was uploaded. No "end-to-end".</li>
+        <li>Drops "lodged" (a sender word) from today's text.</li></ul>`
+    }
+  };
+
+  let current = 'ready';
+  function render(key) {
+    current = key;
+    const st = S[key];
+    overlay.innerHTML = '';
+    sheet.innerHTML = st.html();
+    if (st.after) st.after();
+    notes.innerHTML = '<h2>' + st.label + '</h2>' + st.notes;
+    [...$('states').children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.key === key)));
+    if (key === 'downloading') runProgress();
+  }
+
+  let timer;
+  function runProgress() {
+    clearInterval(timer);
+    let p = 41;
+    timer = setInterval(() => {
+      if (current !== 'downloading') return clearInterval(timer);
+      p = Math.min(100, p + 3);
+      const pct = sheet.querySelector('[data-pct]'), bar = sheet.querySelector('[data-bar]'), mb = sheet.querySelector('[data-mb]');
+      if (!pct) return clearInterval(timer);
+      pct.innerHTML = p + '<sup>%</sup>';
+      bar.style.width = p + '%';
+      mb.textContent = (248.6 * p / 100).toFixed(1) + ' MB of ' + SIZE;
+      if (p >= 100) { clearInterval(timer); setTimeout(() => current === 'downloading' && render('done'), 500); }
+    }, 180);
+  }
+
+  Object.entries(S).forEach(([key, st]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.key = key; b.textContent = st.label;
+    if (st.old) b.className = 'old';
+    b.addEventListener('click', () => render(key));
+    $('states').appendChild(b);
+  });
+
+  document.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-go]');
+    if (go) {
+      const k = go.dataset.go;
+      render(k); return;
+    }
+    const rv = e.target.closest('[data-reveal]');
+    if (rv) {
+      const shown = rv.getAttribute('aria-pressed') === 'true';
+      const n = rv.parentElement.querySelector('[data-name]'); n.textContent = shown ? n.dataset.hidden : n.dataset.real;
+      rv.textContent = shown ? 'Show name' : 'Hide name';
+      rv.setAttribute('aria-pressed', String(!shown));
+    }
+  });
+
+  $('pill').addEventListener('click', () => {
+    const next = page.dataset.theme === 'carbon' ? 'paper' : 'carbon';
+    page.dataset.theme = next;
+    $('pill').textContent = next === 'carbon' ? 'Carbon / Paper' : 'Paper / Carbon';
+  });
+
+  function setWidth(phone) {
+    $('frame').classList.toggle('phone', phone);
+    $('w-phone').setAttribute('aria-pressed', String(phone));
+    $('w-desk').setAttribute('aria-pressed', String(!phone));
+  }
+  $('w-desk').addEventListener('click', () => setWidth(false));
+  $('w-phone').addEventListener('click', () => setWidth(true));
+
+  setInterval(() => {
+    const c = sheet.querySelector('[data-count]'); if (c) c.textContent = countdown();
+    const o = sheet.querySelector('[data-open]'); if (o) o.textContent = untilOpen();
+  }, 30000);
+  render('ready');
+})();
+</script>
