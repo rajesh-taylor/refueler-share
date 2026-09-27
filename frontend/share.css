@@ -487,6 +487,11 @@ main {
   html:not(.rx-mode) .site-header .wordmark-divider,
   html:not(.rx-mode) .site-header .wordmark-section { display: none; }
 }
+/* At ≤640 px global.css keeps only the active nav link: here "Share", which the
+   wordmark already says ("Refueler / Share"). They ran together as "ShareSHARE". */
+@media (max-width: 640px) {
+  html:not(.rx-mode) .site-nav > a.active { display: none; }
+}
 
 .rx-mode .shell { padding: clamp(40px, 9vh, 88px) 16px 56px; }
 .rx-mode main { max-width: 480px; gap: 0; }
