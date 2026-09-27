@@ -1,6 +1,6 @@
 # Share-Receiver-1 — receiver page build list
 > **Session:** Share-Receiver-1 · 27 Sep 2026 (design, no code changed)
-> **Status:** Design approved by Rajesh (mock v5). N-1 ✅ · N-2a ✅ shipped 27 Sep (`82105b4`) · **N-2b next**.
+> **Status:** Design approved by Rajesh (mock v5). N-1 ✅ · N-2a ✅ shipped 27 Sep (`82105b4`) · N-2b ✅ shipped 28 Sep (`22689ef`; item 15 Safari check pending) · item 13 waits on Share-DL-W1 · **N-3 next**.
 > **Mock:** https://claude.ai/artifact/1HRgQc8hxtcpod7ZKqE66t (private) · repo copy `docs/drafts/share-receiver-mock-v5.html`
 > **Inputs:** `receiver-page-brief.md` · `docs/Share-Download-spec-v1.md` §6 · Share-DAD-2 log entry
 
@@ -39,7 +39,10 @@ Carbon first. One primary action: Download.
 Found in N-2a (27 Sep 2026):
 - **F-6 `share-tokens.css` is not loaded on refueler.io/share/.** refueler.io's `head.njk` loads `global.css` only, which has no `--mono`, `--serif`, `--display`, `--sans`, `--card-bg`, `--radius`, `--c-red`, `--c-amber`. Every `share.css` rule using them silently falls back live (e.g. "mono" labels on the upload page render in DM Sans). The receiver styles (`.rx-*`) set their own fonts and rules, so they're unaffected. Fix the upload-page styles in a cleanup session (map to `global.css` tokens; don't load a second token file).
 - **F-7 Theme pill label is wrong on load in Carbon** (site-wide): the head script sets the pill text before the pill exists, so it reads "Paper / Carbon" until clicked. refueler.io `head.njk`. Fold into N-3.
-- **F-8 "Refueler / Share" wordmark** (`wordmarkSection: "Share"`, N-2a) doesn't fit beside the full site nav between 961 and ~1000 px. `share.css` hides "/ Share" from 961 to 1040 px on the upload page only. Tidy when the site nav is revisited.
+- **F-8 "Refueler / Share" wordmark** (`wordmarkSection: "Share"`, N-2a) doesn't fit beside the full site nav between 961 and ~1000 px. `share.css` hides "/ Share" from 961 to 1040 px on the upload page only. Tidy when the site nav is revisited. *(N-2b: at ≤960 px the upload page header reads "Refueler / ShareSHARE": the wordmark plus the one active nav link global.css keeps on narrow screens. Live since N-2a.)*
+
+Found in N-2b (28 Sep 2026):
+- **F-9 No one can download the date seal now.** The sender never received the `.ots` file (upload only shows "date seal submitted ✓"); the recipient's offer was the only way out, and item 10 removed it. The seal is still made, stored encrypted (`{uuid}/date-seal.ots.enc`) and deleted with the transfer. `/timestamp/seal/{uuid}` and `decryptOts` now have no caller; kept for the checker. Not reachable today (permanent record is paid-only). **Before paid uploads open, or before "permanent record" is claimed:** give the sender (or a checker) the seal, the nonce and an upgrade step — the F-1 design session, with Legend.
 
 ## 3. Build sessions, in order
 
@@ -52,7 +55,7 @@ One list of Notes articles drives both the Notes index page and a small `/notes/
 Files: `src/index.njk` (receiver markup only), `frontend/share.css`, `frontend/download.js`. No Worker change.
 Split in two sessions:
 - **N-2a · Share-Receiver-2a** — items 1–9. ✅ **Done 27 Sep 2026** — shipped `82105b4` (refueler.io `8c9986c`). Also: password row "Needed to download"; other errors "Stopped" / "The download stopped." + today's message; wordmark "Refueler / Share"; save-dialog-cancel dead button fixed; Safari/Firefox network error no longer hangs. Dead link and failed check use the new layout with today's words (reworded in N-2b).
-- **N-2b · Share-Receiver-2b** — next:
+- **N-2b · Share-Receiver-2b** — ✅ **Done 28 Sep 2026** — shipped `22689ef` (refueler.io `8516a9a`), items 10, 11, 12, 14; item 15 (Safari) Rajesh, pending. Found F-9. Was:
   - item 10 remove the date-seal offer (and drop the `decryptOts` import if unused);
   - item 11 "Link no longer active" copy + send line;
   - item 12 "Failed check" copy;
@@ -88,6 +91,6 @@ Change the default from `'paper'` to `'carbon'` in: refueler.io `src/_includes/h
 ### Later, not scheduled
 - **Receiver footer (R-14)** — "© 2026 Refueler · Status · Support" vs the live site-wide footer ("© 2026 Refueler Ltd (incorporating) · refueler.io" · Privacy · Support). Rajesh, 27 Sep: leave for now; do when needed or in a snag-list run.
 - Upload-page styles on refueler.io (F-6), pill label on load (F-7), wordmark band (F-8).
-- Date-seal checker a recipient can use (F-1) — design with Legend.
+- Date-seal checker a recipient can use (F-1), and a way for anyone to get the seal at all (F-9) — design with Legend, before paid uploads open.
 - Daily availability hours — new feature, not planned.
 - Delete stale `frontend/index.html` (F-3).
