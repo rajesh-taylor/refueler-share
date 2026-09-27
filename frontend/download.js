@@ -32,10 +32,14 @@
 //   One sheet at a time (src/index.njk): #receiver-card → #unlock-screen →
 //   #download-card → #rx-done, or #rx-notice (window closed / dead link / stopped).
 //   Copy is the build list's, word for word. "Password", never "passphrase" (R-7).
+//
+// Share-Receiver-2b (N-2b, items 10–12, 14):
+//   No date seal for recipients (R-9, finding F-1): a recipient can't check it today.
+//   The seal nonce may still be in the link fragment; this page ignores it.
+//   Each sheet settles in the first time it appears (item 14); the downloading sheet never does.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { loadDeps, hexToBuf, bufToHex, WORKER_URL } from './crypto.js';
-import { decryptOts } from './timestamp.js';
+import { loadDeps, hexToBuf, WORKER_URL } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -46,6 +50,11 @@ const NOTES_TIMEOUT_MS = 4000;
 
 const RX_SHEETS = ['receiver-card', 'unlock-screen', 'download-card', 'rx-done', 'rx-notice'];
 const $ = id => document.getElementById(id);
+
+// Item 14: lines settle 170 ms apart, button last, once per sheet. Must match share.css .rx-arrive.
+const RX_STAGGER_MS = 170;
+const RX_SETTLE_MS  = 500;
+const _arrived = new Set(['download-card']);   // a measurement, not an arrival
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IntegrityError — typed error thrown on any 409 or truncated-body path.
@@ -92,16 +101,6 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   state.sessionAesKey = await crypto.subtle.importKey(
     'raw', rawKeyBytes, { name: 'AES-GCM' }, false, ['decrypt'],
   );
-
-  // ── Seal nonce — for OTS download offer ──────────────────────────────────
-  // v1: detected.sealNonce is Uint8Array|null → convert to hex string for internal use
-  // v0: detected.sn is already a hex string|null
-  let sealNonceHex = null;
-  if (detected.v === 1 && detected.sealNonce) {
-    sealNonceHex = bufToHex(detected.sealNonce);
-  } else if (detected.v === 0 && detected.sn) {
-    sealNonceHex = detected.sn;
-  }
 
   // Clear fragment + query from URL bar now (key is imported, no longer needed)
   history.replaceState(null, '', location.pathname);
@@ -151,9 +150,6 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   const fileName = (detected.v === 1 && detected.filename)
     ? detected.filename
     : (meta.file_name || `refueler-${uuid.slice(0, 8)}`);
-
-  const timestampState = meta.timestamp_state || 'none';
-  const hasOts = (timestampState === 'pending' || timestampState === 'complete') && !!sealNonceHex;
 
   const isZip                 = fileName.toLowerCase().endsWith('.zip');
   const isPassphraseProtected = !!meta.passphrase_protected;
@@ -236,7 +232,7 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
     phase = 'download';
     let outcome;
     try {
-      outcome = await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+      outcome = await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers);
     } catch (e) {
       helpers.reportError('download_unhandled', e?.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
       _showDownloadError('Download failed. Please try again.', domRefs);
@@ -307,7 +303,7 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Download capability gate. Returns 'cancelled' if the recipient closed the save dialog.
 // ─────────────────────────────────────────────────────────────────────────────
-async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
+async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers) {
   const hasFSAA = typeof showSaveFilePicker !== 'undefined';
   if (hasFSAA) {
     let fileHandle;
@@ -316,12 +312,12 @@ async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOt
     } catch (e) {
       if (e.name === 'AbortError') return 'cancelled';
       helpers.reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
-      await _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+      await _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers);
       return;
     }
-    await _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+    await _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, domRefs, state, helpers);
   } else {
-    await _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+    await _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers);
   }
 }
 
@@ -349,12 +345,11 @@ async function _parse409Body(res) {
 //   - No partial file was saved
 // ─────────────────────────────────────────────────────────────────────────────
 function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
-  // Receiver-2a: new layout, today's words. Rewording is build item 12 (Share-Receiver-2b).
-  // Honest scope: ciphertext storage integrity check, not end-to-end.
-  _showNotice('Stopped', 'This transfer did not pass its integrity check',
-    'The encrypted file on the server does not match what was lodged. '
-    + 'No partial file has been saved to your device. '
-    + 'Contact the sender for a fresh link.');
+  // Item 12. Honest scope: the stored copy vs. what was uploaded (ciphertext storage
+  // integrity), never end-to-end.
+  _showNotice('Stopped', "This file didn't pass its check.",
+    "The stored copy doesn't match what the sender uploaded, so the download stopped. "
+    + 'Nothing was saved to your device. Ask the sender for a new link.');
 
   // Log for ops visibility — fire-and-forget
   const detail = chunkIdx !== null ? `chunk:${chunkIdx}` : 'root_or_sidecar';
@@ -372,7 +367,7 @@ function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
 //   5. X-Integrity header read silently on first chunk; no UX change
 //   6. Legacy 200 (no X-Integrity) → identical path, silent pass-through
 // ─────────────────────────────────────────────────────────────────────────────
-async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
+async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, domRefs, state, helpers) {
   const { reportError } = helpers;
   const totalChunks = meta.total_chunks;
   const totalBytes  = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
@@ -475,7 +470,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
     }
 
     await writable.close();
-    await _finish(uuid, willSelfDestruct, hasOts, sealNonceHex, state, domRefs, reportError);
+    _finish(willSelfDestruct, domRefs);
 
   } catch (e) {
     try { await writable.abort(); } catch {}
@@ -503,7 +498,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 //   4. chunks array discarded and never assembled on IntegrityError
 //   5. X-Integrity read silently on res headers; no UX change for legacy
 // ─────────────────────────────────────────────────────────────────────────────
-async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
+async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers) {
   const { reportError } = helpers;
   const totalChunks = meta?.total_chunks;
 
@@ -586,26 +581,20 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
-  await _finish(uuid, willSelfDestruct, hasOts, sealNonceHex, state, domRefs, reportError);
+  _finish(willSelfDestruct, domRefs);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Finished (item 9, R-10): "Downloaded." + File/Size, DAD line, Notes card, send line.
+// No date seal (item 10, R-9), so the Notes card is always tried.
 // ─────────────────────────────────────────────────────────────────────────────
-async function _finish(uuid, willSelfDestruct, hasOts, sealNonceHex, state, domRefs, reportError) {
+function _finish(willSelfDestruct, domRefs) {
+  if (willSelfDestruct) $('rx-done-deleted').hidden = false;   // before the sheet shows: it joins the arrival
   _showSheet('rx-done');
-  if (willSelfDestruct) $('rx-done-deleted').hidden = false;
-
-  // Date seal offer stays until build item 10 (Share-Receiver-2b).
-  let sealShown = false;
-  if (hasOts) {
-    try { sealShown = await _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError); } catch {}
-  }
 
   try { _logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
 
-  // R-11: never both a date seal and a Notes card.
-  if (!sealShown) _showNotesCard(domRefs.dlSignoff);
+  _showNotesCard(domRefs.dlSignoff);
 }
 
 // Fetched only now, after the download. No cookies, no referrer, nothing about
@@ -627,7 +616,7 @@ async function _showNotesCard(anchor) {
     if (href.origin !== 'https://refueler.io' || !href.pathname.startsWith('/notes/')) return;
 
     const card = document.createElement('a');
-    card.className = 'rx-article';
+    card.className = 'rx-article rx-settle';   // arrives up to 4 s after the sheet: settles in on its own
     card.href      = href.href;
     card.target    = '_blank';                  // don't navigate away from a download still saving
     card.rel       = 'noopener noreferrer';
@@ -645,6 +634,7 @@ async function _showNotesCard(anchor) {
     more.textContent = 'Read the article →';
     card.append(eyebrow, title, summary, more);
     anchor.insertAdjacentElement('beforebegin', card);
+    setTimeout(() => card.classList.remove('rx-settle'), RX_SETTLE_MS + 100);
   } catch {
     // no card
   } finally {
@@ -653,62 +643,32 @@ async function _showNotesCard(anchor) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TH-2: OTS download offer
-// ─────────────────────────────────────────────────────────────────────────────
-// Returns true only if the offer was shown (R-11: then no Notes card).
-async function _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError) {
-  if (!uuid || !sealNonceHex || !state.sessionAesKey) return false;
-
-  let otsBytes;
-  try {
-    const res = await fetch(`${WORKER_URL}/timestamp/seal/${uuid}`);
-    if (!res.ok) { reportError('ots_fetch', `HTTP ${res.status}`, `uuid:${uuid.slice(0,8)}`); return false; }
-    const raw  = await res.arrayBuffer();
-    otsBytes   = await decryptOts(new Uint8Array(raw), state.sessionAesKey);
-  } catch (e) {
-    reportError('ots_decrypt', e.message, `uuid:${uuid.slice(0,8)}`);
-    return false;
-  }
-
-  const otsWrap = document.createElement('div');
-  otsWrap.className = 'ots-download-wrap mt8';
-
-  const otsBtn = document.createElement('button');
-  otsBtn.type = 'button';
-  otsBtn.className = 'btn btn-secondary btn-small';
-  otsBtn.textContent = '⬇ date-seal.ots';
-  otsBtn.title = 'Download the Bitcoin-anchored date stamp for this transfer';
-  otsBtn.addEventListener('click', () => {
-    const otsBlob = new Blob([otsBytes], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(otsBlob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'date-seal.ots';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  });
-
-  otsWrap.appendChild(otsBtn);
-
-  const otsNote = document.createElement('p');
-  otsNote.className = 'muted small mt4';
-  otsNote.textContent = 'Verify with opentimestamps.org — proves when this file existed, not who sent it.';
-  otsWrap.appendChild(otsNote);
-
-  domRefs.dlSignoff.insertAdjacentElement('beforebegin', otsWrap);
-  return true;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Receiver helpers
 // ─────────────────────────────────────────────────────────────────────────────
 function _showSheet(id) {
   for (const s of RX_SHEETS) { const el = $(s); if (el) el.hidden = (s !== id); }
+  if (!_arrived.has(id)) { _arrived.add(id); _arrive($(id)); }
 }
 
-function _showNotice(eyebrow, head, lede) {
+// Item 14. Stagger only the lines actually on screen, so a hidden row leaves no gap.
+// The class comes off once the last line has settled: a sheet shown again (save
+// dialog cancelled, card re-rendered) doesn't replay. prefers-reduced-motion: share.css.
+function _arrive(sheet) {
+  if (!sheet) return;
+  const lines = [...sheet.children].filter(el => !el.hidden && el.getClientRects().length > 0);
+  lines.forEach((el, i) => { el.style.animationDelay = `${i * RX_STAGGER_MS}ms`; });
+  sheet.classList.add('rx-arrive');
+  setTimeout(() => {
+    sheet.classList.remove('rx-arrive');
+    lines.forEach(el => { el.style.animationDelay = ''; });
+  }, Math.max(0, lines.length - 1) * RX_STAGGER_MS + RX_SETTLE_MS + 100);
+}
+
+function _showNotice(eyebrow, head, lede, { send = false } = {}) {
   $('rx-notice-eyebrow').textContent = eyebrow;
   $('rx-notice-head').textContent    = head;
   $('rx-notice-lede').textContent    = lede;
+  $('rx-notice-send').hidden         = !send;
   _showSheet('rx-notice');
 }
 
@@ -832,11 +792,11 @@ function _renderHiddenFileName(rcFileName, fileName, hiddenLabel) {
   rcFileName.insertAdjacentElement('afterend', btn);
 }
 
-// Receiver-2a: new layout, today's words (mid-download 410 lands here too).
-// Rewording + send line is build item 11 (Share-Receiver-2b).
+// Item 11. Deleted, expired and unknown links (mid-download 410 lands here too).
 function _showLinkInactive(_domRefs) {
-  _showNotice('Link closed', 'This link is no longer active',
-    'The transfer was deleted after download or has expired. Ask the sender for a new link.');
+  _showNotice('Link closed', 'This link is no longer active.',
+    'The file was deleted after download, or its time ran out. Ask the sender for a new link.',
+    { send: true });
 }
 
 // No progress figures on an error (DAD-ERROR-TEXT, Share-B10-3): the notice sheet has none.

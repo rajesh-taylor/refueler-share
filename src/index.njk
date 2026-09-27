@@ -267,7 +267,7 @@ function showMaintenanceModal(status) {
       <div id="qr-wrap"></div>
     </div>
 
-    <!-- ── Receiver (Share-Receiver-2a) ─────────────────────────────────────
+    <!-- ── Receiver (Share-Receiver-2a/2b) ──────────────────────────────────
          Download mode only; download.js shows one sheet at a time.
          Type rule (R-1): serif = the one headline, mono capitals = labels,
          DM Sans = everything read. -->
@@ -331,16 +331,17 @@ function showMaintenanceModal(status) {
       </dl>
       <p class="rx-once" id="rx-done-deleted" hidden>Transfer permanently deleted from Refueler's servers.</p>
       <!-- R-12: "free up to 4 GB" is FREE_CAP in frontend/crypto.js. If the free
-           limit ever drops below 4 GB, change this line and the upload page's
-           "Free up to 4 GB" (drop zone, above). -->
+           limit ever drops below 4 GB, change both send lines (here and on the
+           dead-link notice, below) and the upload page's "Free up to 4 GB" (drop zone). -->
       <p class="rx-send-wrap" id="dl-signoff"><a class="rx-send" href="/share/"><span>Send your own file, free up to 4 GB →</span></a></p>
     </section>
 
-    <!-- Closed window, dead link, stopped download -->
+    <!-- Closed window, dead link, stopped download. Send line: dead link only (item 11). -->
     <section class="rx-sheet" id="rx-notice" hidden>
       <p class="rx-eyebrow" id="rx-notice-eyebrow"></p>
       <h1 class="rx-head" id="rx-notice-head"></h1>
       <p class="rx-lede" id="rx-notice-lede"></p>
+      <p class="rx-send-wrap" id="rx-notice-send" hidden><a class="rx-send" href="/share/"><span>Send your own file, free up to 4 GB →</span></a></p>
     </section>
 
     <!-- Drop zone multi-file rejection message -->
