@@ -27,10 +27,25 @@
 //   IV source:
 //     v1: URL fragment (detected.ivBytes) — never in manifest. See Share-4.
 //     v0: fragment iv param (hex) — backward compat for old links.
+//
+// Share-Receiver-2a (docs/Share-Receiver-1-build-list.md N-2a, items 1–9):
+//   One sheet at a time (src/index.njk): #receiver-card → #unlock-screen →
+//   #download-card → #rx-done, or #rx-notice (window closed / dead link / stopped).
+//   Copy is the build list's, word for word. "Password", never "passphrase" (R-7).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { loadDeps, hexToBuf, bufToHex, WORKER_URL } from './crypto.js';
 import { decryptOts } from './timestamp.js';
+
+// Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
+// refueler.io/share/. A missing file answers 200 + the homepage, so only a body
+// that parses and passes every check below becomes a card.
+const NOTES_LATEST_URL = 'https://refueler.io/notes/latest.json';
+const NOTES_URL_PREFIX = 'https://refueler.io/notes/';
+const NOTES_TIMEOUT_MS = 4000;
+
+const RX_SHEETS = ['receiver-card', 'unlock-screen', 'download-card', 'rx-done', 'rx-notice'];
+const $ = id => document.getElementById(id);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IntegrityError — typed error thrown on any 409 or truncated-body path.
@@ -52,11 +67,15 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   const { uuid } = detected;
   const {
     dropZone, infoCard, optionsCard, receiverCard,
-    rcFileName, rcFileIcon, rcFolderNote, rcSize, rcExpiry,
-    rcPassphraseRow, rcDownloadBtn, unlockScreen, unlockInput,
-    unlockError, unlockBtn, uspBlock, uspText,
+    rcFileName, rcFolderNote, rcSize, rcExpiry,
+    rcPassphraseRow, rcDownloadBtn, unlockInput,
+    unlockError, unlockBtn, uspText,
   } = domRefs;
-  const { formatBytes, reportError } = helpers;
+  const { formatBytes } = helpers;
+
+  // Receiver mode (R-14): share.css hides the site nav links, Plans · Status,
+  // the HTTP/3 line and the badge. Wordmark and theme pill stay.
+  document.documentElement.classList.add('rx-mode');
 
   dropZone.classList.add('hidden');
   infoCard.classList.add('hidden');
@@ -136,129 +155,157 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   const timestampState = meta.timestamp_state || 'none';
   const hasOts = (timestampState === 'pending' || timestampState === 'complete') && !!sealNonceHex;
 
-  // Populate receiver card  (fileName resolved above — fragment v1 or meta fallback)
+  const isZip                 = fileName.toLowerCase().endsWith('.zip');
+  const isPassphraseProtected = !!meta.passphrase_protected;
+  const willSelfDestruct      = meta.pending_destruction !== null && meta.pending_destruction !== undefined;
+  const expiryTs = meta.expiry_timestamp          || null;
+  const fromTs   = meta.available_from_timestamp  || null;   // paid tiers only (manifest_tg.js)
+  const untilTs  = meta.available_until_timestamp || null;
+  // Last moment a download is allowed: the sender's window or the transfer's expiry, whichever is first.
+  const closeTs  = (untilTs && expiryTs) ? Math.min(untilTs, expiryTs) : (untilTs || expiryTs);
+  const nowSecs  = () => Math.floor(Date.now() / 1000);
+
+  // Timed window already closed (item 7): say so on arrival — no name, no size.
+  if (untilTs && nowSecs() >= untilTs) { _showWindowClosed(untilTs); return; }
+
+  // Folder (item 5). Folders are zipped in the sender's browser; the Worker never learns the type.
+  if (isZip) {
+    $('rc-eyebrow').textContent         = 'A folder for you';
+    $('rc-head').textContent            = 'Someone sent you a folder.';
+    $('rc-name-label').textContent      = 'Folder';
+    $('rx-done-name-label').textContent = 'Folder';
+    rcFolderNote.hidden = false;
+  }
+
   // Share-DAD-2: name hidden until the recipient asks — glancing eyes on a screen
   // see "Encrypted file". The saved file still gets its real name.
-  const isZip = fileName.toLowerCase().endsWith('.zip');
-  _renderHiddenFileName(rcFileName, fileName, isZip ? 'Encrypted folder' : 'Encrypted file');
-  if (isZip) { rcFileIcon.textContent = '📁'; rcFolderNote.classList.remove('hidden'); }
+  const hiddenLabel = isZip ? 'Encrypted folder' : 'Encrypted file';
+  _renderHiddenFileName(rcFileName, fileName, hiddenLabel);
+  _renderHiddenFileName($('rx-done-name'), fileName, hiddenLabel);
 
-  rcSize.textContent = meta.total_bytes ? formatBytes(meta.total_bytes) : '—';
+  const sizeText = meta.total_bytes ? formatBytes(meta.total_bytes) : '—';
+  rcSize.textContent            = sizeText;
+  $('rx-done-size').textContent = sizeText;
 
-  if (meta.expiry_timestamp) {
-    const secsRemaining = Math.floor(meta.expiry_timestamp - Date.now() / 1000);
-    if (secsRemaining <= 0) {
-      rcExpiry.textContent = 'Expired';
-      rcExpiry.style.color = 'var(--c-red)';
+  if (isPassphraseProtected) rcPassphraseRow.hidden = false;
+
+  // ── Card state: ready, or timed window not yet open (items 2, 3, 6) ───────
+  // phase: card → (unlock) → download. The clock only changes the page before a download starts.
+  let phase = 'card';
+
+  function renderCard() {
+    const now     = nowSecs();
+    const waiting = !!fromTs && now < fromTs;
+    $('rc-until-row').hidden  = waiting;
+    $('rc-opens-row').hidden  = !waiting;
+    $('rc-closes-row').hidden = !waiting;
+    if (waiting) {
+      $('rc-opens').textContent       = _fmtDateTime(fromTs);
+      $('rc-opens-count').textContent = _untilOpen(fromTs - now);
+      $('rc-closes').textContent      = closeTs ? _fmtDateTime(closeTs) : '—';
+      rcDownloadBtn.disabled    = true;
+      rcDownloadBtn.textContent = 'Download from ' + (_sameDay(fromTs) ? _fmtTime(fromTs) : _fmtDateTime(fromTs));
+      uspText.textContent       = 'The sender chose when this file can be downloaded. This page unlocks by itself.';
     } else {
-      const days  = Math.floor(secsRemaining / 86400);
-      const hours = Math.floor((secsRemaining % 86400) / 3600);
-      if (days >= 1)       rcExpiry.textContent = `${days} day${days !== 1 ? 's' : ''} remaining`;
-      else if (hours >= 1) rcExpiry.textContent = `${hours} hour${hours !== 1 ? 's' : ''} remaining`;
-      else                 rcExpiry.textContent = 'Less than 1 hour';
+      rcExpiry.textContent               = closeTs ? _fmtDateTime(closeTs) : '—';
+      $('rc-expiry-count').textContent   = closeTs ? _countdown(closeTs - now) : '';
+      rcDownloadBtn.disabled    = false;
+      rcDownloadBtn.textContent = 'Download';
+      uspText.textContent       = 'No account or email needed.';
     }
-  } else {
-    rcExpiry.textContent = '—';
   }
 
-  const isPassphraseProtected = !!meta.passphrase_protected;
-  if (isPassphraseProtected) rcPassphraseRow.classList.remove('hidden');
-
-  const willSelfDestruct     = meta.pending_destruction !== null && meta.pending_destruction !== undefined;
-  const availableFromUnixRx  = meta.available_from_timestamp  || null;
-  const availableUntilUnixRx = meta.available_until_timestamp || null;
-
-  receiverCard.style.display = 'flex';
-
-  // Tidal countdown
-  const nowSecs = () => Math.floor(Date.now() / 1000);
-  if (availableFromUnixRx && nowSecs() < availableFromUnixRx) {
-    rcDownloadBtn.disabled = true;
-    const countdownEl = document.createElement('p');
-    countdownEl.id = 'tidal-countdown';
-    countdownEl.className = 'tidal-countdown-display muted mono small';
-    rcDownloadBtn.insertAdjacentElement('afterend', countdownEl);
-
-    function _updateCountdown() {
-      const secsLeft = Math.max(0, availableFromUnixRx - nowSecs());
-      if (secsLeft === 0) { rcDownloadBtn.disabled = false; countdownEl.remove(); return; }
-      const h = Math.floor(secsLeft / 3600);
-      const m = Math.floor((secsLeft % 3600) / 60);
-      const s = secsLeft % 60;
-      const parts = [];
-      if (h > 0) parts.push(`${h}h`);
-      if (m > 0 || h > 0) parts.push(`${m}m`);
-      parts.push(`${s}s`);
-      countdownEl.textContent = `Available in ${parts.join(' ')}`;
-      setTimeout(_updateCountdown, 1000);
-    }
-    _updateCountdown();
+  // Recompute on open, every minute, when the tab comes back, and at the exact
+  // moments the window opens or closes (R-5: today's code worked it out once).
+  function tick() {
+    if (phase !== 'card' && phase !== 'unlock') return;
+    const now = nowSecs();
+    if (expiryTs && now >= expiryTs) { phase = 'ended'; _showLinkInactive(domRefs); return; }
+    if (untilTs && now >= untilTs)   { phase = 'ended'; _showWindowClosed(untilTs); return; }
+    if (phase === 'card') renderCard();
   }
+  renderCard();
+  _showSheet('receiver-card');
+  setInterval(tick, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  if (fromTs && nowSecs() < fromTs) _at(fromTs, tick);
+  if (closeTs) _at(closeTs, tick);
 
-  if (availableUntilUnixRx) {
-    const untilEl = document.createElement('p');
-    untilEl.id = 'tidal-until-display';
-    untilEl.className = 'tidal-until-display muted mono small';
-    untilEl.textContent = `Available until ${_formatDatetime(availableUntilUnixRx)}`;
-    rcDownloadBtn.insertAdjacentElement('afterend', untilEl);
-  }
-
-  uspText.textContent = 'No account. No email. No history. Your data. Not ours.';
-  uspBlock.classList.remove('hidden');
-
-  const onDownloadClick = async () => {
-    receiverCard.style.display = 'none';
-
-    const _proceed = async () => {
-      if (isPassphraseProtected) {
-        unlockScreen.style.display = 'flex';
-        unlockBtn.addEventListener('click', async () => {
-          const passphrase = unlockInput.value.trim();
-          if (!passphrase) return;
-          unlockBtn.disabled = true;
-          unlockError.textContent = '';
-          try {
-            const authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ passphrase }),
-            });
-            if (!authRes.ok) {
-              unlockError.textContent = authRes.status === 401 ? 'Incorrect password.' : 'Something went wrong.';
-              unlockBtn.disabled = false;
-              return;
-            }
-            const { token } = await authRes.json();
-            state.downloadToken = token;
-            unlockInput.value = '';
-            unlockScreen.style.display = 'none';
-            await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
-          } catch {
-            unlockError.textContent = 'Network error. Try again.';
-            unlockBtn.disabled = false;
-          }
-        });
-        unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlockBtn.click(); });
-      } else {
-        await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
-      }
-    };
-
-    if (willSelfDestruct) {
-      // "Not now" returns to the card with the button armed again.
-      _showPreDownloadModal(() => _proceed(), () => {
-        receiverCard.style.display = 'flex';
-        rcDownloadBtn.addEventListener('click', onDownloadClick, { once: true });
-      });
-    } else {
-      await _proceed();
+  // ── Download ──────────────────────────────────────────────────────────────
+  const startDownload = async () => {
+    phase = 'download';
+    let outcome;
+    try {
+      outcome = await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
+    } catch (e) {
+      helpers.reportError('download_unhandled', e?.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
+      _showDownloadError('Download failed. Please try again.', domRefs);
+      return;
     }
+    // Save dialog cancelled: back to the card, button still live (it used to go dead).
+    if (outcome === 'cancelled') { phase = 'card'; renderCard(); _showSheet('receiver-card'); tick(); }
   };
-  rcDownloadBtn.addEventListener('click', onDownloadClick, { once: true });
+
+  // ── Password (item 4, R-8) ────────────────────────────────────────────────
+  const tryUnlock = async () => {
+    const passphrase = unlockInput.value.trim();
+    if (!passphrase || unlockBtn.disabled) return;
+    unlockBtn.disabled = true;
+    _setUnlockError(unlockInput, unlockError, '', false);
+    let authRes;
+    try {
+      authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passphrase }),
+      });
+      if (!authRes.ok) {
+        _setUnlockError(unlockInput, unlockError,
+          authRes.status === 401 ? 'Incorrect password.' : 'Something went wrong.',
+          authRes.status === 401);
+        unlockBtn.disabled = false;
+        return;
+      }
+      const { token } = await authRes.json();
+      state.downloadToken = token;
+    } catch {
+      _setUnlockError(unlockInput, unlockError, 'Network error. Try again.', false);
+      unlockBtn.disabled = false;
+      return;
+    }
+    unlockInput.value  = '';
+    unlockBtn.disabled = false;
+    await startDownload();
+  };
+  unlockBtn.addEventListener('click', tryUnlock);
+  unlockInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
+  let busy = false;
+  rcDownloadBtn.addEventListener('click', async () => {
+    if (busy || rcDownloadBtn.disabled || phase !== 'card') return;
+    busy = true;
+    try {
+      if (willSelfDestruct) {
+        // "Download / Not now" dialog stays until Share-DL-W1 (build item 13).
+        receiverCard.hidden = true;
+        const go = await new Promise(resolve => _showPreDownloadModal(() => resolve(true), () => resolve(false)));
+        if (!go) { if (phase === 'card') receiverCard.hidden = false; return; }
+      }
+      if (isPassphraseProtected && !state.downloadToken) {
+        phase = 'unlock';
+        _showSheet('unlock-screen');
+        unlockInput.focus();
+        return;
+      }
+      await startDownload();
+    } finally {
+      busy = false;
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Download capability gate
+// Download capability gate. Returns 'cancelled' if the recipient closed the save dialog.
 // ─────────────────────────────────────────────────────────────────────────────
 async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
   const hasFSAA = typeof showSaveFilePicker !== 'undefined';
@@ -267,7 +314,7 @@ async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, hasOt
     try {
       fileHandle = await showSaveFilePicker({ suggestedName: fileName, types: [] });
     } catch (e) {
-      if (e.name === 'AbortError') { domRefs.receiverCard.style.display = 'flex'; return; }
+      if (e.name === 'AbortError') return 'cancelled';
       helpers.reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
       await _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers);
       return;
@@ -302,44 +349,12 @@ async function _parse409Body(res) {
 //   - No partial file was saved
 // ─────────────────────────────────────────────────────────────────────────────
 function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
-  const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
-
-  // Hide progress entirely — no stray percentage/bar alongside a failure state.
-  dlPct.classList.add('hidden');
-  dlBar.parentElement.classList.add('hidden');
-  dlStageTag.textContent = 'Transfer failed';
-  downloadCard.classList.remove('hidden');
-
-  // Remove any existing error card to avoid doubling up
-  const existing = document.getElementById('integrity-fail-card');
-  if (existing) existing.remove();
-
-  const card = document.createElement('div');
-  card.id = 'integrity-fail-card';
-  card.className = 'integrity-fail-card';
-
-  const icon = document.createElement('div');
-  icon.className = 'integrity-fail-icon';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.textContent = '⚠';
-
-  const heading = document.createElement('p');
-  heading.className = 'integrity-fail-heading';
-  heading.textContent = 'This transfer did not pass its integrity check';
-
-  const body = document.createElement('p');
-  body.className = 'integrity-fail-body';
-  // Honest scope: ciphertext storage integrity check, not end-to-end
-  body.textContent = 'The encrypted file on the server does not match what was lodged. '
+  // Receiver-2a: new layout, today's words. Rewording is build item 12 (Share-Receiver-2b).
+  // Honest scope: ciphertext storage integrity check, not end-to-end.
+  _showNotice('Stopped', 'This transfer did not pass its integrity check',
+    'The encrypted file on the server does not match what was lodged. '
     + 'No partial file has been saved to your device. '
-    + 'Contact the sender for a fresh link.';
-
-  card.appendChild(icon);
-  card.appendChild(heading);
-  card.appendChild(body);
-
-  // Insert after the download card heading area
-  downloadCard.appendChild(card);
+    + 'Contact the sender for a fresh link.');
 
   // Log for ops visibility — fire-and-forget
   const detail = chunkIdx !== null ? `chunk:${chunkIdx}` : 'root_or_sidecar';
@@ -358,18 +373,13 @@ function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
 //   6. Legacy 200 (no X-Integrity) → identical path, silent pass-through
 // ─────────────────────────────────────────────────────────────────────────────
 async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
-  const { downloadCard, dlStageTag, dlPct, dlBar, dlSignoff, uspBlock } = domRefs;
   const { reportError } = helpers;
   const totalChunks = meta.total_chunks;
+  const totalBytes  = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
 
   if (!totalChunks || totalChunks < 1) { _showDownloadError('Transfer metadata is incomplete. Please try again.', domRefs); return; }
 
-  downloadCard.classList.remove('hidden');
-  dlPct.classList.remove('hidden');
-  dlBar.parentElement.classList.remove('hidden');
-  dlStageTag.textContent = 'Downloading';
-  dlPct.textContent = '0%';
-  dlBar.style.width = '0%';
+  _showProgress(domRefs, 'Downloading', totalBytes);
 
   let writable;
   try {
@@ -439,6 +449,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
   }
 
   try {
+    let bytesWritten = 0;
     let nextChunkPromise = fetchChunkWithRetry(0);
     for (let i = 0; i < totalChunks; i++) {
       const ciphertextBuf = await nextChunkPromise;
@@ -456,22 +467,15 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
         return;
       }
       await writable.write(new Uint8Array(plaintext));
-      const pct = Math.round(((i + 1) / totalChunks) * 100);
-      dlBar.style.width = pct + '%';
-      dlPct.textContent = pct + '%';
+      bytesWritten += plaintext.byteLength;
+      const pct = totalBytes > 0
+        ? Math.min(Math.round((bytesWritten / totalBytes) * 100), 100)
+        : Math.round(((i + 1) / totalChunks) * 100);
+      _setProgress(domRefs, pct, bytesWritten, totalBytes);
     }
 
     await writable.close();
-    dlStageTag.textContent = 'Complete';
-    dlBar.style.width = '100%';
-    dlPct.textContent = '100%';
-    uspBlock.classList.add('hidden');
-
-    if (hasOts) await _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError);
-
-    dlSignoff.classList.remove('hidden');
-    try { _logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
-    if (willSelfDestruct) _showDeletedNotice(domRefs);
+    await _finish(uuid, willSelfDestruct, hasOts, sealNonceHex, state, domRefs, reportError);
 
   } catch (e) {
     try { await writable.abort(); } catch {}
@@ -500,20 +504,14 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 //   5. X-Integrity read silently on res headers; no UX change for legacy
 // ─────────────────────────────────────────────────────────────────────────────
 async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, sealNonceHex, domRefs, state, helpers) {
-  const { downloadCard, dlStageTag, dlPct, dlBar, dlSignoff, uspBlock } = domRefs;
-  const { formatBytes, reportError } = helpers;
+  const { reportError } = helpers;
   const totalChunks = meta?.total_chunks;
 
   if (!totalChunks || totalChunks < 1) { _showDownloadError('Transfer metadata is incomplete. Please try again.', domRefs); return; }
 
-  downloadCard.classList.remove('hidden');
-  dlPct.classList.remove('hidden');
-  dlBar.parentElement.classList.remove('hidden');
-  dlStageTag.textContent = 'Downloading';
-  dlPct.textContent = '0%';
-  dlBar.style.width = '0%';
-
   const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
+  _showProgress(domRefs, 'Downloading', totalBytes);
+
   const chunks = [];
   let bytesReceived = 0;
 
@@ -560,11 +558,11 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
     const pct = totalBytes > 0
       ? Math.min(Math.round((bytesReceived / totalBytes) * 50), 50)
       : Math.round(((i + 1) / totalChunks) * 50);
-    dlBar.style.width = pct + '%';
-    dlPct.textContent = pct + '%';
+    _setProgress(domRefs, pct, bytesReceived, totalBytes);
   }
 
-  dlStageTag.textContent = 'Decrypting';
+  // Second pass (Safari/Firefox): decrypt in memory, then hand the file over (item 8).
+  domRefs.dlStageTag.textContent = 'Preparing file';
   const decrypted = [];
   for (let i = 0; i < chunks.length; i++) {
     try {
@@ -578,8 +576,7 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
       return;
     }
     const pct = 50 + Math.round(((i + 1) / chunks.length) * 50);
-    dlBar.style.width = pct + '%';
-    dlPct.textContent = pct + '%';
+    _setProgress(domRefs, pct, totalBytes, totalBytes);
   }
 
   const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
@@ -589,33 +586,88 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, hasOts, se
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
-  dlStageTag.textContent = 'Complete';
-  dlBar.style.width = '100%';
-  dlPct.textContent = '100%';
-  uspBlock.classList.add('hidden');
+  await _finish(uuid, willSelfDestruct, hasOts, sealNonceHex, state, domRefs, reportError);
+}
 
-  if (hasOts) await _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError);
+// ─────────────────────────────────────────────────────────────────────────────
+// Finished (item 9, R-10): "Downloaded." + File/Size, DAD line, Notes card, send line.
+// ─────────────────────────────────────────────────────────────────────────────
+async function _finish(uuid, willSelfDestruct, hasOts, sealNonceHex, state, domRefs, reportError) {
+  _showSheet('rx-done');
+  if (willSelfDestruct) $('rx-done-deleted').hidden = false;
 
-  dlSignoff.classList.remove('hidden');
+  // Date seal offer stays until build item 10 (Share-Receiver-2b).
+  let sealShown = false;
+  if (hasOts) {
+    try { sealShown = await _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError); } catch {}
+  }
+
   try { _logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
-  if (willSelfDestruct) _showDeletedNotice(domRefs);
+
+  // R-11: never both a date seal and a Notes card.
+  if (!sealShown) _showNotesCard(domRefs.dlSignoff);
+}
+
+// Fetched only now, after the download. No cookies, no referrer, nothing about
+// the reader. Any failure (error, HTML, slow, bad fields) = no card, no message.
+async function _showNotesCard(anchor) {
+  const ctl   = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), NOTES_TIMEOUT_MS);
+  try {
+    const res = await fetch(NOTES_LATEST_URL, {
+      credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctl.signal,
+    });
+    if (!res.ok) return;
+    const d = JSON.parse(await res.text());
+    const str = v => typeof v === 'string' && v.trim() !== '';
+    if (!d || d.schema !== 'notes-latest.v1') return;
+    if (!str(d.title) || !str(d.summary) || !str(d.url)) return;
+    if (!d.url.startsWith(NOTES_URL_PREFIX)) return;
+    const href = new URL(d.url);
+    if (href.origin !== 'https://refueler.io' || !href.pathname.startsWith('/notes/')) return;
+
+    const card = document.createElement('a');
+    card.className = 'rx-article';
+    card.href      = href.href;
+    card.target    = '_blank';                  // don't navigate away from a download still saving
+    card.rel       = 'noopener noreferrer';
+    const eyebrow = document.createElement('p');
+    eyebrow.className   = 'rx-eyebrow';
+    eyebrow.textContent = 'Latest from Refueler Notes';
+    const title = document.createElement('h2');
+    title.className   = 'rx-article-title';
+    title.textContent = d.title;
+    const summary = document.createElement('p');
+    summary.className   = 'rx-article-summary';
+    summary.textContent = d.summary;
+    const more = document.createElement('span');
+    more.className   = 'rx-article-more';
+    more.textContent = 'Read the article →';
+    card.append(eyebrow, title, summary, more);
+    anchor.insertAdjacentElement('beforebegin', card);
+  } catch {
+    // no card
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TH-2: OTS download offer
 // ─────────────────────────────────────────────────────────────────────────────
+// Returns true only if the offer was shown (R-11: then no Notes card).
 async function _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError) {
-  if (!uuid || !sealNonceHex || !state.sessionAesKey) return;
+  if (!uuid || !sealNonceHex || !state.sessionAesKey) return false;
 
   let otsBytes;
   try {
     const res = await fetch(`${WORKER_URL}/timestamp/seal/${uuid}`);
-    if (!res.ok) { reportError('ots_fetch', `HTTP ${res.status}`, `uuid:${uuid.slice(0,8)}`); return; }
+    if (!res.ok) { reportError('ots_fetch', `HTTP ${res.status}`, `uuid:${uuid.slice(0,8)}`); return false; }
     const raw  = await res.arrayBuffer();
     otsBytes   = await decryptOts(new Uint8Array(raw), state.sessionAesKey);
   } catch (e) {
     reportError('ots_decrypt', e.message, `uuid:${uuid.slice(0,8)}`);
-    return;
+    return false;
   }
 
   const otsWrap = document.createElement('div');
@@ -643,14 +695,104 @@ async function _offerOtsDownload(uuid, sealNonceHex, state, domRefs, reportError
   otsWrap.appendChild(otsNote);
 
   domRefs.dlSignoff.insertAdjacentElement('beforebegin', otsWrap);
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TG receiver helpers
+// Receiver helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function _formatDatetime(unixSecs) {
+function _showSheet(id) {
+  for (const s of RX_SHEETS) { const el = $(s); if (el) el.hidden = (s !== id); }
+}
+
+function _showNotice(eyebrow, head, lede) {
+  $('rx-notice-eyebrow').textContent = eyebrow;
+  $('rx-notice-head').textContent    = head;
+  $('rx-notice-lede').textContent    = lede;
+  _showSheet('rx-notice');
+}
+
+// Item 7: the sender's timed window has closed (before the transfer's own expiry).
+function _showWindowClosed(untilTs) {
+  _showNotice('Link closed', 'This file is no longer available.',
+    `The sender made it available until ${_fmtDateTime(untilTs)}. Ask them for a new link.`);
+}
+
+// Item 8: big mono %, hairline track, "X MB of Y MB".
+function _showProgress(domRefs, stage, totalBytes) {
+  domRefs.dlStageTag.textContent = stage;
+  _setProgress(domRefs, 0, 0, totalBytes);
+  _showSheet('download-card');
+}
+
+function _setProgress(domRefs, pct, doneBytes, totalBytes) {
+  domRefs.dlPct.textContent = String(pct);
+  domRefs.dlBar.style.width = pct + '%';
+  $('dl-track').setAttribute('aria-valuenow', String(pct));
+  $('dl-mb').textContent = totalBytes > 0 ? _bytesOf(doneBytes, totalBytes) : '';
+}
+
+// Both figures in the total's unit, same units as share.js formatBytes (Size row).
+function _bytesOf(done, total) {
+  const units = [['GB', 1024 ** 3, 2], ['MB', 1024 ** 2, 1], ['KB', 1024, 1]];
+  const [unit, div, dp] = units.find(([, d]) => total >= d) || ['B', 1, 0];
+  const f = b => (Math.min(b, total) / div).toFixed(dp);
+  return `${f(done)} ${unit} of ${f(total)} ${unit}`;
+}
+
+function _setUnlockError(input, errEl, msg, invalid) {
+  errEl.textContent = msg;
+  if (invalid) input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
+}
+
+// Run fn at a unix time. Re-checks at least once a minute, so a sleeping laptop can't overshoot.
+function _at(unixSecs, fn) {
+  const step = () => {
+    const ms = unixSecs * 1000 - Date.now();
+    if (ms <= 0) { fn(); return; }
+    setTimeout(step, Math.min(ms, 60000));
+  };
+  step();
+}
+
+// R-5: exact local date + time first ("Sat 3 Oct, 15:25"). Built by hand so
+// every browser prints the same thing.
+const _WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const _MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const _pad2 = n => String(n).padStart(2, '0');
+
+function _fmtTime(unixSecs) {
   const d = new Date(unixSecs * 1000);
-  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return `${_pad2(d.getHours())}:${_pad2(d.getMinutes())}`;
+}
+
+function _fmtDateTime(unixSecs) {
+  const d = new Date(unixSecs * 1000);
+  return `${_WD[d.getDay()]} ${d.getDate()} ${_MO[d.getMonth()]}, ${_fmtTime(unixSecs)}`;
+}
+
+function _sameDay(unixSecs) {
+  return new Date(unixSecs * 1000).toDateString() === new Date().toDateString();
+}
+
+// Countdown under "Available until": days, then hours on the last day.
+function _countdown(secs) {
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  if (d >= 1) return `in ${d} day${d === 1 ? '' : 's'}`;
+  if (h >= 1) return `in ${h} hour${h === 1 ? '' : 's'}`;
+  return 'in less than an hour';
+}
+
+// Countdown under "Opens".
+function _untilOpen(secs) {
+  const d = Math.floor(secs / 86400);
+  if (d >= 1) return `in ${d} day${d === 1 ? '' : 's'}`;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (!h && !m) return 'in less than a minute';
+  return 'in ' + (h ? `${h} h ` : '') + `${m} min`;
 }
 
 // Share-DAD-2: the Worker deletes a DAD transfer as soon as the last chunk is
@@ -674,23 +816,11 @@ function _showPreDownloadModal(onConfirm, onCancel) {
   document.getElementById('pre-dl-modal-cancel').addEventListener('click', () => { overlay.remove(); onCancel(); }, { once: true });
 }
 
-function _showDeletedNotice(domRefs) {
-  const { dlSignoff } = domRefs;
-  const gate = document.createElement('div');
-  gate.id = 'dl-confirm-gate';
-  gate.className = 'dl-confirm-gate dl-confirm-gate--done';
-  const line = document.createElement('p');
-  line.className = 'dl-confirm-question';
-  line.textContent = 'Transfer permanently deleted from Refueler\'s servers.';
-  gate.appendChild(line);
-  dlSignoff.insertAdjacentElement('beforebegin', gate);
-}
-
 function _renderHiddenFileName(rcFileName, fileName, hiddenLabel) {
   rcFileName.textContent = hiddenLabel;
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'rc-reveal-btn';
+  btn.className = 'rx-reveal';
   btn.textContent = 'Show name';
   btn.setAttribute('aria-pressed', 'false');
   btn.addEventListener('click', () => {
@@ -702,33 +832,16 @@ function _renderHiddenFileName(rcFileName, fileName, hiddenLabel) {
   rcFileName.insertAdjacentElement('afterend', btn);
 }
 
-function _showLinkInactive(domRefs) {
-  domRefs.downloadCard.classList.add('hidden');   // mid-download 410 lands here too
-  if (document.getElementById('link-inactive-card')) return;
-  const card = document.createElement('div');
-  card.id = 'link-inactive-card';
-  card.className = 'card link-inactive-card';
-  const heading = document.createElement('p');
-  heading.className = 'link-inactive-heading';
-  heading.textContent = 'This link is no longer active';
-  const body = document.createElement('p');
-  body.className = 'link-inactive-body';
-  body.textContent = 'The transfer was deleted after download or has expired. Ask the sender for a new link.';
-  card.appendChild(heading);
-  card.appendChild(body);
-  domRefs.receiverCard.insertAdjacentElement('beforebegin', card);
+// Receiver-2a: new layout, today's words (mid-download 410 lands here too).
+// Rewording + send line is build item 11 (Share-Receiver-2b).
+function _showLinkInactive(_domRefs) {
+  _showNotice('Link closed', 'This link is no longer active',
+    'The transfer was deleted after download or has expired. Ask the sender for a new link.');
 }
 
-function _showDownloadError(msg, domRefs) {
-  const { downloadCard, dlStageTag, dlPct, dlBar } = domRefs;
-  downloadCard.classList.remove('hidden');
-  dlStageTag.textContent = `Error — ${msg}`;
-  // Hide progress entirely on error (DAD-ERROR-TEXT, Share-B10-3) — no stray "0%".
-  // #dl-pct is a sibling span in the same flex-row as #dl-stage-tag; #dl-bar's
-  // parent (.progress-bar-wrap) is the separate row underneath. Hiding both
-  // matches the pattern _showIntegrityFailure now also uses.
-  dlPct.classList.add('hidden');
-  dlBar.parentElement.classList.add('hidden');
+// No progress figures on an error (DAD-ERROR-TEXT, Share-B10-3): the notice sheet has none.
+function _showDownloadError(msg, _domRefs) {
+  _showNotice('Stopped', 'The download stopped.', msg);
 }
 
 function _logReceiverEvent(event, variant) {

@@ -3,12 +3,15 @@ title: "refueler share — encrypted file transfer"
 description: "Anonymous, encrypted file transfer. No account. No email. No history."
 permalink: /index.html
 activePage: ""
+wordmarkSection: "Share"
 ---
 <!DOCTYPE html>
 <html lang="en">
 <head>
 {% set extraHead %}
 <link rel="stylesheet" href="/share.css">
+<!-- Receiver headline font (R-1, F-5). Remove when N-3 adds Source Serif 4 to the site-wide head. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300&display=swap">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 {% endset %}
 {% include "head.njk" %}
@@ -264,58 +267,81 @@ function showMaintenanceModal(status) {
       <div id="qr-wrap"></div>
     </div>
 
-    <!-- Receiver landing card (S47c) — shown before any download starts -->
-    <div class="card" id="receiver-card" style="display:none">
-      <div class="rc-file-row">
-        <span class="rc-file-icon" id="rc-file-icon">📄</span>
-        <div>
-          <span class="rc-file-name" id="rc-file-name">Loading…</span>
-          <div class="rc-folder-note hidden" id="rc-folder-note">Compressed folder — unzip after download</div>
+    <!-- ── Receiver (Share-Receiver-2a) ─────────────────────────────────────
+         Download mode only; download.js shows one sheet at a time.
+         Type rule (R-1): serif = the one headline, mono capitals = labels,
+         DM Sans = everything read. -->
+
+    <!-- Ready card: also password, folder and timed-window variants -->
+    <section class="rx-sheet" id="receiver-card" hidden>
+      <p class="rx-eyebrow" id="rc-eyebrow">A file for you</p>
+      <h1 class="rx-head" id="rc-head">Someone sent you a file.</h1>
+      <dl class="rx-ledger">
+        <div class="rx-row">
+          <dt id="rc-name-label">File</dt>
+          <dd><span class="rx-fname"><span id="rc-file-name">Encrypted file</span></span>
+            <small id="rc-folder-note" hidden>A zipped folder. Unzip it after download.</small></dd>
         </div>
+        <div class="rx-row"><dt>Size</dt><dd id="rc-size">—</dd></div>
+        <div class="rx-row" id="rc-until-row"><dt>Available until</dt><dd><span id="rc-expiry">—</span><small id="rc-expiry-count"></small></dd></div>
+        <div class="rx-row" id="rc-opens-row" hidden><dt>Opens</dt><dd><span id="rc-opens">—</span><small id="rc-opens-count"></small></dd></div>
+        <div class="rx-row" id="rc-closes-row" hidden><dt>Closes</dt><dd id="rc-closes">—</dd></div>
+        <div class="rx-row" id="rc-passphrase-row" hidden><dt>Password</dt><dd>Needed to download</dd></div>
+      </dl>
+      <div class="rx-actions">
+        <button class="rx-btn" id="rc-download-btn" type="button">Download</button>
+        <p class="rx-fine" id="usp-text">No account or email needed.</p>
       </div>
-      <div class="rc-meta-grid">
-        <div class="rc-meta-item">
-          <div class="rc-meta-label">Size</div>
-          <div class="rc-meta-value" id="rc-size">—</div>
-        </div>
-        <div class="rc-meta-item">
-          <div class="rc-meta-label">Expires</div>
-          <div class="rc-meta-value" id="rc-expiry">—</div>
-        </div>
-      </div>
-      <div id="rc-passphrase-row" class="hidden">
-        <span class="rc-passphrase-badge">🔐 Password protected</span>
-      </div>
-      <button class="btn btn-primary" id="rc-download-btn">Download</button>
+    </section>
 
-      <div id="usp-block" class="hidden"><p class="usp-text" id="usp-text"></p></div>
-    </div>
-
-    <!-- Unlock screen (download flow — passphrase gated) -->
-    <div id="unlock-screen">
-      <div class="unlock-icon">🔐</div>
-      <div class="unlock-title">Enter password</div>
-      <div class="unlock-sub">This file is password protected. Enter the password to download.</div>
-      <div class="field" style="width:100%;max-width:320px">
-        <input type="password" id="unlock-input" placeholder="Password" autocomplete="current-password" />
+    <!-- Password screen -->
+    <section class="rx-sheet" id="unlock-screen" hidden>
+      <p class="rx-eyebrow">Password needed</p>
+      <h1 class="rx-head">This file has a password.</h1>
+      <p class="rx-lede">The sender gives you this separately from the link.</p>
+      <div class="rx-field">
+        <label for="unlock-input">Password</label>
+        <input type="password" id="unlock-input" autocomplete="current-password" aria-describedby="unlock-error" />
       </div>
-      <div id="unlock-error"></div>
-      <button class="btn btn-primary" id="unlock-btn" style="min-width:140px">Unlock</button>
-    </div>
-
-    <!-- Download progress -->
-    <div class="card hidden" id="download-card">
-      <div class="flex-row">
-        <span class="tag" id="dl-stage-tag">Downloading</span>
-        <span class="muted small" id="dl-pct"></span>
+      <p class="rx-err" id="unlock-error" role="alert"></p>
+      <div class="rx-actions">
+        <button class="rx-btn" id="unlock-btn" type="button">Unlock and download</button>
+        <p class="rx-fine">No account or email needed.</p>
       </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar" id="dl-bar"></div>
-      </div>
-    </div>
+    </section>
 
-    <!-- Post-download sign-off (colophon) -->
-    <div class="hidden" id="dl-signoff"><p class="dl-signoff-secondary"><a href="https://refueler.io" style="color:inherit;text-decoration:none">REFUELER.IO</a></p></div>
+    <!-- Downloading -->
+    <section class="rx-sheet" id="download-card" hidden>
+      <p class="rx-eyebrow" id="dl-stage-tag">Downloading</p>
+      <h1 class="rx-head">Downloading.</h1>
+      <div class="rx-measure">
+        <div class="rx-pct"><span id="dl-pct">0</span><sup>%</sup></div>
+        <div class="rx-track" id="dl-track" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="dl-bar"></b></div>
+        <div class="rx-readout"><span id="dl-mb"></span><span>Keep this tab open</span></div>
+      </div>
+    </section>
+
+    <!-- Finished -->
+    <section class="rx-sheet" id="rx-done" hidden>
+      <p class="rx-eyebrow">Complete</p>
+      <h1 class="rx-head">Downloaded.</h1>
+      <dl class="rx-ledger">
+        <div class="rx-row"><dt id="rx-done-name-label">File</dt><dd><span class="rx-fname"><span id="rx-done-name">Encrypted file</span></span></dd></div>
+        <div class="rx-row"><dt>Size</dt><dd id="rx-done-size">—</dd></div>
+      </dl>
+      <p class="rx-once" id="rx-done-deleted" hidden>Transfer permanently deleted from Refueler's servers.</p>
+      <!-- R-12: "free up to 4 GB" is FREE_CAP in frontend/crypto.js. If the free
+           limit ever drops below 4 GB, change this line and the upload page's
+           "Free up to 4 GB" (drop zone, above). -->
+      <p class="rx-send-wrap" id="dl-signoff"><a class="rx-send" href="/share/"><span>Send your own file, free up to 4 GB →</span></a></p>
+    </section>
+
+    <!-- Closed window, dead link, stopped download -->
+    <section class="rx-sheet" id="rx-notice" hidden>
+      <p class="rx-eyebrow" id="rx-notice-eyebrow"></p>
+      <h1 class="rx-head" id="rx-notice-head"></h1>
+      <p class="rx-lede" id="rx-notice-lede"></p>
+    </section>
 
     <!-- Drop zone multi-file rejection message -->
     <div class="hidden" id="drop-multi-msg" role="alert"></div>
