@@ -141,11 +141,11 @@ After the per-chunk retry budget runs out on a **network-class** error, the down
 **The delete-after-download dialog ("Download" / "Not now") is removed.** Its message moves onto the card as one line, and Download starts at once:
 
 > Encrypted file · Show name
-> Size 100.0 GB · Expires in 6 days — Sat 3 Oct, 15:25 (recipient's local time)
+> Size 100.0 GB · Expires **Sat 3 Oct, 15:25** (recipient's local time), with "in 6 days" underneath, muted
 > *Deleted after download. The link works once.*  ← delete-after-download transfers only
 > [ Download ]
 
-**One card for every transfer:** the delete-after-download line appears only when the sender armed it; otherwise the card is the same without it. **Expiry shows both** the countdown and the exact local date and time — downloads stop at that second (Rajesh, 27 Sep).
+**One card for every transfer:** the delete-after-download line appears only when the sender armed it; otherwise the card is the same without it. **Expiry leads with the exact local date and time** (the hard stop — downloads end at that second); the countdown sits underneath, smaller, recomputed on every open and refreshed each minute while the page is open, switching to hours on the last day (Rajesh, 27 Sep). Today's code computes it once at load and never refreshes.
 
 Acceptable because deletion only begins once the file has fully arrived (§5, D-DAD-2). Supersedes the Share-DAD-2 calm dialog. Mock: canvas artifact "Share receiver + homepage" (A = now, B = one card).
 
