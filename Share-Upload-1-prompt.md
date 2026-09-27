@@ -1,12 +1,12 @@
 # Share-Upload-1 — prompt (design + A/B mock, no code)
 > Written at the end of Share-Receiver-2b · 28 Sep 2026. Planned: **Tue 29 Sep** (small, fits the Berlin rule).
-> Share-Upload-2 (the build) starts **after Berlin (back Sun 4 Oct)** — see the bottom of this file.
+> Share-Upload-2 (the build): **Tue 29 Sep evening** if Upload-1 is complete and there's time; otherwise **after B12-1b** (Rajesh, 28 Sep). See the bottom of this file.
 
 Paste this as the session prompt:
 
 ---
 
-Share-Upload-1 — upload page + Share sub-menu: design and A/B mock only, no repo code. Repos: refueler-share (read) and refueler.io (read). Read CLAUDE.md first, then `docs/Share-Receiver-1-build-list.md` (decisions R-1…R-14 and findings F-1…F-9 carry over), `docs/drafts/share-receiver-mock-v5.html` (the approved receiver mock, same look), and the "Share-Upload direction" entry in `share-sessions.md`. Produce an A/B mock as a private artifact plus `docs/Share-Upload-1-build-list.md` (decisions, findings, build items for Upload-2). Propose before writing anything to the repo. Short, plain answers.
+Share-Upload-1 — upload page + Share sub-menu: design and A/B mock only, no repo code. Repos: refueler-share (read) and refueler.io (read). Read CLAUDE.md first, then `Share-Upload-1-prompt.md` §1–5 (Rajesh's decisions, what's open, the states list, the Eleventy sub-menu plan, constraints), `docs/Share-Receiver-1-build-list.md` (decisions R-1…R-14 and findings F-1…F-9 carry over), `docs/drafts/share-receiver-mock-v5.html` (the approved receiver mock, same look), and the "Share-Upload direction" entry in `share-sessions.md`. Produce an A/B mock as a private artifact plus `docs/Share-Upload-1-build-list.md` (decisions, findings, build items for Upload-2). Propose before writing anything to the repo. Short, plain answers.
 
 ---
 
@@ -17,7 +17,7 @@ Share-Upload-1 — upload page + Share sub-menu: design and A/B mock only, no re
 - **A/B mock.** Two variants side by side, so Rajesh can compare. Not a live A/B test: traffic is too small to read, and the page doesn't track visitors.
 - **Share sub-menu under the site header** on every Share page: Send (the upload page) · Plans · Status, with room for later items (sign-in, Harbourmaster). **Then Plans and Status come out of the top nav**, freeing space there.
 - **Each product's section is a mini site**: its own sub-menu under the one Refueler header. Build it with Eleventy (data + one include), not by hand per page (§4).
-- **Upload-1 tomorrow (29 Sep); Upload-2 after Berlin.**
+- **Upload-1 on 29 Sep. Upload-2 on 29 Sep evening if Upload-1 is complete and there's time; otherwise after B12-1b.**
 
 ## 2. To decide in Upload-1
 
@@ -68,7 +68,7 @@ Check the live page first (https://refueler.io/share/), and `frontend/upload.js`
 
 ---
 
-## Share-Upload-2 — build (after Berlin, from Sun 4 Oct)
+## Share-Upload-2 — build (29 Sep evening if Upload-1 is complete, otherwise after B12-1b)
 
 Medium, two repos. Scope comes from `docs/Share-Upload-1-build-list.md`. Known shape:
 
@@ -77,4 +77,4 @@ Medium, two repos. Scope comes from `docs/Share-Upload-1-build-list.md`. Known s
    **Order matters:** if canonical `index.njk` includes a file refueler.io doesn't have yet, the refueler.io Pages build fails.
 3. Preview every state locally (scratch harness, as in Share-Receiver-2a/2b) + the receiver page, then Rajesh ships and checks in Safari.
 
-**Scheduling flag:** the locked queue after Berlin starts with **B12-1b** (the live Pro Bono size hole, S1.1). Rajesh decides whether Upload-2 goes before or after it.
+**Scheduling (Rajesh, 28 Sep):** Upload-2 runs Tue 29 Sep evening only if Upload-1 is complete and there's time. Otherwise it goes after **B12-1b** (first in the locked queue after Berlin: the live Pro Bono size hole, S1.1). If it runs on the 29th, it ships the night before Rajesh flies (30 Sep), so the pre-flight check is the whole Safari checklist on the live page, and a revert is ready if anything is off.
