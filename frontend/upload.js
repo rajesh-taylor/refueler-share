@@ -777,6 +777,21 @@ async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, r
   throw new Error(`Chunk ${chunkIndex} direct PUT failed after ${_DIRECT_MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
 }
 
+// Share-Deps-1 (E): if BLAKE3/secp256k1 can't load even with the pure-JS fallback,
+// say so instead of freezing on the progress bar. Runs before anything is sent.
+// Other upload errors are still silent — that's F-11, Share-Upload-2.
+async function _loadDepsOrSay(domRefs, helpers) {
+  try {
+    await loadDeps();
+    return true;
+  } catch (e) {
+    helpers.reportError('load_deps', e?.name || 'Error', String(e?.message || '').slice(0, 120));
+    helpers.setStage('Stopped', 0);
+    domRefs.progressDetail.textContent = 'Share couldn’t start in this browser. Reload to try again, or use another browser.';
+    return false;
+  }
+}
+
 async function startUpload(domRefs, state, helpers, transferOpts) {
   if (!state.selectedFile) return;
   const {
@@ -789,7 +804,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   optionsCard.classList.add('hidden');
   progressCard.classList.remove('hidden');
 
-  await loadDeps();
+  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
 
   setStage('Generating key', 5);
   state.sessionAesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
@@ -1112,7 +1127,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     return;
   }
 
-  await loadDeps();
+  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
 
   // Restore AES-GCM key + session IV from the record.
   // Per-chunk AAD (4-byte BE uint32 index) differentiates chunks; session IV is shared.

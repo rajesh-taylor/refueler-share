@@ -10,14 +10,14 @@
 // four pinned vectors, identical to the Worker module. If any differs, the port is
 // wrong — fix the code, never the vectors.
 //
-// BLAKE3 source: the SAME local WASM bundle the chunk-integrity path already uses,
-// reached through crypto.js's blake3Hash(). No @noble in the browser bundle, no CDN
-// fetch of blake3 (both are locked do-not-retry). Parity holds because both sides
-// compute the standardised BLAKE3-256 digest: identical bytes in, identical root out —
-// the same equivalence the upload chunk-hash path already relies on in production.
+// BLAKE3 source: the SAME BLAKE3 the chunk-integrity path uses, reached through
+// crypto.js's blake3Hash() — the local WASM bundle, or (Share-Deps-1) the vendored
+// pure-JS noble BLAKE3 where WASM can't run. Never a CDN fetch (locked do-not-retry).
+// Parity holds because every side computes the standardised BLAKE3-256 digest:
+// identical bytes in, identical root out. selfTest() gates whichever one loaded.
 //
 // PRECONDITION: crypto.js's loadDeps() must have been awaited before buildMerkleTree()
-// or reconstructRoot() is called (the WASM must be initialised). The core functions
+// or reconstructRoot() is called (BLAKE3 must be initialised). The core functions
 // stay synchronous to mirror the Worker exactly; upload.js already awaits loadDeps()
 // on the chunk-hash path, so the wiring in 6-3d inherits the guarantee for free.
 // selfTest() awaits loadDeps() itself, so it runs cold from the browser console.
@@ -32,9 +32,9 @@ const NODE_PREFIX = 0x01;
 const DIGEST_LEN = 32;
 
 // BLAKE3-256 over a byte buffer, returned as a raw 32-byte Uint8Array.
-// blake3Hash() returns hex from the WASM bundle; we widen it back to bytes so the
-// tree operates on Uint8Array throughout, exactly as the Worker module does. Reusing
-// blake3Hash() (not a second WASM instance) is what "the SAME browser BLAKE3" means.
+// blake3Hash() returns hex; we widen it back to bytes so the tree operates on
+// Uint8Array throughout, exactly as the Worker module does. Reusing blake3Hash()
+// (not a second instance) is what "the SAME browser BLAKE3" means.
 function b3(buf) {
   return _hexToBytes(blake3Hash(buf));
 }
@@ -150,7 +150,7 @@ export const TEST_VECTORS = {
 };
 
 // selfTest() -> [{ n, root, layers }]  (throws on any parity failure)
-// async: awaits loadDeps() so the WASM bundle is live, then runs the synchronous
+// async: awaits loadDeps() so BLAKE3 (WASM or JS) is live, then runs the synchronous
 // build. Runs from the browser console (wherever the module is served) and under
 // Vitest if the WASM bundle loads in node.
 export async function selfTest() {

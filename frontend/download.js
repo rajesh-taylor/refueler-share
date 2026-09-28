@@ -39,7 +39,9 @@
 //   Each sheet settles in the first time it appears (item 14); the downloading sheet never does.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { loadDeps, hexToBuf, WORKER_URL } from './crypto.js';
+// Share-Deps-1: no loadDeps() here. Receiving needs neither BLAKE3 nor secp256k1,
+// so the card never waits on them (and never fails on a browser without WASM, F-20).
+import { hexToBuf, WORKER_URL } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -72,7 +74,19 @@ class IntegrityError extends Error {
 // ─────────────────────────────────────────────────────────────────────────────
 // enterDownloadMode
 // ─────────────────────────────────────────────────────────────────────────────
+// Share-Deps-1 (E): an unexpected throw while setting up the page used to leave it
+// blank (share.js doesn't await this). Say so plainly instead. Full error design: Upload-2.
 export async function enterDownloadMode(detected, domRefs, state, helpers) {
+  try {
+    await _enterDownloadMode(detected, domRefs, state, helpers);
+  } catch (e) {
+    try { helpers.reportError('receiver_setup', e?.name || 'Error', String(e?.message || '').slice(0, 120)); } catch {}
+    _showNotice('Stopped', 'Share couldn’t start in this browser.',
+      'Reload to try again, or use another browser.');
+  }
+}
+
+async function _enterDownloadMode(detected, domRefs, state, helpers) {
   const { uuid } = detected;
   const {
     dropZone, infoCard, optionsCard, receiverCard,
@@ -89,8 +103,6 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   dropZone.classList.add('hidden');
   infoCard.classList.add('hidden');
   optionsCard.classList.add('hidden');
-
-  await loadDeps();
 
   // ── Resolve AES key bytes ─────────────────────────────────────────────────
   // v1: keyBytes is already a Uint8Array from parseFragment()

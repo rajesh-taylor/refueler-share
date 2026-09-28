@@ -3,7 +3,9 @@
 // Imported by upload.js and download.js. Never imported by index.njk directly.
 //
 // Exports:
-//   loadDeps()                         — initialise blake3 + secp256k1
+//   loadDeps()                         — initialise blake3 + secp256k1 (upload only)
+//   loadBlake3(), loadSecp()           — the two halves of loadDeps()
+//   blake3Impl()                       — 'wasm' | 'js' | null (which BLAKE3 loaded)
 //   blake3Hash(data)                   — BLAKE3-256, returns hex string
 //   sha256Hex(data)                    — SHA-256, returns hex string
 //   generateBlindedCredential()        — NUT-00 blind sig step 1
@@ -15,8 +17,9 @@
 //
 // Architectural note: blake3 and secp are module-level mutable state.
 // loadDeps() must be awaited before calling blake3Hash() or any NUT-00 function.
-// Both upload.js and download.js call loadDeps() — it is safe to call twice
-// (the Promise.all resolves quickly on the second call via module cache).
+// Only upload mode calls it (upload.js, merkle.js selfTest). Receiver mode uses
+// neither and must not wait on it (Share-Deps-1). Safe to call repeatedly: each
+// loader caches its promise.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,30 +42,87 @@ export const TIER_EXPIRY_SECONDS = {
 export const CHUNK_UPLOAD_TIMEOUT_MS = 60_000; // 60 s per chunk
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dynamic dependencies — loaded once, reused
+// Dynamic dependencies — local files only, loaded once, reused (Share-Deps-1)
 // ─────────────────────────────────────────────────────────────────────────────
 // Module-level mutable state. Safe: ES module is a singleton — all importers
-// share the same binding. loadDeps() is idempotent via module cache.
-let blake3 = null;
-let secp   = null;
+// share the same binding.
+//
+// Nothing here is ever fetched from a CDN: the upload page holds the AES key (F-21).
+//
+// BLAKE3: the WASM bundle (frontend/blake3/) first. If WebAssembly is missing
+// (Vanadium with the JIT off, F-20), fails to load, or gets the known answer
+// wrong, fall back to vendored pure-JS noble BLAKE3 (frontend/noble-blake3.js).
+// Same digests either way; the fallback is just slower (~2.5 MiB/s with no JIT).
+//
+// secp256k1: vendored @noble/secp256k1 1.7.2 (frontend/noble-secp256k1.js).
+// v1 API — secp.Point.fromPrivateKey / secp.Point.fromHex. Removed in v2.
+// Do not upgrade without migrating NUT-00 crypto.
+let blake3     = null;   // { createHash() } — WASM module or the noble wrapper below
+let blake3Kind = null;   // 'wasm' | 'js'
+let secp       = null;
+let _blake3Loading = null;
+let _secpLoading   = null;
+
+// BLAKE3("abc") — official test vector. Checked against whichever BLAKE3 loads.
+const _B3_KAT_ABC = '6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85';
 
 export async function loadDeps() {
-  if (blake3 && secp) return; // already loaded
-  const [b3mod, secpMod] = await Promise.all([
-    import('./blake3/browser-async.js'),
-    import('https://esm.sh/@noble/secp256k1@1.7.2'),
-  ]);
-  blake3 = await b3mod.default();
-  secp   = secpMod;
-  // NOTE: secp256k1@1.7.2 (v1 API) — secp.Point.fromPrivateKey / secp.Point.fromHex
-  // Removed in v2. Do not upgrade without migrating NUT-00 crypto.
+  await Promise.all([loadBlake3(), loadSecp()]);
+}
+
+export function loadBlake3() {
+  if (!_blake3Loading) {
+    _blake3Loading = _loadBlake3().catch(e => { _blake3Loading = null; throw e; });
+  }
+  return _blake3Loading;
+}
+
+export function loadSecp() {
+  if (!_secpLoading) {
+    _secpLoading = import('./noble-secp256k1.js')
+      .then(mod => { secp = mod; })
+      .catch(e => { _secpLoading = null; throw e; });
+  }
+  return _secpLoading;
+}
+
+export function blake3Impl() {
+  return blake3Kind;
+}
+
+async function _loadBlake3() {
+  if (typeof WebAssembly === 'object') {
+    try {
+      const b3mod = await import('./blake3/browser-async.js');
+      const wasm  = await b3mod.default();
+      if (_blake3Kat(wasm)) { blake3 = wasm; blake3Kind = 'wasm'; return; }
+    } catch { /* fall through to pure JS */ }
+  }
+  const { blake3: nobleBlake3 } = await import('./noble-blake3.js');
+  const js = { createHash: () => _nobleHasher(nobleBlake3.create({})) };
+  if (!_blake3Kat(js)) throw new Error('BLAKE3 self-test failed');
+  blake3 = js; blake3Kind = 'js';
+}
+
+function _blake3Kat(impl) {
+  const h = impl.createHash();
+  h.update(new TextEncoder().encode('abc'));
+  return h.digest('hex') === _B3_KAT_ABC;
+}
+
+// The WASM hasher's surface, as far as Share uses it: update(bytes), digest('hex').
+function _nobleHasher(h) {
+  return {
+    update(data) { h.update(data instanceof Uint8Array ? data : new Uint8Array(data)); return this; },
+    digest(enc)  { const out = h.digest(); return enc === 'hex' ? bufToHex(out) : out; },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BLAKE3
 // ─────────────────────────────────────────────────────────────────────────────
 // Returns BLAKE3-256 hex digest of data (Uint8Array or ArrayBuffer).
-// blake3 must be initialised via loadDeps() before calling.
+// blake3 must be initialised via loadDeps() (or loadBlake3()) before calling.
 export function blake3Hash(data) {
   const h = blake3.createHash();
   h.update(data instanceof Uint8Array ? data : new Uint8Array(data));
@@ -140,8 +200,8 @@ export function hexToBuf(hex) {
 //   @noble/hashes/hkdf       → hkdf
 //   @noble/hashes/pbkdf2     → pbkdf2
 // These are the v2 noble packages already present in the Worker.
-// The existing NUT-00 functions above use secp v1 via esm.sh — these are separate
-// and must not share the same secp binding.
+// The existing NUT-00 functions above use secp v1 (vendored, frontend/noble-secp256k1.js)
+// — these are separate and must not share the same secp binding.
 // =============================================================================
 
 // Resolved at B8-5 when the frontend import map is wired. Stubs declared here
