@@ -10,8 +10,6 @@ wordmarkSection: "Share"
 <head>
 {% set extraHead %}
 <link rel="stylesheet" href="/share.css">
-<!-- Receiver headline font (R-1, F-5). Remove when N-3 adds Source Serif 4 to the site-wide head. -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300&display=swap">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 {% endset %}
 {% include "head.njk" %}
@@ -19,7 +17,7 @@ wordmarkSection: "Share"
 <div class="status-banner hidden" id="status-banner" role="alert" aria-live="polite">
   <span class="status-banner-icon" id="status-banner-icon"></span>
   <span class="status-banner-text" id="status-banner-text"></span>
-  <a class="status-banner-link" href="/status.html" id="status-banner-link">View status →</a>
+  <a class="status-banner-link" href="/share/status/" id="status-banner-link">View status →</a>
   <button class="status-banner-dismiss" id="status-banner-dismiss" aria-label="Dismiss">✕</button>
 </div>
 
@@ -203,7 +201,7 @@ function showMaintenanceModal(status) {
     <!-- Cap warning + upgrade nudge -->
     <div id="cap-warning" class="card hidden">
       <p class="cap-warn">This file is over the 4 GB free limit.</p>
-      <p class="muted small mt4">Creative Premium supports transfers up to 100 GB — <a href="/upgrade.html" class="upgrade-nudge-link">see plans →</a></p>
+      <p class="muted small mt4">Creative Premium supports transfers up to 100 GB — <a href="/share/plans/" class="upgrade-nudge-link">see plans →</a></p>
     </div>
 
     <!-- Options card (shown after file selected) -->

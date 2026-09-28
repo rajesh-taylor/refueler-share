@@ -1,12 +1,12 @@
 /* ── share-tokens.css — brand tokens for share.refueler.io ──────────────────
    Single token source for all Share pages. Equivalent of global.css on
-   refueler.io. Loaded via head.njk <link> on every Eleventy Share page and
-   linked directly from frontend/index.html.
+   refueler.io. Linked by refueler.io's Share Plans and Status pages, and by
+   the local-preview head.njk. Not loaded on refueler.io/share/ itself (F-6).
    Rule: no Share page may define its own :root token block.
    Token reference: REFUELER-BRIDGE.md § Design system
    Theme detection: document.documentElement.dataset.theme === 'carbon'
    Theme persistence: cookie rs-theme scoped to .refueler.io (30-day rolling)
-   Paper is default. Carbon is user toggle only.
+   Carbon is default site-wide (R-13). A visitor's saved choice wins.
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* ── Brand tokens — Paper default ──────────────────────────────────────────── */
