@@ -275,6 +275,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **S-030** refueler.io `command-centre` still uses `localStorage` `rfTheme`, not the `rs-theme` cookie → low, any refueler.io tidy.
 - **S-041** Speed benchmark (1/4/10/25/50 GB; fibre / broadband / 4G / rural) against WeTransfer, Smash, SwissTransfer → after the Share-DL track; possible Notes article.
 - **S-045** Homepage/landing copy speaks to WeTransfer and Smash users → homepage design session.
+- **Repo bloat (found 28 Sep):** 200 Rust build files under `worker/blake3-wasm-src/target/` are tracked in git. Untrack them and gitignore `target/` (keep the vendored `worker/blake3-wasm/` output) → any small tidy session.
 
 **Ideas, parked (no build slot):**
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
