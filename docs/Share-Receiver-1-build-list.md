@@ -81,7 +81,7 @@ Split in two sessions:
 
 "Open this link on a computer" (phone > 4 GB, browser can't save) is designed in the mock but built in **Share-DL-2** with its detection logic (spec §2.3, D-8).
 
-### N-3 · Share-Theme-1 (refueler.io + refueler-share, small) — R-13
+### N-3 · Share-Theme-1 (refueler.io + refueler-share, small) — R-13 · *combined with N-4 + F-3 as Share-Cleanup-1 (`Share-Cleanup-1-prompt.md`)*
 Change the default from `'paper'` to `'carbon'` in: refueler.io `src/_includes/head.njk`, `src/notes/notes.js`, `src/share/chambers/index.html`, `src/dev/index.html`, `src/assets/css/global.css` (header comment); refueler-share `src/_includes/head.njk` (local build). Check `src/merchant/merchant-tablet-logic.js` (POS tablet): confirm with Rajesh whether it's in scope. Add Source Serif 4 to the font link (F-5).
 
 ### N-4 · Copy fixes (refueler.io, small) — Rajesh approves wording first
