@@ -19,6 +19,9 @@ dist/
 !frontend/blake3/dist/
 !src/blake3/dist/
 build/
+# Local-preview page `npm run build` writes from src/index.njk. Never served or mirrored:
+# refueler.io/share/ is rendered from src/index.njk itself (Share-Cleanup-1, F-3).
+frontend/index.html
 .wrangler/
 
 # OS

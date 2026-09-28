@@ -63,7 +63,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
-- DO NOT edit inline CSS/JS in `src/index.njk` or `src/upgrade.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
+- DO NOT edit inline CSS/JS in `src/index.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
 - **Sovereign storage cap: 100 GB. Locked TH-Opus-1.**
 - **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.**
@@ -101,7 +101,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **CF for SaaS enabled on `refueler.io` zone (SW1 · 8 Sep 2026).** Fallback origin: `fallback.share.refueler.io`. Custom hostname: `api.share.refueler.io`. hostname_id: `d1d04abe-854c-48a0-8afe-bca47dfb0c3b`. ssl_id: `a3bd125f-f48c-4226-9e7c-d26e77fbaa90`. API token: `refueler-share-saas` (Zone → SSL and Certificates → Edit, scoped to `refueler.io`). Worker route: `api.share.refueler.io/*` in `wrangler.toml`. `wl_config.js` is the host-lookup module — add new client hostnames to `WL_CONFIGS` there.
 - API tier invoiced manually via Stripe invoice template. No subscription price object for API tier — invoice template only, managed manually in Stripe dashboard, off-repo.
 - `X-Email` header dropped from upload path entirely.
-- Never edit `frontend/upgrade.html` directly — Eleventy overwrites it from `src/upgrade.njk` on every build.
+- `frontend/index.html` is a local-preview build of `src/index.njk` — gitignored, never served or mirrored. Edit `src/index.njk`. The pages.dev-era `src/status.njk`, `src/upgrade.njk` and their `frontend/*.html` were removed (Share-Cleanup-1, F-3); refueler.io owns Status, Plans and `/upgrade.html`.
 - `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html`.
 - `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Both are produced by `bin/sync-share.sh` rendering canonical `src/index.njk` — never edit the refueler.io copy directly (CI and the pre-push hook flag it stale; the next ship overwrites it).
 

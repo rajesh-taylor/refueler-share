@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap" />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300&display=swap" rel="stylesheet" />
 
 <!-- Tokens — single source for all Share pages -->
 <link rel="stylesheet" href="/share-tokens.css" />
@@ -38,13 +39,16 @@
       }
     }
     function toggleTheme() {
-      var current = getCookie('rs-theme') || 'paper';
+      var current = getCookie('rs-theme') || 'carbon';
       var next = current === 'paper' ? 'carbon' : 'paper';
       setCookie('rs-theme', next);
       applyTheme(next);
       {% if stripeThemeRemount %}if (typeof remountStripeForTheme === 'function') remountStripeForTheme();{% endif %}
     }
     window.toggleTheme = toggleTheme;
-    applyTheme(getCookie('rs-theme') || 'paper');
+    applyTheme(getCookie('rs-theme') || 'carbon');
+    document.addEventListener('DOMContentLoaded', function () {
+      applyTheme(getCookie('rs-theme') || 'carbon');
+    });
   })();
 </script>
