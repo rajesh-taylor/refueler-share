@@ -1,0 +1,654 @@
+<meta charset="utf-8">
+<title>Share Upload Page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Tokens: refueler.io/src/assets/css/global.css. Carbon first, Paper via the pill.
+   The mock chrome (the "desk") is dark on purpose, in both viewer themes. */
+:root {
+  color-scheme: dark;
+  --desk: #121110;
+  --desk-fg: #8A847C;
+  --desk-hi: #D8D2C8;
+  --desk-rule: rgba(245,240,232,0.08);
+  --serif: 'Source Serif 4', Georgia, serif;
+  --sans: 'DM Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --radius-btn: 8px;
+}
+.page {
+  color-scheme: dark;
+  --bg: #1A1917;
+  --fg: #F5F0E8;
+  --fg-muted: #B0AAA2;
+  --fg-subtle: #6A6560;
+  --rule: rgba(245,240,232,0.10);
+  --rule-strong: rgba(245,240,232,0.22);
+  --soft: rgba(245,240,232,0.08);
+  --input-bg: #252525;
+  --input-border: rgba(245,240,232,0.18);
+  --accent: #C8A96E;
+  --warn: #C8943A;
+  --danger: #E05252;
+  --btn-bg: #F5F0E8;
+  --btn-fg: #1A1917;
+}
+.page[data-theme="paper"] {
+  color-scheme: light;
+  --bg: #E8E2D8;
+  --fg: #1A1A1A;
+  --fg-muted: #5A5550;
+  --fg-subtle: #8A857F;
+  --rule: rgba(26,26,26,0.12);
+  --rule-strong: rgba(26,26,26,0.26);
+  --soft: rgba(26,26,26,0.07);
+  --input-bg: #DDD7CD;
+  --input-border: rgba(26,26,26,0.18);
+  --accent: #9A7A3E;
+  --warn: #B87333;
+  --danger: #B83A3A;
+  --btn-bg: #1A1A1A;
+  --btn-fg: #E8E2D8;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--desk); color: var(--desk-hi); font-family: var(--sans); margin: 0; }
+.wrap { max-width: 1480px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; }
+
+/* ── Mock chrome ─────────────────────────────────────────── */
+.bar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.bar h1 { font: 500 11px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--desk-fg); margin: 0; }
+.bar h1 b { color: var(--desk-hi); font-weight: 500; }
+.ctl { display: flex; flex-wrap: wrap; gap: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--desk-rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--desk-fg); background: none; border: 0; padding: 7px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--desk-rule); }
+.seg button[aria-pressed="true"] { background: rgba(245,240,232,0.09); color: #F5F0E8; }
+.states { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.states button { font: 400 12px var(--sans); color: var(--desk-fg); background: none; border: 1px solid var(--desk-rule); border-radius: 100px; padding: 6px 12px; cursor: pointer; }
+.states button:hover { color: #F5F0E8; }
+.states button[aria-pressed="true"] { color: #1A1917; background: var(--desk-hi); border-color: var(--desk-hi); }
+.states button.old { border-style: dashed; }
+
+.stage { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .stage { grid-template-columns: minmax(0,1fr); } }
+.frame { border: 1px solid var(--desk-rule); border-radius: 10px; overflow: hidden; margin-inline: auto; width: 100%; background: #0E0D0C; }
+.phone-mode .frame { max-width: 390px; }
+.urlbar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--desk-rule); }
+.urlbar i { width: 9px; height: 9px; border-radius: 50%; background: #2C2A27; flex: none; }
+.urlbar span { font: 12px var(--mono); color: var(--desk-fg); margin-left: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vp { overflow: hidden; }
+
+.notes { border-top: 1px solid var(--desk-rule); padding-top: 14px; }
+.notes h2 { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--desk-fg); margin: 0 0 10px; }
+.notes p, .notes li { font: 400 13px/1.55 var(--sans); color: #B0AAA2; margin: 0 0 8px; }
+.notes ul { padding-left: 16px; margin: 0 0 18px; }
+.notes code { font: 12px var(--mono); color: var(--desk-hi); }
+.notes .flag { color: #C8A96E; }
+.box { border: 1px solid var(--desk-rule); border-radius: 10px; padding: 14px 16px 6px; margin-top: 8px; }
+
+/* ── The page ────────────────────────────────────────────── */
+.page { width: 1100px; min-height: 780px; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; font-family: var(--sans); transition: background .35s ease, color .25s ease; position: relative; }
+.page.is-phone { width: 390px; min-height: 820px; }
+/* Whole page takes a drop: a thin accent frame while a file is over it */
+.page.dragging::after { content: ''; position: absolute; inset: 6px; border: 1px solid var(--accent); border-radius: 10px; pointer-events: none; }
+
+.p-head { border-bottom: 1px solid var(--rule); padding-inline: 40px; }
+.is-phone .p-head { padding-inline: 24px; }
+.p-head-in { height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wordmark { font: 600 14px var(--sans); letter-spacing: .06em; color: var(--fg); text-decoration: none; white-space: nowrap; }
+.wordmark span { font-weight: 300; opacity: .5; margin: 0 .5rem; }
+.wordmark em { font-style: normal; font-weight: 400; letter-spacing: .08em; opacity: .55; }
+.topnav { display: flex; align-items: center; gap: 30px; }
+.topnav a { font: 500 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); text-decoration: none; }
+.topnav a.on { color: var(--fg); }
+.is-phone .topnav { gap: 10px; }
+.is-phone .topnav a { display: none; }
+.menu-btn { display: none; width: 34px; height: 30px; border: 1px solid var(--rule-strong); border-radius: 6px; background: none; cursor: pointer; flex-direction: column; justify-content: center; align-items: center; gap: 4px; padding: 0; }
+.menu-btn span { display: block; width: 14px; height: 1px; background: var(--fg-muted); }
+.is-phone .menu-btn { display: flex; }
+.pill { font: 500 10.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); background: none; border: 1px solid var(--rule-strong); border-radius: 100px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.pill:hover { color: var(--fg); }
+.drawer { display: none; flex-direction: column; border-top: 1px solid var(--rule); padding-block: 6px; }
+.drawer.open { display: flex; }
+.drawer a { font: 500 11px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); text-decoration: none; padding: 13px 0; border-bottom: 1px solid var(--rule); }
+.drawer a:last-child { border-bottom: 0; }
+.drawer a.on { color: var(--fg); }
+
+/* Share sub-menu: one segmented pill, centred over the content column */
+.subnav { display: flex; justify-content: center; padding: 22px 40px 0; }
+.is-phone .subnav { padding: 18px 16px 0; }
+.subnav-pill { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 100px; overflow: hidden; }
+.subnav-pill a { font: 400 13.5px/1 var(--sans); color: var(--fg-muted); text-decoration: none; padding: 9px 20px; transition: color .2s, background .2s; }
+.subnav-pill a + a { border-left: 1px solid var(--rule); }
+.subnav-pill a:hover { color: var(--fg); }
+.subnav-pill a[aria-current="page"] { color: var(--fg); background: var(--soft); }
+
+.p-main { flex: 1; display: flex; justify-content: center; padding: 56px 40px 64px; }
+.is-phone .p-main { padding: 36px 16px 48px; }
+.sheet { width: 100%; max-width: 520px; display: flex; flex-direction: column; }
+
+.p-foot { border-top: 1px solid var(--rule); padding: 26px 40px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; font: 400 10.5px var(--sans); letter-spacing: .06em; color: var(--fg-subtle); }
+.is-phone .p-foot { padding: 22px 24px; }
+.p-foot span:last-child { display: flex; gap: 20px; }
+
+/* Type roles (R-1): serif headline, mono labels + big %, DM Sans for reading */
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--fg-muted); margin: 0 0 18px; }
+.head { font: 300 40px/1.12 var(--serif); letter-spacing: -.01em; text-wrap: balance; margin: 0; }
+.is-phone .head { font-size: 32px; }
+.lede { font: 300 15px/1.6 var(--sans); color: var(--fg-muted); margin: 14px 0 0; max-width: 46ch; }
+.fine { font: 400 12.5px/1.5 var(--sans); color: var(--fg-muted); margin: 0; }
+.fine.after { margin-top: 16px; }
+.warn { color: var(--warn); }
+.dim { color: var(--fg-subtle); }
+
+.ledger { margin: 32px 0 0; border-top: 1px solid var(--rule); }
+.row { display: grid; grid-template-columns: 118px minmax(0,1fr); gap: 16px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.row dt { font: 500 10.5px/1.6 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--fg-subtle); }
+.row dd { margin: 0; font: 400 15px/1.45 var(--sans); color: var(--fg); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.row dd.dim { color: var(--fg-subtle); }
+.row dd.warn { color: var(--warn); }
+.row dd small { display: block; font: 300 13.5px/1.5 var(--sans); color: var(--fg-muted); margin-top: 3px; }
+.is-phone .row { grid-template-columns: minmax(0,1fr); gap: 6px; }
+.fname { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.textbtn { font: 400 12.5px var(--sans); color: var(--fg-muted); background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; cursor: pointer; }
+.textbtn:hover { color: var(--fg); }
+.textbtn.inline { font-size: 13.5px; }
+.textbtn.swap { font-size: 13.5px; color: var(--fg); text-decoration-color: var(--fg-muted); }
+.is-phone .fname { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+.once { font: 400 14px/1.5 var(--sans); color: var(--fg); margin: 12px 0 0; padding-left: 14px; border-left: 1px solid var(--accent); }
+
+.actions { margin-top: 24px; display: flex; flex-direction: column; gap: 14px; }
+.btn { font: 500 14px var(--sans); letter-spacing: .02em; border: 1px solid transparent; border-radius: var(--radius-btn); padding: 14px 20px; cursor: pointer; width: 100%; background: var(--btn-bg); color: var(--btn-fg); transition: opacity .2s; }
+.btn:hover { opacity: .88; }
+.btn.ghost { background: none; color: var(--fg); border-color: var(--rule-strong); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btnrow { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+
+/* The slip: one hairline box holding the ledger, the facts row at its foot.
+   Empty rows fill in place as the file arrives. */
+.slip { margin-top: 32px; border: 1px solid var(--rule-strong); border-radius: 10px; transition: border-color .2s, background .2s; }
+.slip .ledger { margin: 0; border-top: 0; }
+.slip .row { padding: 16px 18px; }
+.is-phone .slip .row { padding: 14px 16px; }
+.slip.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.hint { font: 400 15px/1.45 var(--sans); color: var(--fg); }
+.over .hint { color: var(--accent); }
+.pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+.is-phone .pick { margin-top: 0; }
+.pick .btn-fill { font: 500 13.5px var(--sans); letter-spacing: .02em; color: var(--btn-fg); background: var(--btn-bg); border: 0; border-radius: var(--radius-btn); padding: 10px 16px; cursor: pointer; }
+.pick .btn-fill:hover { opacity: .88; }
+.pick .textbtn { font-size: 13.5px; }
+.is-phone .pick .btn-fill { flex: 1 1 100%; padding: 13px 16px; font-size: 14px; }
+.is-phone .pick .textbtn { margin-inline: auto; }
+.facts { padding: 12px 18px; font: 400 13px/1.55 var(--sans); color: var(--fg-muted); }
+.is-phone .facts { padding: 12px 16px; }
+.facts span { white-space: nowrap; }
+
+/* Switch */
+.sw { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font: 400 15px var(--sans); color: var(--fg); position: relative; }
+.sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.sw .trk { width: 34px; height: 20px; border-radius: 100px; border: 1px solid var(--rule-strong); position: relative; flex: none; transition: background .2s, border-color .2s; }
+.sw .trk::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--fg-muted); transition: transform .2s, background .2s; }
+.sw input:checked + .trk { background: var(--fg); border-color: var(--fg); }
+.sw input:checked + .trk::after { transform: translateX(14px); background: var(--btn-fg); }
+.sw input:focus-visible + .trk { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pwf { margin-top: 12px; }
+.pwf input { font: 400 15px var(--sans); color: var(--fg); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--radius-btn); padding: 12px 14px; width: 100%; outline: none; }
+.pwf input:focus { border-color: var(--fg-muted); }
+.pwf small { display: block; font: 300 13.5px/1.5 var(--sans); color: var(--fg-muted); margin-top: 8px; }
+
+/* Turnstile, only when Cloudflare needs a click. Stand-in: Cloudflare draws the
+   real widget; "flexible" size fills the column like the button below it. */
+.check { margin-top: 24px; }
+.check .fine { margin-bottom: 10px; }
+.ts { width: 100%; height: 65px; border: 1px dashed var(--rule-strong); border-radius: 6px; display: flex; align-items: center; gap: 12px; padding: 0 16px; font: 400 14px var(--sans); color: var(--fg); background: none; cursor: pointer; text-align: left; }
+.ts i { width: 22px; height: 22px; border-radius: 4px; border: 1.5px solid var(--fg-muted); display: grid; place-items: center; color: #27AE60; font: normal 600 12px var(--sans); flex: none; }
+.ts.done i { border-radius: 50%; border-color: #27AE60; }
+.ts small { margin-left: auto; font: 500 9.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-subtle); }
+
+/* Progress: the receiver's measure */
+.measure { margin-top: 36px; }
+.pct { font: 400 60px/1 var(--mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.is-phone .pct { font-size: 48px; }
+.pct sup { font-size: .4em; vertical-align: .9em; margin-left: 2px; color: var(--fg-muted); }
+.track { height: 1px; background: var(--rule-strong); margin: 20px 0 12px; position: relative; }
+.track b { position: absolute; left: 0; top: -1px; height: 3px; background: var(--fg); transition: width .18s linear; }
+.readout { display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; font: 300 13.5px var(--sans); color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.row .track { margin: 10px 0 8px; }
+.row .readout { font-size: 13px; }
+
+/* Link + QR */
+.linkbox { font: 400 13.5px/1.55 var(--sans); color: var(--fg); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--radius-btn); padding: 12px 14px; overflow-wrap: anywhere; user-select: all; margin-top: 28px; }
+.linkbox + .btnrow { margin-top: 10px; }
+.qr { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 22px; }
+.qr canvas { display: block; border-radius: 8px; image-rendering: pixelated; }
+.qr p { font: 300 13.5px/1.5 var(--sans); color: var(--fg-muted); margin: 0; max-width: 34ch; text-align: center; }
+.send { display: inline-block; margin-top: 40px; font: 400 14px var(--sans); color: var(--fg-muted); text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; align-self: flex-start; }
+.send span { border-bottom: 1px solid var(--rule-strong); padding-bottom: 2px; }
+.send:hover { color: var(--fg); }
+.panel { border: 1px solid var(--rule-strong); border-radius: 10px; padding: 20px 22px; margin-top: 32px; }
+.is-phone .panel { padding: 18px 16px; }
+.panel .ledger { margin-top: 14px; }
+.panel .eyebrow { margin-bottom: 12px; }
+.panel-title { font: 400 17px/1.4 var(--sans); margin: 0; }
+.panel + .slip { margin-top: 16px; }
+
+/* Live today (reference only) */
+.old-info { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; font: 400 13px/1.5 var(--sans); color: var(--fg-muted); }
+.old-info span:nth-child(2) { flex: 1; }
+.old-drop { margin-top: 20px; border: 1px solid var(--rule-strong); border-radius: 10px; padding: 32px 20px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.old-drop .arr { color: var(--fg-subtle); font-size: 20px; }
+.old-drop .d-label { font: 500 15px var(--sans); }
+.old-drop .d-sub { font: 400 12.5px var(--sans); color: var(--fg-muted); }
+.old-btn { font: 500 13px var(--sans); border: 1px solid var(--rule-strong); border-radius: 8px; padding: 8px 12px; }
+.old-sub { margin-top: 16px; font: 500 10.5px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-muted); }
+.old-whisper { text-align: center; font: 400 11.5px var(--sans); color: var(--fg-subtle); padding: 14px 0; }
+
+/* Arrival: lines settle one after another, once per state */
+.arrive > * { animation: settle .45s cubic-bezier(.2,.7,.2,1) both; }
+.arrive > :nth-child(2) { animation-delay: 120ms; }
+.arrive > :nth-child(3) { animation-delay: 240ms; }
+.arrive > :nth-child(4) { animation-delay: 360ms; }
+.arrive > :nth-child(5) { animation-delay: 480ms; }
+.arrive > :nth-child(n+6) { animation-delay: 600ms; }
+/* Rows that arrive with the file settle in place */
+.fill { animation: settle .4s cubic-bezier(.2,.7,.2,1) both; }
+.fill:nth-of-type(2) { animation-delay: 90ms; } .fill:nth-of-type(3) { animation-delay: 180ms; }
+.fill:nth-of-type(4) { animation-delay: 270ms; } .fill:nth-of-type(5) { animation-delay: 360ms; }
+@keyframes settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .arrive > *, .fill { animation: none; } .page, .track b { transition: none; } }
+
+:focus-visible { outline: 2px solid #C8A96E; outline-offset: 3px; }
+</style>
+
+<div class="wrap" id="wrap">
+  <div class="bar">
+    <h1><b>Share-Upload-1</b> · mock v3 · no repo edits</h1>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Frame width">
+        <button type="button" data-w="laptop" aria-pressed="true">Laptop</button>
+        <button type="button" data-w="phone" aria-pressed="false">Phone</button>
+      </div>
+      <div class="seg" role="group" aria-label="Theme">
+        <button type="button" data-t="carbon" aria-pressed="true">Carbon</button>
+        <button type="button" data-t="paper" aria-pressed="false">Paper</button>
+      </div>
+    </div>
+  </div>
+  <div class="states" id="states" role="group" aria-label="Page state"></div>
+
+  <div class="stage" id="stage">
+    <div class="frame" id="frame"><div class="urlbar"><i></i><i></i><i></i><span>refueler.io/share/</span></div><div class="vp" id="vp"><div class="page" id="page" data-theme="carbon"></div></div></div>
+    <aside class="notes" id="notes" aria-live="polite"></aside>
+  </div>
+  <input type="file" id="picker" hidden>
+</div>
+
+<script>
+(function () {
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const page = document.getElementById('page'), vp = document.getElementById('vp');
+  const notesEl = document.getElementById('notes'), picker = document.getElementById('picker');
+
+  const fmtBytes = (b) => b < 1024 ** 2 ? (b / 1024).toFixed(1) + ' KB' : b < 1024 ** 3 ? (b / 1024 ** 2).toFixed(1) + ' MB' : (b / 1024 ** 3).toFixed(2) + ' GB';
+  const FREE = 4 * 1024 ** 3;
+  const SAMPLE = { name: 'Completion statement – 14 Albion Row.pdf', bytes: 248.6 * 1024 ** 2 };
+  const SAMPLE_BIG = { name: 'Site survey – drone footage.mov', bytes: 6.31 * 1024 ** 3 };
+  const FOLDER = { name: 'Albion Row – completion pack', zip: 'Albion Row – completion pack.zip', files: 212, bytes: 1.08 * 1024 ** 3 };
+  let cur = { ...SAMPLE }, big = { ...SAMPLE_BIG };
+  const LINK = 'https://refueler.io/share/?uuid=7f3c9a2e-4b1d-4e8a-9c55-2d0e6b81f4a7#eyJ2IjoxLCJrIjoiVWs3cVpfM3hOMmhGbFJ0OWNXdkEwbUxlWVNqNGJQZ0QiLCJpIjoiNnRKclEyYlp3S2ZNIiwibiI6IkNvbXBsZXRpb24gc3RhdGVtZW50In0';
+
+  // R-5: exact local date + time first, countdown underneath.
+  const expiry = new Date(Date.now() + 7 * 86400000); expiry.setSeconds(0, 0);
+  const fmtDate = (d) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  let state = 'empty', phone = false, theme = 'carbon', drawer = false, verified = false;
+  const opts = { pw: false, dad: false, folder: false };
+
+  // ── Page shell ────────────────────────────────────────────
+  const NAV = [['Share', 1], ['Legend'], ['Notes'], ['Editorial'], ['Support'], ['Privacy']];
+  function header(live) {
+    const items = live ? [...NAV, ['Plans'], ['Status']] : NAV;
+    const links = items.map(([n, on]) => `<a href="#"${on ? ' class="on"' : ''}>${n}</a>`).join('');
+    return `<header class="p-head"><div class="p-head-in">
+        <a class="wordmark" href="#">Refueler<span>/</span><em>Share</em></a>
+        <nav class="topnav" aria-label="Refueler">${links}
+          <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="${drawer}" data-menu><span></span><span></span><span></span></button>
+          <button class="pill" type="button" data-pill>${theme === 'carbon' ? 'Carbon / Paper' : 'Paper / Carbon'}</button></nav></div>
+      <nav class="drawer${drawer ? ' open' : ''}" aria-label="Refueler, menu">${links}</nav>
+    </header>`;
+  }
+  const subnav = () => `<div class="subnav"><nav class="subnav-pill" aria-label="Share">
+      <a href="#" aria-current="page">Send</a><a href="#">Plans</a><a href="#">Status</a></nav></div>`;
+  const footer = (live) => `${live ? '<div class="old-whisper">Delivered over Cloudflare HTTP/3.<br>[Refueler badge]</div>' : ''}
+    <footer class="p-foot"><span>© 2026 Refueler Ltd (incorporating) · refueler.io</span><span><a>Privacy</a><a>Support</a></span></footer>`;
+
+  // ── The slip ─────────────────────────────────────────────
+  const FACTS = `<div class="facts"><span>No account or email needed ·</span> <span>Encrypted in your browser · Free up to 4 GB</span></div>`;
+  const slip = (rows, cls = '') => `<div class="slip ${cls}"><dl class="ledger">${rows}</dl>${FACTS}</div>`;
+  const pick = (hidden) => `<div class="pick" ${hidden ? 'style="visibility:hidden"' : ''}><button class="btn-fill" type="button" data-pick>Choose a file</button><button class="textbtn" type="button" data-go="zipping">or a folder</button></div>`;
+  function emptyRows(over) {
+    const fileVal = phone
+      ? pick(false)
+      : `<span class="hint">${over ? 'Release to add.' : 'Drop it anywhere on this page'}</span>${pick(over)}`;
+    return `<div class="row"><dt>File</dt><dd>${fileVal}</dd></div>
+      <div class="row"><dt>Size</dt><dd class="dim">—</dd></div>
+      <div class="row"><dt>Available until</dt><dd class="dim">7 days after upload</dd></div>`;
+  }
+  const name = () => opts.folder ? FOLDER.zip : cur.name;
+  const bytes = () => opts.folder ? FOLDER.bytes : cur.bytes;
+  // "Choose another": empties the rows, keeps the password / delete settings, focuses "Choose a file".
+  const swap = `<button class="textbtn swap" type="button" data-go="empty" data-swap>Choose another</button>`;
+  const fileRow = (fill) => opts.folder
+    ? `<div class="row${fill}"><dt>Folder</dt><dd><span class="fname"><span>${esc(FOLDER.zip)}</span>${swap}</span><small>${FOLDER.files} files, zipped in your browser</small></dd></div>`
+    : `<div class="row${fill}"><dt>File</dt><dd><span class="fname"><span>${esc(cur.name)}</span>${swap}</span></dd></div>`;
+  const chosenRows = () => `${fileRow(' fill')}
+      <div class="row fill"><dt>Size</dt><dd>${fmtBytes(bytes())}</dd></div>
+      <div class="row fill"><dt>Available until</dt><dd>${fmtDate(expiry)}<small>7 days from upload</small></dd></div>
+      <div class="row fill"><dt>Password</dt><dd>
+        <label class="sw"><input type="checkbox" data-opt="pw" id="opt-pw"${opts.pw ? ' checked' : ''}><span class="trk"></span>Ask for a password</label>
+        <div class="pwf" data-pwf ${opts.pw ? '' : 'hidden'}>
+          <input type="password" id="opt-pw-value" aria-label="Password" autocomplete="new-password" value="${opts.pw ? 'correct horse battery' : ''}">
+          <small>Send it separately from the link. Refueler stores only a hash of it.</small></div></dd></div>
+      <div class="row fill"><dt>After download</dt><dd>
+        <label class="sw"><input type="checkbox" data-opt="dad" id="opt-dad"${opts.dad ? ' checked' : ''}><span class="trk"></span>Delete the file</label>
+        <p class="once" data-once ${opts.dad ? '' : 'hidden'}>The link works once, then the file is deleted.</p></dd></div>`;
+  const measure = (pct, of, right) => `<div class="measure" aria-live="polite">
+      <div class="pct"><span data-pct>${pct}</span><sup>%</sup></div>
+      <div class="track"><b data-bar style="width:${pct}%"></b></div>
+      <div class="readout"><span data-mb>${of}</span><span>${right}</span></div></div>`;
+  const resultRows = () => `<div class="row"><dt>Size</dt><dd>${fmtBytes(bytes())}</dd></div>
+      <div class="row"><dt>Available until</dt><dd>${fmtDate(expiry)}<small>in 7 days</small></dd></div>
+      ${opts.pw ? '<div class="row"><dt>Password</dt><dd>Needed to download<small>Send it separately from the link.</small></dd></div>' : ''}
+      ${opts.dad ? '<div class="row"><dt>After download</dt><dd>The link works once</dd></div>' : ''}`;
+  const uploaded = () => `42%<small>${fmtBytes(bytes() * .42)} of ${fmtBytes(bytes())}</small>`;
+
+  // ── States ───────────────────────────────────────────────
+  const S = {
+    live: {
+      label: 'Live today', old: true,
+      html: () => `<div><div class="old-info"><span>🔒</span><span>No account. No email. No history. Files are encrypted in your browser before upload. Only you hold the key.</span><span>✕</span></div>
+        <div class="old-drop"><span class="arr">↑</span><span class="d-label">Drop a file or folder here</span><span class="d-sub">End-to-end encrypted · Free up to 4 GB</span>
+        <span style="display:flex;gap:8px;margin-top:6px"><span class="old-btn">📄 Browse file</span><span class="old-btn">📁 Upload folder</span></span></div>
+        <div class="old-sub">Plans · Status</div></div>`,
+      notes: [`What <code>refueler.io/share/</code> shows now, for reference.`]
+    },
+    empty: {
+      label: 'Empty',
+      html: () => `<div class="arrive"><p class="eyebrow">New transfer</p><h1 class="head">Send a file.</h1>${slip(emptyRows(false))}</div>`,
+      notes: [`<b>The empty ledger.</b> The box is the File / Size / Available until rows before a file arrives. Choosing or dropping a file fills them in place.`,
+        `No icon, no dashed box. "Choose a file" is filled (most people send one file); "or a folder" is a text link.`,
+        `The whole page takes a drop, so the box doesn't need to be a big target.`,
+        `Try it: drag a real file onto this page, or press "Choose a file". Only its name and size are read, in this tab.`,
+        `Phone: button and link only; no drop line.`]
+    },
+    drag: {
+      label: 'Drag-over',
+      html: () => `<div><p class="eyebrow">New transfer</p><h1 class="head">Send a file.</h1>${slip(emptyRows(true), 'over')}</div>`,
+      pageClass: 'dragging',
+      notes: [`A file held over any part of the page: a thin accent frame around the page, the box turns accent, and the File row reads "Release to add."`,
+        `Two or more files: "One file or one folder at a time."`,
+        `Laptop only; phones have no drag and drop.`]
+    },
+    zipping: {
+      label: 'Zipping folder',
+      html: () => `<div class="arrive"><p class="eyebrow">Preparing</p><h1 class="head">Zipping your folder.</h1>
+        ${slip(`<div class="row fill"><dt>Folder</dt><dd>${esc(FOLDER.name)}<small>${FOLDER.files} files</small></dd></div>
+          <div class="row fill"><dt>Zipping</dt><dd><div class="track"><b style="width:53%"></b></div><div class="readout"><span>640 MB of 1.2 GB</span><span>53%</span></div></dd></div>
+          <div class="row"><dt>Available until</dt><dd class="dim">7 days after upload</dd></div>`)}
+        <p class="fine after">Folders are zipped in your browser first, up to 2 GB.</p></div>`,
+      after: () => { opts.folder = true; },
+      notes: [`Same box. The Folder row fills first, then a Zipping row shows bytes done.`,
+        `Folder over 2 GB: "This folder is 2.6 GB. Folders can be up to 2 GB. Zip it yourself and send the .zip as a file (free up to 4 GB)."`]
+    },
+    chosen: {
+      label: 'File chosen',
+      html: () => `<div class="arrive"><p class="eyebrow">Ready to send</p><h1 class="head">Send a file.</h1>
+        ${slip(chosenRows())}
+        <div class="actions"><button class="btn" type="button" data-upload>Encrypt and upload</button></div></div>`,
+      notes: [`Same box, rows filled in place; Password and After download join. The facts row stays at the foot, so no line under the button.`,
+        `Wrong file? "Choose another" empties the rows and puts focus on "Choose a file". Password and delete settings are kept. Dropping a new file on the page also replaces it. The Cloudflare check isn't re-run.`,
+        `Turnstile runs invisibly ("interaction-only"). Pressing the button before it finishes shows "Checking…" and carries on by itself. Try it.`,
+        `Paid-only options stay out (F-10).`]
+    },
+    check: {
+      label: 'Check needed',
+      html: () => `<div class="arrive"><p class="eyebrow">Ready to send</p><h1 class="head">Send a file.</h1>
+        ${slip(chosenRows())}
+        <div class="check"><p class="fine">A quick check by Cloudflare that you're a person. Not an account.</p>
+          <button class="ts${verified ? ' done' : ''}" type="button" data-verify><i>${verified ? '✓' : ''}</i>${verified ? 'Verified' : 'Confirm you’re a person'}<small>Turnstile</small></button></div>
+        <div class="actions"><button class="btn" type="button" data-upload ${verified ? '' : 'disabled'}>Encrypt and upload</button></div></div>`,
+      notes: [`Rare: Cloudflare wants a click. Only then does the widget appear, full width like the button it unlocks, with one line saying what it is.`,
+        `The stand-in is ours; Cloudflare draws the real widget and its words. Size "flexible" fills the column (never below 300 px).`,
+        `Click the stand-in to pass it.`]
+    },
+    over: {
+      label: 'Over 4 GB',
+      html: () => `<div class="arrive"><p class="eyebrow">Too large</p><h1 class="head">This file is over 4 GB.</h1>
+        ${slip(`<div class="row fill"><dt>File</dt><dd>${esc(big.name)}</dd></div>
+          <div class="row fill"><dt>Size</dt><dd class="warn">${fmtBytes(big.bytes)}<small>Free transfers go up to 4 GB. Paid plans for larger files aren't open yet. <a class="textbtn inline" href="#">See plans</a></small></dd></div>`)}
+        <div class="actions"><button class="btn ghost" type="button" data-go="empty">Choose another file</button></div></div>`,
+      notes: [`Same box; the Size row explains. Link goes to <code>/share/plans/</code> (F-13).`,
+        `Drop a file over 4 GB on this page to see it with your own file.`]
+    },
+    resume: {
+      label: 'Resume',
+      html: () => `<div class="arrive"><p class="eyebrow">New transfer</p><h1 class="head">Send a file.</h1>
+        <div class="panel"><p class="eyebrow">Interrupted</p><p class="panel-title">An upload didn't finish.</p>
+          <dl class="ledger"><div class="row"><dt>File</dt><dd>${esc(cur.name)}</dd></div><div class="row"><dt>Uploaded</dt><dd>${uploaded()}</dd></div></dl>
+          <p class="lede">Choose the same file to carry on. Your browser can't reopen it by itself.</p>
+          <div class="actions"><div class="btnrow"><button class="btn" type="button" data-go="uploading">Choose the file</button><button class="btn ghost" type="button" data-go="empty">Discard</button></div></div></div>
+        ${slip(emptyRows(false))}</div>`,
+      notes: [`Shown on arrival when this browser has an unfinished upload. The empty box stays below for a different file.`,
+        `Folder: "A folder upload didn't finish. Folders can't be resumed, so start again."`]
+    },
+    uploading: {
+      label: 'Uploading',
+      html: () => `<div><p class="eyebrow">Encrypting and uploading</p><h1 class="head">Uploading.</h1>
+        ${measure(41, fmtBytes(bytes() * .41) + ' of ' + fmtBytes(bytes()), 'Keep this tab open')}
+        <p class="fine after">If this tab closes, come back to this page to resume.</p></div>`,
+      notes: [`Same measure as the receiver's download.`,
+        `Three stage words: Preparing · Encrypting and uploading · Finishing.`,
+        `Tab title shows the % ("41% · Refueler Share"), never the file name.`]
+    },
+    ready: {
+      label: 'Link ready',
+      html: () => `<div class="arrive"><p class="eyebrow">Link ready</p><h1 class="head">Your link is ready.</h1>
+        <p class="lede">The key to the file is inside the link. Anyone who has the link can download the file, so send it only to the person it’s for.</p>
+        <div class="linkbox">${LINK}</div>
+        <div class="btnrow"><button class="btn" type="button" data-copy>Copy link</button><button class="btn ghost" type="button" data-qr aria-expanded="false">Show QR code</button></div>
+        <div class="qr" data-qrwrap hidden><canvas aria-label="QR code placeholder"></canvas><p>Scan with a phone’s camera to download the file on that phone.</p></div>
+        <dl class="ledger"><div class="row"><dt>${opts.folder ? 'Folder' : 'File'}</dt><dd>${esc(name())}</dd></div>${resultRows()}</dl>
+        <button class="send" type="button" data-go="empty"><span>Send another file</span></button></div>`,
+      notes: [`Unchanged from v2: link first, details under the buttons, QR below the buttons when asked.`,
+        `Placeholder QR pattern, not scannable.`]
+    },
+    error: {
+      label: 'Error',
+      html: () => `<div class="arrive"><p class="eyebrow">Stopped</p><h1 class="head">The upload stopped.</h1>
+        <p class="lede">Refueler couldn't be reached after several tries. Nothing was shared. Try again carries on from 42%; you'll be asked to choose the same file.</p>
+        <dl class="ledger"><div class="row"><dt>${opts.folder ? 'Folder' : 'File'}</dt><dd>${esc(name())}</dd></div><div class="row"><dt>Uploaded</dt><dd>${uploaded()}</dd></div></dl>
+        <div class="actions"><div class="btnrow"><button class="btn" type="button" data-go="resume">Try again</button><button class="btn ghost" type="button" data-go="empty">Start over</button></div></div></div>`,
+      notes: [`New. Today a failed upload freezes on its last stage (F-11).`,
+        `Other causes: "The security check didn't go through. Try again." · "Refueler refused the upload. Try again; if it keeps happening, check the Status page." · "The upload didn't finish. Some parts didn't arrive. Try again."`]
+    }
+  };
+
+  const DECIDED = `<div class="box"><h2>Decided</h2><ul>
+      <li>Open sheet; the setup lives in one hairline box (the empty ledger).</li>
+      <li>"Choose a file" filled, "or a folder" link; whole page takes a drop.</li>
+      <li>Turnstile hidden unless Cloudflare needs a click; then full width.</li>
+      <li>Sub-menu Send · Plans · Status, one centred pill; sign-in when built.</li>
+      <li>Link first on "Link ready"; QR as in v2.</li>
+      <li>"Encrypted in your browser". Page follows the theme. HTTP/3 line and badge removed.</li></ul></div>`;
+
+  function renderNotes() {
+    notesEl.innerHTML = `<h2>${S[state].label}</h2><ul>${S[state].notes.map(x => `<li>${x}</li>`).join('')}</ul>${DECIDED}`;
+  }
+
+  // ── Render ──────────────────────────────────────────────
+  function render(key) {
+    if (key) { if (S[key].after) S[key].after(); state = key; }
+    const live = state === 'live';
+    page.className = 'page' + (phone ? ' is-phone' : '') + (S[state].pageClass ? ' ' + S[state].pageClass : '');
+    page.dataset.theme = theme;
+    page.innerHTML = header(live) + (live ? '' : subnav())
+      + `<main class="p-main"><div class="sheet">${S[state].html()}</div></main>` + footer(live);
+    renderNotes();
+    $$('#states button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.key === state)));
+    fit();
+    if (state === 'uploading') runProgress();
+  }
+
+  function fit() {
+    const w = vp.clientWidth, dw = phone ? 390 : 1100;
+    page.style.zoom = w ? Math.min(1, w / dw) : 1;
+  }
+  new ResizeObserver(fit).observe(document.getElementById('stage'));
+
+  let timer;
+  function runProgress() {
+    clearInterval(timer);
+    let p = 41;
+    timer = setInterval(() => {
+      if (state !== 'uploading') return clearInterval(timer);
+      p = Math.min(100, p + 2);
+      const pct = page.querySelector('[data-pct]'); if (!pct) return clearInterval(timer);
+      pct.textContent = p;
+      page.querySelector('[data-bar]').style.width = p + '%';
+      page.querySelector('[data-mb]').textContent = fmtBytes(bytes() * p / 100) + ' of ' + fmtBytes(bytes());
+      if (p >= 100) { clearInterval(timer); setTimeout(() => state === 'uploading' && render('ready'), 500); }
+    }, 160);
+  }
+
+  // Placeholder QR (not scannable), drawn sharp: whole CSS pixels per module,
+  // canvas at the screen's pixel density, 4-module light margin, dark on paper.
+  function drawQr(cv) {
+    const n = 29, quiet = 4, units = n + quiet * 2;
+    const mod = phone ? 6 : 7;
+    const dpr = Math.max(2, Math.round(window.devicePixelRatio || 1));
+    const css = units * mod, px = mod * dpr;
+    cv.width = cv.height = css * dpr;
+    cv.style.width = cv.style.height = css + 'px';
+    const c = cv.getContext('2d');
+    c.fillStyle = '#F5F0E8'; c.fillRect(0, 0, cv.width, cv.height);
+    c.fillStyle = '#1A1917';
+    const at = (x, y, w = 1, h = 1) => c.fillRect((quiet + x) * px, (quiet + y) * px, w * px, h * px);
+    let seed = 7;
+    const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const reserved = (x, y) => (x < 8 && y < 8) || (x > n - 9 && y < 8) || (x < 8 && y > n - 9) || x === 6 || y === 6;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!reserved(x, y) && rnd() > 0.52) at(x, y);
+    for (let i = 8; i < n - 8; i += 2) { at(i, 6); at(6, i); }
+    [[0, 0], [n - 7, 0], [0, n - 7]].forEach(([fx, fy]) => {
+      at(fx, fy, 7, 7);
+      c.fillStyle = '#F5F0E8'; at(fx + 1, fy + 1, 5, 5);
+      c.fillStyle = '#1A1917'; at(fx + 2, fy + 2, 3, 3);
+    });
+    at(n - 9, n - 9, 5, 5); c.fillStyle = '#F5F0E8'; at(n - 8, n - 8, 3, 3); c.fillStyle = '#1A1917'; at(n - 7, n - 7);
+  }
+
+  // A real file (dropped or picked): only name and size are read, never contents.
+  function takeFile(f, isDir) {
+    if (isDir) { render('zipping'); setTimeout(() => state === 'zipping' && render('chosen'), 1600); return; }
+    opts.folder = false;
+    if (f.size > FREE) { big = { name: f.name, bytes: f.size }; return render('over'); }
+    cur = { name: f.name, bytes: f.size || 1 };
+    render('chosen');
+  }
+
+  // ── Controls ────────────────────────────────────────────
+  Object.entries(S).forEach(([key, st]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.key = key; b.textContent = st.label;
+    if (st.old) b.className = 'old';
+    b.addEventListener('click', () => {
+      if ((key === 'chosen' && state !== 'zipping') || key === 'empty' || key === 'live') opts.folder = false;
+      if (key === 'ready' && state !== 'uploading') { opts.pw = true; opts.dad = true; }
+      if (key === 'check') verified = false;
+      if (key === 'over') big = { ...SAMPLE_BIG };
+      render(key);
+    });
+    document.getElementById('states').appendChild(b);
+  });
+
+  const press = (attr, val) => $$(`[${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.getAttribute(attr) === val)));
+  $$('[data-w]').forEach(b => b.addEventListener('click', () => {
+    phone = b.dataset.w === 'phone'; press('data-w', b.dataset.w);
+    document.getElementById('wrap').classList.toggle('phone-mode', phone);
+    drawer = false;
+    render();
+  }));
+  function setTheme(t) { theme = t; press('data-t', t); render(); }
+  $$('[data-t]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.t)));
+
+  page.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href="#"]'); if (a) e.preventDefault();
+    if (e.target.closest('[data-pill]')) return setTheme(theme === 'carbon' ? 'paper' : 'carbon');
+    if (e.target.closest('[data-menu]')) { drawer = !drawer; return render(); }
+    if (e.target.closest('[data-pick]')) { picker.value = ''; picker.click(); return; }
+    if (e.target.closest('[data-verify]') && !verified) { verified = true; return render(); }
+    const up = e.target.closest('[data-upload]');
+    if (up) {
+      up.disabled = true; up.textContent = 'Checking…';
+      setTimeout(() => (state === 'chosen' || state === 'check') && render('uploading'), 900);
+      return;
+    }
+    const go = e.target.closest('[data-go]');
+    if (go) {
+      const k = go.dataset.go;
+      if (k === 'zipping') { render('zipping'); setTimeout(() => state === 'zipping' && render('chosen'), 1600); return; }
+      if (k === 'empty') opts.folder = false;
+      render(k);
+      if (go.hasAttribute('data-swap')) { const p = page.querySelector('[data-pick]'); if (p) p.focus(); }
+      return;
+    }
+    const copy = e.target.closest('[data-copy]');
+    if (copy) {
+      try { navigator.clipboard.writeText(LINK).catch(() => {}); } catch (_) {}
+      copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy link'; }, 2000);
+      return;
+    }
+    const qr = e.target.closest('[data-qr]');
+    if (qr) {
+      const w = page.querySelector('[data-qrwrap]'); w.hidden = !w.hidden;
+      if (!w.hidden) drawQr(w.querySelector('canvas'));
+      qr.textContent = w.hidden ? 'Show QR code' : 'Hide QR code';
+      qr.setAttribute('aria-expanded', String(!w.hidden));
+    }
+  });
+  page.addEventListener('change', (e) => {
+    const o = e.target.dataset && e.target.dataset.opt; if (!o) return;
+    opts[o] = e.target.checked;
+    const el = page.querySelector(o === 'pw' ? '[data-pwf]' : '[data-once]'); if (el) el.hidden = !opts[o];
+  });
+  picker.addEventListener('change', () => { if (picker.files[0]) takeFile(picker.files[0], false); });
+
+  // Whole-page drop. dragover fires continuously while a file is held over the
+  // page; when it stops for a moment, the file has left.
+  const DROPPABLE = ['empty', 'drag', 'chosen', 'check', 'over', 'resume'];
+  let dragTimer = null, before = 'empty';
+  const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  page.addEventListener('dragover', (e) => {
+    if (!hasFiles(e) || phone || !DROPPABLE.includes(state)) return;
+    e.preventDefault();
+    if (state !== 'drag') { before = state; render('drag'); }
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(() => { if (state === 'drag') render(before); }, 250);
+  });
+  page.addEventListener('drop', (e) => {
+    if (!hasFiles(e) || state !== 'drag') return;
+    e.preventDefault(); clearTimeout(dragTimer);
+    const items = e.dataTransfer.items, files = e.dataTransfer.files;
+    if (files.length > 1) return render(before);
+    const entry = items && items[0] && items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+    if (files[0]) takeFile(files[0], !!(entry && entry.isDirectory)); else render(before);
+  });
+
+  render('empty');
+})();
+</script>
