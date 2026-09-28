@@ -1,5 +1,5 @@
 # notes-articles-list.md — refueler.io /notes/ pipeline
-> **Version:** 1.2 | **Created:** AP-1 · 29 July 2026 | **Updated:** Share-127 · 8 Seppt 2026
+> **Version:** 1.3 | **Created:** AP-1 · 29 July 2026 | **Updated:** Share-Deps-1 · 28 Sep 2026 (article 15)
 > Editorial planning document. Lives in `refueler-share/` alongside CLAUDE.md and TESTING.md.
 > Load when in an editorial planning or article build session. Not by default.
 > Publishing platform: `refueler.io/notes/` (main domain, not share subdomain).
@@ -221,6 +221,14 @@ the articles are context, not a campaign.
 
 ---
 
+## Article 15 — Sending files from GrapheneOS without loosening anything
+**Status:** Idea — added Share-Deps-1 · 28 Sep 2026
+**Audience:** GrapheneOS users, privacy-hardened Android, people who keep Vanadium on its defaults
+**Product dependency:** None for the claim. Share works on Vanadium's default settings (JIT off): Rajesh received a link from a Mac and sent one back on a Pixel 9a, 28 Sep 2026.
+**Note:** The honest angle: most web tools quietly need the JavaScript JIT or WebAssembly, and the usual advice is "turn the JIT back on for this site". Share doesn't ask that: receiving needs neither, and sending falls back to a pure-JS BLAKE3 when WebAssembly isn't there. Also true since Deps-1: no third-party script on the page (no CDN), so nothing outside refueler.io runs next to the key. **Say plainly:** big sends are slower with the JIT off (hashing ~1–2.5 MB/s, so a 4 GB send spends tens of minutes hashing); small and medium files are fine. **Before drafting:** time a ~100 MB send on the Pixel; find out whether Vanadium ran the WASM interpreter or the JS fallback (USB remote debugging, `blake3Impl()`); ideally the CSP (`docs/Share-CSP-1-notes.md`) is live so the piece can say so. iPhone Lockdown Mode is the same situation (no JIT, no WebAssembly); worth one line, after a test.
+
+---
+
 ## Full pipeline at a glance
 
 | # | Title (short) | Publish order | Dependency | Outreach hook |
@@ -239,6 +247,7 @@ the articles are context, not a campaign.
 | 12 | API technical integration / Nostr auth | After API built | AP-2/AP-3 + build | Developers at firms |
 | 13 | Witness evidence transmission | After article 7 | Susie conversation first | Legal/human rights orgs |
 | 14 | Block explorer metadata leak | Post-B9 | refueler-multi-core live | Bitcoin-native professionals |
+| 15 | GrapheneOS, no loosening | Anytime (after a 100 MB Pixel test) | None | GrapheneOS forum / Matrix, privacy Android |
 
 ---
 
