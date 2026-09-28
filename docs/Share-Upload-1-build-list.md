@@ -25,7 +25,7 @@ The page a sender lands on. One job: get a file to a link. Same look as the rece
 | U-11 | **Wrong file: "Choose another".** Next to the file name (13.5 px, full-strength text; under the name on a phone). It empties the rows back to the empty ledger and puts focus on "Choose a file", so file-or-folder is open again. The password and delete settings are kept for the next file. Dropping a new file anywhere on the page replaces the current one. A passed Cloudflare check is kept (today `_handleFileSelection` throws the token away and re-renders Turnstile on every new file). The browser Back button is no help: the page has no history of its own, so Back leaves Refueler. |
 
 Still open (defaults below unless Rajesh says otherwise):
-- Link-preview title / description (same page as the receiver, so it's the unfurl a recipient sees): "Refueler Share — encrypted file transfer" / "Encrypted file transfer. Files are encrypted in the browser before upload. No account or email needed." Drops lowercase and "No history".
+- Link-preview title / description (same page as the receiver, so it's the unfurl a recipient sees): "Refueler Share — encrypted file transfer" / "Encrypted file transfer. Files are encrypted in the browser before upload. No account or email needed." Drops lowercase and "No history". *✅ Live, Share-Cleanup-1 extras (`104c048`).*
 - Tab title while uploading: "41% · Refueler Share", never the file name.
 
 ### Copy
@@ -71,7 +71,7 @@ Numbering continues from the receiver list.
 - **F-12 Status banner links to `/status.html`,** which refueler.io answers with the homepage. Should be `/share/status/`. *✅ Fixed, Share-Cleanup-1 (`d1bacad`).*
 - **F-13 Cap warning links to `/upgrade.html`,** which 308s to the legacy `/upgrade` page (Stripe form, retired tier names). Should be `/share/plans/`. *✅ Link fixed, Share-Cleanup-1 (`d1bacad`); the line's text ("Creative Premium supports transfers up to 100 GB") still waits for the Upload-2 copy.*
 - **F-14 Stray public page.** refueler.io `src/share/-includes/share-footer.njk` is built and served at `refueler.io/share/-includes/share-footer/` (a bare footer). Same bytes as `_includes/share-footer.njk`, which is itself identical to `footer.njk`. *✅ Deleted, Share-Cleanup-1 (refueler.io `4acc358`).*
-- **F-15 Double label at ≤640 px on other sections.** `/legend/` shows "Refueler / Legend" + "LEGEND" (global.css keeps the active link). Share's fix lives in `share.css` and covers the upload page only; Plans and Status get the same bug once they use `nav.njk` with a section. Fix once in refueler.io.
+- **F-15 Double label at ≤640 px on other sections.** `/legend/` shows "Refueler / Legend" + "LEGEND" (global.css keeps the active link). Share's fix lives in `share.css` and covers the upload page only; Plans and Status get the same bug once they use `nav.njk` with a section. Fix once in refueler.io. *✅ Fixed, Share-Cleanup-1 extras (refueler.io `15646f8`): `nav.njk` adds `has-wordmark-section`, `global.css` hides the active link under it at ≤640 px. Upload-2 only removes the now-redundant `share.css` rule.*
 - **F-16 QR colours.** `_renderQr` draws light-on-dark in Carbon (`#F7F4EF` on `#111316`); some phone scanners can't read inverted codes. It's drawn once, so it doesn't follow a theme switch. Always dark on a light tile (U-9).
 - *F-17 withdrawn (Turnstile in the always-dark card; variant A only).*
 - **F-18 F-8 may go away.** Removing Plans and Status from the top nav frees well over 100 px. Retest 961–1040 px; if "/ Share" fits, remove the hide rule in `share.css`.
@@ -97,7 +97,7 @@ Two repos. **Order matters:** refueler.io first, or the Pages build fails on a m
 1. `src/_data/sections.js`: `share: [Send /share/, Plans /share/plans/, Status /share/status/]`. Legend later; sign-in when built (U-4).
 2. `src/share/share.11tydata.json`: `{ "section": "share", "wordmarkSection": "Share" }`. Check `chambers/index.html` (an Eleventy template in the same folder) doesn't render a nav from it.
 3. `src/_includes/section-nav.njk`: the centred segmented pill (U-3); current item from `page.url` with `aria-current="page"`. Verify `/share/index.html` gives `page.url` `/share/`.
-4. `nav.njk`: drop the Plans/Status block (bar and drawer); "Share" active when `section == 'share'`. Hide the active product link at ≤640 px whenever a section shows in the wordmark (F-15), then remove the upload-only rule from `share.css`.
+4. `nav.njk`: drop the Plans/Status block (bar and drawer); "Share" active when `section == 'share'`. F-15 is already fixed site-wide (Share-Cleanup-1 extras): just remove the upload-only rule from `share.css`.
 5. `plans.njk`, `status.njk`: `nav.njk` + `section-nav.njk` + `footer.njk`; remove "← Back to Refueler Share". Retire `share-nav.njk` and `share-footer.njk` (the stray `-includes/` folder, F-14, is already gone: Share-Cleanup-1).
 6. Plans page "End-to-end encrypted" → "Encrypted in your browser" (U-2).
 
