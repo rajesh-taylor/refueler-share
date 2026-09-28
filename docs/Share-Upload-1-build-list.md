@@ -1,6 +1,6 @@
 # Share-Upload-1 — upload page + Share sub-menu build list
 > **Session:** Share-Upload-1 · 28 Sep 2026 (design, no code changed)
-> **Status:** Design approved by Rajesh (mock v3, 28 Sep). Build: Share-Upload-2. Share-Deps-1 ✓ (F-20, F-21 fixed, 28 Sep).
+> **Status:** Design approved by Rajesh (mock v3, 28 Sep). Build: Share-Upload-2, **after Berlin** (Rajesh, 28 Sep). Share-Deps-1 ✓ (F-20, F-21 fixed, 28 Sep).
 > **Mock:** https://claude.ai/artifact/MAQmeQhhM3KieZo1Cr2FYg (private; v1 = A/B, v2 = open sheet, v3 = empty ledger) · repo copy `docs/drafts/share-upload-mock-v3.html`
 > **Inputs:** `Share-Upload-1-prompt.md` §1–5 · `docs/Share-Receiver-1-build-list.md` (R-1…R-14, F-1…F-9 carry over) · receiver mock v5
 

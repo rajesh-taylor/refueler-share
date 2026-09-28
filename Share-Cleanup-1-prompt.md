@@ -30,6 +30,16 @@ Share-Cleanup-1 — three small fixes from `docs/Share-Receiver-1-build-list.md`
    - Update the CLAUDE.md line "Never edit `frontend/upgrade.html` directly…".
    - Plain `git commit && git push` (not mirrored).
 
+## Extras if time (added Share-Deps-1, 28 Sep — Rajesh confirms at session start)
+
+Upload-2 is now after Berlin, so these small live fixes would otherwise wait a week+. Each is tiny; skip any that grows.
+5. **F-12** — status banner link `/status.html` → `/share/status/` (`src/index.njk`, mirrored → `ship-frontend.sh`).
+6. **F-13** — cap warning link `/upgrade.html` → `/share/plans/` (`src/index.njk`, same ship as 5 and step 3).
+7. **F-14** — delete refueler.io's stray `src/share/-includes/` (served at `/share/-includes/share-footer/`). Grep first that nothing includes from it.
+
+Not in Cleanup-1: F-22 (download bar) touches the download path every receiver uses. Only as its own small session, and only if it can be tested on the iPhone (Safari) and the Pixel the same day before flying. Otherwise after Berlin.
+Share-Deps-1 (28 Sep) changed `frontend/crypto.js`, `download.js`, `upload.js` and added `noble-secp256k1.js` / `noble-blake3.js`. Cleanup-1 doesn't need to touch any of them.
+
 ## Checks (before Rajesh's Safari pass)
 
 - Local preview of refueler.io pages touched by N-3/N-4 in both themes.
