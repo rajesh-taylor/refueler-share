@@ -1,6 +1,6 @@
 # Share-Receiver-1 — receiver page build list
 > **Session:** Share-Receiver-1 · 27 Sep 2026 (design, no code changed)
-> **Status:** Design approved by Rajesh (mock v5). N-1 ✅ · N-2a ✅ shipped 27 Sep (`82105b4`) · N-2b ✅ shipped 28 Sep (`22689ef`; Safari ✓) · item 13 waits on Share-DL-W1 · **N-3 next**.
+> **Status:** Design approved by Rajesh (mock v5). N-1 ✅ · N-2a ✅ shipped 27 Sep (`82105b4`) · N-2b ✅ shipped 28 Sep (`22689ef`; Safari ✓) · N-3 ✅ N-4 ✅ (Share-Cleanup-1, 28 Sep) · item 13 waits on Share-DL-W1.
 > **Mock:** https://claude.ai/artifact/1HRgQc8hxtcpod7ZKqE66t (private) · repo copy `docs/drafts/share-receiver-mock-v5.html`
 > **Inputs:** `receiver-page-brief.md` · `docs/Share-Download-spec-v1.md` §6 · Share-DAD-2 log entry
 
@@ -32,13 +32,13 @@ Carbon first. One primary action: Download.
 
 - **F-1 Date seal can't be checked by a recipient.** The `.ots` stamps `SHA-256(BLAKE3 plaintext root ‖ seal_nonce)`, not `SHA-256(file)` (`frontend/timestamp.js` `buildCommitment`). opentimestamps.org hashes the dropped file with SHA-256, so file + seal will not match. The nonce lives only in the link fragment, which `download.js` clears from the address bar on load. The saved seal is also the pending (un-upgraded) version; upgrade belongs to Legend. So the live line "Verify with opentimestamps.org — proves when this file existed…" is false for a recipient. Not reachable today (permanent record is paid-only; paid uploads not open). A recipient checker is a future design session (with Legend): the seal file would need to carry the nonce, plus an upgrade step.
 - **F-2 Status page password claim is wrong.** refueler.io `src/share/status.njk:101-102`: "The passphrase never travels the wire — only its hash is stored". The **sender** sends only a hash, but the **recipient's** browser POSTs the plain password to `/auth/{uuid}` (`download.js`), where the Worker hashes it (`worker/src/index.js` ~1411-1428). True version: only a hash is stored; the password is sent over an encrypted connection when unlocking and is not kept.
-- **F-3 `frontend/index.html` is stale.** The mirrored page is `src/index.njk` (`bin/lib/share-mirror.sh` `SM_C_NJK`). Edit receiver markup in `src/index.njk` only. `frontend/index.html` should be deleted in a cleanup session.
+- **F-3 `frontend/index.html` is stale.** The mirrored page is `src/index.njk` (`bin/lib/share-mirror.sh` `SM_C_NJK`). Edit receiver markup in `src/index.njk` only. `frontend/index.html` should be deleted in a cleanup session. *✅ Deleted, Share-Cleanup-1 (`7c9c692`).*
 - **F-4 Timed window is one window,** `available_from` → `available_until` (paid tiers only, `manifest_tg.js`), enforced by the Worker on `/auth` and `/download`. Not daily hours (9am–6pm every day would be a new feature). Today, after the window closes, the page still shows a Download button, and pressing it lands on "no longer active".
-- **F-5 Source Serif 4 is not loaded** on refueler.io (`src/_includes/head.njk` loads Satoshi, DM Sans, IBM Plex Mono). Add Source Serif 4 (opsz, wght 300) to the font link. The live site wordmark uses Satoshi; keep it. *(N-2a: loaded for the Share page only, one `<link>` in `src/index.njk` extraHead — remove it when N-3 adds the font site-wide.)*
+- **F-5 Source Serif 4 is not loaded** on refueler.io (`src/_includes/head.njk` loads Satoshi, DM Sans, IBM Plex Mono). Add Source Serif 4 (opsz, wght 300) to the font link. The live site wordmark uses Satoshi; keep it. *(N-2a: loaded for the Share page only, one `<link>` in `src/index.njk` extraHead — remove it when N-3 adds the font site-wide.)* *✅ Site-wide since Share-Cleanup-1 (refueler.io `4acc358`); Share-only link removed (`d1bacad`).*
 
 Found in N-2a (27 Sep 2026):
 - **F-6 `share-tokens.css` is not loaded on refueler.io/share/.** refueler.io's `head.njk` loads `global.css` only, which has no `--mono`, `--serif`, `--display`, `--sans`, `--card-bg`, `--radius`, `--c-red`, `--c-amber`. Every `share.css` rule using them silently falls back live (e.g. "mono" labels on the upload page render in DM Sans). The receiver styles (`.rx-*`) set their own fonts and rules, so they're unaffected. Fix the upload-page styles in a cleanup session (map to `global.css` tokens; don't load a second token file).
-- **F-7 Theme pill label is wrong on load in Carbon** (site-wide): the head script sets the pill text before the pill exists, so it reads "Paper / Carbon" until clicked. refueler.io `head.njk`. Fold into N-3.
+- **F-7 Theme pill label is wrong on load in Carbon** (site-wide): the head script sets the pill text before the pill exists, so it reads "Paper / Carbon" until clicked. refueler.io `head.njk`. Fold into N-3. *✅ Fixed, Share-Cleanup-1: label re-set on `DOMContentLoaded`, markup starts "Carbon / Paper". Notes pages had a second cause (`notes.js` replaced the toggle), also fixed.*
 - **F-8 "Refueler / Share" wordmark** (`wordmarkSection: "Share"`, N-2a) doesn't fit beside the full site nav between 961 and ~1000 px. `share.css` hides "/ Share" from 961 to 1040 px on the upload page only. Tidy when the site nav is revisited. *(N-2b: at ≤640 px the upload page header read "Refueler / ShareSHARE": the wordmark plus the one active nav link global.css keeps on narrow screens. Live since N-2a. Fixed 28 Sep: that link is hidden at ≤640 px on the upload page.)*
 
 Found in N-2b (28 Sep 2026):
@@ -81,16 +81,16 @@ Split in two sessions:
 
 "Open this link on a computer" (phone > 4 GB, browser can't save) is designed in the mock but built in **Share-DL-2** with its detection logic (spec §2.3, D-8).
 
-### N-3 · Share-Theme-1 (refueler.io + refueler-share, small) — R-13 · *combined with N-4 + F-3 as Share-Cleanup-1 (`Share-Cleanup-1-prompt.md`)*
+### N-3 · Share-Theme-1 (refueler.io + refueler-share, small) — R-13 · ✅ **Done 28 Sep 2026 in Share-Cleanup-1** (refueler.io `4acc358`; Share `d1bacad`, `7c9c692`). F-3, F-5, F-7 closed. POS tablet left out (Rajesh). `dev/index.html` was already Carbon.
 Change the default from `'paper'` to `'carbon'` in: refueler.io `src/_includes/head.njk`, `src/notes/notes.js`, `src/share/chambers/index.html`, `src/dev/index.html`, `src/assets/css/global.css` (header comment); refueler-share `src/_includes/head.njk` (local build). Check `src/merchant/merchant-tablet-logic.js` (POS tablet): confirm with Rajesh whether it's in scope. Add Source Serif 4 to the font link (F-5).
 
-### N-4 · Copy fixes (refueler.io, small) — Rajesh approves wording first
+### N-4 · Copy fixes (refueler.io, small) — ✅ **Done 28 Sep 2026 in Share-Cleanup-1** (refueler.io `e4463bb`), wording as below, approved by Rajesh
 - `src/share/plans.njk:168,187` and `src/share/upgrade.njk:168`: "Passphrase download gate" → "Password-protected downloads" (R-7).
 - `src/share/status.njk:98-103`: passphrase → password, and fix the claim (F-2), e.g. "Only a hash of the password is stored. When the recipient unlocks, the password is sent over an encrypted connection, checked, and not kept."
 
 ### Later, not scheduled
 - **Receiver footer (R-14)** — "© 2026 Refueler · Status · Support" vs the live site-wide footer ("© 2026 Refueler Ltd (incorporating) · refueler.io" · Privacy · Support). Rajesh, 27 Sep: leave for now; do when needed or in a snag-list run.
-- Upload-page styles on refueler.io (F-6), pill label on load (F-7), wordmark band (F-8).
+- Upload-page styles on refueler.io (F-6), wordmark band (F-8). (Pill label on load, F-7: ✅ Share-Cleanup-1.)
 - Date-seal checker a recipient can use (F-1), and a way for anyone to get the seal at all (F-9) — design with Legend, before paid uploads open.
 - Daily availability hours — new feature, not planned.
-- Delete stale `frontend/index.html` (F-3).
+- ~~Delete stale `frontend/index.html` (F-3).~~ ✅ Share-Cleanup-1 (`7c9c692`): also `status.html`, `upgrade.html`, `src/status.njk`, `src/upgrade.njk`; `frontend/index.html` gitignored.
