@@ -245,9 +245,9 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1b, B12-2 (B12-1 ✓) | ❌ | First sessions after 4 Oct. B12-1b closes the live Pro Bono size hole — open until then. |
+| 11a | **B12 post-Berlin start** — B12-1b, B12-2 (B12-1 ✓) | ❌ | First sessions after 4 Oct (B12-1b first). |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
-| 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ CAP-WARNING-LINK, UPGRADE-CSS, DAD-ERROR-TEXT) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
+| 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
 | 11d′ | **Pricing-v2-Opus** (1–2 sessions) → plans-page rewrite | ❌ | Rate card v2: holding time + per-32 MiB billing, GBP↔credits, credit blocks, Pro Bono × agents, personal agent key vs `Sovereign ⊅ API`. Plans rewrite after B12-4a from `docs/drafts/` (draft B). Agents/MCP first. Log: Share-MCP-Chat-1. |
 | 11e | B12-4c Sovereign ledger + portability | ✅ | Needs B8-1 (Deed derivation) + B7 live. Runs alongside SD-block. |
@@ -259,6 +259,38 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 16 | Article pipeline | ✅ | Unlocks after NB-4. Article-Rewrite-1 ("What a subpoena gets") brief: `docs/Article-Rewrite-1-brief.md` — not gated on NB-4. |
 | 17 | B9 build (B9-1…B9-8) | — | Design locked B9-Opus. Build sessions in `merkle-spec-v1.md` §9. |
 | 18 | B10+ | — | ML-KEM + NUT-22 + Verkle forward. |
+ 
+---
+
+## Backlog imported from desktop-chat memory (Share-Cleanup-1 · 28 Sep 2026)
+
+Swept against the repo on import; only items not already done or recorded elsewhere are listed (S-numbers = the export file, kept off-repo). Memory-only items, medium confidence.
+
+**Open — slot into the named session:**
+- **S-004** Retune `VERIFY_INLINE_CHUNK_THRESHOLD` (128) after the large-download work → Share-DL track.
+- **S-095** Question: move ciphertext verification off the download hot path (verify at finalise + background sweep) if WASM isn't enough → Share-DL / B9 build.
+- **S-019** Spec a client self-serve transfer status check (own transfer, own token) for "my transfer isn't downloading" → with B12-4b Chambers / B12-5 Harbourmaster.
+- **S-024** Manifest still stores exact `total_bytes` (the X4 fix covered `dock_index` only). Dropping it turns the receiver card's size into an estimate → decide at the next manifest/initiate session.
+- **S-025** Whitepaper "honest scope": the operator never sees the real filename (Worker gets `encrypted-payload`; name lives in the fragment) → `docs/WHITEPAPER-OUTLINE.md` at B9-4.
+- **S-030** refueler.io `command-centre` still uses `localStorage` `rfTheme`, not the `rs-theme` cookie → low, any refueler.io tidy.
+- **S-041** Speed benchmark (1/4/10/25/50 GB; fibre / broadband / 4G / rural) against WeTransfer, Smash, SwissTransfer → after the Share-DL track; possible Notes article.
+- **S-045** Homepage/landing copy speaks to WeTransfer and Smash users → homepage design session.
+
+**Ideas, parked (no build slot):**
+- **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
+- **S-081** Recipient declaration at link creation: one person (keypair, ≤3 devices) / team (shared secret, counter) / one-time. UI says "access key". Overlaps B8 Mode 2.
+- **S-098** Sovereign size obfuscation: pad the last chunk to a full 32 MiB. Needs an architecture + cost session first.
+- **S-031** True folder resume (re-zip, skip sent chunks). Today folders can't resume (Upload-1 copy says so).
+- **S-103** `cdk-dart` as a future mobile client.
+
+**Resolved on import (repo wins):**
+- **S-005** `@refueler/mcp-server` not on npm (404, 28 Sep): hold the publish until MCP-Fix-1 (CLAUDE.md updated).
+- **S-032/S-033/S-099** Durable Objects / Queues backlog: rejected by the CLAUDE.md lock unless an Opus reopens it.
+- **S-065** Lodge/Collect register stays for internal/whitepaper use; UI copy uses plain words (R-3 "Download", "lodged" dropped).
+- **S-052** Sovereign portability via Signal/SimpleX QR: superseded by B12-SR QR pairing with a 6-digit check code.
+- **S-142** Harbourmaster = Chartered client surface at reduced resolution (B12 spec), never in the public menu. BRIDGE v9.6 "Navy Office view" wording is stale → next BRIDGE bump.
+- **S-120** Live Plans page prices yearly = 12 × monthly (no discount): the July £120/£240 table is dead.
+- **S-028** Brave theme cookie, **S-029** phoenixd toggle: resolved (Rajesh, 28 Sep).
  
 ---
  

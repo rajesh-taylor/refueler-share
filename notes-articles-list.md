@@ -110,8 +110,8 @@ the articles are context, not a campaign.
 2. How most "secure" file transfer services work: TLS in transit, AES at rest, server holds the key. What a legal notice to the provider actually returns.
 3. How a blind server works: client-side encryption before upload, key lives in the URL fragment. Explain the fragment without jargon — "the bit after the # symbol in a link is never sent to a web server, by design, since 1994."
 4. The Refueler model: what we store (encrypted noise + sizes/timestamps), what we can't hand over (plaintexts, keys, identities), why.
-5. One paragraph on the remaining caveat — we see sizes and timing. Honest.
-6. CTA: own ending, earned. Link to share.refueler.io.
+5. One paragraph on the remaining caveat — we see sizes and timing. Honest. Plus the one realistic local risk: a browser extension with access to the page can read the key in the link (desktop-chat note, 10 Jul; import S-042). A fuller security write-up and legal position paper on the fragment-key model is a separate, unscheduled piece.
+6. CTA: own ending, earned. Link to refueler.io/share/.
 
 **Note:** This is the conceptual centrepiece of the series. Everything else orbits it. Also the btc++ Berlin warm-up article — technical developers at the conference should have seen it or been linked to it before October.
 

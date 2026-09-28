@@ -184,12 +184,12 @@ Session count is a guide not a constraint — split early, never overload. Plann
 
 **SW-MCP block ✓ (prep complete):**
 - SW-MCP-1–6 ✓ — MCP server scaffold through demo hardening. 228 tests passing (`refueler-mcp` repo).
-- SW-MCP-8 ✓ — package prepared; `npm publish --access public` is a manual one-liner Rajesh runs from `~/Documents/refueler-mcp`.
+- SW-MCP-8 ✓ — package prepared; `npm publish --access public` is a manual one-liner Rajesh runs from `~/Documents/refueler-mcp`. **Not published yet (npm 404, 28 Sep) — hold until MCP-Fix-1 ships.**
 - SW-MCP-7 gates on B7/NB-4 (anonymous rail send).
 
 **B9-Opus ✓ complete (12 Sep 2026):** Merkle / MMR / SMT / ZK design locked. `merkle-spec-v1.md` produced (repo root).
 
-**B12 block (opened 24 Sep 2026):** B12 design ✓ (`cc14d21`) · B12-SR security review ✓ (`4564730`). B12-1 ✓. **B12-1b and B12-2 moved post-Berlin (decided 25 Sep): only small ad hoc sessions until back 4 Oct.** Live Pro Bono size hole (S1.1, B12-1b) stays open until then.
+**B12 block (opened 24 Sep 2026):** B12 design ✓ (`cc14d21`) · B12-SR security review ✓ (`4564730`). B12-1 ✓. **B12-1b and B12-2 moved post-Berlin (decided 25 Sep): only small ad hoc sessions until back 4 Oct.** B12-1b is the first session back.
 
 Locked block sequence (updated Share-B12-SR · 24 Sep 2026):
 `B12-1 ✓ → [Berlin 30 Sep–3 Oct; back Sun 4 Oct; small ad hoc sessions only until then] → B12-1b → B12-2 → KV-Audit-Opus + fixes · X3 naming · X5 app origin → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
@@ -261,7 +261,7 @@ target three times before reaching refueler.io. A green log on the wrong project
 DO NOT commit frontend JS based on code review alone — verify behaviour live after `✓ SHIPPED`.
 DO NOT assume manifest fields exist — `curl /meta/{uuid}` to verify before coding against them.
 DO NOT change fragment.js without verifying upload.js and download.js handle IV, key, and filename end-to-end.
-DO NOT introduce a NEW request header the browser sends to the Worker without adding it to Access-Control-Allow-Headers in worker/src/utils.js corsHeaders() — the CORS preflight blocks it (net::ERR_FAILED, "field x-… is not allowed"). X-Upload-Session hit this at Share-6-3d; /urls will hit it on >256-chunk transfers.
+DO NOT introduce a NEW request header the browser sends to the Worker without adding it to Access-Control-Allow-Headers in worker/src/utils.js corsHeaders() — the CORS preflight blocks it (net::ERR_FAILED, "field x-… is not allowed"). X-Upload-Session hit this at Share-6-3d (now allowed; the 3,200-chunk soaks went through `/urls` with it).
 NOTE (browser + hostname, Share-6 live-test 21 Sep): download "CORS/ERR_FAILED/503" failures were **Brave** + the api.share.refueler.io custom hostname (6-6b cutover not done) intermittently 503-ing; a 503 carries no CORS header so the browser mislabels it "CORS". Safari downloads the same link cleanly, and curl shows the Worker DOES send CORS on the failing chunk. DO NOT edit Worker CORS or finalise token logic for this — both are correct. Real fix lives in 6-6b (or revert frontend/crypto.js WORKER_URL to https://refueler-share.rt-fc4.workers.dev). Test downloads in Safari before assuming a code fault.
 NOTE (verifying R2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
 Claude must ask for all relevant files before writing any fix — never assume and code blind.

@@ -77,7 +77,7 @@ Returns `{ uuid, session_token, urls:[{index, url, expires}], batch_next }`.
 For each chunk `i`: lazily `slice(i*32MiB, …)` off disk (single file) or off the in-RAM zip Blob (folder, §6/§7) → `FileReader` reads **that slice only** (a fresh reader per part, released immediately — this is the `NotReadableError` fix) → AES-GCM encrypt with **AAD = 4-byte BE uint32 of `i`** (§8) → BLAKE3-hash the ciphertext locally (merkle leaf `i`) → `PUT` the ciphertext to the presigned URL for `{uuid}/{iiii}` → read `ETag` from the response as the R2 ACK. Retry budget = Share-5's (6 attempts; 2/5/15/30/60 s). IDB per-chunk state written on each ACK (unchanged shape). When a batch runs out, `POST /upload/{uuid}/urls {from,count}` (auth: session token) for the next batch (§6).
 
 **③ `POST /upload/{uuid}/finalise`** (auth: session token)
-Body: `{ merkle_root (b64url 32B), chunk_count, hashes (b64url of 32·N concat), + tidal/PR fields if deferred }`. Worker:
+Body: `{ merkle_root (b64url 32B), chunk_count, hashes (b64url of 32·N concat), + tidal/PR fields if deferred }`. *(Stale: the shipped handler is authoritative — header `X-Upload-Session`, body `{ hashes: [b64url 32B × N], merkle_root }`, an array, no `chunk_count`. See share-sessions.md "Do-not-retry / wire contract (Share-6)".)* Worker:
 1. Validate `hashes.length === 32 · chunk_count`; **HEAD** each `{uuid}/{iiii}` for existence + size (cheap completeness check — this is what `CompleteMultipartUpload` gave us for free; the Worker still reads **no bodies**).
 2. Write `{uuid}/hashes` sidecar (raw 32-byte concat, chunk order — `merkle-spec-v1.md` §1/§2).
 3. Set `manifest.merkle_root`, `tree_algo:"rfc6962-unbalanced-blake3-v1"`, `chunk_count`, `upload_complete:true`; `putManifest`.

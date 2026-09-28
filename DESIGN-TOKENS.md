@@ -1,8 +1,12 @@
 # DESIGN-TOKENS.md — Refueler
+> ⚠️ **SUPERSEDED — do not use these values (Share-Cleanup-1 · 28 Sep 2026).**
+> The single token source is refueler.io `src/assets/css/global.css`. Live values: Paper `--bg #E8E2D8`, Carbon `--bg #1A1917`; Carbon is the site-wide default.
+> The `#F7F4EF` / `#1E1F22` backgrounds and the orange `--accent-action` below are abolished (`docs/B12-spec-v1.1.md` item 32, Legend design spec).
+> Kept for history only. Share's own `share-tokens.css` is a third, older variant (F-6: map upload styles to `global.css` tokens in Upload-2).
+>
 > **Version:** 1.0 | **Extracted:** Planning session · 21 July 2026
-> Canonical token reference for all Refueler surfaces.
-> Source of record: `merchant-tablet-styles.css` + `dev-console.html`.
-> All repos must converge to these values. Divergences are bugs, not decisions.
+> ~~Canonical token reference for all Refueler surfaces.~~
+> Source of record at the time: `merchant-tablet-styles.css` + `dev-console.html`.
 
 ---
 
