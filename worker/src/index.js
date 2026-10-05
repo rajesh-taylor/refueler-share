@@ -1,6 +1,6 @@
 /* eslint-disable no-undef, no-use-before-define */
 import { verifyTurnstileToken } from './turnstile.js';
-import { issueBlindSignature, verifyCredential } from './nut00.js';
+import { issueBlindSignature, verifyCredential, verifyProofV2 } from './nut00.js';
 import { computeCommitment } from './commitment.js';
 import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
@@ -1141,101 +1141,18 @@ async function handleApiCredentialIssue(request, env) {
     quotaPeriodEnd = updated.period_end;
 
   } else {
-    // ── Anonymous rail: capability-atom token verification ────────────────────
-    //
-    // The client presents one blind-signed capability-atom token per issuance.
-    // Token is verified against the API keyset (MINT_API_PRIVATE_KEY).
-    // Double-spend check against api_spent_tokens Supabase table.
-    // On success, token serial is marked spent — atomic with issuance.
-    //
-    // If MINT_API_PRIVATE_KEY is not yet provisioned (pre-B7 bootstrap),
-    // the anonymous rail is unavailable and returns 503.
-
-    const cashuToken = request.headers.get('X-Cashu-Token') ?? '';
-    if (!cashuToken) {
-      return new Response(
-        JSON.stringify({
-          error: 'Anonymous rail requires X-Cashu-Token header (one capability-atom token per issuance)',
-          code:  'token_required',
-        }),
-        { status: 402, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!env.MINT_API_PRIVATE_KEY) {
-      console.error('api_credential_issue: MINT_API_PRIVATE_KEY not provisioned');
-      return new Response(
-        JSON.stringify({
-          error: 'Anonymous rail token issuance not yet available — use identity rail or contact support',
-          code:  'anon_rail_unavailable',
-        }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Verify the presented token was signed by the API keyset.
-    // Do not change until Cred-Fix-2 — see cred-fix-tracker. This site fails
-    // closed today; it must only change together with full token verification.
-    let tokenSerial;
-    try {
-      const verified = await verifyCredential(cashuToken, env.MINT_API_PRIVATE_KEY);
-      if (!verified || !verified.serial) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid capability token', code: 'token_invalid' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-      tokenSerial = verified.serial;
-    } catch (e) {
-      console.error('api_credential_issue: token verification error:', e);
-      return new Response(
-        JSON.stringify({ error: 'Invalid capability token', code: 'token_invalid' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Double-spend check — api_spent_tokens table.
-    const spendCheckRes = await supabaseFetch(
-      env, 'GET',
-      `/rest/v1/api_spent_tokens?serial=eq.${encodeURIComponent(tokenSerial)}&select=serial`,
-      null,
-      { 'Prefer': 'count=exact', 'Range': '0-0' }
+    // ── Anonymous rail: closed until B7 ──────────────────────────────────────
+    // Capability-atom tokens will use credential format v2 (standard Cashu
+    // proof verification against the API keyset) when the anonymous rail is
+    // built at B7. Until then every request is refused, whatever it presents —
+    // explicitly, not by a parse quirk (Cred-Fix-2a).
+    return new Response(
+      JSON.stringify({
+        error: 'Anonymous rail token issuance not yet available — use identity rail or contact support',
+        code:  'anon_rail_unavailable',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
-
-    if (!spendCheckRes.ok) {
-      console.error('api_credential_issue: api_spent_tokens check failed:', await spendCheckRes.text());
-      return err(502, 'Token verification unavailable — please retry');
-    }
-
-    const cr       = spendCheckRes.headers.get('Content-Range') ?? '';
-    const crMatch  = cr.match(/\/(\d+)$/);
-    const alreadySpent = crMatch ? parseInt(crMatch[1], 10) > 0 : false;
-
-    if (alreadySpent) {
-      supabaseFetch(env, 'POST', '/rest/v1/api_double_spend_attempts', {
-        serial:       tokenSerial,
-        attempted_at: new Date().toISOString(),
-      }, { 'Prefer': 'return=minimal' }).catch(e =>
-        console.error('api_credential_issue: double_spend_attempt log failed:', e)
-      );
-      return new Response(
-        JSON.stringify({ error: 'Token already spent', code: 'token_spent' }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const markSpentRes = await supabaseFetch(
-      env, 'POST', '/rest/v1/api_spent_tokens',
-      { serial: tokenSerial, created_at: new Date().toISOString() },
-      { 'Prefer': 'return=minimal' }
-    );
-
-    if (!markSpentRes.ok) {
-      console.error('api_credential_issue: mark spent failed:', await markSpentRes.text());
-      return err(502, 'Token spend recording failed — please retry');
-    }
-
-    // quotaRemaining stays null — server is blind to anonymous rail balance.
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1250,9 +1167,9 @@ async function handleApiCredentialIssue(request, env) {
 
   const commitment = await computeCommitment(env.COMMITMENT_KEY, uuid, issuedTier, API_EXPIRY_WINDOW);
 
-  let signedPoint, mintPubkey;
+  let signedPoint, mintPubkey, keysetId, dleq;
   try {
-    ({ signedPoint, mintPubkey } = await issueBlindSignature(blinded_message, mintKey));
+    ({ signedPoint, mintPubkey, keysetId, dleq } = await issueBlindSignature(blinded_message, mintKey));
   } catch (e) {
     console.error('api_credential_issue: blind sig error:', e);
     return err(500, 'Credential issuance failed');
@@ -1280,6 +1197,8 @@ async function handleApiCredentialIssue(request, env) {
   return json({
     signed_point:     signedPoint,
     mint_pubkey:      mintPubkey,
+    keyset_id:        keysetId,
+    dleq,
     allocation_bytes: 250 * 1024 * 1024 * 1024, // 250 GB API tier cap (SW-Opus-1)
     uuid,
     issued_tier:      issuedTier,
@@ -1380,9 +1299,9 @@ async function handleCredentialIssue(request, env) {
 
   const commitment = await computeCommitment(env.COMMITMENT_KEY, uuid, issuedTier, expiryWindow);
 
-  let signedPoint, mintPubkey;
+  let signedPoint, mintPubkey, keysetId, dleq;
   try {
-    ({ signedPoint, mintPubkey } = await issueBlindSignature(blinded_message, env.MINT_PRIVATE_KEY));
+    ({ signedPoint, mintPubkey, keysetId, dleq } = await issueBlindSignature(blinded_message, env.MINT_PRIVATE_KEY));
   } catch (e) {
     console.error('Blind sig error:', e);
     return err(500, 'Credential issuance failed');
@@ -1391,6 +1310,8 @@ async function handleCredentialIssue(request, env) {
   return json({
     signed_point:     signedPoint,
     mint_pubkey:      mintPubkey,
+    keyset_id:        keysetId,
+    dleq,
     allocation_bytes: allocationBytes,
     uuid,
     issued_tier:      issuedTier,
@@ -1699,10 +1620,16 @@ async function handleInitiate(request, env, ctx, uuid) {
   // Share-Admin-1: test credentials skip both the BDHKE verify and the Supabase
   // spent_tokens INSERT. The test_credential KV flag (marked initiated:true above)
   // is the single-use guard. No serial → no Supabase write.
+  // Cred-Fix-2a: credential format v2 = standard Cashu proof {id, secret, C},
+  // verified k·Y == C (serial = hex(Y)). Format v1 {C, mint_pubkey} is still
+  // accepted until the frontend sends v2 — REMOVE the v1 branch at Cred-Fix-2b.
   let serial;
   if (!isTestCredential) {
     try {
-      serial = await verifyCredential(JSON.parse(credential), env.MINT_PRIVATE_KEY);
+      const parsed = JSON.parse(credential);
+      serial = (parsed && typeof parsed === 'object' && 'secret' in parsed)
+        ? verifyProofV2(parsed, env.MINT_PRIVATE_KEY).serial
+        : await verifyCredential(parsed, env.MINT_PRIVATE_KEY);
     } catch {
       return err(401, 'Invalid credential');
     }

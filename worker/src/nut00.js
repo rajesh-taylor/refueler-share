@@ -16,6 +16,15 @@
 import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { concatBytes, hexToBytes, bytesToHex } from '@noble/hashes/utils';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { equalBytes } from '@noble/curves/utils.js';
+import {
+  hashToCurve as cashuHashToCurve,
+  createBlindSignature,
+  createDLEQProof,
+  deriveKeysetId,
+  pointFromHex,
+} from '@cashu/cashu-ts';
 
 // Cashu hash_to_curve domain separator — per NUT-00 spec
 const DOMAIN_SEPARATOR = new TextEncoder().encode('Secp256k1_HashToCurve_Cashu_');
@@ -42,27 +51,45 @@ export function hashToCurve(secretBytes) {
 }
 
 /**
- * issueBlindSig(blindedPointHex, mintPrivkeyHex) → { signed_point, mint_pubkey }
- * C_ = k * B_
- * K  = k * G  (mint pubkey)
+ * keysetIdFor(mintPrivkeyHex) → NUT-02 keyset id (version 01, 66 hex chars)
+ * One key at amount 1, unit "auth" (NUT-22 convention — no monetary unit).
+ * Consumer and API keys have different pubkeys, so their ids differ.
+ */
+export function keysetIdFor(mintPrivkeyHex) {
+  const K = bytesToHex(secp.getPublicKey(hexToBytes(mintPrivkeyHex), true));
+  return deriveKeysetId({ 1: K }, { unit: 'auth', versionByte: 1 });
+}
+
+/**
+ * issueBlindSig(blindedPointHex, mintPrivkeyHex)
+ *   → { signed_point, mint_pubkey, keyset_id, dleq: { e, s } }
+ * C_ = k * B_ ; K = k * G (mint pubkey).
+ * Cred-Fix-2: signing and the NUT-12 DLEQ proof come from @cashu/cashu-ts
+ * (deterministic nonce). keyset_id and dleq are additive response fields.
  */
 export function issueBlindSig(blindedPointHex, mintPrivkeyHex) {
   const privkeyBytes = hexToBytes(mintPrivkeyHex);
-  const B_ = secp.ProjectivePoint.fromHex(blindedPointHex);
-  const k  = BigInt('0x' + mintPrivkeyHex);
-  const C_ = B_.multiply(k);
-  // getPublicKey returns compressed bytes
-  const K  = bytesToHex(secp.getPublicKey(privkeyBytes, true));
+  const B_ = pointFromHex(blindedPointHex);
+  const id = keysetIdFor(mintPrivkeyHex);
+  const { C_ } = createBlindSignature(B_, privkeyBytes, id);
+  const { e, s } = createDLEQProof(B_, privkeyBytes);
   return {
     signed_point: C_.toHex(true),
-    mint_pubkey:  K,
+    mint_pubkey:  bytesToHex(secp.getPublicKey(privkeyBytes, true)),
+    keyset_id:    id,
+    dleq:         { e: bytesToHex(e), s: bytesToHex(s) },
   };
 }
 
-// Alias used by index.js — returns { signedPoint, mintPubkey }
+// Alias used by index.js — returns { signedPoint, mintPubkey, keysetId, dleq }
 export function issueBlindSignature(blindedPointHex, mintPrivkeyHex) {
   const result = issueBlindSig(blindedPointHex, mintPrivkeyHex);
-  return { signedPoint: result.signed_point, mintPubkey: result.mint_pubkey };
+  return {
+    signedPoint: result.signed_point,
+    mintPubkey:  result.mint_pubkey,
+    keysetId:    result.keyset_id,
+    dleq:        result.dleq,
+  };
 }
 
 /**
@@ -83,6 +110,39 @@ export function verifyToken(secretHex, unblindedSigHex, mintPrivkeyHex) {
 }
 
 /**
+ * verifyProofV2(proof, mintPrivkeyHex) → { serial }   (throws on any failure)
+ *
+ * Credential format v2 — a standard Cashu proof { id, secret, C } (amount
+ * omitted or 1). Standard Cashu proof verification:
+ *   Y = hash_to_curve(utf8(secret))   (NUT-00; the secret STRING's UTF-8 bytes)
+ *   require k·Y == C                  (compressed bytes, constant-time compare)
+ *   serial = hex(Y)                   (NUT-07 convention, 66 hex chars)
+ * id must be this key's NUT-02 keyset id. Unknown fields are refused.
+ */
+const PROOF_V2_FIELDS = new Set(['id', 'amount', 'secret', 'C']);
+
+export function verifyProofV2(proof, mintPrivkeyHex) {
+  if (!proof || typeof proof !== 'object' || Array.isArray(proof)) throw new Error('Invalid proof');
+  for (const key of Object.keys(proof)) {
+    if (!PROOF_V2_FIELDS.has(key)) throw new Error('Unexpected proof field');
+  }
+  const { id, amount, secret, C } = proof;
+  if (amount !== undefined && amount !== 1)                   throw new Error('Invalid proof amount');
+  if (typeof secret !== 'string' || !/^[0-9a-f]{64}$/.test(secret)) throw new Error('Invalid proof secret');
+  if (typeof C !== 'string' || !/^0[23][0-9a-f]{64}$/.test(C))      throw new Error('Invalid proof C');
+  if (typeof id !== 'string' || id !== keysetIdFor(mintPrivkeyHex)) throw new Error('Unknown keyset id');
+
+  const Y = cashuHashToCurve(new TextEncoder().encode(secret));
+  const k = secp256k1.Point.Fn.fromBytes(hexToBytes(mintPrivkeyHex));
+  const expected = Y.multiply(k).toBytes(true);
+  if (!equalBytes(expected, hexToBytes(C))) throw new Error('Proof signature invalid');
+
+  return { serial: Y.toHex(true) };
+}
+
+/**
+ * Credential format v1 — REMOVE at Cred-Fix-2b once the frontend sends v2.
+ *
  * verifyCredential(credentialJson, mintPrivkeyHex) → serial hex string
  *
  * Credential envelope from frontend unblindSignature():

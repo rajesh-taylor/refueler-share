@@ -4,7 +4,7 @@
 //   • missing COMMITMENT_KEY fails closed (500 at issue, 503 at initiate)
 //   • /credential/issue resume branch removed (400)
 //   • X-Email no longer selects a tier
-//   • /api/v1/credential/issue anonymous rail stays closed until Cred-Fix-2
+//   • /api/v1/credential/issue anonymous rail stays closed until B7 (explicit 503, Cred-Fix-2a)
 // All env is in-memory (test/_r2_mock.js) + a stubbed fetch. No network.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -259,13 +259,15 @@ describe('POST /api/v1/credential/issue — anonymous rail stays closed', () => 
     expect(res.status).toBe(503);
   });
 
-  it('401 for any token, including a genuinely issued API-keyset credential', async () => {
-    stubFetch();
+  it('503 for any token even with MINT_API_PRIVATE_KEY set, including a genuinely issued credential', async () => {
+    const calls = stubFetch();
     const env = makeEnv({ MINT_API_PRIVATE_KEY: MINT_PRIVKEY_HEX });
     const { credential } = await issueViaWorker(env);
     for (const token of ['anything', '{}', credential]) {
       const res = await anonIssue(env, token);
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(503);
+      expect((await res.json()).code).toBe('anon_rail_unavailable');
     }
+    expect(calls.some(c => c.includes('api_spent_tokens'))).toBe(false);
   });
 });

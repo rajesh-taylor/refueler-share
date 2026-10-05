@@ -212,7 +212,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-B12-1d ✓ (5 Oct 2026) — S1.1 complete: every presigned PUT signs `content-length` (full chunks `CHUNK_SIZE + 16`; tail exact, `/initiate`-only as `tail_url`); finalise 409s `wrong_size`. Worker deploy `1c6c7985`. Live-verified in Safari + 8.5 GiB soak. Next: Cred-Fix-2 → Share-Size-1 → B12-2 (refueler-io session) → KV-Audit-Opus.**
+**Cred-Fix-2a ✓ (5 Oct 2026) — Worker accepts credential format v2 (standard Cashu proof, verified `k·Y == C`, serial `hex(Y)`), issue returns `keyset_id` + NUT-12 `dleq`; v1 still accepted until 2b. Worker deploy `4c9730b2`. Live-verified in Safari. Next: Cred-Fix-2b → Share-Size-1 → B12-2 (refueler-io session) → KV-Audit-Opus.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -234,6 +234,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | B12-1b ✓ | deploy `0d2f94d9` | Test gate green; R2 proven to enforce signed `content-length` (403 on mismatch, plain and chunked). Optional `contentLength` in presigner. S1.1 build split to B12-1c. |
 | B12-1c ✓ | `413b714` | Frontend half of S1.1: `tail_url` handling in `upload.js` (fresh + resume, `tailUrl` in IDB) and `test-upload.html` (+16 B bodies, 32 MiB locked). Worker half → B12-1d. |
 | B12-1d ✓ | deploy `1c6c7985` | Worker half of S1.1: signed `content-length` on `/initiate` + `/urls`, `tail_url` every N, chunk/byte-count 400, finalise `wrong_size` 409 + `waitUntil` delete. 639 tests. Live: wrong-size PUT → 403; 8.5 GiB / 272 chunks finalised, R2 chunks exactly 33,554,448 B. |
+| Cred-Fix-2a ✓ | deploy `4c9730b2` | Credential format v2 accepted (`verifyProofV2`, `@cashu/cashu-ts` 4.11.0 pinned), `keyset_id` + `dleq` at issue, anonymous-rail API issuance explicit 503 until B7. 659 tests incl. official NUT-00/02/12 vectors. v1 removal → 2b. |
  
 ---
  
