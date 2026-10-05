@@ -212,7 +212,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Cred-Fix-2a ✓ (5 Oct 2026) — Worker accepts credential format v2 (standard Cashu proof, verified `k·Y == C`, serial `hex(Y)`), issue returns `keyset_id` + NUT-12 `dleq`; v1 still accepted until 2b. Worker deploy `4c9730b2`. Live-verified in Safari. Next: Cred-Fix-2b → Share-Size-1 → B12-2 (refueler-io session) → KV-Audit-Opus.**
+**Cred-Fix-2a ✓ (5 Oct 2026) — Worker accepts credential format v2 (standard Cashu proof, verified `k·Y == C`, serial `hex(Y)`), issue returns `keyset_id` + NUT-12 `dleq`; v1 still accepted until 2b. Worker deploy `4c9730b2`. Live-verified in Safari. Next: Cred-Fix-2b → Share-Size-1 → Share-Upload-2 → B12-2 (refueler-io session) → KV-Audit-Opus.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -244,7 +244,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b → Share-Size-1 (exact size into URL fragment) → Share-Upload-2 (Rajesh, 5 Oct) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
