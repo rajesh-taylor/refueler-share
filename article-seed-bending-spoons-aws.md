@@ -1,5 +1,5 @@
 # Article seed — One subpoena. Two acquisitions. Same server.
-> **Logged:** Ad hoc session · 16 September 2026
+> **Logged:** Ad hoc session · 16 September 2026 · **Updated:** 5 Oct 2026 (Meetup added; own-host honesty note)
 > **Status:** Seed only — not yet in notes-articles-list.md pipeline. Add at next editorial session.
 > **Proposed slot:** Article 3a or standalone — between articles 3 and 4
 > **Audience:** General professional. Anyone who used WeTransfer or Smash.
@@ -23,6 +23,32 @@ That is not a Refueler claim. That is their own infrastructure disclosure.
 
 ---
 
+## Update 5 Oct 2026 — Meetup is Bending Spoons too
+
+Bending Spoons also owns **Meetup** (acquired 2024 — confirm date and announcement before publishing).
+Meetup is reported to run on **AWS** as well. Source so far is weak: a Google AI Overview citing a
+YouTube cloud-training video. **Verify against Meetup's own privacy policy / subprocessor list**
+before using it — the article's strength is that every infrastructure claim comes from the company's
+own disclosures. If Meetup's policy doesn't name AWS, drop the AWS half of this paragraph and keep
+the ownership half.
+
+**Why it matters (a different kind of data, not a third file service):** WeTransfer and Smash hold
+*who sent what to whom*. Meetup holds *who belongs to which group and who turned up where and when*:
+names, interests, RSVPs, locations. Same owner across file-transfer metadata and an attendance
+graph. Do **not** claim the datasets are merged — that depends on each privacy policy and is
+unverified. The defensible point: one company now decides the privacy terms for all of them, and
+those terms can change after you signed up. Acquisition is how a privacy policy you agreed to
+becomes one you didn't.
+
+Possible line (founder voice, use at most one): *"You agreed to Meetup's privacy policy. You didn't
+agree to its next owner's."*
+
+Broader portfolio (Evernote, Vimeo and others reported) — **check the current list at draft time**;
+it changes fast and an out-of-date list undermines the piece. One sentence at most; the article is
+about the pattern, not the shopping list.
+
+---
+
 ## Structure
 
 1. **The acquisition paragraph.** Bending Spoons bought both. State it flatly. No editorialising. Link to the announcements.
@@ -43,6 +69,14 @@ That is not a Refueler claim. That is their own infrastructure disclosure.
 ---
 
 ## Honest constraints
+- **Refueler runs on a big US provider too (Cloudflare Workers + R2).** The CLOUD Act reaches
+  Cloudflare exactly as it reaches Amazon. Never imply the host is the difference — it isn't. The
+  difference is who holds the key: their servers can decrypt (provider-held keys); ours hold
+  ciphertext and never see the key. Say this plainly in the piece, before a reader says it for us.
+  (House line: architecture is what protects you; jurisdiction just determines how long the
+  paperwork takes.)
+- "Same server" / "same building" is shorthand: same provider, not necessarily the same account,
+  region or machine. Keep it as an image, not a technical claim.
 - Confirm CLOUD Act applicability to UK-origin transfers before publishing — legal nuance matters here.
 - Do not overstate: "one subpoena" is a rhetorical device. In practice, separate requests per service. But the infrastructure point (same AWS account/region) is the substance — verify with actual AWS region data for both services before publishing.
 - Bending Spoons funding sources: "Amazon-funded" stated conversationally in session — verify before including in published piece. May be PE-backed, not Amazon directly. The AWS infrastructure point is the stronger and verifiable claim.
