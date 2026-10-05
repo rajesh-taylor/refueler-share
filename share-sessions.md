@@ -349,7 +349,8 @@
 |---|---|---|---|
 | B12-1 | 1 (done) | Sonnet | Pre-Berlin |
 | B12-1b | 1 (done) | Sonnet | 5 Oct — Part 0 + R2 enforcement gate only (split) |
-| B12-1c | 1–2 | Sonnet | S1.1 build, re-scoped (Worker + frontend) — next session, then Cred-Fix-2 (Rajesh, 5 Oct) |
+| B12-1c | 1 (done) | Sonnet | 5 Oct — Part 1 frontend only (split); `413b714` ✓ SHIPPED |
+| B12-1d | 1 | Sonnet | S1.1 Worker + tests + live verify (B12-1c Parts 2–4) — next, then Cred-Fix-2 |
 | B12-2 | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) — no prompt yet; needs Navy Office files from Rajesh |
 | KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
 | B12-3 quota | 3 (+1) | Sonnet | Week 2 |
@@ -486,3 +487,10 @@ Files: `frontend/crypto.js`, `download.js`, `upload.js`, `merkle.js` (comments),
 **Re-scoped S1.1 build (B12-1c) carries:** checklist items 1, 2, 4, 5 from `Share-B12-1b-prompt.md`; the `total_bytes`-in-manifest decision; frontend tail-URL handling (fresh + resume + test-upload) via `ship-frontend.sh`. Reuse `wrongSizeSegments` (`sweep_rules.js`) for the finalise size check.
 **Also:** `worker/.dev.vars` (gitignored, never committed) had a pasted heredoc wrapper (`cat > … << 'EOF'` / `EOF`) as first/last lines — removed; values untouched.
 **Follow-up (Rajesh, 5 Oct):** order B12-1c (prompt `Share-B12-1c-prompt.md`) → Cred-Fix-2 → **Share-Size-1** (exact file size moves from manifest/`/meta` into the URL fragment; old links fall back to a chunk-count estimate) → B12-2 (refueler-io session). `total_bytes` stays in the manifest until Share-Size-1. Logged idea, not scheduled: size padding (e.g. Padmé buckets) to blur the ciphertext size R2 sees — storage cost trade-off, Opus question.
+
+## Share-B12-1c (5 Oct 2026) — S1.1 Part 1: frontend tolerant of both Worker shapes (split session) · `413b714` (refueler.io `37442ed`) ✓ SHIPPED
+
+**Part 0 ✓** `npm test` clean on unmodified `main` (621 passed, 29 skipped).
+**Built (frontend only, Worker untouched):** `upload.js` — uses `/initiate` `tail_url` for index N−1 when present, asks `/urls` for indices `< N−1` only; resume record stores `tailUrl {url, expires}`; resume skips the `/urls` probe when only the tail remains (finalise 401/409 is the session check; re-PUT is harmless, deterministic ciphertext); expired `tailUrl` → clear; old record + new Worker (`/urls` 400) → clear, "Resume record is incomplete". `_fetchNextUrlBatch` errors carry `.status`. `test-upload.html` — same tail handling; PUT bodies `chunkBytes + 16`; chunk size locked to 32 MiB (was configurable and plaintext-sized — would have 403'd on a size-signing Worker). Scratch sim (N 1–3200, both Worker shapes, fresh + resume) green.
+**Rajesh decisions (5 Oct):** gap points 1–4 confirmed (admin +16 / tail-only resume / `tailUrl` on every IDB write / old-record clear). Split after Part 1.
+**Safari gate ✓ (Rajesh, 5 Oct, current Worker):** single file, password + DAD — downloaded and opened; link dead on second use; receiver card shows name (behind "Show name"), size, expiry. **Open:** Parts 2–4 → **B12-1d** (prompt `Share-B12-1d-prompt.md`). Worker, tests, deploy, live verify, §S1.1 note; then Cred-Fix-2.

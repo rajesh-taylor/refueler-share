@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.8 | **Last updated:** Share-B12-1b · 5 Oct 2026
+> **Version:** 9.9 | **Last updated:** Share-B12-1c · 5 Oct 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
  
 ---
@@ -212,7 +212,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-B12-1b ✓ (5 Oct 2026) — R2 enforces signed `content-length` (live-proven, dev bucket). S1.1 build moves to B12-1c (Worker + frontend + `total_bytes`-in-manifest decision). Post-Berlin order (Rajesh, 5 Oct): B12-1c → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (refueler-io session) → KV-Audit-Opus.**
+**Share-B12-1c ✓ (5 Oct 2026) — S1.1 Part 1 shipped: frontend accepts a separate `tail_url` (fresh + resume + test-upload), works against both Worker shapes. Worker unchanged. Next: B12-1d (S1.1 Worker + tests + live verify; Safari gate first) → Cred-Fix-2 → Share-Size-1 → B12-2 (refueler-io session) → KV-Audit-Opus.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -237,6 +237,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-B12-SR ✓ | `4564730` | Security review — `B12-SR-spec-v1.md` (root). Amends B12 A1–A18. |
 | B12-1 ✓ | `3b1b819` | PURGED status, DAD clears `dock_index`, drop `size_bytes` (X4), sweep rules S1.10. |
 | B12-1b ✓ | deploy `0d2f94d9` | Test gate green; R2 proven to enforce signed `content-length` (403 on mismatch, plain and chunked). Optional `contentLength` in presigner. S1.1 build split to B12-1c. |
+| B12-1c ✓ | `413b714` | Frontend half of S1.1: `tail_url` handling in `upload.js` (fresh + resume, `tailUrl` in IDB) and `test-upload.html` (+16 B bodies, 32 MiB locked). Worker half → B12-1d. |
  
 ---
  
@@ -246,7 +247,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c next → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d next → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
