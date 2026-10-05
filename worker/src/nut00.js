@@ -10,45 +10,21 @@
  * LAYER BOUNDARY: This module handles anonymous authentication only.
  * BLAKE3 chunk verification lives in blake3.js. These layers must never be conflated.
  *
- * NOTE: Uses @noble/secp256k1@2.x API (ProjectivePoint, not Point).
+ * NOTE: Uses @noble/secp256k1@2.x API for the pubkey; NUT-00/02/12 maths via @cashu/cashu-ts.
  */
 
 import * as secp from '@noble/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
-import { concatBytes, hexToBytes, bytesToHex } from '@noble/hashes/utils';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { equalBytes } from '@noble/curves/utils.js';
+// Hex helpers from noble-curves v2 (ESM), not noble-hashes v1: in the vitest workerd pool,
+// an ESM import of hashes v1 utils.js first breaks blake3.js's later CJS require() of it.
+import { equalBytes, hexToBytes, bytesToHex } from '@noble/curves/utils.js';
 import {
-  hashToCurve as cashuHashToCurve,
+  hashToCurve,
   createBlindSignature,
   createDLEQProof,
   deriveKeysetId,
   pointFromHex,
 } from '@cashu/cashu-ts';
-
-// Cashu hash_to_curve domain separator — per NUT-00 spec
-const DOMAIN_SEPARATOR = new TextEncoder().encode('Secp256k1_HashToCurve_Cashu_');
-
-/**
- * hashToCurve(secretBytes) → secp256k1 ProjectivePoint
- * Per NUT-00: msg_hash = SHA256(DOMAIN_SEPARATOR || x)
- *             try Y = point('02' || SHA256(msg_hash || counter_le_uint32))
- */
-export function hashToCurve(secretBytes) {
-  const msgHash = sha256(concatBytes(DOMAIN_SEPARATOR, secretBytes));
-  for (let counter = 0; counter < 0xffffffff; counter++) {
-    const counterBytes = new Uint8Array(4);
-    new DataView(counterBytes.buffer).setUint32(0, counter, true); // little-endian
-    const hash = sha256(concatBytes(msgHash, counterBytes));
-    const compressed = concatBytes(new Uint8Array([0x02]), hash);
-    try {
-      return secp.ProjectivePoint.fromHex(bytesToHex(compressed));
-    } catch {
-      continue;
-    }
-  }
-  throw new Error('hash_to_curve: exhausted counter space');
-}
 
 /**
  * keysetIdFor(mintPrivkeyHex) → NUT-02 keyset id (version 01, 66 hex chars)
@@ -93,23 +69,6 @@ export function issueBlindSignature(blindedPointHex, mintPrivkeyHex) {
 }
 
 /**
- * verifyToken(secretHex, unblindedSigHex, mintPrivkeyHex) → boolean
- * Checks: k * hash_to_curve(secret) == C
- */
-export function verifyToken(secretHex, unblindedSigHex, mintPrivkeyHex) {
-  try {
-    const secretBytes = hexToBytes(secretHex);
-    const Y = hashToCurve(secretBytes);
-    const k = BigInt('0x' + mintPrivkeyHex);
-    const expectedC  = Y.multiply(k);
-    const presentedC = secp.ProjectivePoint.fromHex(unblindedSigHex);
-    return expectedC.equals(presentedC);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * verifyProofV2(proof, mintPrivkeyHex) → { serial }   (throws on any failure)
  *
  * Credential format v2 — a standard Cashu proof { id, secret, C } (amount
@@ -132,67 +91,10 @@ export function verifyProofV2(proof, mintPrivkeyHex) {
   if (typeof C !== 'string' || !/^0[23][0-9a-f]{64}$/.test(C))      throw new Error('Invalid proof C');
   if (typeof id !== 'string' || id !== keysetIdFor(mintPrivkeyHex)) throw new Error('Unknown keyset id');
 
-  const Y = cashuHashToCurve(new TextEncoder().encode(secret));
+  const Y = hashToCurve(new TextEncoder().encode(secret));
   const k = secp256k1.Point.Fn.fromBytes(hexToBytes(mintPrivkeyHex));
   const expected = Y.multiply(k).toBytes(true);
   if (!equalBytes(expected, hexToBytes(C))) throw new Error('Proof signature invalid');
 
   return { serial: Y.toHex(true) };
-}
-
-/**
- * Credential format v1 — REMOVE at Cred-Fix-2b once the frontend sends v2.
- *
- * verifyCredential(credentialJson, mintPrivkeyHex) → serial hex string
- *
- * Credential envelope from frontend unblindSignature():
- *   { C: "<hex>", mint_pubkey: "<hex>" }
- *
- * The "secret" (x) is embedded as the first 64 hex chars of C for our scheme,
- * BUT our frontend stores credential as JSON { C, mint_pubkey } and sends the
- * raw secret separately. We use C as the unblinded sig and derive a serial from it.
- *
- * Actual credential wire format sent by frontend:
- *   X-Cashu-Credential: JSON.stringify({ C, mint_pubkey })
- *
- * We verify by checking the credential is a valid point on the curve signed by k.
- * Since we don't store the original secret x server-side, we verify structural
- * validity and use SHA256(C_bytes) as the spend serial (double-spend prevention).
- */
-export async function verifyCredential(credentialJson, mintPrivkeyHex) {
-  let cred;
-  try {
-    cred = typeof credentialJson === 'string' ? JSON.parse(credentialJson) : credentialJson;
-  } catch {
-    throw new Error('Invalid credential JSON');
-  }
-
-  // Frontend sends { C, mint_pubkey } — accept both field naming conventions
-  const unblindedSigHex = cred.C ?? cred.unblinded_sig;
-  const mintPubkeyHex   = cred.mint_pubkey;
-
-  if (!unblindedSigHex || !mintPubkeyHex) throw new Error('Missing credential fields');
-
-  // Verify mint_pubkey matches our private key
-  const expectedPubkey = bytesToHex(secp.getPublicKey(hexToBytes(mintPrivkeyHex), true));
-  if (mintPubkeyHex !== expectedPubkey) throw new Error('Credential mint key mismatch');
-
-  // Verify C is a valid curve point (structural check)
-  try {
-    secp.ProjectivePoint.fromHex(unblindedSigHex);
-  } catch {
-    throw new Error('Credential C is not a valid curve point');
-  }
-
-  // Derive spend serial from the unblinded sig point bytes
-  return await tokenSerial(unblindedSigHex);
-}
-
-/**
- * tokenSerial(hex) → SHA256 hex string — used as double-spend key in Supabase
- */
-export async function tokenSerial(hex) {
-  const bytes = hexToBytes(hex);
-  const hash  = await crypto.subtle.digest('SHA-256', bytes);
-  return bytesToHex(new Uint8Array(hash));
 }

@@ -212,7 +212,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Cred-Fix-2a ✓ (5 Oct 2026) — Worker accepts credential format v2 (standard Cashu proof, verified `k·Y == C`, serial `hex(Y)`), issue returns `keyset_id` + NUT-12 `dleq`; v1 still accepted until 2b. Worker deploy `4c9730b2`. Live-verified in Safari. Next: Cred-Fix-2b → Share-Size-1 → Share-Upload-2 → B12-2 (refueler-io session) → KV-Audit-Opus.**
+**Cred-Fix-2 ✓ (5 Oct 2026) — credential format v2 end to end: the browser builds a standard Cashu proof `{id, amount, secret, C}` with vendored cashu-ts 4.11.0 (`frontend/cashu-crypto.js`) and checks the NUT-12 DLEQ proof; the Worker verifies `k·Y == C` (serial `hex(Y)`) and refuses format v1. Deploys `4c9730b2` (2a) + `a5ac4f5d` (2b); frontend `ca3972c`. Live-verified in Safari + Brave. Next: Share-Size-1 → Share-Upload-2 → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -244,7 +244,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b → Share-Size-1 (exact size into URL fragment) → Share-Upload-2 (Rajesh, 5 Oct) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 (exact size into URL fragment) → Share-Upload-2 (Rajesh, 5 Oct) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
@@ -290,6 +290,12 @@ Swept against the repo on import; only items not already done or recorded elsewh
   9. `upload.js` has no handling for finalise 409 `wrong_size` (shows as a generic error). Unreachable through signed URLs; low.
 - **Write-once chunks** → KV-Audit-Opus / B12-3: also sign `If-None-Match: *` into presigned PUTs so R2 refuses to overwrite an existing chunk (closes "holder of a leaked URL overwrites a chunk with same-size junk for 6 days" → download 409 / DoS, never disclosure). Needs a live R2 gate (like B12-1b) and `upload.js` treating 412 as success on resume retries (saves the re-upload).
 - **Test-Harness-1** (small): combined `npm test` failed locally 5 Oct (workerd runtimes ETIMEDOUT / refused on 127.0.0.1). **Cause: Mullvad VPN** — with it disconnected the suite is clean (639 passed, 10 s); CI (Node 22) green throughout. Local network sharing was already on, so it is not that setting — workaround: disconnect Mullvad while running the suite (or run files singly). Not code. Still open: under `singleWorker: true`, `delete_resume` + `dock_b12` bearer-delete tests fail from cross-file state (pre-existing). Also remove unused `MIME_DENYLIST` (Share-MIME-1).
+
+**Added Cred-Fix-2b (5 Oct 2026):**
+- **Share-Upload-2:** Turnstile console warning "Unable to find onload callback 'onTurnstileLoad'…" — harmless race (deferred `api.js?onload=onTurnstileLoad` in `src/index.njk:13` runs before `upload.js` sets the callback; `renderTurnstile` polls for `window.turnstile`). Fix: drop `?onload=`.
+- **Vendor cleanup** (small, both repos): `frontend/noble-secp256k1.js` is no longer imported (credentials use `frontend/cashu-crypto.js`). Remove it from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in one ship — the sync never deletes from the mirror.
+- **cashu-ts upgrades:** bump `worker/package.json` and `bin/vendor-cashu/package.json` together, then `bin/vendor-cashu.sh` + ship + deploy. Browser and Worker must run the same version.
+- **DLEQ key pin** (B7/B8, anonymous rail): the browser checks the DLEQ proof against the key in the same response, not a pinned key (Rajesh, 5 Oct). Pin when credentials are bought separately from transfers.
 
 **Ideas, parked (no build slot):**
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.

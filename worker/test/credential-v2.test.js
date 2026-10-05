@@ -3,7 +3,7 @@
 //     (deterministic nonce) — official vectors, cashubtc/nuts tests/ @ 8bde3c0
 //   • verifyProofV2: Y = hash_to_curve(utf8(secret)), k·Y == C, serial = hex(Y)
 //   • /credential/issue returns keyset_id + dleq (additive)
-//   • /upload/:uuid/initiate accepts v2; v1 still accepted until Cred-Fix-2b
+//   • /upload/:uuid/initiate accepts v2 only; format v1 refused (Cred-Fix-2b)
 // All env is in-memory (test/_r2_mock.js) + a stubbed fetch. No network.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -15,7 +15,7 @@ vi.mock('../src/turnstile.js', () => ({
 
 // Load order matters in the workerd pool: the Worker modules (and noble hashes v1,
 // CJS via the vitest alias) must load before @cashu/cashu-ts.
-import { issueBlindSig, keysetIdFor, verifyProofV2, hashToCurve } from '../src/nut00.js';
+import { issueBlindSig, keysetIdFor, verifyProofV2 } from '../src/nut00.js';
 import worker from '../src/index.js';
 import * as secp from '@noble/secp256k1';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
@@ -85,23 +85,6 @@ async function issueV2(env, secret = randomSecret()) {
   const C = unblindSignature(pointFromHex(body.signed_point), r, K);
   const proof = { id: body.keyset_id, amount: 1, secret, C: C.toHex(true) };
   return { res, body, B_, K, secret, proof };
-}
-
-// Format v1 as the current frontend builds it (genuine signature, legacy hash_to_curve).
-async function issueV1(env) {
-  const x  = secp.utils.randomPrivateKey();
-  const Y  = hashToCurve(x);
-  const r  = BigInt('0x' + bytesToHex(secp.utils.randomPrivateKey()));
-  const B_ = Y.add(secp.ProjectivePoint.BASE.multiply(r));
-  const res = await worker.fetch(new Request('https://api.share.test/credential/issue', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ blinded_message: B_.toHex(true), turnstile_token: 'tt-' + bytesToHex(x) }),
-  }), env, ctx);
-  const body = await res.json();
-  const K = secp.ProjectivePoint.fromHex(body.mint_pubkey);
-  const C = secp.ProjectivePoint.fromHex(body.signed_point).add(K.multiply(r).negate());
-  return { body, credential: JSON.stringify({ C: C.toHex(true), mint_pubkey: body.mint_pubkey }) };
 }
 
 function initiate(env, uuid, credential, commitment) {
@@ -307,12 +290,13 @@ describe('Worker: /credential/issue + /upload/:uuid/initiate with format v2', ()
     expect(spent).toEqual([]);
   });
 
-  it('format v1 still accepted until Cred-Fix-2b', async () => {
+  it('format v1 {C, mint_pubkey} → 401, nothing spent (Cred-Fix-2b)', async () => {
     const spent = stubLedger();
     const env = makeEnv();
-    const { body, credential } = await issueV1(env);
-    const res = await initiate(env, body.uuid, credential, body.commitment);
-    expect(res.status).toBe(200);
-    expect(spent[0]).toMatch(/^[0-9a-f]{64}$/); // v1 serial: SHA-256(C)
+    const { body, proof } = await issueV2(env);
+    const v1 = { C: proof.C, mint_pubkey: body.mint_pubkey };
+    const res = await initiate(env, body.uuid, v1, body.commitment);
+    expect(res.status).toBe(401);
+    expect(spent).toEqual([]);
   });
 });

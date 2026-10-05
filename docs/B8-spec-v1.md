@@ -19,9 +19,9 @@ collection. **None of it is live.** What is true on 13 Sep 2026, versus what thi
 | Thing | State on 13 Sep 2026 |
 |---|---|
 | NUT-11 **Mode 1** passphrase gate (`hashSecret()`, bare SHA-256, in the manifest) | **Live** (S3, parity-checked SW-MCP-2) |
-| BDHKE proof verification against the mint pubkey set (`worker/src/nut11.js`) | **Live** |
+| BDHKE proof verification against the mint pubkey set | **Live from 5 Oct 2026** (Cred-Fix-2): standard Cashu proof verification, `verifyProofV2` in `worker/src/nut00.js` — `Y = hash_to_curve(utf8(secret))`, `k·Y == C`, serial `hex(Y)`. *Correction:* "Live" on 13 Sep was wrong — until Cred-Fix-2 the Worker checked credential structure only (see `docs/Cred-verification-note-v1.md`). |
 | Supabase atomic double-spend guard (`spent_tokens` INSERT-on-serial) | **Live** |
-| `@noble/secp256k1` present in Worker + `frontend/crypto.js` | **Live** (already imported) |
+| `@noble/secp256k1` present in Worker + `frontend/crypto.js` | **Live** in the Worker. *Correction (5 Oct 2026):* the browser's Cashu maths now comes from vendored `@cashu/cashu-ts` 4.11.0 (`frontend/cashu-crypto.js`); B8-5 still needs noble v2 (`schnorr`) shipped to the browser. |
 | Mode 2 **Schnorr witness verification** (`schnorr.verify`, BIP-340, x-only key) | **Not built.** B8-1/B8-2 |
 | The **Locke** object (Deed→HKDF→secp256k1 keypair, passkey-wrapped) | **Not built.** B8-1/B8-3 |
 | Harbourmaster **challenge-response login** (KV pubkey set, one-shot challenge) | **Not built.** B8-3 |
@@ -169,8 +169,11 @@ fails locally. Exact sequence at credential redemption, before any state mutatio
 1. **Schnorr witness verify** (local CPU). Parse `secret` → extract `data` pubkey → x-only →
    `schnorr.verify(witness.signatures[0], msg, xonly)`. Fail → `400 invalid_witness`. *(Fail fast on
    the new Mode-2 gate.)*
-2. **BDHKE proof verify** against the mint pubkey set (local CPU). Unchanged from Mode 1. Fail →
-   `400 invalid_proof`.
+2. **BDHKE proof verify** against the mint pubkey set (local CPU) — the Cred-Fix-2 check
+   (`verifyProofV2`): `Y = hash_to_curve(utf8(secret))`, require `k·Y == C`. For Mode 2 the P2PK
+   JSON string *is* the secret, so its UTF-8 bytes are what is hashed. Fail → `400 invalid_proof`.
+   *(Corrected 5 Oct 2026 — this said "Unchanged from Mode 1", which presupposed a check that only
+   shipped at Cred-Fix-2. Today `/initiate` answers a failed check with `401`; B8-2 settles the code.)*
 3. **Supabase atomic double-spend** — INSERT-on-serial into `spent_tokens` (network; the spend
    commit). Conflict (409) → already spent; fire-and-forget log to `double_spend_attempts`, return
    the double-spend error. Success → proceed to issue the credential / grant the action.
@@ -294,8 +297,9 @@ payment event. (Carried from BRIDGE §Locke.)
 
 ### D-6 — Stay pinned at CDK 0.17.2 for B8 (LOCKED)
 
-**The Worker does not use CDK as a library.** BDHKE is implemented directly in
-`worker/src/nut11.js`; Mode 2 adds `schnorr.verify()` from `@noble/secp256k1` (already present). The
+**The Worker does not use CDK as a library.** BDHKE lives in `worker/src/nut00.js`, using
+`@cashu/cashu-ts` primitives since Cred-Fix-2 (5 Oct 2026; corrected from `nut11.js`); Mode 2 adds
+`schnorr.verify()` from `@noble/secp256k1` (already present). The
 CDK pin governs mint-side tooling, **not** the Worker's verification path.
 
 Assessing 0.18.0 (released Sep 2026) against B8 specifically:

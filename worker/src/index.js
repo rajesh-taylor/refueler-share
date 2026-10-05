@@ -1,6 +1,6 @@
 /* eslint-disable no-undef, no-use-before-define */
 import { verifyTurnstileToken } from './turnstile.js';
-import { issueBlindSignature, verifyCredential, verifyProofV2 } from './nut00.js';
+import { issueBlindSignature, verifyProofV2 } from './nut00.js';
 import { computeCommitment } from './commitment.js';
 import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
@@ -1620,16 +1620,12 @@ async function handleInitiate(request, env, ctx, uuid) {
   // Share-Admin-1: test credentials skip both the BDHKE verify and the Supabase
   // spent_tokens INSERT. The test_credential KV flag (marked initiated:true above)
   // is the single-use guard. No serial → no Supabase write.
-  // Cred-Fix-2a: credential format v2 = standard Cashu proof {id, secret, C},
-  // verified k·Y == C (serial = hex(Y)). Format v1 {C, mint_pubkey} is still
-  // accepted until the frontend sends v2 — REMOVE the v1 branch at Cred-Fix-2b.
+  // Credential format v2 only (Cred-Fix-2b): a standard Cashu proof {id, secret, C},
+  // verified k·Y == C (serial = hex(Y)). Anything else → 401, nothing spent.
   let serial;
   if (!isTestCredential) {
     try {
-      const parsed = JSON.parse(credential);
-      serial = (parsed && typeof parsed === 'object' && 'secret' in parsed)
-        ? verifyProofV2(parsed, env.MINT_PRIVATE_KEY).serial
-        : await verifyCredential(parsed, env.MINT_PRIVATE_KEY);
+      serial = verifyProofV2(JSON.parse(credential), env.MINT_PRIVATE_KEY).serial;
     } catch {
       return err(401, 'Invalid credential');
     }

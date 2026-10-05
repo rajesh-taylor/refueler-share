@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.8 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Cred-Fix-1 · 26 Sep 2026
+> **Version:** 2.9 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Cred-Fix-2b · 5 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -61,6 +61,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
 - **No upload-time file-type (MIME) check exists.** The Content-Type denylist lived only on the Worker-relay chunk path, retired at Share-6-6b; direct-to-R2 uploads never sent a type. Retired as a claim (Rajesh, Cred-Fix-1 · 26 Sep 2026) — do not assert it in any copy. The Worker never learns or stores the file type. `MIME_DENYLIST` in `utils.js` is unused; Share-MIME-1 removes it and re-checks public copy.
 - **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
+- **Upload credential = credential format v2, a standard Cashu proof `{id, amount: 1, secret, C}` (Cred-Fix-2 · 5 Oct 2026).** Worker `verifyProofV2` (`worker/src/nut00.js`): `Y = hash_to_curve(utf8(secret))`, `k·Y == C`, serial `hex(Y)`; anything else 401, nothing spent. Browser and Worker both use `@cashu/cashu-ts` (exact pin) — the browser via vendored `frontend/cashu-crypto.js`, rebuilt only by `bin/vendor-cashu.sh`. Upgrade both pins together. No hand-rolled curve maths. Browser checks the NUT-12 DLEQ proof; key not pinned until the anonymous rail. Note: `docs/Cred-verification-note-v1.md`.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
 - Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
 - DO NOT edit inline CSS/JS in `src/index.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
@@ -131,10 +132,11 @@ Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported st
 remains unimplemented — do not claim end-to-end file integrity until B9 build is complete (B9-3).
 
 **Integrity/audit marketing claims — current ruling (S42e + TH-series + B9-Opus · 12 Sep 2026):**
-- ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase ledger. Rate limiting on all public endpoints. UUID-bound credential issuance.
+- ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase ledger. Rate limiting on all public endpoints. UUID-bound credential issuance. Standard Cashu proof verification (`k·Y == C`) on every upload credential (Cred-Fix-2, 5 Oct 2026).
 - ✅ **Safe to assert (TH-series+):** Permanent record (Bitcoin-anchored existence proof) for Sovereign+ transfers where sender opts in. Honest scope: proves bytes existed on or before a block date. Does not prove authorship, truth, or delivery.
 - ✅ **Safe to assert after B9-3 ships:** Ciphertext storage integrity — Worker verifies assembled ciphertext Merkle root on every download. Use: "ciphertext storage integrity" or "the encrypted object served equals the encrypted object stored." Never "end-to-end."
 - 🔒 **Still blocked (until B9 build):** Full Merkle tree verification at download. Receipt `merkle_root`/`verified` fields (gate: B9-3). NUT-11 Mode 2 (keypair auth). "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
+- 🔒 **Blocked until the anonymous rail (B7/SD):** crediting blind signatures for unlinkability. On the consumer path the Worker sees the same UUID at issue and upload; anonymity = no account / no email, never "blinding".
 - 🔒 **Permanently blocked:** Plaintext `blake3PlaintextRoot` in any receipt or in the Worker. "End-to-end file integrity" as a Refueler-side claim (the Worker never verifies plaintext — the recipient does).
 - 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 build B9-1…B9-3 (ciphertext Merkle root verification) → B9-4 (receipt upgrade) → B10 (ML-KEM).
 

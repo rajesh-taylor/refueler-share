@@ -22,9 +22,10 @@ import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { computeCommitment, commitmentMessage, COMMITMENT_TAG } from '../src/commitment.js';
-import { hashToCurve } from '../src/nut00.js';
 import worker from '../src/index.js';
 import { makeBucket, makeKV } from './_r2_mock.js';
+// Load order matters in the workerd pool: Worker modules before @cashu/cashu-ts.
+import { blindMessage, unblindSignature, pointFromHex } from '@cashu/cashu-ts';
 
 const MINT_PRIVKEY_HEX = '7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f';
 const KEY   = 'test-commitment-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -65,22 +66,19 @@ function stubFetch() {
   return calls;
 }
 
-// Normal client flow: blind a secret, ask /credential/issue, unblind.
+// Normal client flow (credential format v2): blind utf8(secret), ask /credential/issue, unblind.
 async function issueViaWorker(env, extraBody = {}) {
-  const x  = secp.utils.randomPrivateKey();
-  const Y  = hashToCurve(x);
-  const r  = BigInt('0x' + bytesToHex(secp.utils.randomPrivateKey()));
-  const B_ = Y.add(secp.ProjectivePoint.BASE.multiply(r));
+  const secret = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+  const { B_, r } = blindMessage(new TextEncoder().encode(secret));
   const res = await worker.fetch(new Request('https://api.share.test/credential/issue', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ blinded_message: B_.toHex(true), turnstile_token: 'tt-' + bytesToHex(x), ...extraBody }),
+    body:    JSON.stringify({ blinded_message: B_.toHex(true), turnstile_token: 'tt-' + secret, ...extraBody }),
   }), env, ctx);
   const body = await res.json();
   if (res.status !== 200) return { res, body };
-  const K = secp.ProjectivePoint.fromHex(body.mint_pubkey);
-  const C = secp.ProjectivePoint.fromHex(body.signed_point).add(K.multiply(r).negate());
-  return { res, body, credential: JSON.stringify({ C: C.toHex(true), mint_pubkey: body.mint_pubkey }) };
+  const C = unblindSignature(pointFromHex(body.signed_point), r, pointFromHex(body.mint_pubkey));
+  return { res, body, credential: JSON.stringify({ id: body.keyset_id, amount: 1, secret, C: C.toHex(true) }) };
 }
 
 function initiate(env, uuid, { credential, commitment, tier = 'free', bytes = 1024, extra = {} }) {

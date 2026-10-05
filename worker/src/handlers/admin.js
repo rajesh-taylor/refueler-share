@@ -212,7 +212,7 @@ async function fetchMetricsData(env) {
         : 1.0;
       credentialUniquenessNote =
         'Fraction of credential uses that were first-time (legitimate) melts. ' +
-        '1.0 = no replay attacks observed. Excludes attacks failing verifyCredential() ' +
+        '1.0 = no replay attacks observed. Excludes attempts failing credential verification ' +
         'before the spent_tokens lookup (those return 401, not 409, and are not captured here).';
     } else {
       credentialUniquenessNote = 'Supabase count query failed — both spent_tokens and double_spend_attempts counts required.';
