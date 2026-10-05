@@ -349,7 +349,7 @@
 |---|---|---|---|
 | B12-1 | 1 (done) | Sonnet | Pre-Berlin |
 | B12-1b | 1 (done) | Sonnet | 5 Oct — Part 0 + R2 enforcement gate only (split) |
-| B12-1c | 1–2 | Sonnet | S1.1 build, re-scoped (Worker + frontend) — slot TBD by Rajesh |
+| B12-1c | 1–2 | Sonnet | S1.1 build, re-scoped (Worker + frontend) — next session, then Cred-Fix-2 (Rajesh, 5 Oct) |
 | B12-2 | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) — no prompt yet; needs Navy Office files from Rajesh |
 | KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
 | B12-3 quota | 3 (+1) | Sonnet | Week 2 |
