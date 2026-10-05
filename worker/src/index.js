@@ -1953,6 +1953,15 @@ async function handleAdminR2PresignTest(request, env) {
     ? body.key.replace(/[^0-9A-Za-z/_-]/g, '')
     : `share-6-1-smoke/${crypto.randomUUID()}/0000`;
 
+  // B12-1b: optional signed content-length — proves R2 enforces S1.1.
+  let contentLength;
+  if (body.content_length !== undefined) {
+    contentLength = body.content_length;
+    if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+      return err(400, 'content_length must be a non-negative integer');
+    }
+  }
+
   const cfg = {
     accountId:       env.CF_ACCOUNT_ID,
     accessKeyId:     env.R2_S3_ACCESS_KEY_ID,
@@ -1963,8 +1972,8 @@ async function handleAdminR2PresignTest(request, env) {
     return err(503, 'R2 API token not configured (set R2_S3_ACCESS_KEY_ID / R2_S3_SECRET_ACCESS_KEY)');
   }
   try {
-    const { url, expires } = await presignPutObject({ ...cfg, key });
-    return json({ ok: true, bucket: cfg.bucket, key, url, expires });
+    const { url, expires } = await presignPutObject({ ...cfg, key, contentLength });
+    return json({ ok: true, bucket: cfg.bucket, key, url, expires, content_length: contentLength ?? null });
   } catch (e) {
     return err(500, `Presign failed: ${e.message}`);
   }

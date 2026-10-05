@@ -118,25 +118,39 @@ export async function makePresigner({
   const kSigning        = await awsSigningKey(secretAccessKey, dateStamp, region, service);
   const expires         = Math.floor(now.getTime() / 1000) + expiresIn;
 
-  const query = new Map([
-    ['X-Amz-Algorithm',     'AWS4-HMAC-SHA256'],
-    ['X-Amz-Credential',    `${accessKeyId}/${credentialScope}`],
-    ['X-Amz-Date',          amzDate],
-    ['X-Amz-Expires',       String(expiresIn)],
-    ['X-Amz-SignedHeaders', 'host'],
-  ]);
-  const canonicalQuery = Array.from(query.keys()).sort()
-    .map(k => `${rfc3986(k)}=${rfc3986(query.get(k))}`)
-    .join('&');
+  const baseQuery = [
+    ['X-Amz-Algorithm',  'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential', `${accessKeyId}/${credentialScope}`],
+    ['X-Amz-Date',       amzDate],
+    ['X-Amz-Expires',    String(expiresIn)],
+  ];
 
-  return async function presign(key) {
+  // B12-1b (B12-SR S1.1): optional contentLength signs `content-length` into the
+  // URL, so R2 refuses a PUT whose body length differs. Omitted → host-only
+  // signature, byte-identical to Share-6-1 output.
+  return async function presign(key, { contentLength } = {}) {
+    let signedHeaders    = 'host';
+    let canonicalHeaders = `host:${host}\n`;
+    if (contentLength !== undefined) {
+      if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+        throw new Error(`presign: invalid contentLength ${contentLength}`);
+      }
+      signedHeaders    = 'content-length;host';               // sorted, lowercase
+      canonicalHeaders = `content-length:${contentLength}\nhost:${host}\n`;
+    }
+
+    const query = new Map([...baseQuery, ['X-Amz-SignedHeaders', signedHeaders]]);
+    const canonicalQuery = Array.from(query.keys()).sort()
+      .map(k => `${rfc3986(k)}=${rfc3986(query.get(k))}`)
+      .join('&');
+
     const canonicalUri = `/${rfc3986(bucket)}/${encodeKey(key)}`;
     const canonicalRequest = [
       'PUT',
       canonicalUri,
       canonicalQuery,
-      `host:${host}\n`,   // canonical headers
-      'host',             // signed headers
+      canonicalHeaders,
+      signedHeaders,
       'UNSIGNED-PAYLOAD', // presigned URLs sign no body
     ].join('\n');
 
@@ -156,7 +170,7 @@ export async function makePresigner({
 // One-shot presign (tests / single-URL smoke). Prefer makePresigner for batches.
 export async function presignPutObject(opts) {
   const presign = await makePresigner(opts);
-  return presign(opts.key);
+  return presign(opts.key, { contentLength: opts.contentLength });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -76,6 +76,32 @@ describe('presign shape / expiry', () => {
   });
 });
 
+describe('signed content-length (B12-1b, B12-SR S1.1)', () => {
+  it('without contentLength the URL is byte-identical to Share-6-1 (pinned)', async () => {
+    const { url } = await presignPutObject({ ...R2, key: `${UUID}/0000`, now: FIXED_NOW });
+    expect(new URL(url).searchParams.get('X-Amz-SignedHeaders')).toBe('host');
+    expect(new URL(url).searchParams.get('X-Amz-Signature'))
+      .toBe('476649b23a847d70ddc1fe78de793b9c519e691fb0e93fd646977f396fce6235');
+  });
+
+  it('with contentLength signs content-length;host, and the length changes the signature', async () => {
+    const full = 32 * 1024 * 1024 + 16;
+    const a = await presignPutObject({ ...R2, key: `${UUID}/0000`, now: FIXED_NOW, contentLength: full });
+    const b = await presignPutObject({ ...R2, key: `${UUID}/0000`, now: FIXED_NOW, contentLength: full + 1 });
+    expect(new URL(a.url).searchParams.get('X-Amz-SignedHeaders')).toBe('content-length;host');
+    expect(new URL(a.url).searchParams.get('X-Amz-Signature'))
+      .not.toBe(new URL(b.url).searchParams.get('X-Amz-Signature'));
+  });
+
+  it('refuses a negative or non-integer contentLength', async () => {
+    for (const bad of [-1, 1.5, NaN, '16']) {
+      await expect(
+        presignPutObject({ ...R2, key: `${UUID}/0000`, now: FIXED_NOW, contentLength: bad })
+      ).rejects.toThrow(/invalid contentLength/);
+    }
+  });
+});
+
 describe('commitment binding (upload-session token)', () => {
   const KEY = 'master-signing-key-for-tests';
 

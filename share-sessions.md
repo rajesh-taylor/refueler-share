@@ -348,7 +348,8 @@
 | Block | Sessions | Model | When |
 |---|---|---|---|
 | B12-1 | 1 (done) | Sonnet | Pre-Berlin |
-| B12-1b | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) |
+| B12-1b | 1 (done) | Sonnet | 5 Oct — Part 0 + R2 enforcement gate only (split) |
+| B12-1c | 1–2 | Sonnet | S1.1 build, re-scoped (Worker + frontend) — slot TBD by Rajesh |
 | B12-2 | 1 (+1 buffer) | Sonnet | Post-Berlin (moved 25 Sep) — no prompt yet; needs Navy Office files from Rajesh |
 | KV-Audit-Opus → KV fixes · X3 naming · X5 app origin | 1 + 4–5 | Opus + Sonnet | Week 1 post-Berlin |
 | B12-3 quota | 3 (+1) | Sonnet | Week 2 |
@@ -473,3 +474,14 @@ Files: `frontend/crypto.js`, `download.js`, `upload.js`, `merkle.js` (comments),
 **Extras after close (28 Sep, Rajesh's go):** browser toolbar tint (`theme-color`) follows the page's `--bg` on load and on switch, and F-15 (≤640 px: hide the active nav link when the wordmark names the section, e.g. `/legend/`) — refueler.io `15646f8`; Share link-preview title/description → "Refueler Share — encrypted file transfer" / "Encrypted file transfer. Files are encrypted in the browser before upload. No account or email needed." (Upload-1 defaults) — shipped `104c048` (refueler.io `6ba5c9a`); this file trimmed 496 → 473 lines (25–26 Sep entries compacted, open items carried).
 **Desktop-chat memory import (28 Sep):** Rajesh exported the claude.ai Share project (145 items; chats reach only 7–21 Jul, Aug–Sep from its memory files; export kept off-repo in `~/Downloads`). Swept against both repos, git and live: most done or already recorded; leftovers → `Share-Master-Context.md` §Backlog imported from desktop-chat memory. Also: CLAUDE.md + Master Context no longer announce the open B12-1b issue in public wording; `@refueler/mcp-server` publish held until MCP-Fix-1 (not on npm); admin test-credential route confirmed 401 without key; stale CORS note, Share-6 finalise contract note, `DESIGN-TOKENS.md` (marked superseded), Notes article 4 caveat (+ `share.refueler.io` → `refueler.io/share/`), Upload-2 info-card note. refueler.io project export next.
 **Left over (not done):** `frontend/upgrade.css` now unused (`SM_CANON_ONLY` in `share-mirror.sh`); legacy refueler.io `/upgrade.html` (Stripe form, retired tier names, `/upgrade.css` 404) still live — both for Upload-2 / plans draft B.
+
+## Share-B12-1b (5 Oct 2026) — test gate + S1.1 R2 enforcement gate (split session) · deploy `0d2f94d9`
+
+**Part 0 ✓:** `npm test` clean on unmodified `main` (618 passed, 25 files) — no `npm ci` needed, Share-CI-1 held.
+**Split at Step 0 (Rajesh, option 2):** the code differs from S1.1's premise in two ways, so only the gate ran here:
+1. `/initiate` writes `total_bytes` into the R2 manifest (`createManifest`), and `/meta` + download (receiver card size, progress) read it. "Tail length never stored" does not hold today; removing it changes the receiver card. Decision for the re-scoped session, not a silent fix.
+2. Tail URL at initiate needs frontend work: `upload.js` fresh path (>256 chunks, tail outside first batch), the IDB resume path (tail URL must be saved, `/urls` won't remint it), and `admin/test-upload.html`. `refueler-mcp` doesn't call `/urls`.
+**Built:** `presign(key, { contentLength })` in `r2_presign.js` — optional; omitted = byte-identical host-only URL (pinned signature test). Admin `/admin/r2-presign-test` accepts `content_length` (dev bucket forced). 3 tests → 621 passed. `/initiate` and `/urls` unchanged.
+**R2 gate ✓ (live, dev bucket, Rajesh ran curl):** URL signed for 16 B — 17 B → 403 · chunked 17 B / 1 MiB / 64 MiB → 403 · 16 B → 200. Dev key `b12-1b-gate/run2/0000` absent afterwards (nothing written). A chunked body of the *correct* length → 200 (edge sends a Content-Length; not a bypass). **R2 enforces signed `content-length`; S1.1 is buildable.**
+**Re-scoped S1.1 build (B12-1c) carries:** checklist items 1, 2, 4, 5 from `Share-B12-1b-prompt.md`; the `total_bytes`-in-manifest decision; frontend tail-URL handling (fresh + resume + test-upload) via `ship-frontend.sh`. Reuse `wrongSizeSegments` (`sweep_rules.js`) for the finalise size check.
+**Also:** `worker/.dev.vars` (gitignored, never committed) had a pasted heredoc wrapper (`cat > … << 'EOF'` / `EOF`) as first/last lines — removed; values untouched.
