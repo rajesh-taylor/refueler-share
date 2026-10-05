@@ -91,7 +91,7 @@ function initiate(env, uuid, { credential, commitment, tier = 'free', bytes = 10
       'X-Cashu-Credential':      credential,
       'X-Credential-Commitment': commitment,
       'X-Issued-Tier':           tier,
-      'X-Total-Chunks':          '1',
+      'X-Total-Chunks':          String(Math.ceil(bytes / (32 * 1024 * 1024))), // B12-1d: must match bytes
       'X-Total-Bytes':           String(bytes),
       'X-Expiry-Timestamp':      String(now + 3600),
       ...extra,

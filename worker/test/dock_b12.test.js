@@ -4,7 +4,7 @@
 //   · Execution Dock API (purged status, no size_bytes).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { makeBucket, makeKV } from './_r2_mock.js';
+import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 
 // Isolate the units under test from heavy siblings (WASM, crypto, receipts).
 vi.mock('../src/nut11.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
@@ -152,7 +152,7 @@ describe('every deletion path leaves the same trace in dock_index: absence', () 
 describe('finalise — X4: no plaintext size in dock_index', () => {
   async function finalise(existingDock) {
     const seed = { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify({ uuid: UUID, tier: 'creative', total_chunks: 2, total_bytes: 12345, upload_complete: false, expiry_timestamp: NOW + DAY }) },
-                   [`${UUID}/0000`]: { size: 10, uploaded: NOW }, [`${UUID}/0001`]: { size: 10, uploaded: NOW } };
+                   [`${UUID}/0000`]: { size: FULL, uploaded: NOW }, [`${UUID}/0001`]: { size: 10, uploaded: NOW } };
     const bucket = makeBucket(seed);
     const kv = makeKV({ [`upload_session:${UUID}`]: 'tok', [`dock_index:${UUID}`]: existingDock });
     const req = new Request(`https://w.test/upload/${UUID}/finalise`, {

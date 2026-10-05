@@ -47,6 +47,7 @@ import {
 import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
 import { makePresigner, presignPutObject, signSessionToken, computeTransferCost } from './r2_presign.js';
+import { CHUNK_SIZE, CHUNK_TAG_BYTES } from './sweep_rules.js';                // B12-1d: signed PUT sizes
 // SW-MCP-W2: monthly credit allocation, lazy reset, overage ceiling, personal_api plan
 import {
   loadQuota, applyQuotaSpend, provisionQuota, cancelQuota,
@@ -342,7 +343,7 @@ export default {
           logEvent(env, { endpoint: 'upload_finalise', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
-        return timed('upload_finalise', () => handleFinalise(request, env, finaliseMatch[1]).then(r => addCors(r, request)));
+        return timed('upload_finalise', () => handleFinalise(request, env, finaliseMatch[1], ctx).then(r => addCors(r, request)));
       }
 
       const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
@@ -1512,7 +1513,7 @@ const INITIATE_EXPIRY_MAX = {
   api:      90 * 24 * 3600,
 };
 
-const PART_SIZE_BYTES = 33_554_432; // 32 MiB (Share-6-spec §2, D-1)
+const PART_SIZE_BYTES = 33_554_432; // 32 MiB (Share-6-spec §2, D-1) — must equal sweep_rules CHUNK_SIZE (tested)
 const URL_BATCH_SIZE  = 256;        // Share-6-spec §6, D-5
 
 // Constant-time string compare (matches the inline chunk-0 pattern). Used for
@@ -1597,6 +1598,12 @@ async function handleInitiate(request, env, ctx, uuid) {
 
   if (!credential || !totalChunks || !totalBytes || !expiryTs) {
     return err(400, 'Missing required headers');
+  }
+  // B12-1d (B12-SR S1.1): chunk count must match the byte count, so the signed
+  // tail length is always 1…CHUNK_SIZE. Checked before any flag or spend.
+  if (totalBytes < 1 || totalChunks !== Math.ceil(totalBytes / CHUNK_SIZE)) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 400, errorMsg: 'chunk_count_mismatch' });
+    return err(400, 'X-Total-Chunks does not match X-Total-Bytes');
   }
   if (!commitment) {
     logEvent(env, { endpoint: 'upload_initiate', status: 401, errorMsg: 'credential_commitment_missing' });
@@ -1856,13 +1863,20 @@ async function handleInitiate(request, env, ctx, uuid) {
     console.error('makePresigner failed:', e);
     return err(503, 'R2 presigning not configured');
   }
-  const firstCount = Math.min(totalChunks, URL_BATCH_SIZE);
+  // B12-1d (B12-SR S1.1): every URL signs content-length. Full chunks 0…N−2 are
+  // exactly CHUNK_SIZE + tag; the tail N−1 is issued here only, as tail_url, signed
+  // for its exact ciphertext length (never stored — /urls can't re-issue it).
+  const fullCount  = totalChunks - 1;
+  const firstCount = Math.min(fullCount, URL_BATCH_SIZE);
   const urls = [];
   for (let i = 0; i < firstCount; i++) {
-    const { url, expires } = await presign(`${uuid}/${String(i).padStart(4, '0')}`);
+    const { url, expires } = await presign(`${uuid}/${String(i).padStart(4, '0')}`,
+                                           { contentLength: CHUNK_SIZE + CHUNK_TAG_BYTES });
     urls.push({ index: i, url, expires });
   }
-  const batchNext = totalChunks > URL_BATCH_SIZE ? URL_BATCH_SIZE : null;
+  const batchNext = fullCount > URL_BATCH_SIZE ? URL_BATCH_SIZE : null;
+  const tail = await presign(`${uuid}/${String(fullCount).padStart(4, '0')}`,
+                             { contentLength: (totalBytes - fullCount * CHUNK_SIZE) + CHUNK_TAG_BYTES });
 
   return json({
     uuid,
@@ -1871,6 +1885,7 @@ async function handleInitiate(request, env, ctx, uuid) {
     total_chunks:  totalChunks,
     urls,
     batch_next:    batchNext,
+    tail_url:      { index: fullCount, url: tail.url, expires: tail.expires },
   });
 }
 
@@ -1909,15 +1924,18 @@ async function handleUploadUrls(request, env, uuid) {
   } catch {
     return err(400, 'Invalid JSON');
   }
+  // B12-1d: /urls serves full chunks 0…N−2 only. The tail URL came from
+  // /initiate; from ≥ N−1 is a plain 400 (the frontend's old-record signal).
+  const fullCount = totalChunks - 1;
   const from  = parseInt(body.from, 10);
   let   count = parseInt(body.count, 10);
-  if (!Number.isInteger(from) || from < 0 || from >= totalChunks) {
+  if (!Number.isInteger(from) || from < 0 || from >= fullCount) {
     return err(400, 'from out of range');
   }
   if (!Number.isInteger(count) || count < 1) {
     return err(400, 'count must be a positive integer');
   }
-  count = Math.min(count, URL_BATCH_SIZE, totalChunks - from);
+  count = Math.min(count, URL_BATCH_SIZE, fullCount - from);
 
   let presign;
   try {
@@ -1928,10 +1946,11 @@ async function handleUploadUrls(request, env, uuid) {
   }
   const urls = [];
   for (let i = from; i < from + count; i++) {
-    const { url, expires } = await presign(`${uuid}/${String(i).padStart(4, '0')}`);
+    const { url, expires } = await presign(`${uuid}/${String(i).padStart(4, '0')}`,
+                                           { contentLength: CHUNK_SIZE + CHUNK_TAG_BYTES });
     urls.push({ index: i, url, expires });
   }
-  const next = (from + count) < totalChunks ? (from + count) : null;
+  const next = (from + count) < fullCount ? (from + count) : null;
 
   return json({ uuid, urls, batch_next: next });
 }

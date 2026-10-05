@@ -41,6 +41,7 @@
 
 import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
 import { putManifest } from '../manifest.js';
+import { wrongSizeSegments, DELETE_BATCH } from '../sweep_rules.js';
 
 // base64url → Uint8Array. Returns null on any non-base64url input or decode
 // failure; the caller enforces the exact 32-byte length. Strict base64url
@@ -115,8 +116,9 @@ function railForTier(tier) {
 // /^\d{4}$/ on the final path segment, so they are naturally excluded from the
 // Set without an explicit filter step.
 //
-// Returns: { missing: string[] } where each element is the 4-digit chunk index
-// of a missing object (e.g. "0001"). Empty array means all chunks are present.
+// Returns: { missing: string[], chunks: Map<"0000", { size }> }. `missing` holds
+// the 4-digit index of each absent chunk (empty = all present). `chunks` carries
+// each chunk object's R2 size for the B12-1d exact-size check.
 //
 // Subrequest cost:
 //   ceil(chunkCount / 1000) list() calls vs chunkCount HEAD subrequests.
@@ -127,7 +129,7 @@ function railForTier(tier) {
 // propagate to the outer 500 handler — same behaviour as a failed HEAD batch.
 async function listBasedCompleteness(bucket, uuid, chunkCount) {
   const prefix    = `${uuid}/`;
-  const chunkKeys = new Set();
+  const chunkKeys = new Map();
   let cursor;
 
   do {
@@ -138,7 +140,7 @@ async function listBasedCompleteness(bucket, uuid, chunkCount) {
       // Extract the final segment after the UUID prefix (e.g. "0000", "hashes").
       const segment = obj.key.slice(prefix.length);
       // Chunk keys are exactly 4 decimal digits — manifest.json and hashes excluded.
-      if (/^\d{4}$/.test(segment)) chunkKeys.add(segment);
+      if (/^\d{4}$/.test(segment)) chunkKeys.set(segment, { size: obj.size });
     }
 
     cursor = page.list_complete ? undefined : page.cursor;
@@ -150,10 +152,10 @@ async function listBasedCompleteness(bucket, uuid, chunkCount) {
     if (!chunkKeys.has(seg)) missing.push(seg);
   }
 
-  return missing;
+  return { missing, chunks: chunkKeys };
 }
 
-export async function handleFinalise(request, env, uuid) {
+export async function handleFinalise(request, env, uuid, ctx) {
   if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
 
   // ── 1. Session-token auth (timing-safe compare vs KV) ──────────────────────
@@ -185,15 +187,34 @@ export async function handleFinalise(request, env, uuid) {
   // subrequest budget and removes the ~1000-chunk ceiling for large transfers.
   // All missing indices are collected before returning 409 (same contract as
   // the old HEAD sweep — no stop-at-first behaviour).
-  let missing;
+  let missing, chunks;
   try {
-    missing = await listBasedCompleteness(env.BUCKET, uuid, chunkCount);
+    ({ missing, chunks } = await listBasedCompleteness(env.BUCKET, uuid, chunkCount));
   } catch (e) {
     console.error('list()-based completeness check failed:', e);
     return err(502, 'Storage completeness check failed');
   }
   if (missing.length > 0) {
     return json({ error: 'incomplete', missing }, 409);
+  }
+
+  // ── 2b. Exact-size check (B12-1d, B12-SR S1.1 / S1.10 rule 3) ──────────────
+  // Full chunks must be exactly CHUNK_SIZE + 16; the tail no larger. Signed
+  // content-length makes this unreachable through our URLs — this is the
+  // backstop. Offending objects are deleted off the response path (DAD
+  // pattern: ctx.waitUntil, never inline); the browser re-uploads them.
+  // Runs before the body is read: a 409 here changes no state.
+  const wrong = wrongSizeSegments(chunks, chunkCount);
+  if (wrong.length > 0) {
+    const keys = wrong.map(seg => `${uuid}/${seg}`);
+    const del  = (async () => {
+      for (let i = 0; i < keys.length; i += DELETE_BATCH) {
+        await env.BUCKET.delete(keys.slice(i, i + DELETE_BATCH));
+      }
+    })().catch(e => console.error('wrong-size chunk delete failed:', e));
+    ctx?.waitUntil?.(del);
+    aeLog(env, { endpoint: 'upload_finalise', status: 409, errorMsg: 'wrong_size' });
+    return json({ error: 'wrong_size', segments: wrong }, 409);
   }
 
   // ── 3. Read + validate chunk hashes and merkle_root from the body ──────────

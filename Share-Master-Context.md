@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.9 | **Last updated:** Share-B12-1c · 5 Oct 2026
+> **Version:** 9.10 | **Last updated:** Share-B12-1d · 5 Oct 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
  
 ---
@@ -212,15 +212,10 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-B12-1c ✓ (5 Oct 2026) — S1.1 Part 1 shipped: frontend accepts a separate `tail_url` (fresh + resume + test-upload), works against both Worker shapes. Worker unchanged. Next: B12-1d (S1.1 Worker + tests + live verify; Safari gate first) → Cred-Fix-2 → Share-Size-1 → B12-2 (refueler-io session) → KV-Audit-Opus.**
+**Share-B12-1d ✓ (5 Oct 2026) — S1.1 complete: every presigned PUT signs `content-length` (full chunks `CHUNK_SIZE + 16`; tail exact, `/initiate`-only as `tail_url`); finalise 409s `wrong_size`. Worker deploy `1c6c7985`. Live-verified in Safari + 8.5 GiB soak. Next: Cred-Fix-2 → Share-Size-1 → B12-2 (refueler-io session) → KV-Audit-Opus.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Share-6-1 ✓ | `0013908` (deployed `aa4a73bc`) | R2 SigV4 presigner · /initiate · /urls · session token. Smoke test passed. |
-| Share-6-2 ✓ | c593b23/5180e5a | R2 CORS + direct-PUT loop. PUT 200 confirmed. |
-| Share-6-3a ✓ | (inline, committed in Dash-2) | Worker /finalise handler: HEAD completeness, sidecar write, merkle_root, session-token spend. |
-| Share-Dash-2 ✓ | d68ec8b (deployed 34a9188d) | Fold handleFinalise → handlers/; dock enrichment (size_bytes/rail/merkle_root); three new admin handlers (client_errors_kv, api_stats, news_events). Navy Office / Chambers / Custom House / Harbourmaster naming locked. |
-| Share-Dash-3b ✓ | `911eae8` (refueler-io) | Navy Office + Chambers rename, API & MCP card, client-errors AE/KV toggle, growth card. (Sonnet Dash-3 was rolled back; 3b is the real completion.) |
 | Share-6-3b ✓ | `ec37c17` | `worker/src/merkle.js` — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors (Opus). |
 | Share-6-3c ✓ | `frontend/merkle.js` | Browser Merkle twin — WASM-BLAKE3 parity, same pinned vectors, `selfTest()` gate (Opus). |
 | Share-6-3d ✓ | `050998b` · `f97b7d9` · `a00351a`/`b8906f9` | `upload.js` finalise wiring + first real end-to-end send. Worker CORS `X-Upload-Session` fix; `merkle.js` added to `sync-share.sh`. |
@@ -238,6 +233,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | B12-1 ✓ | `3b1b819` | PURGED status, DAD clears `dock_index`, drop `size_bytes` (X4), sweep rules S1.10. |
 | B12-1b ✓ | deploy `0d2f94d9` | Test gate green; R2 proven to enforce signed `content-length` (403 on mismatch, plain and chunked). Optional `contentLength` in presigner. S1.1 build split to B12-1c. |
 | B12-1c ✓ | `413b714` | Frontend half of S1.1: `tail_url` handling in `upload.js` (fresh + resume, `tailUrl` in IDB) and `test-upload.html` (+16 B bodies, 32 MiB locked). Worker half → B12-1d. |
+| B12-1d ✓ | deploy `1c6c7985` | Worker half of S1.1: signed `content-length` on `/initiate` + `/urls`, `tail_url` every N, chunk/byte-count 400, finalise `wrong_size` 409 + `waitUntil` delete. 639 tests. Live: wrong-size PUT → 403; 8.5 GiB / 272 chunks finalised, R2 chunks exactly 33,554,448 B. |
  
 ---
  
@@ -247,7 +243,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d next → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
@@ -279,6 +275,20 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **S-041** Speed benchmark (1/4/10/25/50 GB; fibre / broadband / 4G / rural) against WeTransfer, Smash, SwissTransfer → after the Share-DL track; possible Notes article.
 - **S-045** Homepage/landing copy speaks to WeTransfer and Smash users → homepage design session.
 - **Repo bloat (found 28 Sep):** 200 Rust build files under `worker/blake3-wasm-src/target/` are tracked in git. Untrack them and gitignore `target/` (keep the vendored `worker/blake3-wasm/` output) → any small tidy session.
+
+**Added Share-B12-1d (5 Oct 2026):**
+- **Share-Upload-2 additions** (all frontend/admin; ship via `ship-frontend.sh`):
+  1. Resume: button takes 3–6 s to appear after refresh; file picker needs two clicks (Safari desktop).
+  2. Resume: long silent pause after picking the file (re-hashing sent chunks) — show "Checking N chunks already sent…" or speed it up.
+  3. Download progress: percentage runs at ~half the bytes ("41%" at 224 of 272 MB) then jumps at the end (`download.js`).
+  4. Upload progress: bar includes setup stages (61% at 5/9 chunks); paused card "chunk 5 of 9" ambiguous → "5 of 9 chunks sent".
+  5. `admin/test-upload.html` loads `@noble/hashes` + `@noble/secp256k1` from esm.sh while holding the admin key → use the refueler.io-hosted copies (main page has been esm.sh-free since Deps-1).
+  6. 14 vendored `frontend/blake3/esm/*` files carry `sourceMappingURL` to unshipped `.map`s → Safari console noise ("JSON Parse error '<'"). Strip at vendor/copy time.
+  7. `test-upload.html` stats (Chunks/Speed/ETA) refresh only every 100 chunks → refresh per chunk, keep the 100-chunk log line.
+  8. `test-upload.html` header comment still says "NEVER add to sync-share.sh" — stale since Share-Sync-1.
+  9. `upload.js` has no handling for finalise 409 `wrong_size` (shows as a generic error). Unreachable through signed URLs; low.
+- **Write-once chunks** → KV-Audit-Opus / B12-3: also sign `If-None-Match: *` into presigned PUTs so R2 refuses to overwrite an existing chunk (closes "holder of a leaked URL overwrites a chunk with same-size junk for 6 days" → download 409 / DoS, never disclosure). Needs a live R2 gate (like B12-1b) and `upload.js` treating 412 as success on resume retries (saves the re-upload).
+- **Test-Harness-1** (small): combined `npm test` fails locally — vitest-pool-workers runtimes time out connecting to 127.0.0.1 (seen 5 Oct; clean `main` too; every file passes run alone). With `singleWorker: true` the suite runs in ~10 s but `delete_resume` + `dock_b12` bearer-delete tests fail from cross-file state (pre-existing). Try after a reboot first; then cap pool concurrency / fix the leak. Also remove unused `MIME_DENYLIST` (Share-MIME-1).
 
 **Ideas, parked (no build slot):**
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
