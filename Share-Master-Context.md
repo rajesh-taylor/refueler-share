@@ -246,11 +246,12 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c next → Cred-Fix-2 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c next → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
 | 11d′ | **Pricing-v2-Opus** (1–2 sessions) → plans-page rewrite | ❌ | Rate card v2: holding time + per-32 MiB billing, GBP↔credits, credit blocks, Pro Bono × agents, personal agent key vs `Sovereign ⊅ API`. Plans rewrite after B12-4a from `docs/drafts/` (draft B). Agents/MCP first. Log: Share-MCP-Chat-1. |
+| 11d″ | **Padding-Opus** (design + planning, no build slot yet) | ❌ | Size padding (e.g. Padmé buckets) so R2 sees a size band, not an exact size. Open: everyone-light vs paid-stronger (paid-only padding marks the sender as a customer), storage cost, interaction with per-32 MiB API billing. Also scope a Wormhole-style short-code mode (PAKE) as a possible paid feature — async storage makes short codes harder than in Wormhole. Raised Share-B12-1b. |
 | 11e | B12-4c Sovereign ledger + portability | ✅ | Needs B8-1 (Deed derivation) + B7 live. Runs alongside SD-block. |
 | 12 | B8-Opus → B8 build — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. B8-Opus first. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
