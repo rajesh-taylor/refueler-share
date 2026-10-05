@@ -152,8 +152,8 @@
 
   <div class="row">
     <div>
-      <label>Chunk size (MiB) — must match Worker = 32</label>
-      <input type="number" id="chunkMib" value="32" min="1" max="32" step="1">
+      <label>Chunk size (MiB) — fixed: Worker signs 32 MiB + 16 B (B12-1c)</label>
+      <input type="number" id="chunkMib" value="32" min="32" max="32" step="1" disabled>
     </div>
     <div>
       <label>Credential cap (GiB)</label>
@@ -302,7 +302,7 @@ $('btnStart').addEventListener('click', async () => {
   const adminKey     = $('adminKey').value.trim();
   const targetGib    = parseFloat($('targetGib').value)   || 250;
   const concurrency  = parseInt($('concurrency').value, 10) || 8;
-  const chunkMib     = parseInt($('chunkMib').value, 10)   || 32;
+  const chunkMib     = 32; // B12-1c: Worker signs content-length = CHUNK_SIZE + 16 — not configurable
   const capGib       = parseFloat($('capGib').value)       || 260;
   const credExpiry   = parseInt($('credExpiry').value, 10) || 28800;
   const verifyCount  = parseInt($('verifyChunks').value, 10) || 0;
@@ -314,6 +314,7 @@ $('btnStart').addEventListener('click', async () => {
   const totalChunks  = Math.ceil(totalBytes / CHUNK_SIZE);
   const capBytes     = Math.round(capGib * 1024 * 1024 * 1024);
   const URL_BATCH    = 256; // Worker returns 256 presigned URLs per /urls call
+  const TAG_BYTES    = 16;  // AES-GCM tag — real chunks are plaintext + 16; R2 checks the signed size
 
   emit(`▶  Starting soak upload`, 'head');
   emit(`   Target       : ${fmtBytes(totalBytes)} — ${totalChunks} chunks × ${fmtBytes(CHUNK_SIZE)}`, 'info');
@@ -350,6 +351,10 @@ $('btnStart').addEventListener('click', async () => {
   const batchFetching  = {};     // batchStart → Promise<void>
   let   sessionToken   = null;
   let   uuid           = null;
+  // B12-1c: a size-signing Worker returns the tail URL separately (tail_url) and
+  // /urls serves indices < urlLimit only. An older Worker: tailUrl null, urlLimit N.
+  let   tailUrl        = null;
+  let   urlLimit       = totalChunks;
 
   // Fetch a URL batch from /upload/:uuid/urls
   async function fetchBatch(batchStart) {
@@ -363,7 +368,7 @@ $('btnStart').addEventListener('click', async () => {
             'Content-Type':     'application/json',
             'X-Upload-Session': sessionToken,
           },
-          body: JSON.stringify({ from: batchStart, count: 256 }),
+          body: JSON.stringify({ from: batchStart, count: Math.min(URL_BATCH, urlLimit - batchStart) }),
         });
         if (!res.ok) throw new Error(`/urls batch ${batchStart} → ${res.status}`);
         const d = await res.json();
@@ -374,11 +379,12 @@ $('btnStart').addEventListener('click', async () => {
   }
 
   async function getUrl(i) {
+    if (tailUrl && i === totalChunks - 1) return tailUrl;
     const batchStart = Math.floor(i / URL_BATCH) * URL_BATCH;
     await fetchBatch(batchStart);
     // Pre-fetch next batch in background
     const next = batchStart + URL_BATCH;
-    if (next < totalChunks && !(next in urlCache) && !(next in batchFetching))
+    if (next < urlLimit && !(next in urlCache) && !(next in batchFetching))
       fetchBatch(next).catch(() => {}); // fire-and-forget; will retry on demand
     return urlCache[batchStart][i - batchStart].url;
   }
@@ -467,7 +473,13 @@ $('btnStart').addEventListener('click', async () => {
     const initData = await initiateRes.json();
     sessionToken = initData.session_token;
     urlCache[0]  = initData.urls; // seed batch 0
-    emit(`   Session token obtained. Batch 0: ${initData.urls.length} URLs.`, 'ok');
+    if (initData.tail_url) {
+      if (initData.tail_url.index !== totalChunks - 1) throw new Error(`tail_url index ${initData.tail_url.index} ≠ ${totalChunks - 1}`);
+      tailUrl  = initData.tail_url.url;
+      urlLimit = totalChunks - 1;
+    }
+    emit(`   Session token obtained. Batch 0: ${initData.urls.length} URLs.` +
+         (tailUrl ? ` Tail URL (index ${totalChunks - 1}) issued separately.` : ' No tail_url (pre-B12-1c Worker).'), 'ok');
 
     // ── Step 3: parallel upload ───────────────────────────────────────────────
     emit(`\n[3/5] Uploading ${totalChunks} chunks with concurrency=${concurrency}…`, 'head');
@@ -487,7 +499,7 @@ $('btnStart').addEventListener('click', async () => {
         const chunkBytes = isLast ? (totalBytes - i * CHUNK_SIZE) : CHUNK_SIZE;
 
         // Generate payload and compute hash in parallel with URL fetch
-        const payload = randomChunk(chunkBytes);
+        const payload = randomChunk(chunkBytes + TAG_BYTES); // ciphertext-sized
         const [hashBytes, presignedUrl] = await Promise.all([
           Promise.resolve(blake3(payload)), // synchronous, wrapped for .all
           getUrl(i),

@@ -50,6 +50,8 @@ import { buildMerkleTree } from './merkle.js';
 // Record shape (TH-2: added sealNonceHex — additive, no schema bump required):
 // { uuid, chunkIndex, totalChunks, fileName, fileSize, keyHex, ivHex,
 //   tier, expiryTimestamp, timestamp, sealNonceHex }
+// Share-6 added uploadMode, sessionToken, sourceType. B12-1c added tailUrl
+// { url, expires } — the size-signed tail URL, issued only at /initiate.
 // ─────────────────────────────────────────────────────────────────────────────
 const IDB_NAME    = 'refueler-share-resume';
 const IDB_STORE   = 'transfers';
@@ -712,7 +714,9 @@ async function _fetchNextUrlBatch(uuid, sessionToken, from, count, reportError) 
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     reportError('url_batch_status', `HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} from:${from} ${txt.slice(0, 80)}`);
-    throw new Error(`URL batch ${from} failed: HTTP ${res.status}`);
+    const e = new Error(`URL batch ${from} failed: HTTP ${res.status}`);
+    e.status = res.status; // resume uses 400 to spot an old record on a B12-1c Worker
+    throw e;
   }
   const body = await res.json();
   return body.urls || [];
@@ -908,16 +912,28 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     for (const entry of (initData.urls || [])) urlMap.set(entry.index, entry.url);
     let batchNext = initData.batch_next; // null when all URLs delivered upfront (≤ 256 chunks)
 
+    // B12-1c: a size-signing Worker returns the tail URL separately (tail_url) and
+    // /urls never covers index N−1. An older Worker has no tail_url → unchanged.
+    let tailUrl = null;
+    if (initData.tail_url) {
+      if (initData.tail_url.index !== totalChunks - 1) {
+        throw new Error(`tail_url index ${initData.tail_url.index} ≠ ${totalChunks - 1}`);
+      }
+      tailUrl = { url: initData.tail_url.url, expires: initData.tail_url.expires };
+      urlMap.set(totalChunks - 1, tailUrl.url);
+    }
+    const urlLimit = tailUrl ? totalChunks - 1 : totalChunks; // /urls serves indices < urlLimit
+
     setStage('Uploading', 18);
 
     for (let i = 0; i < totalChunks; i++) {
       // Fetch the next URL batch on demand (chunks > 256)
       if (!urlMap.has(i)) {
         if (batchNext === null) throw new Error(`No presigned URL for chunk ${i} and no batch_next`);
-        const newUrls = await _fetchNextUrlBatch(state.uploadUUID, sessionToken, batchNext, 256, reportError);
+        const newUrls = await _fetchNextUrlBatch(state.uploadUUID, sessionToken, batchNext, Math.min(256, urlLimit - batchNext), reportError);
         for (const entry of newUrls) urlMap.set(entry.index, entry.url);
         const maxIdx = newUrls.length > 0 ? Math.max(...newUrls.map(e => e.index)) : batchNext - 1;
-        batchNext = (maxIdx + 1 < totalChunks) ? maxIdx + 1 : null;
+        batchNext = (maxIdx + 1 < urlLimit) ? maxIdx + 1 : null;
       }
 
       const presignedUrl = urlMap.get(i);
@@ -950,6 +966,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
         keyHex, ivHex, tier: issuedTier, expiryTimestamp, timestamp: Date.now(),
         sealNonceHex: sealNonceHex || undefined,
         uploadMode: 'direct-r2', sessionToken, // Share-6: resume will need these
+        tailUrl: tailUrl || undefined,          // B12-1c: /urls cannot re-issue the tail
         sourceType: state.sourceType || 'file', // Part C: folder detection for FOLDER-RESUME discard
       }, reportError).catch(() => {});
 
@@ -1152,6 +1169,17 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     return;
   }
 
+  // B12-1c: the size-signed tail URL is issued once, at /initiate. A record that
+  // has one serves index N−1 from it; /urls is asked for full chunks only.
+  const tailUrl  = record.tailUrl || null;
+  const urlLimit = tailUrl ? totalChunks - 1 : totalChunks; // /urls serves indices < urlLimit
+  if (tailUrl && resumeFrom < totalChunks && tailUrl.expires * 1000 <= Date.now()) {
+    await clearResumeState(record.uuid, reportError);
+    progressDetail.textContent = 'This transfer can no longer be resumed — please start a new upload.';
+    setStage('', 0);
+    return;
+  }
+
   setStage(`Resuming from chunk ${resumeFrom + 1} of ${totalChunks}`, 10);
 
   // ── File prompt + validation ───────────────────────────────────────────────
@@ -1191,7 +1219,10 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   // 401 = sessionToken expired (transfer window closed) or finalise already spent it.
   // 409 = upload_complete (finalise already ran — stale IDB record).
   // Both are terminal: clear the record and surface a clean message.
-  const remaining = totalChunks - resumeFrom;
+  // B12-1c: if only the tail is left there is nothing for /urls to sign, so the
+  // probe is skipped; finalise's 401/409 is then the session check. Re-PUTting
+  // the tail is harmless (same key + IV + AAD → identical ciphertext).
+  const remaining = urlLimit - resumeFrom; // full chunks /urls still has to sign
 
   if (remaining > 0) {
     let probeRes;
@@ -1213,6 +1244,15 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       return;
     }
 
+    // 400 on a record with no tailUrl = an old record meeting a B12-1c Worker
+    // (it asked /urls for index N−1, which that Worker never signs). Can't finish.
+    if (probeRes.status === 400 && !tailUrl) {
+      await clearResumeState(record.uuid, reportError);
+      progressDetail.textContent = 'Resume record is incomplete — please start a new upload.';
+      setStage('', 0);
+      return;
+    }
+
     if (!probeRes.ok) {
       const txt = await probeRes.text().catch(() => '');
       reportError('resume_urls_status', `HTTP ${probeRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
@@ -1225,13 +1265,14 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     var urlMap    = new Map();
     for (const entry of (initBody.urls || [])) urlMap.set(entry.index, entry.url);
     const maxInitIdx = initBody.urls?.length > 0 ? Math.max(...initBody.urls.map(e => e.index)) : resumeFrom - 1;
-    var batchNext    = (maxInitIdx + 1 < totalChunks) ? maxInitIdx + 1 : null;
+    var batchNext    = (maxInitIdx + 1 < urlLimit) ? maxInitIdx + 1 : null;
   } else {
-    // remaining === 0: all chunks already in R2 but finalise was interrupted.
-    // Fall through to the re-hash loop (which covers all chunks) then finalise.
+    // remaining === 0: no full chunks left to sign — either all chunks are in R2
+    // and finalise was interrupted, or only the tail is left (B12-1c tailUrl).
     var urlMap    = new Map();
     var batchNext = null;
   }
+  if (tailUrl) urlMap.set(totalChunks - 1, tailUrl.url);
 
   // ── HARD RULE 1: re-encrypt prior chunks to rebuild ciphertext hashes ───────
   // Exactly the same key + session IV + 4-byte BE uint32 AAD as startUpload.
@@ -1271,10 +1312,21 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     // Page URL batches on demand (> 256 remaining chunks)
     if (!urlMap.has(i)) {
       if (batchNext === null) throw new Error(`No presigned URL for chunk ${i} and no batch_next`);
-      const newUrls = await _fetchNextUrlBatch(record.uuid, sessionToken, batchNext, 256, reportError);
+      let newUrls;
+      try {
+        newUrls = await _fetchNextUrlBatch(record.uuid, sessionToken, batchNext, Math.min(256, urlLimit - batchNext), reportError);
+      } catch (e) {
+        if (e.status === 400 && !tailUrl) { // old record on a B12-1c Worker — see probe above
+          await clearResumeState(record.uuid, reportError);
+          progressDetail.textContent = 'Resume record is incomplete — please start a new upload.';
+          setStage('', 0);
+          return;
+        }
+        throw e;
+      }
       for (const entry of newUrls) urlMap.set(entry.index, entry.url);
       const maxIdx = newUrls.length > 0 ? Math.max(...newUrls.map(e => e.index)) : batchNext - 1;
-      batchNext = (maxIdx + 1 < totalChunks) ? maxIdx + 1 : null;
+      batchNext = (maxIdx + 1 < urlLimit) ? maxIdx + 1 : null;
     }
 
     const presignedUrl = urlMap.get(i);
@@ -1312,6 +1364,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
       sealNonceHex: sealNonceHex || undefined,
       uploadMode: 'direct-r2', sessionToken,
+      tailUrl: tailUrl || undefined,
       sourceType: record.sourceType || 'file',
     }, reportError).catch(() => {});
 
