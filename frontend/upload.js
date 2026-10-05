@@ -21,6 +21,7 @@ import {
   sha256Hex,
   generateBlindedCredential,
   unblindSignature,
+  CredentialProofError,
   bufToHex,
   hexToBuf,
   WORKER_URL,
@@ -830,14 +831,14 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   const chunkHashes = [];
 
   setStage('Credentialling', 12);
-  const { blindedMsg, blindingFactor } = await generateBlindedCredential();
+  const blinded = await generateBlindedCredential();
   let _credPct = 12;
   const _credTick = setInterval(() => { if (_credPct < 14) { _credPct += 0.5; progressBar.style.width = _credPct + '%'; } }, 120);
 
   const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blindedMsg, tier: 'free' }),
+    body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blinded.blindedMsg, tier: 'free' }),
   });
   clearInterval(_credTick);
 
@@ -846,10 +847,21 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     reportError('credential_issue', `HTTP ${issueRes.status}`, errText.slice(0, 200));
     throw new Error(`Credential issue failed: ${errText}`);
   }
-  const { signed_point, mint_pubkey, uuid: issuedUuid, issued_tier: issuedTier, commitment } = await issueRes.json();
+  const issued = await issueRes.json();
+  const { uuid: issuedUuid, issued_tier: issuedTier, commitment } = issued;
   if (!issuedUuid || !commitment || !issuedTier) throw new Error('Credential issue response missing uuid, commitment, or issued_tier');
   state.uploadUUID = issuedUuid;
-  const credential = await unblindSignature(signed_point, blindingFactor, mint_pubkey);
+  // Cred-Fix-2b: credential format v2. A bad DLEQ proof stops here, before anything is spent.
+  let credential;
+  try {
+    credential = await unblindSignature(issued, blinded);
+  } catch (e) {
+    if (!(e instanceof CredentialProofError)) throw e;
+    reportError('credential_dleq', e.name, String(e.message).slice(0, 120));
+    setStage('Stopped', 0);
+    progressDetail.textContent = 'Share couldn’t get a valid upload pass. Reload to try again.';
+    return;
+  }
 
   _updatePaidFeaturesVisibility(issuedTier, transferOpts);
 

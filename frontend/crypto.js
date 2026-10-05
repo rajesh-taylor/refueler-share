@@ -3,19 +3,19 @@
 // Imported by upload.js and download.js. Never imported by index.njk directly.
 //
 // Exports:
-//   loadDeps()                         — initialise blake3 + secp256k1 (upload only)
-//   loadBlake3(), loadSecp()           — the two halves of loadDeps()
+//   loadDeps()                         — initialise blake3 + cashu-crypto (upload only)
+//   loadBlake3(), loadCashu()          — the two halves of loadDeps()
 //   blake3Impl()                       — 'wasm' | 'js' | null (which BLAKE3 loaded)
 //   blake3Hash(data)                   — BLAKE3-256, returns hex string
 //   sha256Hex(data)                    — SHA-256, returns hex string
-//   generateBlindedCredential()        — NUT-00 blind sig step 1
-//   unblindSignature(...)              — NUT-00 blind sig step 2
+//   generateBlindedCredential()        — NUT-00 blind sig step 1 (credential format v2)
+//   unblindSignature(issued, blinded)  — NUT-12 DLEQ check + NUT-00 step 2 → credential JSON
 //   bufToHex(buf)                      — ArrayBuffer/Uint8Array → hex string
 //   hexToBuf(hex)                      — hex string → ArrayBuffer
 //   WORKER_URL, CHUNK_SIZE, FREE_CAP, FREE_EXPIRY, TIER_EXPIRY_SECONDS
 //   CHUNK_UPLOAD_TIMEOUT_MS
 //
-// Architectural note: blake3 and secp are module-level mutable state.
+// Architectural note: blake3 and cashu are module-level mutable state.
 // loadDeps() must be awaited before calling blake3Hash() or any NUT-00 function.
 // Only upload mode calls it (upload.js, merkle.js selfTest). Receiver mode uses
 // neither and must not wait on it (Share-Deps-1). Safe to call repeatedly: each
@@ -54,20 +54,20 @@ export const CHUNK_UPLOAD_TIMEOUT_MS = 60_000; // 60 s per chunk
 // wrong, fall back to vendored pure-JS noble BLAKE3 (frontend/noble-blake3.js).
 // Same digests either way; the fallback is just slower (~2.5 MiB/s with no JIT).
 //
-// secp256k1: vendored @noble/secp256k1 1.7.2 (frontend/noble-secp256k1.js).
-// v1 API — secp.Point.fromPrivateKey / secp.Point.fromHex. Removed in v2.
-// Do not upgrade without migrating NUT-00 crypto.
+// Cashu (credential format v2): vendored @cashu/cashu-ts 4.11.0 subset
+// (frontend/cashu-crypto.js, built by bin/vendor-cashu.sh) — the same library and
+// version the Worker verifies with. No hand-rolled curve maths here.
 let blake3     = null;   // { createHash() } — WASM module or the noble wrapper below
 let blake3Kind = null;   // 'wasm' | 'js'
-let secp       = null;
+let cashu      = null;   // { hashToCurve, blindMessage, unblindSignature, verifyDLEQProof, pointFromHex }
 let _blake3Loading = null;
-let _secpLoading   = null;
+let _cashuLoading  = null;
 
 // BLAKE3("abc") — official test vector. Checked against whichever BLAKE3 loads.
 const _B3_KAT_ABC = '6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85';
 
 export async function loadDeps() {
-  await Promise.all([loadBlake3(), loadSecp()]);
+  await Promise.all([loadBlake3(), loadCashu()]);
 }
 
 export function loadBlake3() {
@@ -77,13 +77,13 @@ export function loadBlake3() {
   return _blake3Loading;
 }
 
-export function loadSecp() {
-  if (!_secpLoading) {
-    _secpLoading = import('./noble-secp256k1.js')
-      .then(mod => { secp = mod; })
-      .catch(e => { _secpLoading = null; throw e; });
+export function loadCashu() {
+  if (!_cashuLoading) {
+    _cashuLoading = import('./cashu-crypto.js')
+      .then(mod => { cashu = mod; })
+      .catch(e => { _cashuLoading = null; throw e; });
   }
-  return _secpLoading;
+  return _cashuLoading;
 }
 
 export function blake3Impl() {
@@ -145,35 +145,52 @@ export async function sha256Hex(data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NUT-00 blind signature — uses secp256k1 v1 API (secp.Point.*)
-// DO NOT upgrade secp256k1 to v2 without migrating these functions.
+// Credential format v2 — a standard Cashu proof { id, amount: 1, secret, C }.
+// Worker side: verifyProofV2 in worker/src/nut00.js (Y = hash_to_curve(utf8(secret)),
+// k·Y == C). Requires loadDeps() (or loadCashu()) first.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Step 1 → { blindedMsg, blindingFactor, secret }. Keep the result until step 2. */
 export async function generateBlindedCredential() {
-  const r   = secp.utils.randomPrivateKey();
-  const msg = crypto.getRandomValues(new Uint8Array(32));
-  const Y   = await _hashToCurve(bufToHex(msg));
-  const rG  = secp.Point.fromPrivateKey(r);
-  const B_  = Y.add(rG);
-  return { blindedMsg: B_.toHex(true), blindingFactor: bufToHex(r) };
+  // secret: 64-hex string of 32 random bytes; its UTF-8 bytes are hashed to the curve (NUT-00).
+  const secret = bufToHex(crypto.getRandomValues(new Uint8Array(32)));
+  const { B_, r } = cashu.blindMessage(new TextEncoder().encode(secret));
+  return {
+    blindedMsg:     B_.toHex(true),
+    blindingFactor: r.toString(16).padStart(64, '0'),
+    secret,
+  };
 }
 
-export async function unblindSignature(signedPoint, blindingFactor, mintPubkeyHex) {
-  const C_ = secp.Point.fromHex(signedPoint);
-  const K  = secp.Point.fromHex(mintPubkeyHex);
-  const r  = BigInt('0x' + blindingFactor);
-  const C  = C_.add(K.multiply(r).negate());
-  return JSON.stringify({ C: C.toHex(true), mint_pubkey: mintPubkeyHex });
+/** Thrown when the issue response's NUT-12 DLEQ proof does not check out. */
+export class CredentialProofError extends Error {
+  constructor(message) { super(message); this.name = 'CredentialProofError'; }
 }
 
-async function _hashToCurve(msgHex) {
-  const hash = await crypto.subtle.digest('SHA-256', hexToBuf(msgHex));
-  const hashHex = bufToHex(hash);
-  for (let i = 0; i < 256; i++) {
-    try {
-      return secp.Point.fromHex('02' + (BigInt('0x' + hashHex) + BigInt(i)).toString(16).padStart(64, '0'));
-    } catch { continue; }
+/**
+ * Step 2. issued = the /credential/issue JSON ({ signed_point, mint_pubkey, keyset_id, dleq }),
+ * blinded = generateBlindedCredential()'s result. Checks the NUT-12 DLEQ proof (the signature
+ * matches the key it came with — the key is not pinned), then unblinds.
+ * → JSON string for X-Cashu-Credential. Throws CredentialProofError on a bad or missing proof.
+ */
+export async function unblindSignature(issued, blinded) {
+  const { signed_point, mint_pubkey, keyset_id, dleq } = issued || {};
+  if (!signed_point || !mint_pubkey || !keyset_id || !dleq?.e || !dleq?.s) {
+    throw new CredentialProofError('Credential issue response missing signature, keyset id or DLEQ proof');
   }
-  throw new Error('hashToCurve failed');
+  let C_, K, verified = false;
+  try {
+    C_ = cashu.pointFromHex(signed_point);
+    K  = cashu.pointFromHex(mint_pubkey);
+    const B_ = cashu.pointFromHex(blinded.blindedMsg);
+    const proof = { e: new Uint8Array(hexToBuf(dleq.e)), s: new Uint8Array(hexToBuf(dleq.s)) };
+    verified = cashu.verifyDLEQProof(proof, B_, C_, K);
+  } catch {
+    // malformed point or out-of-range scalar — the library throws rather than returning false
+  }
+  if (!verified) throw new CredentialProofError('Credential DLEQ proof did not verify');
+  const C = cashu.unblindSignature(C_, BigInt('0x' + blinded.blindingFactor), K);
+  return JSON.stringify({ id: keyset_id, amount: 1, secret: blinded.secret, C: C.toHex(true) });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -200,7 +217,7 @@ export function hexToBuf(hex) {
 //   @noble/hashes/hkdf       → hkdf
 //   @noble/hashes/pbkdf2     → pbkdf2
 // These are the v2 noble packages already present in the Worker.
-// The existing NUT-00 functions above use secp v1 (vendored, frontend/noble-secp256k1.js)
+// The credential functions above use the vendored cashu-ts subset (frontend/cashu-crypto.js)
 // — these are separate and must not share the same secp binding.
 // =============================================================================
 
