@@ -212,7 +212,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-B12-1b ✓ (5 Oct 2026) — R2 enforces signed `content-length` (live-proven, dev bucket). S1.1 build moves to B12-1c (Worker + frontend + `total_bytes`-in-manifest decision). Post-Berlin order (Rajesh, 5 Oct): B12-1c → Cred-Fix-2 → B12-2 (refueler-io session) → KV-Audit-Opus.**
+**Share-B12-1b ✓ (5 Oct 2026) — R2 enforces signed `content-length` (live-proven, dev bucket). S1.1 build moves to B12-1c (Worker + frontend + `total_bytes`-in-manifest decision). Post-Berlin order (Rajesh, 5 Oct): B12-1c → Cred-Fix-2 → Share-Size-1 (exact size into URL fragment) → B12-2 (refueler-io session) → KV-Audit-Opus.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
