@@ -33,7 +33,9 @@ What this proves: the encrypted object served is the encrypted object stored. It
 
 Upload credentials use the blind signature scheme from the Cashu protocol (NUT-00). The server signs a blinded value without seeing what it signs. There is no account and no email behind a free upload, so there is no identity for us to attach to it.
 
-This is not a monetary use of Cashu. There is no external mint; the blind signature is used as an anonymous credential. We are moving credentials onto the standard Cashu proof format, checked with the Cashu developers' reviewed library code rather than our own, which also opens the door to DLEQ proofs (NUT-12) and keypair-bound credentials (NUT-11). In build.
+This is not a monetary use of Cashu. There is no external mint; the blind signature is used as an anonymous credential. Each credential is a standard Cashu proof (`{id, amount, secret, C}`). The Worker verifies the signature on every upload (`k·Y == C`) and spends it once; the browser checks the signer's DLEQ proof (NUT-12) before using it. Both sides use the Cashu developers' reviewed library (`@cashu/cashu-ts`), not our own curve code. What changed and why: [`docs/Cred-verification-note-v1.md`](docs/Cred-verification-note-v1.md).
+
+Your anonymity on the free tier comes from having no account and no email, not from the blinding: the Worker sees the same transfer at issue and at upload. Blinding starts to matter when credentials are bought separately from the transfers they pay for (the Bearer rail, B7). Keypair-bound credentials (NUT-11) follow in B8.
 
 **SHA-256 + OpenTimestamps — Bitcoin-anchored existence proof**
 
@@ -64,7 +66,7 @@ The Worker stores encrypted bytes. It has no key.
 | Encryption | AES-256-GCM, client-side only |
 | Integrity | BLAKE3 WASM + Merkle root, ciphertext only |
 | Existence proof | SHA-256 / OpenTimestamps / Bitcoin |
-| Anonymous credentials | Cashu NUT-00 blind signatures |
+| Anonymous credentials | Cashu blind signatures: standard proofs (NUT-00), DLEQ (NUT-12), `@cashu/cashu-ts` |
 | API auth | HMAC-SHA256 per-request signing |
 
 ---
@@ -96,7 +98,7 @@ No free trials. No discounts. The price is the price.
 
 **Permanent record** — Bitcoin-anchored date stamp, verifiable independently with OpenTimestamps. Paid tiers.
 
-**Passphrase gate** — the recipient needs a passphrase to download. Only its hash is stored.
+**Password lock** — the recipient needs a password to download. Only its hash is stored.
 
 **Folder upload** — folders are zipped in the browser (streaming, fflate) and sent as one encrypted transfer.
 
@@ -146,7 +148,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 
 ## Build Status
 
-**596 tests passing (refueler-share) · 228 (refueler-mcp)**
+**642 tests passing (refueler-share) · 228 (refueler-mcp)**
 
 | Block | Status | Scope |
 |-------|--------|-------|
@@ -156,15 +158,36 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | SW-block | ✅ | Custom API hostname, HMAC API auth, webhooks, receipts, sandbox |
 | Share-6 | ✅ | Direct-to-R2 uploads, Merkle root at upload, ciphertext storage verification at download (B9-1…B9-3) |
 | Ops | ✅ | Navy Office admin dashboard; batched, resumable deletes; one-command frontend deploy with byte-level live check, pre-push guard and CI mirror check |
-| B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done; first build session shipped |
+| Credential hardening | ✅ | Upload credentials bound to one transfer (keyed commitment); standard Cashu proofs verified on every upload; DLEQ checked in the browser; reviewed library code on both sides |
+| B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done. Shipped so far: deletion and sweep fixes; every upload URL signed for its exact chunk size, enforced by storage |
 
-| Next | Scope |
-|------|-------|
-| Credential hardening | Standard Cashu proof format, reviewed library code, DLEQ |
+### Roadmap
+
+**Now** — roughly in this order:
+
+| Session | Scope |
+|---------|-------|
+| Share-Size-1 | The exact file size moves into the share link (the URL fragment) and is no longer stored in the transfer record or served by the API. It narrows who can learn the size; it does not hide it from our storage |
+| Share-Upload-2 | Redesigned upload page; clearer upload errors and resume |
+| MCP-Fix-1 | MCP send tool moved onto the current upload path and credential format, then the npm package is published |
+| Security foundations | Review of every key-value store use (nothing in it may grant access unless signed by the Worker); a dedicated origin for signed-in pages |
+| B12 (rest) | Storage quotas, Citizen sign-in (single-use email link), billing, then an audit of what was built |
+
+**Next:**
+
+| Block | Scope |
+|-------|-------|
+| Large downloads | Streaming downloads in Safari and Firefox (no whole-file copy in memory); a resumable collector for very large transfers |
 | B8 | NUT-11 keypair-bound credentials (the Locke) |
 | B7 | Lightning via self-hosted LNbits; Bearer rail |
 | Silent Drop | Standing, anonymous intake for receiving files |
+
+**Later:**
+
+| Block | Scope |
+|-------|-------|
 | B9 (rest) | Receipts carrying the ciphertext Merkle root, transfer history, security whitepaper |
+| Size padding | Design work: pad transfers to size bands so storage sees a band, not an exact size |
 | B10 | ML-KEM post-quantum key wrapping |
 
 ---
@@ -177,13 +200,16 @@ worker/src/          Cloudflare Worker — issue, initiate/finalise, download
 worker/test/         Unit tests (Vitest, workerd pool)
 frontend/            Browser JS and CSS (canonical source)
   share.js           Entry point, DOM, mode detection
-  crypto.js          AES-GCM, BLAKE3, NUT-00, SHA-256, config constants
+  crypto.js          AES-GCM, BLAKE3, Cashu credential, SHA-256, config constants
+  fragment.js        Share-link fragment grammar (key, IV, real filename, seal nonce)
   merkle.js          Browser Merkle tree (twin of worker/src/merkle.js)
   upload.js          Upload state machine, IDB resume, folder handling
-  download.js        Download state machine, OTS offer
+  download.js        Receiver page and download state machine
   timestamp.js       OTS pipeline
+  cashu-crypto.js    Vendored @cashu/cashu-ts subset (generated — see bin/vendor-cashu.sh)
 bin/ship-frontend.sh Commit, mirror into refueler-io, push both, prove bytes live
 bin/sync-share.sh    Mirror step and --check / --live diagnostics
+bin/vendor-cashu.sh  Reproducible build of frontend/cashu-crypto.js from a pinned lockfile
 bin/githooks/        Pre-push guard: main can't drift from the live site
 docs/                Design specs and security reviews
 merkle-spec-v1.md    Merkle tree specification
