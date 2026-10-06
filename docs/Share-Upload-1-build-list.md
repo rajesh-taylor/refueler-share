@@ -1,6 +1,6 @@
 # Share-Upload-1 — upload page + Share sub-menu build list
 > **Session:** Share-Upload-1 · 28 Sep 2026 (design, no code changed)
-> **Status:** Design approved by Rajesh (mock v3, 28 Sep). Build: Share-Upload-2, **after Berlin** (Rajesh, 28 Sep). Share-Deps-1 ✓ (F-20, F-21 fixed, 28 Sep).
+> **Status:** Design approved by Rajesh (mock v3, 28 Sep). Share-Deps-1 ✓ (F-20, F-21, 28 Sep). **Share-Upload-2 ✓ (6 Oct): Part 1 (refueler.io `580135c`) + Part 2 B1 (`565efd9`), live-verified. B2 (behaviour) → Share-Upload-3.** Statuses per item in §3.
 > **Mock:** https://claude.ai/artifact/MAQmeQhhM3KieZo1Cr2FYg (private; v1 = A/B, v2 = open sheet, v3 = empty ledger) · repo copy `docs/drafts/share-upload-mock-v3.html`
 > **Inputs:** `Share-Upload-1-prompt.md` §1–5 · `docs/Share-Receiver-1-build-list.md` (R-1…R-14, F-1…F-9 carry over) · receiver mock v5
 
@@ -87,6 +87,13 @@ Found at Share-Deps-1 (28 Sep, Rajesh's phone tests + code reading):
 - **F-24 A link with a damaged key shows "Share couldn't start in this browser."** Deps-1's catch-all is right for a failed load, wrong for a bad link (reloading or another browser won't help). Rare: a truncated fragment usually fails to parse and lands on the upload page instead. Give the key-import failure its own "This link is incomplete" notice with the F-11 error work.
 - **F-25 The admin test page still loads code from esm.sh.** `worker/src/share/admin/test-upload.html` (mirrored to `refueler.io/share/admin/`) imports `@noble/hashes@1.8.0/blake3` and `@noble/secp256k1@2.2.1` from esm.sh. Admin-only, no user keys, but it breaks under a `/share/*` CSP. Vendor or give it its own policy (see `docs/Share-CSP-1-notes.md`).
 - **F-26 Permanent record contacts the OTS calendars from the browser.** `timestamp.js` `submitToCalendars()` POSTs the 32-byte commitment straight to alice/bob `…calendar.opentimestamps.org`, so the calendars see the sender's IP. CLAUDE.md describes Worker relay endpoints for this. Unreachable today (F-10, paid only); decide at the permanent-record rebuild whether the browser or the Worker talks to the calendars.
+- **F-23 ✓** B1 (`frontend/share-early.js` + `.rx-pending`).
+
+Found at Share-Upload-2 (6 Oct, Rajesh's phone tests):
+
+- **F-27 The view change keeps the scroll position.** On a phone, after "Encrypt and upload" the % sits right under the header with eyebrow and headline scrolled off; desktop "Your link is ready." the same. Fix in B2: bring the sheet top into view on every `setView()`.
+- **F-28 Receiver password input is 15 px**, so iOS Safari zooms on focus (the sender's is 16 px since B1). → Share-Receiver-3.
+- **F-29 Link previews in mail apps** (Tutamail: title + domain + R icon). One static preview for every link; design it in Share-Receiver-3. Description decided: "A file sent with Refueler Share." (Rajesh, 6 Oct; no second sentence, it reads like spam).
 - Noted, no change: resume keeps the AES key and IV in IndexedDB until the upload finishes, is discarded, or is 8 days old.
 
 ## 3. Build — Share-Upload-2
@@ -94,30 +101,30 @@ Found at Share-Deps-1 (28 Sep, Rajesh's phone tests + code reading):
 Two repos. **Order matters:** refueler.io first, or the Pages build fails on a missing include.
 
 ### Part 1 · refueler.io (own git)
-1. `src/_data/sections.js`: `share: [Send /share/, Plans /share/plans/, Status /share/status/]`. Legend later; sign-in when built (U-4).
-2. `src/share/share.11tydata.json`: `{ "section": "share", "wordmarkSection": "Share" }`. Check `chambers/index.html` (an Eleventy template in the same folder) doesn't render a nav from it.
-3. `src/_includes/section-nav.njk`: the centred segmented pill (U-3); current item from `page.url` with `aria-current="page"`. Verify `/share/index.html` gives `page.url` `/share/`.
-4. `nav.njk`: drop the Plans/Status block (bar and drawer); "Share" active when `section == 'share'`. F-15 is already fixed site-wide (Share-Cleanup-1 extras): just remove the upload-only rule from `share.css`.
-5. `plans.njk`, `status.njk`: `nav.njk` + `section-nav.njk` + `footer.njk`; remove "← Back to Refueler Share". Retire `share-nav.njk` and `share-footer.njk` (the stray `-includes/` folder, F-14, is already gone: Share-Cleanup-1).
-6. Plans page "End-to-end encrypted" → "Encrypted in your browser" (U-2).
+1. ✅ `src/_data/sections.js`: `share: [Send /share/, Plans /share/plans/, Status /share/status/]`. Legend later; sign-in when built (U-4).
+2. ✅ `src/share/share.11tydata.json`: `{ "section": "share", "wordmarkSection": "Share" }`. Check `chambers/index.html` (an Eleventy template in the same folder) doesn't render a nav from it.
+3. ✅ `src/_includes/section-nav.njk`: the centred segmented pill (U-3); current item from `page.url` with `aria-current="page"`. Verify `/share/index.html` gives `page.url` `/share/`.
+4. ✅ `nav.njk`: drop the Plans/Status block (bar and drawer); "Share" active when `section == 'share'`. F-15 is already fixed site-wide (Share-Cleanup-1 extras): just remove the upload-only rule from `share.css`.
+5. ✅ `plans.njk`, `status.njk`: `nav.njk` + `section-nav.njk` + `footer.njk`; remove "← Back to Refueler Share". Retire `share-nav.njk` and `share-footer.njk` (the stray `-includes/` folder, F-14, is already gone: Share-Cleanup-1).
+6. ✅ Plans page "End-to-end encrypted" → "Encrypted in your browser" (U-2).
 
 ### Part 2 · refueler-share → `bin/ship-frontend.sh`
-7. `src/index.njk`: include `section-nav.njk` (add a local stub in refueler-share `src/_includes/`); remove the info card (its technical copy already has a home: Status page "How it works" cards; import S-043) and `#share-subnav` + its inline observer script; new upload markup: the slip with empty rows that fill in place (U-1, U-7, U-8); Turnstile block above the button (U-10); remove HTTP/3 line + badge (U-6); title/description ✓ already live (Cleanup-1 extras); cap-warning copy per §1 (links F-12/F-13 already fixed, Share-Cleanup-1); `frontend/upgrade.css` is now unused (drop it and its `SM_CANON_ONLY` entry); a blocking `<head>` script file that marks a link visit before the modules load (F-23; new file → add to `bin/lib/share-mirror.sh`).
-8. `share.css`: upload styles on `global.css` tokens (F-6); slip + facts row, filled "Choose a file", switch, measure shared with `.rx-*`; drop line only on `(hover: hover) and (pointer: fine)`; page-drop accent frame; retest F-8/F-18. Receiver mode hides the sub-menu (R-14). Hide the upload screen under the F-23 class, so a link never flashes it.
-9. `upload.js`: copy per §1; stage words; **drop target = the whole page** (dragover/drop on `document` in upload mode only, never in receiver mode; the accent frame follows dragover and clears when it stops); drop the destroy notice; move the destroy toggle into static markup (keep ids `destroy-after-download`, `destroy-toggle-row`); leave the paid-options injection hidden (F-10); catch `startUpload` errors into the error state (F-11); Turnstile `appearance: 'interaction-only'`, `size: 'flexible'`, shown via `before-interactive-callback`; a click before the token arrives shows "Checking…" and starts when the token lands (U-10). "Choose another" (U-11): back to the empty rows, keep toggle state and password, keep a live Turnstile token (stop resetting `state.turnstileToken` and re-rendering in `_handleFileSelection`; re-render only if the token has expired).
-10. `share.js`: share panel (key line, ledger, "Send another file"); QR on request, into a real canvas at CSS × `devicePixelRatio`, dark on light (U-9, F-16, F-19); remove the info-card dismiss handler.
-11. Keep every id the e2e test and `upload.js` use (`drop-zone` moves to the slip; `file-btn` = "Choose a file", `folder-btn` = "or a folder"): `drop-zone`, `file-input`, `folder-input`, `file-btn`, `folder-btn`, `options-card`, `upload-btn`, `share-card`, `share-link-display`, `copy-btn`, `new-upload-btn`, `qr-wrap`, `progress-*`, `zip-*`, `resume-*`, `cap-warning`, `passphrase-*`, `turnstile-wrap`, `cf-turnstile`, `drop-multi-msg`. The e2e test waits for `#upload-btn` to be enabled; with U-10 the button is enabled early, so check the test still waits for the token (or the queued start).
+7. ✅ B1. `src/index.njk`: include `section-nav.njk` (add a local stub in refueler-share `src/_includes/`); remove the info card (its technical copy already has a home: Status page "How it works" cards; import S-043) and `#share-subnav` + its inline observer script; new upload markup: the slip with empty rows that fill in place (U-1, U-7, U-8); Turnstile block above the button (U-10); remove HTTP/3 line + badge (U-6); title/description ✓ already live (Cleanup-1 extras); cap-warning copy per §1 (links F-12/F-13 already fixed, Share-Cleanup-1); `frontend/upgrade.css` is now unused (drop it and its `SM_CANON_ONLY` entry); a blocking `<head>` script file that marks a link visit before the modules load (F-23; new file → add to `bin/lib/share-mirror.sh`).
+8. ✅ B1, except the page-drop accent frame (B2). `share.css`: upload styles on `global.css` tokens (F-6); slip + facts row, filled "Choose a file", switch, measure shared with `.rx-*`; drop line only on `(hover: hover) and (pointer: fine)`; page-drop accent frame; retest F-8/F-18. Receiver mode hides the sub-menu (R-14). Hide the upload screen under the F-23 class, so a link never flashes it.
+9. **Partly B1:** copy, stage words, static destroy toggle, paid options hidden, simple "Choose another" ✅. **B2 (Share-Upload-3):** whole-page drop, F-11 catch-all + "Try again" (same tab reuses the held file: *"Try again carries on from 42%."*, Rajesh 6 Oct), U-10, U-11 token keeping, scroll the sheet top into view on every view change (F-27). `upload.js`: copy per §1; stage words; **drop target = the whole page** (dragover/drop on `document` in upload mode only, never in receiver mode; the accent frame follows dragover and clears when it stops); drop the destroy notice; move the destroy toggle into static markup (keep ids `destroy-after-download`, `destroy-toggle-row`); leave the paid-options injection hidden (F-10); catch `startUpload` errors into the error state (F-11); Turnstile `appearance: 'interaction-only'`, `size: 'flexible'`, shown via `before-interactive-callback`; a click before the token arrives shows "Checking…" and starts when the token lands (U-10). "Choose another" (U-11): back to the empty rows, keep toggle state and password, keep a live Turnstile token (stop resetting `state.turnstileToken` and re-rendering in `_handleFileSelection`; re-render only if the token has expired).
+10. ✅ B1. `share.js`: share panel (key line, ledger, "Send another file"); QR on request, into a real canvas at CSS × `devicePixelRatio`, dark on light (U-9, F-16, F-19); remove the info-card dismiss handler.
+11. ✅ B1 (ids kept; the e2e waits unchanged — recheck after U-10 in B2). Keep every id the e2e test and `upload.js` use (`drop-zone` moves to the slip; `file-btn` = "Choose a file", `folder-btn` = "or a folder"): `drop-zone`, `file-input`, `folder-input`, `file-btn`, `folder-btn`, `options-card`, `upload-btn`, `share-card`, `share-link-display`, `copy-btn`, `new-upload-btn`, `qr-wrap`, `progress-*`, `zip-*`, `resume-*`, `cap-warning`, `passphrase-*`, `turnstile-wrap`, `cf-turnstile`, `drop-multi-msg`. The e2e test waits for `#upload-btn` to be enabled; with U-10 the button is enabled early, so check the test still waits for the token (or the queued start).
 
 ### Verify
-12. Scratch harness (fake Worker, as in Receiver-2a/2b): every upload state + receiver states, Paper + Carbon, 375 / 640 / 1000 / 1280 px, no side-scroll. Plans and Status pages with the new header.
-13. After `✓ SHIPPED`: live upload + receive in Safari (phone width), password + delete-after-download, theme switch, QR scans from a laptop screen, then the full CLAUDE.md frontend checklist.
-14. **iPhone 13 mini (Safari):** does "or a folder" work in iOS Safari? If it can't pick a folder, hide it there.
-15. **Pixel 9a (GrapheneOS, Vanadium, default settings):** receive a link first, then send. A blank recipient page or a frozen upload = F-20.
+12. ✅ `dev/share-harness/` (fake Worker + Turnstile stub). Scratch harness (fake Worker, as in Receiver-2a/2b): every upload state + receiver states, Paper + Carbon, 375 / 640 / 1000 / 1280 px, no side-scroll. Plans and Status pages with the new header.
+13. ✅ Rajesh, 6 Oct (Safari, Brave, iPhone, Pixel, QR). After `✓ SHIPPED`: live upload + receive in Safari (phone width), password + delete-after-download, theme switch, QR scans from a laptop screen, then the full CLAUDE.md frontend checklist.
+14. ✅ **iPhone 13 mini (Safari):** "or a folder" works (long-press the folder in Files). Kept on iOS (Rajesh, 6 Oct).
+15. ✅ Received a folder, dead on second open. **Pixel 9a (GrapheneOS, Vanadium, default settings):** receive a link first, then send. A blank recipient page or a frozen upload = F-20.
 
 ## 4. Not in Upload-2
 - esm.sh import and Vanadium fallback (F-20, F-21) — ✓ Share-Deps-1, 28 Sep.
 - Notes article for GrapheneOS users — F-20 fixed and tested on Vanadium defaults; listed as article 15 in `notes-articles-list.md`.
-- Download bar (F-22), damaged-key notice (F-24), admin page (F-25), calendars (F-26). F-23 (upload flash) **is** in Upload-2: add to items 7–8.
+- Download bar (F-22) and the download % at half (Upload-2 addition 3, same code), damaged-key notice (F-24), admin page (F-25), calendars (F-26). F-23 (upload flash) **is** in Upload-2: add to items 7–8.
 - Paid options and permanent record (F-1, F-9, F-10) — with paid uploads and Legend.
 - Receiver R-6 line and dialog removal — Share-DL-W1.
 - Plans page tier names and layout — plans draft B.

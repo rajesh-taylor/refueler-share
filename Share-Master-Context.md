@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.10 | **Last updated:** Share-B12-1d · 5 Oct 2026
+> **Version:** 9.11 | **Last updated:** Share-Upload-2 · 6 Oct 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
  
 ---
@@ -195,30 +195,20 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 - DO NOT import `@noble/hashes/blake3` without `.js` extension
 - DO NOT generate `description: ...` placeholder stubs in JS — syntax errors
 - DO NOT present `index.js` edits without full repo path — `refueler-mcp/src/index.js` ≠ `refueler-share/worker/src/index.js`
-- DO NOT claim "end-to-end file integrity" — chunk integrity only (BLAKE3 per ciphertext chunk)
 - DO NOT run `npm publish` in a session — dry-run only; Rajesh publishes manually
-- CLOSED at 6-6b (SHARE-503; direct-to-R2 unconditional). Historical note kept for the Brave diagnosis: `frontend/crypto.js` `WORKER_URL` = `https://api.share.refueler.io` — the custom hostname whose consumer cutover is 6-6b (not done). Serves most requests but intermittently 503s (no CORS on a 503 → browser mislabels "CORS"); downloads hit it most. Fix: revert to `https://refueler-share.rt-fc4.workers.dev` (one line, staged) OR finish 6-6b.
 - DO NOT re-chase "finalise rejects the opaque session token (HMAC)" — false; `finalise.js` byte-compares vs KV like `handleUploadUrls`; fresh uploads finalise 200. Live-verified 20–21 Sep.
-- **B12-SR (24 Sep 2026) — do-not-retry:**
+- **B12-SR (24 Sep 2026) — do-not-retry** (the other B12-SR locks live in CLAUDE.md):
   - DO NOT let any KV value authorise access, lift a limit, or select a privileged branch unless it is MAC'd under a Worker secret. KV is compromised for **write** as well as read (X1). Live offenders pending the KV audit: `test_credential:{uuid}` flag, `api_quota_*`, the `rfs_live_` → org mapping, B8 Locke pubkey set.
-  - DO NOT sign presigned PUT URLs `host`-only — `content-length` must be signed; tail-chunk URL minted at initiate only (B12-1b).
   - DO NOT persist `size_bytes` in `dock_index` (X4 — fixed in B12-1).
-  - DO NOT store a Chambers/Sovereign ledger blob server-side in any form (S7).
-  - DO NOT offer a magic link to a Bearer principal (X3).
-  - DO NOT act on the 6-char `LR-` lodgement ref — display only; actions use the 128-bit handle (S4).
-  - DO NOT write raw `quota_ref` into manifests — sealed `qref_ct` only (S3a).
-- DO NOT re-chase "Worker omits CORS on `/download`" — false; `index.js` wraps every download response (+500 catch) in `addCors`, OPTIONS → 204+CORS. curl confirmed ACAO on the "failing" chunk. Browser-side "CORS/503" download failures were **Brave** + the 503 above; Safari downloads cleanly.
+- DO NOT re-chase "Worker omits CORS on `/download`" — false; `index.js` wraps every download response (+500 catch) in `addCors`, OPTIONS → 204+CORS. curl confirmed ACAO on the "failing" chunk. Browser-side "CORS/503" download failures were **Brave** + intermittent 503s on the custom hostname before 6-6b (a 503 carries no CORS header); Safari downloads cleanly.
 ---
  
 ## Current state
  
-**Share-Size-1 ✓ (6 Oct 2026) — exact file size moved into the link fragment (`z`, still grammar v1); new manifests store no `total_bytes`, `/meta` returns it null for new transfers, receipts `size_bytes: null`. Frontend `27582c7`, deploy `69a99b89`. Live-verified in Safari. Not hidden: R2 object sizes give the exact size to storage access. Next: Share-Upload-2 → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct.**
+**Share-Upload-2 ✓ (6 Oct 2026) — Share sub-menu on every Share page (refueler.io `580135c`) and the redesigned upload page, B1 (look, copy, structure; shipped `565efd9`). Live-verified on iPhone, Pixel and desktop. B2 (behaviour: hidden check, keep-the-check "Choose another", whole-page drop, F-11 errors + Try again, scroll-to-top on view change) + Part C backlog → Share-Upload-3. Then B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Share-6-6a ✓ | — | 100 GiB soak upload ✓ (3200/3200). Download-409 fixed at B10-3. |
-| Share-B10-3 ✓ | `49399ca` (deploy `b81116e2`) | Download-409 fixed: root reconstruction gated by KV `root_verified:{uuid}`, once per transfer. |
-| Share-B11-1 ✓ | `76799ae` (deploy `28d43b55`) | DAD destruction sequence wired in `finishDownload` (6 steps, `ctx.waitUntil`). 410 on second download. |
 | Share-B12 ✓ | `cc14d21` | Storage/quota/surfaces/billing design locked — `docs/B12-spec-v1.1.md`. |
 | Share-B12-SR ✓ | `4564730` | Security review — `B12-SR-spec-v1.md` (root). Amends B12 A1–A18. |
 | B12-1 ✓ | `3b1b819` | PURGED status, DAD clears `dock_index`, drop `size_bytes` (X4), sweep rules S1.10. |
@@ -228,6 +218,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Cred-Fix-2a ✓ | deploy `4c9730b2` | Credential format v2 accepted (`verifyProofV2`, `@cashu/cashu-ts` 4.11.0 pinned), `keyset_id` + `dleq` at issue, anonymous-rail API issuance explicit 503 until B7. 659 tests incl. official NUT-00/02/12 vectors. v1 removal → 2b. |
 | Cred-Fix-2b ✓ | `ca3972c` · deploy `a5ac4f5d` | Browser sends credential format v2 (vendored cashu-ts, DLEQ checked); Worker refuses v1. 642 tests. |
 | Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
+| Share-Upload-2 ✓ | refueler.io `580135c` · `565efd9` | Share sub-menu (`sections.js` + `section-nav.njk`); upload page B1 (open sheet + slip, §1 copy, bytes progress, QR canvas, F-23 `share-early.js`, F-6 tokens). Preview harness `dev/share-harness/`. B2 → Share-Upload-3. |
  
 ---
  
@@ -237,7 +228,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 (Rajesh, 5 Oct) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 (B2 + backlog) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
@@ -272,21 +263,21 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Repo bloat (found 28 Sep):** 200 Rust build files under `worker/blake3-wasm-src/target/` are tracked in git. Untrack them and gitignore `target/` (keep the vendored `worker/blake3-wasm/` output) → any small tidy session.
 
 **Added Share-B12-1d (5 Oct 2026):**
-- **Share-Upload-2 additions** (all frontend/admin; ship via `ship-frontend.sh`):
-  1. Resume: button takes 3–6 s to appear after refresh; file picker needs two clicks (Safari desktop).
-  2. Resume: long silent pause after picking the file (re-hashing sent chunks) — show "Checking N chunks already sent…" or speed it up.
-  3. Download progress: percentage runs at ~half the bytes ("41%" at 224 of 272 MB) then jumps at the end (`download.js`).
-  4. Upload progress: bar includes setup stages (61% at 5/9 chunks); paused card "chunk 5 of 9" ambiguous → "5 of 9 chunks sent".
-  5. `admin/test-upload.html` loads `@noble/hashes` + `@noble/secp256k1` from esm.sh while holding the admin key → use the refueler.io-hosted copies (main page has been esm.sh-free since Deps-1).
-  6. 14 vendored `frontend/blake3/esm/*` files carry `sourceMappingURL` to unshipped `.map`s → Safari console noise ("JSON Parse error '<'"). Strip at vendor/copy time.
-  7. `test-upload.html` stats (Chunks/Speed/ETA) refresh only every 100 chunks → refresh per chunk, keep the 100-chunk log line.
-  8. `test-upload.html` header comment still says "NEVER add to sync-share.sh" — stale since Share-Sync-1.
-  9. `upload.js` has no handling for finalise 409 `wrong_size` (shows as a generic error). Unreachable through signed URLs; low.
+- **Share-Upload-2 additions — status after Share-Upload-2 (6 Oct):** → **Share-Upload-3** unless marked.
+  1. Resume: button takes 3–6 s to appear after refresh; file picker needs two clicks (Safari desktop). Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
+  2. Resume: pause while sent chunks are re-hashed — *partly done (B1: "Checking what was already sent · X of Y")*; speed-up still open.
+  3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
+  4. Upload progress incl. setup stages — ✅ B1 (bytes-based, "X MB of Y MB").
+  5. `admin/test-upload.html` esm.sh (= F-25) → use hosted `noble-blake3.js` + `cashu-crypto.js` `blindMessage`, then delete `noble-secp256k1.js` from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in the same ship.
+  6. 14 `sourceMappingURL` lines in `frontend/blake3/esm/*` **and** 14 in `src/blake3/` → strip at vendor/copy time.
+  7. `test-upload.html` stats refresh per chunk (keep the 100-chunk log line).
+  8. `test-upload.html` header comment stale ("NEVER add to sync-share.sh", "NEVER commit to the public mirror").
+  9. Finalise 409 `wrong_size` → B2's F-11 error states.
 - **Write-once chunks** → KV-Audit-Opus / B12-3: also sign `If-None-Match: *` into presigned PUTs so R2 refuses to overwrite an existing chunk (closes "holder of a leaked URL overwrites a chunk with same-size junk for 6 days" → download 409 / DoS, never disclosure). Needs a live R2 gate (like B12-1b) and `upload.js` treating 412 as success on resume retries (saves the re-upload).
 - **Test-Harness-1** (small): combined `npm test` failed locally 5 Oct (workerd runtimes ETIMEDOUT / refused on 127.0.0.1). **Cause: Mullvad VPN** — with it disconnected the suite is clean (639 passed, 10 s); CI (Node 22) green throughout. Local network sharing was already on, so it is not that setting — workaround: disconnect Mullvad while running the suite (or run files singly). Not code. Still open: under `singleWorker: true`, `delete_resume` + `dock_b12` bearer-delete tests fail from cross-file state (pre-existing). Also remove unused `MIME_DENYLIST` (Share-MIME-1).
 
 **Added Cred-Fix-2b (5 Oct 2026):**
-- **Share-Upload-2:** Turnstile console warning "Unable to find onload callback 'onTurnstileLoad'…" — harmless race (deferred `api.js?onload=onTurnstileLoad` in `src/index.njk:13` runs before `upload.js` sets the callback; `renderTurnstile` polls for `window.turnstile`). Fix: drop `?onload=`.
+- **Share-Upload-3 (B2, U-10):** Turnstile console warning "Unable to find onload callback 'onTurnstileLoad'…" — drop `?onload=` (and `initTurnstile`'s export) when the check goes `interaction-only`.
 - **Vendor cleanup** (small, both repos): `frontend/noble-secp256k1.js` is no longer imported (credentials use `frontend/cashu-crypto.js`). Remove it from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in one ship — the sync never deletes from the mirror.
 - **cashu-ts upgrades:** bump `worker/package.json` and `bin/vendor-cashu/package.json` together, then `bin/vendor-cashu.sh` + ship + deploy. Browser and Worker must run the same version.
 - **DLEQ key pin** (B7/B8, anonymous rail): the browser checks the DLEQ proof against the key in the same response, not a pinned key (Rajesh, 5 Oct). Pin when credentials are bought separately from transfers.
@@ -297,6 +288,16 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Acceptance receipt never emitted:** `index.js` says `cargo.accepted` moved to `/finalise`, but `finalise.js` never emits it — only `cargo.discharged` is sent. Contradicts MCP spec (acceptance immediately). → MCP-Fix-1 or the next API session.
 - **Navy Office "R2 bytes uploaded (90d)" is dead:** it sums `double5` on `upload` AE events, which stopped at Share-6-6b (Worker-relay path retired). Replace (e.g. R2 bucket metrics) or remove → refueler-io.
 
+**Added Share-Upload-2 (6 Oct 2026) — receiver page, agreed by Rajesh (order of value); A/B mock iterations first, then a download-side session:**
+1. **"How this worked"** — quiet link under the ledger on the ready card *and* the finished screen, opens three lines: encrypted in the sender's browser before upload · the key was in your link and never sent to Refueler · (DAD only) the stored copy is now deleted. Facts on request, not a tagline (R-4 holds).
+2. **Notes card unboxed** — hairline rule above the label instead of a box, so it reads as editorial, not an ad slot; the send line stays last.
+3. **"Received" ledger row** on the finished screen — exact local date + time, labelled as the recipient's clock; nothing new reaches the Worker.
+
+**Added Share-Upload-2 (6 Oct 2026):**
+- **Share-Upload-3 (B2):** after every `setView()` change, bring the top of the sheet into view (on phones the % sat under the header, eyebrow + headline scrolled off; desktop "link ready" too). Rajesh to eyeball it over a week of tests.
+- **Share-Receiver-3 (own session, A/B brand mock rounds, Rajesh supplies references):** the three receiver items above, plus **link previews in mail apps** (Tutamail shows title + domain + R icon only; check Gmail, Apple Mail, Outlook, Proton, Signal/WhatsApp). One static preview for every link, DAD or not (the server can't know, and must not tell a mail provider which links are one-shot); a quiet `og:image` card + `og:description` **"A file sent with Refueler Share."** (Rajesh, 6 Oct: no "Open the link…" line, it reads like spam); the "works once" message belongs in the sender's own words (link-ready line). Invariant to keep: a page load never starts a download (mail scanners and preview bots open links). Also the receiver password input is 15 px (iOS zooms) → 16 px.
+- **iOS folder picking** works via long-press in Files; "or a folder" stays on iOS (Rajesh).
+
 **Ideas, parked (no build slot):**
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
 - **S-081** Recipient declaration at link creation: one person (keypair, ≤3 devices) / team (shared secret, counter) / one-time. UI says "access key". Overlaps B8 Mode 2.
@@ -305,8 +306,6 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **S-103** `cdk-dart` as a future mobile client.
 
 **Resolved on import (repo wins):**
-- **S-005** `@refueler/mcp-server` not on npm (404, 28 Sep): hold the publish until MCP-Fix-1 (CLAUDE.md updated).
-- **S-032/S-033/S-099** Durable Objects / Queues backlog: rejected by the CLAUDE.md lock unless an Opus reopens it.
 - **S-065** Lodge/Collect register stays for internal/whitepaper use; UI copy uses plain words (R-3 "Download", "lodged" dropped).
 - **S-052** Sovereign portability via Signal/SimpleX QR: superseded by B12-SR QR pairing with a 6-digit check code.
 - **S-142** Harbourmaster = Chartered client surface at reduced resolution (B12 spec), never in the public menu. BRIDGE v9.6 "Navy Office view" wording is stale → next BRIDGE bump.
