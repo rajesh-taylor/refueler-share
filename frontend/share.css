@@ -1,171 +1,22 @@
 /* ── share.css — extracted from src/index.njk at S51 ─────────────────────── */
 /* DO NOT edit inline CSS in index.njk — edit this file only.                 */
 
+
 /* ── Layout ─────────────────────────────────────────────────────── */
 .shell {
   min-height: calc(100vh - 56px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 48px 20px 80px;
+  padding: clamp(36px, 7vh, 64px) 16px 72px;
 }
 main {
   width: 100%;
-  max-width: 560px;
+  max-width: 520px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
-/* ── Info card ───────────────────────────────────────────────────── */
-.info-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--fg);
-}
-.info-card .info-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-.info-card > span:not(.info-icon) {
-  font-family: var(--sans);
-  font-weight: 400;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--fg);
-}
-
-/* ── Drop zone ───────────────────────────────────────────────────── */
-.drop-zone {
-  background: var(--card-bg);
-  border: 1px solid var(--border-mid);
-  border-radius: var(--radius);
-  padding: 56px 24px;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
-  position: relative;
-}
-.drop-zone:hover,
-.drop-zone.drag-over {
-  border-color: var(--fg-muted);
-  background: var(--drop-hover-bg);
-}
-/* S56: file inputs moved outside drop zone — no absolute positioning needed.  */
-/* The invisible full-area input was intercepting drag events + button clicks. */
-.drop-icon {
-  font-size: 28px;
-  margin-bottom: 14px;
-  opacity: 0.35;
-  line-height: 1;
-  color: var(--fg);
-}
-.drop-label {
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 16px;
-  color: var(--fg);
-  margin-bottom: 6px;
-}
-.drop-sub { font-size: 13px; color: var(--fg-muted); }
-
-/* ── Toggle switch ───────────────────────────────────────────────── */
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.toggle-label { font-size: 13px; color: var(--fg); }
-.toggle-desc { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 38px; height: 21px;
-  flex-shrink: 0;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute; inset: 0;
-  background: var(--tag-bg);
-  border: 1px solid var(--input-border);
-  border-radius: 21px;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-.slider::before {
-  content: '';
-  position: absolute;
-  width: 15px; height: 15px;
-  left: 2px; top: 2px;
-  background: var(--fg-subtle);
-  border-radius: 50%;
-  transition: transform 0.2s, background 0.2s;
-}
-.switch input:checked + .slider { background: var(--fg); border-color: var(--fg); }
-.switch input:checked + .slider::before { transform: translateX(17px); background: var(--bg); }
-
-/* ── Progress ────────────────────────────────────────────────────── */
-.progress-bar-wrap {
-  background: var(--card-border);
-  border-radius: 2px;
-  height: 2px;
-  overflow: hidden;
-  margin-top: 10px;
-}
-.progress-bar {
-  height: 100%;
-  background: var(--fg);
-  border-radius: 2px;
-  width: 0%;
-  transition: width 0.3s linear;
-}
-.progress-label {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--fg-muted);
-  margin-top: 6px;
-}
-
-/* ── Share link panel ────────────────────────────────────────────── */
-.link-box {
-  background: var(--link-box-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius);
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 12px 14px;
-  word-break: break-all;
-  color: var(--fg-muted);
-  margin-top: 10px;
-  line-height: 1.6;
-}
-#qr-wrap { margin-top: 16px; display: flex; justify-content: center; }
-#qr-wrap svg { border-radius: 4px; width: 200px; height: 200px; display: block; }
-
-/* ── Share panel button row ─────────────────────────────────────── */
-.share-btn-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  width: 100%;
-}
-.share-btn-row .btn { width: 100%; justify-content: center; }
-
-/* ── Upgrade nudge links ─────────────────────────────────────────── */
-.upgrade-nudge-link {
-  color: var(--accent-action);
-  text-decoration: none;
-  font-weight: 500;
-}
-.upgrade-nudge-link:hover { text-decoration: underline; }
-
-/* ── Turnstile ───────────────────────────────────────────────────── */
-.turnstile-wrap { display: flex; justify-content: flex-start; }
-.turnstile-wrap > div { width: 100%; max-width: 100%; }
 
 /* ── Download compatibility warning ─────────────────────────────────── */
 .dl-compat-warn {
@@ -191,45 +42,6 @@ main {
 }
 .dl-compat-warn strong { font-weight: 500; }
 
-/* ── Drop zone button row — Browse file + Upload folder side by side ─────── */
-/* S56: two buttons, flex row, centred. No z-index needed — inputs are now    */
-/* outside the drop zone entirely and cannot intercept clicks.                 */
-.drop-folder-row {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  position: relative;
-}
-.drop-folder-row .btn-sm {
-  font-size: 12px;
-  padding: 5px 12px;
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
-}
-
-/* ── Zip progress card ───────────────────────────────────────────── */
-#zip-progress-card {
-  /* inherits .card styles from shared-styles */
-}
-#zip-progress-card .progress-bar {
-  background: var(--accent);  /* gold — distinct from the upload bar (--fg) */
-  transition: width 0.2s linear;
-}
-
-/* ── Drop zone multi-file rejection ─────────────────────────────── */
-#drop-multi-msg {
-  font-size: 13px;
-  color: var(--c-amber);
-  text-align: center;
-  padding: 8px 0 0;
-  font-family: var(--sans);
-}
-
-@media (max-width: 600px) {
-  .drop-zone { padding: 40px 16px; }
-}
-
 /* ── Maintenance modal ───────────────────────────────────────────── */
 #maint-modal {
   position: fixed;
@@ -242,7 +54,7 @@ main {
   padding: 20px;
 }
 .maint-modal-card {
-  background: var(--card-bg);
+  background: var(--surface);
   border-radius: 12px;
   border-top: 3px solid var(--accent);
   max-width: 480px;
@@ -275,7 +87,7 @@ main {
 /* Border uses --gold (#C8A96E). No dismiss — it is a state indicator.  */
 .destroy-notice {
   border-left: 3px solid var(--gold, #C8A96E);
-  background: var(--card-bg);
+  background: var(--surface);
   padding: 10px 14px;
   font-family: var(--mono);
   font-size: 13px;
@@ -293,7 +105,7 @@ main {
 /* Paid-tier only — hidden for Citizen by JS. IBM Plex Mono inputs.   */
 .tidal-window {
   margin-top: 16px;
-  border-top: 1px solid var(--card-border);
+  border-top: 1px solid var(--border);
   padding-top: 14px;
 }
 .tidal-heading {
@@ -323,7 +135,7 @@ main {
   font-family: var(--mono);
   font-size: 13px;
   color: var(--fg);
-  background: var(--card-bg);
+  background: var(--surface);
   border: 1px solid var(--input-border, var(--border-mid));
   border-radius: var(--radius);
   padding: 7px 10px;
@@ -362,7 +174,7 @@ main {
 }
 .pre-dl-modal-card {
   background: var(--bg);                 /* solid — --card-bg is 4 % alpha and vanished on the scrim */
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--border);
   border-radius: 12px;
   max-width: 460px;
   width: 100%;
@@ -392,69 +204,168 @@ main {
   margin: 0 0 8px;
 }
 
-/* ── Info card dismiss button ────────────────────────────────────────── */
-.info-card-dismiss {
-  background: none;
-  border: none;
+/* ── Sender (Share-Upload-2) ─────────────────────────────────────────────────── */
+/* Design: docs/drafts/share-upload-mock-v3.html (U-1…U-11). The sender uses the     */
+/* receiver's parts (.rx-eyebrow, .rx-head, .rx-ledger, .rx-btn, .rx-measure …);     */
+/* the classes below are only what the upload page adds. share.js setView() sets     */
+/* data-view on #upload-sheet; each part shows for its views only.                   */
+.up-sheet .up-for-empty, .up-sheet .up-for-file, .up-sheet .up-for-zipping,
+.up-sheet .up-for-chosen, .up-sheet .up-for-over, .up-sheet .up-for-uploading,
+.up-sheet .up-for-ready, .up-sheet .up-for-stopped { display: none; }
+.up-sheet[data-view="empty"] .up-for-empty,
+.up-sheet:is([data-view="zipping"], [data-view="chosen"], [data-view="over"]) .up-for-file,
+.up-sheet[data-view="zipping"] .up-for-zipping,
+.up-sheet[data-view="chosen"] .up-for-chosen,
+.up-sheet[data-view="over"] .up-for-over,
+.up-sheet[data-view="uploading"] .up-for-uploading,
+.up-sheet[data-view="ready"] .up-for-ready,
+.up-sheet[data-view="stopped"] .up-for-stopped { display: revert; }
+.up-sheet .rx-row.up-for-chosen, .up-sheet .rx-row.up-for-zipping { display: none; }
+.up-sheet[data-view="chosen"] .rx-row.up-for-chosen,
+.up-sheet[data-view="zipping"] .rx-row.up-for-zipping { display: grid; }
+.up-sheet[data-view="zipping"] .up-not-zipping,
+.up-sheet[data-view="over"] .up-not-over { display: none; }
+/* The slip, the resume panel and messages belong to the setup views only. */
+.up-sheet:is([data-view="uploading"], [data-view="ready"], [data-view="stopped"]) :is(.up-slip, .up-panel, .up-msg) { display: none; }
+
+/* The slip (U-7): the ledger in one hairline box, the facts row at its foot. */
+.up-slip {
+  margin-top: 32px;
+  border: 1px solid var(--rx-rule-strong);
+  border-radius: 10px;
+  transition: border-color .2s, background .2s;
+}
+.up-slip .rx-ledger { margin: 0; border-top: 0; }
+.up-slip .rx-row { padding: 16px 18px; }
+.up-slip.drag-over { border-color: var(--rx-accent); background: color-mix(in srgb, var(--rx-accent) 5%, transparent); }
+.up-slip.drag-over .up-hint { color: var(--rx-accent); }
+.up-facts { margin: 0; padding: 12px 18px; font: 400 13px/1.55 var(--rx-sans); color: var(--fg-muted); }
+.up-facts span { white-space: nowrap; }
+
+.up-hint { display: none; font: 400 15px/1.45 var(--rx-sans); color: var(--fg); }
+/* The drop line only where there's a mouse or trackpad (U-8): phones get the buttons. */
+@media (hover: hover) and (pointer: fine) {
+  .up-hint { display: block; }
+  .up-pick { margin-top: 12px; }
+}
+.up-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.up-fill {
+  font: 500 13.5px var(--rx-sans);
+  letter-spacing: .02em;
+  color: var(--bg);
+  background: var(--fg);
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
   cursor: pointer;
-  color: var(--fg-subtle);
-  font-size: 16px;
-  line-height: 1;
-  padding: 0 0 0 8px;
-  flex-shrink: 0;
-  margin-left: auto;
-  transition: color 0.2s;
+  transition: opacity .2s;
 }
-.info-card-dismiss:hover { color: var(--fg); }
-
-/* ── Share subnav — Plans · Status below drop zone (HQ2) ─────────────── */
-.share-subnav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.share-subnav-link {
-  font-family: var(--display);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.up-fill:hover { opacity: .88; }
+.up-link {
+  font: 400 13.5px var(--rx-sans);
   color: var(--fg-muted);
-  text-decoration: none;
-  transition: color 0.2s;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--rx-rule-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.share-subnav-link:hover { color: var(--fg); }
-.share-subnav-dot {
-  color: var(--fg-subtle);
-  font-size: 0.7rem;
+.up-link:hover { color: var(--fg); }
+.up-swap { color: var(--fg); text-decoration-color: var(--fg-muted); }
+.up-dim  { color: var(--fg-subtle); }
+.up-warn { color: var(--warn); }
+.rx-row dd small a.up-link { font-size: inherit; }
+
+/* Switch: Password, After download */
+.up-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font: 400 15px var(--rx-sans); color: var(--fg); position: relative; }
+.up-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.up-track { width: 34px; height: 20px; border-radius: 100px; border: 1px solid var(--rx-rule-strong); position: relative; flex: none; transition: background .2s, border-color .2s; }
+.up-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--fg-muted); transition: transform .2s, background .2s; }
+.up-switch input:checked + .up-track { background: var(--fg); border-color: var(--fg); }
+.up-switch input:checked + .up-track::after { transform: translateX(14px); background: var(--bg); }
+.up-switch input:focus-visible + .up-track { outline: 2px solid var(--rx-accent); outline-offset: 2px; }
+.up-pwf { margin-top: 12px; }
+.up-pwf input {
+  font: 400 16px var(--rx-sans);              /* 16 px: iOS Safari zooms the page into smaller inputs */
+  color: var(--fg);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  width: 100%;
+  outline: none;
+}
+.up-pwf input:focus { border-color: var(--fg-muted); }
+.up-pwf small { display: block; font: 300 13.5px/1.5 var(--rx-sans); color: var(--fg-muted); margin-top: 8px; }
+.up-slip .rx-once { margin-top: 12px; }
+
+.up-left, .rx-fine.up-left { text-align: left; }
+.rx-fine.up-left { margin-top: 16px; }
+.up-msg { font: 400 14px/1.5 var(--rx-sans); color: var(--warn); margin: 16px 0 0; }
+
+/* Turnstile: shown with a line saying what it is. Hidden-unless-needed + full width (U-10): B2. */
+.up-check { margin-top: 24px; }
+.up-check .rx-fine { margin: 0 0 10px; }
+
+.rx-btn.up-ghost { background: none; color: var(--fg); border: 1px solid var(--rx-rule-strong); }
+.up-btnrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+
+/* Resume panel */
+.up-panel { border: 1px solid var(--rx-rule-strong); border-radius: 10px; padding: 20px 22px; margin-top: 32px; }
+.up-panel .rx-eyebrow { margin-bottom: 12px; }
+.up-panel-title { font: 400 17px/1.4 var(--rx-sans); color: var(--fg); margin: 0; }
+.up-panel .rx-ledger { margin-top: 14px; }
+.up-panel .up-btnrow { margin-top: 20px; }
+.up-panel + .up-slip { margin-top: 16px; }
+
+/* Zipping row: a small measure inside the ledger */
+.up-slip .rx-track { margin: 10px 0 8px; }
+.up-slip .rx-readout { font-size: 13px; }
+
+/* Link ready */
+.up-linkbox {
+  font: 400 13.5px/1.55 var(--rx-sans);
+  color: var(--fg);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+  user-select: all;
+  margin-top: 28px;
+}
+/* U-9: a light tile in both themes; share.js sizes the canvas in whole pixels per module. */
+.up-qr { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 22px; }
+.up-qr[hidden] { display: none; }
+.up-qr canvas { display: block; border-radius: 8px; image-rendering: pixelated; }
+.up-qr p { font: 300 13.5px/1.5 var(--rx-sans); color: var(--fg-muted); margin: 0; max-width: 34ch; text-align: center; }
+#share-ledger:empty { display: none; }
+.rx-send-wrap .rx-send { background: none; border: 0; padding: 0; cursor: pointer; }
+.up-sheet .rx-send-wrap { margin-top: 40px; }
+
+/* Phone: label above value; picker button full width (U-8). */
+@media (max-width: 440px) {
+  .up-slip .rx-row { padding: 14px 16px; }
+  .up-facts { padding: 12px 16px; }
+  .up-fill { flex: 1 1 100%; padding: 13px 16px; font-size: 14px; }
+  .up-pick .up-link { margin-inline: auto; }
+  .up-panel { padding: 18px 16px; }
 }
 
-/* ── HTTP/3 whisper + badge — below shell, above footer (HQ2) ───────── */
-.http3-whisper {
-  width: 100%;
-  text-align: center;
-  padding: 12px 20px 4px;
-}
-.http3-whisper-text {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--fg-subtle);
-  letter-spacing: 0.04em;
-}
-[data-refueler-badge] {
-  display: flex;
-  justify-content: center;
-  padding: 4px 20px 16px;
-}
+/* F-23: a Share link keeps the upload sheet and sub-menu hidden until share.js knows the mode. */
+.rx-pending #upload-sheet, .rx-pending .section-nav { display: none !important; }
+
 
 /* ── Receiver page (Share-Receiver-2a) ──────────────────────────────────────── */
 /* Design: docs/drafts/share-receiver-mock-v5.html. Build list N-2a items 1–9.  */
 /* .rx-mode is set on <html> by download.js on a Share link.                    */
 /* Fonts and the two rule weights are set here, not borrowed: the live page     */
 /* loads refueler.io global.css, which has no --mono / --serif (share-tokens.css */
-/* is not loaded there). Colours use tokens both files define.                  */
-.rx-mode {
+/* is not loaded there). Colours use tokens both files define. Page-wide since  */
+/* Share-Upload-2: the sender uses them too (F-6).                              */
+:root {
   --rx-serif: 'Source Serif 4', Georgia, serif;
   --rx-sans:  'DM Sans', system-ui, sans-serif;
   --rx-mono:  'IBM Plex Mono', ui-monospace, Menlo, monospace;
@@ -463,7 +374,7 @@ main {
   --rx-danger:      #B83A3A;
   --rx-accent:      #9A7A3E;
 }
-.rx-mode[data-theme="carbon"] {
+[data-theme="carbon"] {
   --rx-rule:        rgba(245,240,232,0.10);
   --rx-rule-strong: rgba(245,240,232,0.22);
   --rx-danger:      #E05252;
@@ -476,25 +387,11 @@ main {
 .rx-mode .site-nav > a,
 .rx-mode .nav-hamburger,
 .rx-mode .nav-drawer,
-.rx-mode .share-subnav,
-.rx-mode .http3-whisper,
-.rx-mode [data-refueler-badge] { display: none !important; }
-
-/* "/ Share" in the wordmark: between 961 and ~1000 px the full site nav (8 links +
-   pill) and the longer wordmark don't fit, and the header runs off the page (below
-   960 the nav drops links). Hide "/ Share" there on the upload page; the receiver has no nav. */
-@media (min-width: 961px) and (max-width: 1040px) {
-  html:not(.rx-mode) .site-header .wordmark-divider,
-  html:not(.rx-mode) .site-header .wordmark-section { display: none; }
-}
-/* At ≤640 px global.css keeps only the active nav link: here "Share", which the
-   wordmark already says ("Refueler / Share"). They ran together as "ShareSHARE". */
-@media (max-width: 640px) {
-  html:not(.rx-mode) .site-nav > a.active { display: none; }
-}
+.rx-mode .section-nav,
+.rx-mode #upload-sheet { display: none !important; }
 
 .rx-mode .shell { padding: clamp(40px, 9vh, 88px) 16px 56px; }
-.rx-mode main { max-width: 480px; gap: 0; }
+.rx-mode main { max-width: 480px; }
 
 .rx-sheet { display: flex; flex-direction: column; width: 100%; }
 

@@ -13,7 +13,7 @@
 // Legacy fallback: pre-v1 links used #uuid=X&key=Y&iv=Z — handled transparently.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { WORKER_URL }                                   from './crypto.js';
+import { WORKER_URL, FREE_EXPIRY }                      from './crypto.js';
 import { parseFragment as parseFragmentV1 }             from './fragment.js';
 import { enterUploadMode, checkResumeState }            from './upload.js';
 import { enterDownloadMode }                            from './download.js';
@@ -37,7 +37,19 @@ const state = {
 const $ = id => document.getElementById(id);
 
 const domRefs = {
-  infoCard:         $('info-card'),
+  uploadSheet:      $('upload-sheet'),
+  upEyebrow:        $('up-eyebrow'),
+  upHead:           $('up-head'),
+  upFileLabel:      $('up-file-label'),
+  upFileNote:       $('up-file-note'),
+  upHint:           $('up-hint'),
+  upUntil:          $('up-until'),
+  upUntilNote:      $('up-until-note'),
+  upStoppedText:    $('up-stopped-text'),
+  upRestartBtn:     $('up-restart-btn'),
+  chooseAnotherBtn: $('choose-another-btn'),
+  overAnotherBtn:   $('over-another-btn'),
+  fileBtn:          $('file-btn'),
   dropZone:         $('drop-zone'),
   fileInput:        $('file-input'),
   capWarning:       $('cap-warning'),
@@ -47,17 +59,23 @@ const domRefs = {
   passphraseToggle: $('passphrase-toggle'),
   passphraseWrap:   $('passphrase-field-wrap'),
   passphraseInput:  $('passphrase-input'),
+  destroyToggle:    $('destroy-after-download'),
+  destroyNotice:    $('destroy-notice'),
+  paidOptions:      $('paid-options'),
   uploadBtn:        $('upload-btn'),
   progressCard:     $('progress-card'),
-  stageTag:         $('progress-stage-tag'),
   progressPct:      $('progress-pct'),
+  progressTrack:    $('progress-track'),
   progressBar:      $('progress-bar'),
   progressDetail:   $('progress-detail'),
   shareCard:        $('share-card'),
   shareLinkDisplay: $('share-link-display'),
+  shareLedger:      $('share-ledger'),
   copyBtn:          $('copy-btn'),
+  qrBtn:            $('qr-btn'),
   newUploadBtn:     $('new-upload-btn'),
   qrWrap:           $('qr-wrap'),
+  qrCanvas:         $('qr-canvas'),
   unlockScreen:     $('unlock-screen'),
   unlockInput:      $('unlock-input'),
   unlockError:      $('unlock-error'),
@@ -71,7 +89,6 @@ const domRefs = {
   folderInput:      $('folder-input'),
   folderBtn:        $('folder-btn'),
   zipProgressCard:  $('zip-progress-card'),
-  zipStageTag:      $('zip-stage-tag'),
   zipPct:           $('zip-pct'),
   zipBar:           $('zip-bar'),
   zipDetail:        $('zip-detail'),
@@ -87,6 +104,9 @@ const domRefs = {
   uspBlock:         $('usp-block'),
   uspText:          $('usp-text'),
   resumeCard:       $('resume-card'),
+  resumeFile:       $('resume-file'),
+  resumeUploaded:   $('resume-uploaded'),
+  resumeTitle:      $('resume-title'),
   resumeDetail:     $('resume-detail'),
   resumeDiscardBtn: $('resume-discard-btn'),
   resumeNoticeBtn:  $('resume-notice-btn'),
@@ -103,16 +123,47 @@ function formatBytes(b) {
   return (b / 1024 ** 3).toFixed(2) + ' GB';
 }
 
-function setStage(label, pct) {
-  domRefs.stageTag.textContent    = label;
-  domRefs.progressPct.textContent = pct + '%';
-  domRefs.progressBar.style.width = pct + '%';
+// ── Sender sheet (Share-Upload-2) ─────────────────────────────────────────────
+// One sheet, one view at a time; share.css shows the parts for data-view.
+// Eyebrow + headline per view (build list §1); callers may override either.
+const PAGE_TITLE = document.title;
+const VIEWS = {
+  empty:     ['New transfer',  'Send a file.'],
+  zipping:   ['Preparing',     'Zipping your folder.'],
+  chosen:    ['Ready to send', 'Send a file.'],
+  over:      ['Too large',     'This file is over 4 GB.'],
+  uploading: ['Preparing',     'Uploading.'],
+  ready:     ['Link ready',    'Your link is ready.'],
+  stopped:   ['Stopped',       'The upload stopped.'],
+};
+
+function setView(view, { eyebrow, head } = {}) {
+  const [e, h] = VIEWS[view];
+  domRefs.uploadSheet.dataset.view = view;
+  domRefs.upEyebrow.textContent = eyebrow || e;
+  domRefs.upHead.textContent    = head || h;
+  if (view !== 'uploading') document.title = PAGE_TITLE;
 }
 
+// "Stopped" with a plain sentence. F-11 (catching every failure, "Try again") is Share-Upload-2 B2.
+function showStopped(text) {
+  domRefs.upStoppedText.textContent = text;
+  setView('stopped');
+}
+
+// Stage word in the eyebrow: Preparing · Encrypting and uploading · Finishing.
+function setStage(label) {
+  domRefs.upEyebrow.textContent = label;
+}
+
+// Bytes-based: setup steps don't move the bar (C4). The tab title shows the %, never the file name.
 function setProgress(pct, detail) {
-  domRefs.progressPct.textContent    = pct + '%';
-  domRefs.progressBar.style.width    = pct + '%';
-  domRefs.progressDetail.textContent = detail;
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  domRefs.progressPct.textContent = String(p);
+  domRefs.progressBar.style.width = p + '%';
+  domRefs.progressTrack.setAttribute('aria-valuenow', String(p));
+  if (detail !== undefined) domRefs.progressDetail.textContent = detail;
+  document.title = `${p}% · Refueler Share`;
 }
 
 function setDropMsg(msg) {
@@ -125,19 +176,22 @@ function clearDropMsg() {
   domRefs.dropMultiMsg.textContent = '';
 }
 
-function showZipStage(label, pct, detail) {
-  domRefs.zipProgressCard.classList.remove('hidden');
-  domRefs.zipStageTag.textContent = label;
-  domRefs.zipPct.textContent      = pct + '%';
-  domRefs.zipBar.style.width      = pct + '%';
-  domRefs.zipDetail.textContent   = detail || '';
+function showZipStage(_label, pct, detail) {
+  domRefs.zipPct.textContent    = pct + '%';
+  domRefs.zipBar.style.width    = pct + '%';
+  domRefs.zipDetail.textContent = detail || '';
 }
 
 function hideZipCard() {
-  domRefs.zipProgressCard.classList.add('hidden');
-  domRefs.zipBar.style.width  = '0%';
-  domRefs.zipPct.textContent  = '0%';
+  domRefs.zipBar.style.width    = '0%';
+  domRefs.zipPct.textContent    = '';
   domRefs.zipDetail.textContent = '';
+}
+
+// R-5: exact local date + time ("Tue 13 Oct, 17:42").
+function formatWhen(d) {
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
 // reportError — fire-and-forget, never blocks flow, never surfaces to user (S36b)
@@ -156,40 +210,65 @@ function reportError(context, message, detail) {
   } catch {}
 }
 
-function showSharePanel(url, isProtected) {
-  domRefs.shareCard.classList.remove('hidden');
+// Link ready: link first, then the details (U-9 QR on request).
+// info = { fileName, isFolder, sizeBytes, expiryTimestamp, isProtected, destroyAfterDownload };
+// anything unknown (a resumed upload doesn't record the password or delete setting) is left out.
+function showSharePanel(url, info = {}) {
   domRefs.shareLinkDisplay.textContent = url;
-  if (isProtected) {
-    const note = document.createElement('p');
-    note.className = 'muted small mt8';
-    note.textContent = '🔐 Password protected — share the password separately.';
-    domRefs.shareLinkDisplay.insertAdjacentElement('afterend', note);
+  const rows = [];
+  const row = (label, value, note) => {
+    const div = document.createElement('div'); div.className = 'rx-row';
+    const dt = document.createElement('dt'); dt.textContent = label;
+    const dd = document.createElement('dd'); dd.textContent = value;
+    if (note) { const sm = document.createElement('small'); sm.textContent = note; dd.appendChild(sm); }
+    div.append(dt, dd); rows.push(div);
+  };
+  if (info.fileName) row(info.isFolder ? 'Folder' : 'File', info.fileName);
+  if (info.sizeBytes) row('Size', formatBytes(info.sizeBytes));
+  if (info.expiryTimestamp) {
+    const days = Math.round((info.expiryTimestamp * 1000 - Date.now()) / 86400000);
+    row('Available until', formatWhen(new Date(info.expiryTimestamp * 1000)), days > 1 ? `in ${days} days` : '');
   }
-  domRefs.qrWrap.innerHTML = '';
-  if (typeof QrCreator !== 'undefined') {
-    _renderQr(url);
-  }
+  if (info.isProtected) row('Password', 'Needed to download', 'Send it separately from the link.');
+  if (info.destroyAfterDownload) row('After download', 'The link works once');
+  domRefs.shareLedger.replaceChildren(...rows);
+  domRefs.qrWrap.hidden = true;
+  domRefs.qrBtn.textContent = 'Show QR code';
+  domRefs.qrBtn.setAttribute('aria-expanded', 'false');
+  domRefs.qrBtn.hidden = typeof QrCreator === 'undefined';
+  setView('ready');
 }
 
+// U-9 / F-16 / F-19: dark modules on a light tile in both themes, drawn sharp —
+// whole CSS pixels per module, canvas at CSS × devicePixelRatio. QrCreator only
+// draws into a <canvas> (given an <svg> it drew nothing: F-19).
 function _renderQr(url) {
-  const isDark = document.documentElement.dataset.theme === 'carbon';
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  domRefs.qrWrap.appendChild(svg);
-  QrCreator.render({
-    text: url, radius: 0, ecLevel: 'M',
-    fill:       isDark ? '#F7F4EF' : '#3D3A36',
-    background: isDark ? '#111316' : '#F7F4EF',
-    size: 200,
-  }, svg);
+  const opts = { text: url, radius: 0, ecLevel: 'M', quiet: 0 };
+  // Module count: draw once, measure the top-left finder (7 modules wide), snap to 17 + 4v.
+  const probe = document.createElement('canvas');
+  QrCreator.render({ ...opts, fill: '#000', background: '#fff', size: 1000 }, probe);
+  const line = probe.getContext('2d').getImageData(0, 2, 1000, 1).data;
+  let run = 0;
+  while (run < 1000 && line[run * 4] < 128) run++;
+  const count = 17 + 4 * Math.round((1000 * 7 / run - 17) / 4);
+  const units = count + 8;                                    // 4-module light margin each side
+  const target = window.matchMedia('(max-width: 480px)').matches ? 220 : 260;
+  const mod = Math.max(2, Math.floor(target / units));
+  const side = units * mod;
+  const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+  const cv = domRefs.qrCanvas;
+  cv.style.width = cv.style.height = side + 'px';
+  QrCreator.render({ ...opts, quiet: 4, fill: '#1A1917', background: '#F5F0E8', size: side * dpr }, cv);
 }
-
-const COPY_ICON = '<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.25"/><path d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers bundle — passed to upload.js and download.js
 // ─────────────────────────────────────────────────────────────────────────────
 const helpers = {
   formatBytes,
+  formatWhen,
+  setView,
+  showStopped,
   setStage,
   setProgress,
   setDropMsg,
@@ -201,21 +280,25 @@ const helpers = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Info card dismiss
-// ─────────────────────────────────────────────────────────────────────────────
-$('dismiss-info').addEventListener('click', () => domRefs.infoCard.classList.add('hidden'));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Copy button (share card)
+// Link ready: copy, QR, send another
 // ─────────────────────────────────────────────────────────────────────────────
 domRefs.copyBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(domRefs.shareLinkDisplay.textContent).then(() => {
-    domRefs.copyBtn.innerHTML = COPY_ICON + 'Copied ✓';
-    setTimeout(() => { domRefs.copyBtn.innerHTML = COPY_ICON + 'Copy link'; }, 2000);
+    domRefs.copyBtn.textContent = 'Copied';
+    setTimeout(() => { domRefs.copyBtn.textContent = 'Copy link'; }, 2000);
   });
 });
 
+domRefs.qrBtn.addEventListener('click', () => {
+  const open = domRefs.qrWrap.hidden;
+  if (open) _renderQr(domRefs.shareLinkDisplay.textContent);
+  domRefs.qrWrap.hidden = !open;
+  domRefs.qrBtn.textContent = open ? 'Hide QR code' : 'Show QR code';
+  domRefs.qrBtn.setAttribute('aria-expanded', String(open));
+});
+
 domRefs.newUploadBtn.addEventListener('click', () => location.reload());
+domRefs.upRestartBtn.addEventListener('click', () => location.reload());
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mode detection — fragment grammar v1 (SW-MCP-4) + legacy fallback
@@ -260,8 +343,10 @@ function detectMode() {
 const detected = detectMode();
 
 if (detected) {
-  enterDownloadMode(detected, domRefs, state, helpers);
+  enterDownloadMode(detected, domRefs, state, helpers);   // sets .rx-mode before its first await
 } else {
   checkResumeState(domRefs, state, helpers).catch(() => {});
   enterUploadMode(domRefs, state, helpers);
 }
+// F-23: the mode is known; share-early.js's mark has done its job.
+document.documentElement.classList.remove('rx-pending');

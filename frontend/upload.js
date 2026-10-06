@@ -234,11 +234,12 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
   // the useful "zip it yourself" copy show instead.
   if (totalBytes > FOLDER_ZIP_CAP) {
     hideZipCard();
-    setDropMsg(`This folder is ${formatBytes(totalBytes)}. Folders are held in memory during upload and capped at 2 GB. Zip it yourself and lodge the .zip as a single file — single files stream from disk with no size limit beyond your tier ceiling.`);
+    _resetRows(domRefs); helpers.setView('empty');
+    setDropMsg(_folderTooBig(totalBytes, formatBytes));
     return;
   }
 
-  showZipStage('Compressing', 0, `0 B / ${formatBytes(totalBytes)}`);
+  showZipStage('Compressing', 0, `0 B of ${formatBytes(totalBytes)}`);
 
   const zipChunks = [];
   let bytesProcessed = 0;
@@ -272,19 +273,20 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
 
           bytesProcessed += file.size;
           const pct = Math.min(Math.round((bytesProcessed / totalBytes) * 95), 95);
-          showZipStage('Compressing', pct, `${formatBytes(bytesProcessed)} / ${formatBytes(totalBytes)}`);
+          showZipStage('Compressing', pct, `${formatBytes(bytesProcessed)} of ${formatBytes(totalBytes)}`);
           await new Promise(r => setTimeout(r, 0));
         }
         if (!zipError) {
-          showZipStage('Finalising archive', 95, 'Writing zip directory…');
+          showZipStage('Finalising archive', 95, `${formatBytes(totalBytes)} of ${formatBytes(totalBytes)}`);
           zipper.end();
         }
       } catch (e) { reject(e); }
     })();
   }).catch(err => {
     reportError('folder_zip', err.message || 'fflate error', folderName.slice(0, 100));
-    setDropMsg('Compression failed. Try again or zip the folder manually first.');
     hideZipCard();
+    _resetRows(domRefs); helpers.setView('empty');
+    setDropMsg('Zipping the folder didn’t work. Try again, or zip it yourself and send the .zip as a file.');
     return null;
   });
 
@@ -295,55 +297,38 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
   // which streams from disk with no in-RAM ceiling.
   if (zipBlob.size > FOLDER_ZIP_CAP) {
     hideZipCard();
-    setDropMsg(`This folder is ${formatBytes(zipBlob.size)} zipped. Folders are held in memory during upload and capped at 2 GB. Zip it yourself and lodge the .zip as a single file — single files stream from disk with no size limit beyond your tier ceiling.`);
+    _resetRows(domRefs); helpers.setView('empty');
+    setDropMsg(_folderTooBig(zipBlob.size, formatBytes));
     return;
   }
 
-  showZipStage('Compressing', 100, `Ready — ${formatBytes(zipBlob.size)}`);
+  showZipStage('Compressing', 100, `${formatBytes(totalBytes)} of ${formatBytes(totalBytes)}`);
   await new Promise(r => setTimeout(r, 300));
   hideZipCard();
 
   const zipFile = new File([zipBlob], zipName, { type: 'application/zip' });
-  handleFileSelection(zipFile);
+  handleFileSelection(zipFile, entries.length);
+}
+
+// Build list §1: folders over the 2 GB in-memory cap (Share-6-spec §7).
+function _folderTooBig(bytes, formatBytes) {
+  return `This folder is ${formatBytes(bytes)}. Folders can be up to 2 GB. Zip it yourself and send the .zip as a file (free up to 4 GB).`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tidal + permanent-record option injection
 // ─────────────────────────────────────────────────────────────────────────────
 function _injectTransferOptions(domRefs, transferOpts) {
-  const { uploadBtn } = domRefs;
-  const uploadBtnWrap = uploadBtn.closest('.mt16');
-  if (!uploadBtnWrap) return;
-
-  // 1. Destroy-after-download toggle
-  const destroyRow = document.createElement('div');
-  destroyRow.className = 'mt16';
-  destroyRow.id = 'destroy-toggle-row';
-  destroyRow.innerHTML = `
-    <div class="toggle-row">
-      <div>
-        <div class="toggle-label">Destroy after download</div>
-        <div class="toggle-desc">This transfer is deleted the moment it is downloaded</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="destroy-after-download" />
-        <span class="slider"></span>
-      </label>
-    </div>`;
-  uploadBtnWrap.insertAdjacentElement('beforebegin', destroyRow);
-  transferOpts.destroyToggle = document.getElementById('destroy-after-download');
-
-  // 2. Amber destroy notice
-  const notice = document.createElement('div');
-  notice.id = 'destroy-notice';
-  notice.className = 'destroy-notice hidden';
-  notice.innerHTML = `<strong>Once downloaded, the recipient cannot download again.</strong> Our servers store only encrypted data we can't read as we never hold encryption keys.`;
-  destroyRow.insertAdjacentElement('afterend', notice);
-  transferOpts.destroyNotice = notice;
-
+  // 1–2. Delete after download: static markup since Share-Upload-2 (ids kept).
+  transferOpts.destroyToggle = domRefs.destroyToggle;
+  transferOpts.destroyNotice = domRefs.destroyNotice;
   transferOpts.destroyToggle.addEventListener('change', () => {
-    notice.classList.toggle('hidden', !transferOpts.destroyToggle.checked);
+    transferOpts.destroyNotice.hidden = !transferOpts.destroyToggle.checked;
   });
+
+  // 3–5. Paid only and unreachable today (F-10): injected into #paid-options, which stays hidden.
+  const paid = domRefs.paidOptions;
+  if (!paid) return;
 
   // 3. Tidal window
   const tidal = document.createElement('div');
@@ -366,7 +351,7 @@ function _injectTransferOptions(domRefs, transferOpts) {
       </div>
     </div>
     <div id="tidal-error" class="tidal-error hidden" role="alert"></div>`;
-  notice.insertAdjacentElement('afterend', tidal);
+  paid.appendChild(tidal);
   transferOpts.tidalSection   = document.getElementById('tidal-window-section');
   transferOpts.availableFrom  = document.getElementById('available-from');
   transferOpts.availableUntil = document.getElementById('available-until');
@@ -534,11 +519,20 @@ export function enterUploadMode(domRefs, state, helpers) {
     permanentRecordToggle: null, permanentRecordNotice: null,
   };
 
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', e => {
+  // The slip takes a drop while a file can still be chosen. (Whole-page drop: Share-Upload-2 B2.)
+  const droppable = () => ['empty', 'chosen', 'over'].includes(domRefs.uploadSheet.dataset.view);
+  const dragOff = () => { dropZone.classList.remove('drag-over'); domRefs.upHint.textContent = 'Drop it anywhere on this page'; };
+  dropZone.addEventListener('dragover', e => {
+    if (!droppable()) return;
     e.preventDefault();
-    dropZone.classList.remove('drag-over');
+    dropZone.classList.add('drag-over');
+    domRefs.upHint.textContent = 'Release to add.';
+  });
+  dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dragOff(); });
+  dropZone.addEventListener('drop', e => {
+    if (!droppable()) return;
+    e.preventDefault();
+    dragOff();
     clearDropMsg();
 
     const items = e.dataTransfer.items;
@@ -549,11 +543,22 @@ export function enterUploadMode(domRefs, state, helpers) {
         return;
       }
     }
-    if (e.dataTransfer.files.length > 1) { setDropMsg('One file or one folder at a time please.'); return; }
+    if (e.dataTransfer.files.length > 1) { setDropMsg('One file or one folder at a time.'); return; }
     if (e.dataTransfer.files[0]) _handleFileSelection(e.dataTransfer.files[0], domRefs, state, helpers, transferOpts);
   });
 
-  dropZone.addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
+  // "Choose another" (U-11, simple form; keeping a passed check is B2): back to the
+  // empty rows, password and delete settings kept, focus on "Choose a file".
+  const chooseAnother = () => {
+    state.selectedFile = null;
+    clearDropMsg();
+    domRefs.capWarning.classList.add('hidden');
+    _resetRows(domRefs);
+    helpers.setView('empty');
+    domRefs.fileBtn.focus();
+  };
+  domRefs.chooseAnotherBtn.addEventListener('click', chooseAnother);
+  domRefs.overAnotherBtn.addEventListener('click', chooseAnother);
 
   fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) {
@@ -600,18 +605,30 @@ export function enterUploadMode(domRefs, state, helpers) {
 // ─────────────────────────────────────────────────────────────────────────────
 // File selection
 // ─────────────────────────────────────────────────────────────────────────────
-function _handleFileSelection(file, domRefs, state, helpers, transferOpts) {
-  const { capWarning, optionsCard, fileNameTag, fileSizeTag } = domRefs;
-  const { formatBytes, reportError } = helpers;
+function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folderFiles = 0) {
+  const { capWarning, fileNameTag, fileSizeTag } = domRefs;
+  const { formatBytes, formatWhen, setView, reportError } = helpers;
 
   state.selectedFile = file;
   state.sourceType   = 'file'; // reset: folder path sets this to 'folder' before upload
-  capWarning.classList.add('hidden');
-  optionsCard.classList.add('hidden');
-  if (file.size > FREE_CAP) { capWarning.classList.remove('hidden'); return; }
-  fileNameTag.textContent = file.name.length > 32 ? file.name.slice(0, 30) + '…' : file.name;
+  fileNameTag.textContent = file.name;
+  domRefs.upFileLabel.textContent = folderFiles ? 'Folder' : 'File';
+  domRefs.upFileNote.hidden = !folderFiles;
+  domRefs.upFileNote.textContent = folderFiles ? `${folderFiles.toLocaleString()} files, zipped in your browser` : '';
   fileSizeTag.textContent = formatBytes(file.size);
-  optionsCard.classList.remove('hidden');
+  fileSizeTag.classList.remove('up-dim');
+  if (file.size > FREE_CAP) {
+    fileSizeTag.classList.add('up-warn');
+    capWarning.classList.remove('hidden');
+    setView('over');
+    return;
+  }
+  fileSizeTag.classList.remove('up-warn');
+  capWarning.classList.add('hidden');
+  domRefs.upUntil.textContent = formatWhen(new Date(Date.now() + FREE_EXPIRY * 1000));
+  domRefs.upUntil.classList.remove('up-dim');
+  domRefs.upUntilNote.hidden = false;
+  setView('chosen');
   state.turnstileToken = null;
   const tsWrap = document.getElementById('turnstile-wrap');
   if (tsWrap) tsWrap.classList.remove('hidden');
@@ -619,63 +636,84 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts) {
   domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
 }
 
+// Back to the empty ledger ("—", "7 days after upload").
+function _resetRows(domRefs) {
+  domRefs.upFileLabel.textContent = 'File';
+  domRefs.fileNameTag.textContent = '';
+  domRefs.upFileNote.hidden = true;
+  domRefs.fileSizeTag.textContent = '—';
+  domRefs.fileSizeTag.classList.add('up-dim');
+  domRefs.fileSizeTag.classList.remove('up-warn');
+  domRefs.upUntil.textContent = '7 days after upload';
+  domRefs.upUntil.classList.add('up-dim');
+  domRefs.upUntilNote.hidden = true;
+}
+
+// Folder chosen or dropped: the File row becomes Folder and a Zipping row runs (U-7).
+function _startZipView(folderName, fileCount, domRefs, helpers) {
+  domRefs.upFileLabel.textContent = 'Folder';
+  domRefs.fileNameTag.textContent = folderName;
+  domRefs.upFileNote.hidden = !fileCount;
+  domRefs.upFileNote.textContent = fileCount ? `${fileCount.toLocaleString()} files` : '';
+  helpers.setView('zipping');
+}
+
 async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transferOpts) {
   const { setDropMsg, showZipStage, hideZipCard, reportError } = helpers;
   if (typeof fflate === 'undefined') {
-    setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
+    setDropMsg('Folders can’t be zipped in this browser. Zip it yourself and send the .zip as a file.');
     return;
   }
-  showZipStage('Gathering', 0, 'Reading folder…');
+  _startZipView(directoryEntry.name || 'folder', 0, domRefs, helpers);
+  showZipStage('Gathering', 0, 'Reading the folder…');
   let files;
   try {
     files = await readDirectoryEntry(directoryEntry);
   } catch (e) {
     reportError('folder_read', e.message, 'drag_entry');
+    hideZipCard();
+    _resetRows(domRefs); helpers.setView('empty');
     setDropMsg(e.message.includes('nested more than')
       ? e.message
-      : 'Could not read the dropped folder. Try the "Upload folder" button instead.');
-    hideZipCard();
+      : 'The dropped folder couldn’t be read. Try “or a folder” instead.');
     return;
   }
-  if (files.length === 0) { setDropMsg('That folder appears to be empty.'); hideZipCard(); return; }
+  if (files.length === 0) { hideZipCard(); _resetRows(domRefs); helpers.setView('empty'); setDropMsg('That folder is empty.'); return; }
   if (files.length > FOLDER_MAX_FILES) {
-    setDropMsg(`This folder contains ${files.length.toLocaleString()} files — the maximum is ${FOLDER_MAX_FILES.toLocaleString()}. Please zip it manually and upload the .zip file.`);
-    hideZipCard();
+    hideZipCard(); _resetRows(domRefs); helpers.setView('empty');
+    setDropMsg(_folderTooMany(files.length));
     return;
   }
-  if (files.length > FOLDER_WARN_FILES) setDropMsg(`Large folder (${files.length.toLocaleString()} files) — this may take a moment.`);
-
-  const totalUncompressedBytes = files.reduce((acc, e) => acc + (e.file.size || 0), 0);
-  if (totalUncompressedBytes > FREE_CAP) {
-    hideZipCard();
-    domRefs.capWarning.classList.remove('hidden');
-    return;
-  }
+  // Over 2 GB is refused inside zipAndSelect (before reading), with the folder copy.
 
   const folderName = directoryEntry.name || 'folder';
-  await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f) => _handleFileSelection(f, domRefs, state, helpers, transferOpts) });
+  _startZipView(folderName, files.length, domRefs, helpers);
+  await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n) });
   // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
   // setting here overwrites that after the zip+selection chain completes.
   state.sourceType = 'folder';
+}
+
+function _folderTooMany(n) {
+  return `This folder has ${n.toLocaleString()} files. Folders can have up to ${FOLDER_MAX_FILES.toLocaleString()}. Zip it yourself and send the .zip as a file.`;
 }
 
 async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpts) {
   const { setDropMsg, showZipStage, hideZipCard } = helpers;
   if (fileList.length === 0) return;
   if (typeof fflate === 'undefined') {
-    setDropMsg('Compression library unavailable. Please zip the folder manually and upload the .zip file.');
+    setDropMsg('Folders can’t be zipped in this browser. Zip it yourself and send the .zip as a file.');
     return;
   }
   if (fileList.length > FOLDER_MAX_FILES) {
-    setDropMsg(`This folder contains ${fileList.length.toLocaleString()} files — the maximum is ${FOLDER_MAX_FILES.toLocaleString()}. Please zip it manually and upload the .zip file.`);
+    setDropMsg(_folderTooMany(fileList.length));
     return;
   }
-  if (fileList.length > FOLDER_WARN_FILES) setDropMsg(`Large folder (${fileList.length.toLocaleString()} files) — this may take a moment.`);
-
-  showZipStage('Gathering', 0, `${fileList.length} file${fileList.length !== 1 ? 's' : ''} found`);
 
   const firstPath = fileList[0].webkitRelativePath || fileList[0].name;
   const folderName = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
+  _startZipView(folderName, fileList.length, domRefs, helpers);
+  showZipStage('Gathering', 0, '');
 
   const entries = fileList.map(f => {
     const rel      = f.webkitRelativePath || f.name;
@@ -683,14 +721,8 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
     return { relativePath: sanitisePath(stripped), file: f };
   }).filter(e => e.relativePath.length > 0);
 
-  const totalUncompressedBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
-  if (totalUncompressedBytes > FREE_CAP) {
-    hideZipCard();
-    domRefs.capWarning.classList.remove('hidden');
-    return;
-  }
-
-  await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f) => _handleFileSelection(f, domRefs, state, helpers, transferOpts) });
+  // Over 2 GB is refused inside zipAndSelect (before reading), with the folder copy.
+  await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n) });
   // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
   // setting here overwrites that after the zip+selection chain completes.
   state.sourceType = 'folder';
@@ -791,8 +823,7 @@ async function _loadDepsOrSay(domRefs, helpers) {
     return true;
   } catch (e) {
     helpers.reportError('load_deps', e?.name || 'Error', String(e?.message || '').slice(0, 120));
-    helpers.setStage('Stopped', 0);
-    domRefs.progressDetail.textContent = 'Share couldn’t start in this browser. Reload to try again, or use another browser.';
+    helpers.showStopped('Share couldn’t start in this browser. Reload to try again, or use another browser.');
     return false;
   }
 }
@@ -800,18 +831,19 @@ async function _loadDepsOrSay(domRefs, helpers) {
 async function startUpload(domRefs, state, helpers, transferOpts) {
   if (!state.selectedFile) return;
   const {
-    uploadBtn, optionsCard, progressCard, progressBar, progressDetail,
+    uploadBtn,
     passphraseToggle, passphraseInput,
   } = domRefs;
-  const { setStage, setProgress, formatBytes, reportError, showSharePanel } = helpers;
+  const { setStage, setProgress, formatBytes, reportError, showSharePanel, showStopped } = helpers;
 
   uploadBtn.disabled = true;
-  optionsCard.classList.add('hidden');
-  progressCard.classList.remove('hidden');
+  helpers.setView('uploading');
+  setProgress(0, `0 B of ${formatBytes(state.selectedFile.size)}`);
 
   if (!(await _loadDepsOrSay(domRefs, helpers))) return;
 
-  setStage('Generating key', 5);
+  // Stage words (build list §1): Preparing · Encrypting and uploading · Finishing.
+  setStage('Preparing');
   state.sessionAesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
   state.sessionIv     = crypto.getRandomValues(new Uint8Array(12));
   const rawKey  = await crypto.subtle.exportKey('raw', state.sessionAesKey);
@@ -820,27 +852,21 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
 
   let p2shHashHex = null;
   if (passphraseToggle.checked && passphraseInput.value.trim()) {
-    setStage('Hashing password', 8);
     p2shHashHex = await sha256Hex(new TextEncoder().encode(passphraseInput.value.trim()));
     passphraseInput.value = '';
   }
 
-  setStage('Chunking', 10);
   const chunks      = _splitChunks(state.selectedFile, CHUNK_SIZE);
   const totalChunks = chunks.length;
   const chunkHashes = [];
 
-  setStage('Credentialling', 12);
   const blinded = await generateBlindedCredential();
-  let _credPct = 12;
-  const _credTick = setInterval(() => { if (_credPct < 14) { _credPct += 0.5; progressBar.style.width = _credPct + '%'; } }, 120);
 
   const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blinded.blindedMsg, tier: 'free' }),
   });
-  clearInterval(_credTick);
 
   if (!issueRes.ok) {
     const errText = await issueRes.text();
@@ -858,14 +884,12 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   } catch (e) {
     if (!(e instanceof CredentialProofError)) throw e;
     reportError('credential_dleq', e.name, String(e.message).slice(0, 120));
-    setStage('Stopped', 0);
-    progressDetail.textContent = 'Share couldn’t get a valid upload pass. Reload to try again.';
+    showStopped('Share couldn’t get a valid upload pass. Reload to try again.');
     return;
   }
 
   _updatePaidFeaturesVisibility(issuedTier, transferOpts);
 
-  setStage('Uploading', 15);
   const expiryTimestamp = Math.floor(Date.now() / 1000) + FREE_EXPIRY;
 
   const destroyAfterDownload = transferOpts.destroyToggle && transferOpts.destroyToggle.checked ? '1' : null;
@@ -876,8 +900,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   if (tidalErr) {
     _showTidalError(tidalErr, transferOpts);
     uploadBtn.disabled = false;
-    optionsCard.classList.remove('hidden');
-    progressCard.classList.add('hidden');
+    helpers.setView('chosen');
     return;
   }
 
@@ -889,8 +912,6 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   const blake3PlaintextHash = wantsPermanentRecord ? blake3CreateHash() : null;
 
   // ── Direct-to-R2 upload path (Share-6-6b: only path) ─────────────────────
-
-    setStage('Initiating', 15);
 
     // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
     const initiateHeaders = {
@@ -936,7 +957,8 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     }
     const urlLimit = tailUrl ? totalChunks - 1 : totalChunks; // /urls serves indices < urlLimit
 
-    setStage('Uploading', 18);
+    setStage('Encrypting and uploading');
+    const totalBytes = state.selectedFile.size;
 
     for (let i = 0; i < totalChunks; i++) {
       // Fetch the next URL batch on demand (chunks > 256)
@@ -982,14 +1004,15 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
         sourceType: state.sourceType || 'file', // Part C: folder detection for FOLDER-RESUME discard
       }, reportError).catch(() => {});
 
-      setProgress(Math.round(((i + 1) / totalChunks) * 77) + 18, `${i + 1} / ${totalChunks} chunks`);
+      const sentBytes = Math.min((i + 1) * CHUNK_SIZE, totalBytes);
+      setProgress(sentBytes / totalBytes * 100, `${formatBytes(sentBytes)} of ${formatBytes(totalBytes)}`);
     }
 
     clearResumeState(state.uploadUUID, reportError).catch(() => {});
 
     let permanentRecordOk = false;
     if (wantsPermanentRecord && blake3PlaintextHash && sealNonceHex) {
-      setStage('Anchoring to Bitcoin', 97);
+      setStage('Finishing');
       const blake3PlaintextRoot = blake3PlaintextHash.digest('hex');
       const prResult = await runPermanentRecord(state.uploadUUID, blake3PlaintextRoot, sealNonceHex, state.sessionAesKey);
       permanentRecordOk = prResult.ok;
@@ -1004,7 +1027,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     // session IV (NONCE trap): the leaves must equal BLAKE3 of the exact stored
     // bytes the Worker re-hashes at download, or every transfer 409-walls at 6-5.
     // This is the ciphertext root ONLY — never blake3PlaintextRoot above (TWO ROOTS).
-    setStage('Finalising', 98);
+    setStage('Finishing');
 
     const leaves = chunkHashes.map(hex => new Uint8Array(hexToBuf(hex)));
     const { root: merkleRootBytes } = buildMerkleTree(leaves);
@@ -1023,7 +1046,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
       });
     } catch (e) {
       reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${state.uploadUUID.slice(0, 8)}`);
-      progressDetail.textContent = 'Finalise failed (network) — transfer not complete. Please try again.';
+      showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
       return; // no share URL for an unfinalised transfer
     }
 
@@ -1031,24 +1054,21 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
       let missing = [];
       try { missing = (await finRes.json()).missing || []; } catch { /* not JSON */ }
       reportError('finalise_incomplete', `${missing.length} missing: ${missing.slice(0, 20).join(',')}`, `uuid:${state.uploadUUID.slice(0, 8)}`);
-      progressDetail.textContent = `Finalise failed — ${missing.length} chunk(s) missing at storage. Transfer not complete.`;
+      showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
       return; // no share URL
     }
 
     if (!finRes.ok) {
       const txt = await finRes.text().catch(() => '');
       reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${state.uploadUUID.slice(0, 8)} ${txt.slice(0, 120)}`);
-      progressDetail.textContent = `Finalise failed (HTTP ${finRes.status}) — transfer not complete. Please try again.`;
+      showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
       return; // no share URL
     }
 
     // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
-    setStage('Done', 100);
-    progressDetail.textContent = wantsPermanentRecord
-      ? (permanentRecordOk ? 'Transfer complete — date seal submitted ✓' : 'Transfer complete — date seal failed (transfer still available)')
-      : 'Transfer complete';
-    await new Promise(r => setTimeout(r, 700));
-    progressCard.classList.add('hidden');
+    // (permanentRecordOk: paid only, unreachable today, F-10 — reported above, not shown.)
+    setProgress(100);
+    await new Promise(r => setTimeout(r, 500));
 
     const keyBytesRaw2 = new Uint8Array(await crypto.subtle.exportKey('raw', state.sessionAesKey));
     const fragmentBlob2 = assembleFragment({
@@ -1060,7 +1080,11 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     });
     const shareUrl2 = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob2}`;
     history.replaceState(null, '', location.pathname);
-    showSharePanel(shareUrl2, !!p2shHashHex);
+    showSharePanel(shareUrl2, {
+      fileName: state.selectedFile.name, isFolder: state.sourceType === 'folder',
+      sizeBytes: state.selectedFile.size, expiryTimestamp,
+      isProtected: !!p2shHashHex, destroyAfterDownload: !!destroyAfterDownload,
+    });
     return;
 
 }
@@ -1085,7 +1109,7 @@ export async function checkResumeState(domRefs, state, helpers) {
     if (resumeCard) resumeCard.classList.add('hidden');
     if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
     if (typeof helpers.setDropMsg === 'function') {
-      helpers.setDropMsg('Folder uploads cannot be resumed — please start a new upload.');
+      helpers.setDropMsg('A folder upload didn’t finish. Folders can’t be resumed, so start again.');
     }
     return;
   }
@@ -1103,12 +1127,11 @@ export async function checkResumeState(domRefs, state, helpers) {
   const { resumeCard, resumeDetail, resumeDiscardBtn, resumeNoticeBtn } = domRefs;
   const { formatBytes } = helpers;
 
-  const pct    = Math.round((record.chunkIndex + 1) / record.totalChunks * 100);
-  const detail = `${record.fileName} — ${pct}% uploaded (chunk ${record.chunkIndex + 1} of ${record.totalChunks}, ${formatBytes(record.fileSize)})`;
-  if (resumeDetail) resumeDetail.textContent = detail;
-
-  const resumeNote = document.getElementById('resume-note');
-  if (resumeNote) resumeNote.classList.remove('hidden');
+  const sentBytes = Math.min((record.chunkIndex + 1) * CHUNK_SIZE, record.fileSize);
+  const pct       = Math.round(sentBytes / record.fileSize * 100);
+  domRefs.resumeFile.textContent = record.fileName;
+  domRefs.resumeUploaded.replaceChildren(`${pct}%`, Object.assign(document.createElement('small'),
+    { textContent: `${formatBytes(sentBytes)} of ${formatBytes(record.fileSize)}` }));
   if (resumeCard) resumeCard.classList.remove('hidden');
 
   if (resumeDiscardBtn) {
@@ -1119,7 +1142,7 @@ export async function checkResumeState(domRefs, state, helpers) {
   }
 
   if (expired) {
-    if (resumeDetail) resumeDetail.textContent = `${record.fileName} — transfer window has expired. Discard and start a new transfer.`;
+    if (resumeDetail) resumeDetail.textContent = 'It’s too late to carry on: the upload window has closed. Discard it and start again.';
     if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
     return;
   }
@@ -1140,20 +1163,27 @@ export async function checkResumeState(domRefs, state, helpers) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function resumeUpload(record, domRefs, state, helpers) {
   if (!record) return;
-  const { resumeCard, progressCard, progressDetail } = domRefs;
-  const { setStage, setProgress, formatBytes, reportError, showSharePanel } = helpers;
+  const { resumeCard } = domRefs;
+  const { setStage, setProgress, formatBytes, reportError, showSharePanel, showStopped } = helpers;
+  const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
+  // Back to the resume card with a sentence (file picker cancelled, wrong file, no network).
+  const backToCard = (text) => {
+    helpers.setView('empty');
+    if (resumeCard) resumeCard.classList.remove('hidden');
+    if (domRefs.resumeDetail) domRefs.resumeDetail.textContent = text;
+  };
 
   if (resumeCard) resumeCard.classList.add('hidden');
-  progressCard.classList.remove('hidden');
-  setStage('Resuming', 5);
+  helpers.setView('uploading');
+  setStage('Preparing');
+  setProgress(0, '');
 
   // ── Mode gate (6-4a): only direct-R2 records supported ────────────────────
   // Pre-6-2 records lack uploadMode / sessionToken and cannot finalise.
   // Discard cleanly rather than taking the legacy relay road.
   if (record.uploadMode !== 'direct-r2') {
     await clearResumeState(record.uuid, reportError);
-    progressDetail.textContent = 'This transfer cannot be resumed — please start a new upload.';
-    setStage('', 0);
+    showStopped(NO_RESUME);
     return;
   }
 
@@ -1177,8 +1207,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
 
   if (!sessionToken) {
     await clearResumeState(record.uuid, reportError);
-    progressDetail.textContent = 'Resume record is incomplete — please start a new upload.';
-    setStage('', 0);
+    showStopped(NO_RESUME);
     return;
   }
 
@@ -1188,12 +1217,9 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   const urlLimit = tailUrl ? totalChunks - 1 : totalChunks; // /urls serves indices < urlLimit
   if (tailUrl && resumeFrom < totalChunks && tailUrl.expires * 1000 <= Date.now()) {
     await clearResumeState(record.uuid, reportError);
-    progressDetail.textContent = 'This transfer can no longer be resumed — please start a new upload.';
-    setStage('', 0);
+    showStopped(NO_RESUME);
     return;
   }
-
-  setStage(`Resuming from chunk ${resumeFrom + 1} of ${totalChunks}`, 10);
 
   // ── File prompt + validation ───────────────────────────────────────────────
   // We need the original plaintext bytes to re-encrypt prior chunks (HARD RULE 1).
@@ -1201,29 +1227,20 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   try {
     resumeFile = await _promptForResumeFile(record.fileName, record.fileSize, domRefs);
   } catch {
-    progressCard.classList.add('hidden');
-    if (resumeCard) resumeCard.classList.remove('hidden');
-    const resumeDetail = domRefs.resumeDetail;
-    if (resumeDetail) resumeDetail.textContent = `${record.fileName} — select the same file to resume.`;
+    backToCard('Choose the same file to carry on. Your browser can’t reopen it by itself.');
     return;
   }
 
-  if (!resumeFile) { progressCard.classList.add('hidden'); if (resumeCard) resumeCard.classList.remove('hidden'); return; }
+  if (!resumeFile) { backToCard('Choose the same file to carry on. Your browser can’t reopen it by itself.'); return; }
 
   if (resumeFile.name !== record.fileName || resumeFile.size !== record.fileSize) {
-    progressCard.classList.add('hidden');
-    if (resumeCard) resumeCard.classList.remove('hidden');
-    const resumeDetail = domRefs.resumeDetail;
-    if (resumeDetail) resumeDetail.textContent = `File mismatch — expected "${record.fileName}" (${formatBytes(record.fileSize)}). Please select the original file.`;
+    backToCard(`That’s a different file. Choose “${record.fileName}” (${formatBytes(record.fileSize)}) to carry on.`);
     return;
   }
 
   const chunks = _splitChunks(resumeFile, CHUNK_SIZE);
   if (chunks.length !== record.totalChunks) {
-    progressCard.classList.add('hidden');
-    if (resumeCard) resumeCard.classList.remove('hidden');
-    const resumeDetail = domRefs.resumeDetail;
-    if (resumeDetail) resumeDetail.textContent = `File layout mismatch (expected ${record.totalChunks} chunks, got ${chunks.length}). Start a new transfer.`;
+    backToCard('That file doesn’t match the unfinished upload. Discard it and start again.');
     reportError('resume_chunk_count', `expected ${record.totalChunks} got ${chunks.length}`, `uuid:${record.uuid.slice(0,8)}`);
     return;
   }
@@ -1247,13 +1264,13 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       });
     } catch (e) {
       reportError('resume_urls_fetch', e.message?.slice(0, 80), `uuid:${record.uuid.slice(0, 8)}`);
-      progressDetail.textContent = 'Could not reach the server — check your connection and try again.';
+      backToCard('Refueler couldn’t be reached. Check your connection, then choose the file again.');
       return;
     }
 
     if (probeRes.status === 401 || probeRes.status === 409) {
       await clearResumeState(record.uuid, reportError);
-      progressDetail.textContent = 'This transfer can no longer be resumed — please start a new upload.';
+      showStopped(NO_RESUME);
       return;
     }
 
@@ -1261,15 +1278,14 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     // (it asked /urls for index N−1, which that Worker never signs). Can't finish.
     if (probeRes.status === 400 && !tailUrl) {
       await clearResumeState(record.uuid, reportError);
-      progressDetail.textContent = 'Resume record is incomplete — please start a new upload.';
-      setStage('', 0);
+      showStopped(NO_RESUME);
       return;
     }
 
     if (!probeRes.ok) {
       const txt = await probeRes.text().catch(() => '');
       reportError('resume_urls_status', `HTTP ${probeRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
-      progressDetail.textContent = `Could not fetch upload URLs (HTTP ${probeRes.status}) — please try again.`;
+      backToCard('Refueler couldn’t carry on just now. Choose the file again to retry.');
       return;
     }
 
@@ -1292,7 +1308,10 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   // Hash the CIPHERTEXT — these are the Merkle leaves for /finalise.
   // Parity is proven by the acceptance-gate root-equality check (not by inspection).
   const chunkHashes = [];
-  setStage('Verifying prior chunks', 12);
+  // C2 (partly): say what the pause is. Re-hashing what was sent rebuilds the Merkle leaves.
+  const totalBytes = record.fileSize;
+  const sentBytes0 = Math.min(resumeFrom * CHUNK_SIZE, totalBytes);
+  setProgress(sentBytes0 / totalBytes * 100, 'Checking what was already sent');
   for (let i = 0; i < resumeFrom; i++) {
     const raw = await _readChunk(chunks[i]);
     const aad = new Uint8Array(4);
@@ -1313,13 +1332,12 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       throw e;
     }
     chunkHashes.push(h);
-    const pct = Math.round(((i + 1) / Math.max(resumeFrom, 1)) * 10) + 12;
-    setProgress(pct, `Verifying chunk ${i + 1} of ${resumeFrom}…`);
+    setProgress(sentBytes0 / totalBytes * 100, `Checking what was already sent · ${formatBytes(Math.min((i + 1) * CHUNK_SIZE, totalBytes))} of ${formatBytes(sentBytes0)}`);
   }
 
   // ── Upload remaining chunks to R2 via presigned URLs ──────────────────────
   // Mirrors startUpload's direct-R2 loop exactly: encrypt → blake3Hash → PUT.
-  setStage(`Uploading from chunk ${resumeFrom + 1} of ${totalChunks}`, 22);
+  setStage('Encrypting and uploading');
 
   for (let i = resumeFrom; i < totalChunks; i++) {
     // Page URL batches on demand (> 256 remaining chunks)
@@ -1331,8 +1349,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       } catch (e) {
         if (e.status === 400 && !tailUrl) { // old record on a B12-1c Worker — see probe above
           await clearResumeState(record.uuid, reportError);
-          progressDetail.textContent = 'Resume record is incomplete — please start a new upload.';
-          setStage('', 0);
+          showStopped(NO_RESUME);
           return;
         }
         throw e;
@@ -1381,15 +1398,14 @@ export async function resumeUpload(record, domRefs, state, helpers) {
       sourceType: record.sourceType || 'file',
     }, reportError).catch(() => {});
 
-    const uploadedChunks  = i - resumeFrom + 1;
-    const remainingChunks = totalChunks - resumeFrom || 1;
-    setProgress(Math.round(22 + (uploadedChunks / remainingChunks) * 71), `Chunk ${i + 1} of ${totalChunks} sent`);
+    const sentBytes = Math.min((i + 1) * CHUNK_SIZE, totalBytes);
+    setProgress(sentBytes / totalBytes * 100, `${formatBytes(sentBytes)} of ${formatBytes(totalBytes)}`);
   }
 
   clearResumeState(record.uuid, reportError).catch(() => {});
 
   // ── Finalise — identical to 6-3d block in startUpload (TWO ROOTS: ciphertext only) ──
-  setStage('Finalising', 95);
+  setStage('Finishing');
 
   const leaves = chunkHashes.map(hex => new Uint8Array(hexToBuf(hex)));
   const { root: merkleRootBytes } = buildMerkleTree(leaves);
@@ -1408,7 +1424,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     });
   } catch (e) {
     reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${record.uuid.slice(0, 8)}`);
-    progressDetail.textContent = 'Finalise failed (network) — transfer not complete. Please try again.';
+    showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
     return; // no share URL for an unfinalised transfer (HARD RULE 4 — IDB already cleared above)
   }
 
@@ -1416,22 +1432,20 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     let missing = [];
     try { missing = (await finRes.json()).missing || []; } catch { /* not JSON */ }
     reportError('finalise_incomplete', `${missing.length} missing: ${missing.slice(0, 20).join(',')}`, `uuid:${record.uuid.slice(0, 8)}`);
-    progressDetail.textContent = `Finalise failed — ${missing.length} chunk(s) missing at storage. Transfer not complete.`;
+    showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
     return;
   }
 
   if (!finRes.ok) {
     const txt = await finRes.text().catch(() => '');
     reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 120)}`);
-    progressDetail.textContent = `Finalise failed (HTTP ${finRes.status}) — transfer not complete. Please try again.`;
+    showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
     return;
   }
 
   // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
-  setStage('Done', 100);
-  progressDetail.textContent = 'Transfer resumed and complete';
-  await new Promise(r => setTimeout(r, 700));
-  progressCard.classList.add('hidden');
+  setProgress(100);
+  await new Promise(r => setTimeout(r, 500));
 
   // Fragment grammar v1 (D-1): real filename + key + IV in URL fragment only.
   const resumeFragmentBlob = assembleFragment({
@@ -1443,7 +1457,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   });
   const shareUrl = `${location.origin}${location.pathname}?uuid=${record.uuid}#${resumeFragmentBlob}`;
   history.replaceState(null, '', location.pathname);
-  showSharePanel(shareUrl, false);
+  showSharePanel(shareUrl, { fileName: record.fileName, sizeBytes: record.fileSize, expiryTimestamp });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1483,8 +1497,6 @@ function _promptForResumeFile(expectedName, expectedSize, domRefs) {
     input.style.display = 'none';
     document.body.appendChild(input);
 
-    const resumeDetail = domRefs.resumeDetail;
-    if (resumeDetail) resumeDetail.textContent = `Select the original file to resume: "${expectedName}" (${expectedSize} bytes)`;
 
     let settled = false;
     const onFocus = () => {

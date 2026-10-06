@@ -89,20 +89,16 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
 async function _enterDownloadMode(detected, domRefs, state, helpers) {
   const { uuid } = detected;
   const {
-    dropZone, infoCard, optionsCard, receiverCard,
+    receiverCard,
     rcFileName, rcFolderNote, rcSize, rcExpiry,
     rcPassphraseRow, rcDownloadBtn, unlockInput,
     unlockError, unlockBtn, uspText,
   } = domRefs;
   const { formatBytes } = helpers;
 
-  // Receiver mode (R-14): share.css hides the site nav links, Plans · Status,
-  // the HTTP/3 line and the badge. Wordmark and theme pill stay.
+  // Receiver mode (R-14): share.css hides the site nav links, the Share sub-menu
+  // and the upload sheet. Wordmark and theme pill stay.
   document.documentElement.classList.add('rx-mode');
-
-  dropZone.classList.add('hidden');
-  infoCard.classList.add('hidden');
-  optionsCard.classList.add('hidden');
 
   // ── Resolve AES key bytes ─────────────────────────────────────────────────
   // v1: keyBytes is already a Uint8Array from parseFragment()

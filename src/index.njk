@@ -9,6 +9,8 @@ wordmarkSection: "Share"
 <html lang="en">
 <head>
 {% set extraHead %}
+<!-- F-23: marks a Share link before the modules load, so the upload screen never flashes -->
+<script src="/share-early.js"></script>
 <link rel="stylesheet" href="/share.css">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
 {% endset %}
@@ -129,141 +131,152 @@ function showMaintenanceModal(status) {
 <body>
 
 {% include "nav.njk" %}
+{% include "section-nav.njk" %}
 
 <!-- ── Main shell ────────────────────────────────────────────────────── -->
 <div class="shell">
   <main id="app">
 
-    <!-- Info card — lock line (existing) -->
-    <div class="info-card" id="info-card">
-      <span class="info-icon">🔒</span>
-      <span>No account. No email. No history. Files are encrypted in your browser before upload. Only you hold the key.</span>
-      <button class="info-card-dismiss" id="dismiss-info" aria-label="Dismiss">✕</button>
-    </div>
-
-    <!-- File inputs — outside the drop zone so they never intercept drag events   -->
-    <!-- or block button clicks. Triggered programmatically by JS click handlers.  -->
-    <!-- S56: moved from inside drop-zone where position:absolute caused conflicts. -->
+    <!-- File inputs: outside the slip so they never catch drag events or clicks (S56).
+         Opened by JS from "Choose a file" / "or a folder". -->
     <input type="file" id="file-input" aria-label="Select file" style="display:none" />
     <input type="file" id="folder-input" webkitdirectory multiple aria-label="Select folder" style="display:none" />
 
-    <!-- Drop zone -->
-    <div class="drop-zone" id="drop-zone">
-      <div class="drop-icon">↑</div>
-      <div class="drop-label">Drop a file or folder here</div>
-      <div class="drop-sub mt4">End-to-end encrypted · Free up to 4 GB</div>
-      <div class="drop-folder-row mt12">
-        <button class="btn btn-ghost btn-sm" id="file-btn" type="button">📄 Browse file</button>
-        <button class="btn btn-ghost btn-sm" id="folder-btn" type="button">📁 Upload folder</button>
+    <!-- ── Sender (Share-Upload-2) ──────────────────────────────────────────
+         Design: docs/drafts/share-upload-mock-v3.html, decisions U-1…U-11.
+         One sheet; share.js setView() sets data-view (empty · zipping · chosen ·
+         over · uploading · ready · stopped) and share.css shows the parts for it.
+         Same type rule as the receiver (R-1). Every id upload.js and the e2e test
+         use is kept: drop-zone is the slip, file-btn "Choose a file", folder-btn
+         "or a folder". -->
+    <section class="rx-sheet up-sheet" id="upload-sheet" data-view="empty">
+      <p class="rx-eyebrow" id="up-eyebrow">New transfer</p>
+      <h1 class="rx-head" id="up-head">Send a file.</h1>
+
+      <!-- Resume: shown on arrival when this browser has an unfinished upload -->
+      <div class="up-panel hidden" id="resume-card">
+        <p class="rx-eyebrow">Interrupted</p>
+        <p class="up-panel-title" id="resume-title">An upload didn’t finish.</p>
+        <dl class="rx-ledger">
+          <div class="rx-row"><dt>File</dt><dd id="resume-file">—</dd></div>
+          <div class="rx-row" id="resume-uploaded-row"><dt>Uploaded</dt><dd id="resume-uploaded">—</dd></div>
+        </dl>
+        <p class="rx-lede" id="resume-detail">Choose the same file to carry on. Your browser can’t reopen it by itself.</p>
+        <div class="up-btnrow">
+          <button class="rx-btn" id="resume-notice-btn" type="button">Choose the file</button>
+          <button class="rx-btn up-ghost" id="resume-discard-btn" type="button">Discard</button>
+        </div>
       </div>
-    </div>
 
-    <!-- Secondary nav — Plans + Status (HQ2) ──────────────────────────────────
-         Sits below the drop zone. Hidden when a file is selected.
-         Styled to match .site-nav register — display, uppercase, fg-muted.     -->
-    <div class="share-subnav" id="share-subnav">
-      <a href="/share/plans/" class="share-subnav-link">Plans</a>
-      <span class="share-subnav-dot">·</span>
-      <a href="/share/status/" class="share-subnav-link">Status</a>
-    </div>
-
-    <!-- Zip progress card (shown while compressing a folder, before upload progress) -->
-    <div class="card hidden" id="zip-progress-card">
-      <div class="flex-row">
-        <span class="tag" id="zip-stage-tag">Compressing</span>
-        <span class="muted small" id="zip-pct">0%</span>
-      </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar" id="zip-bar"></div>
-      </div>
-      <div class="progress-label mt4" id="zip-detail"></div>
-    </div>
-
-    <!-- Resume card (RU1) — shown on page load if an interrupted transfer is found in IndexedDB.
-     Place this immediately AFTER the zip-progress-card div in index.njk.
-     Hidden by default; revealed by checkResumeState() in share.js. -->
-  <div id="resume-card" class="card hidden" style="margin-top: 1rem;">
-  <div class="card-inner" style="padding: 1.25rem 1.5rem;">
-    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
-      <span class="stage-tag" style="background:var(--gold); color:var(--carbon); font-size:0.7rem; padding:0.2em 0.6em; border-radius:2px; letter-spacing:0.06em; text-transform:uppercase; font-family:var(--mono);">Interrupted</span>
-      <span style="font-family:var(--mono); font-size:0.8rem; color:var(--muted);">Transfer paused</span>
-    </div>
-    <p id="resume-detail" style="font-family:var(--mono); font-size:0.82rem; color:var(--text); margin:0 0 1rem; line-height:1.5;"></p>
-        <p id="resume-note" class="hidden" style="font-family:var(--mono); font-size:0.78rem; color:var(--muted); margin:0 0 0.75rem; font-style:italic;">Chunks already sent are encrypted.</p>
-    <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
-      <button id="resume-notice-btn" class="btn btn-primary" style="min-width:7rem;">Resume</button>
-      <button id="resume-discard-btn" class="btn btn-ghost" style="min-width:7rem;">Discard</button>
-    </div>
-  </div>
-</div>
-
-
-    <!-- Cap warning + upgrade nudge -->
-    <div id="cap-warning" class="card hidden">
-      <p class="cap-warn">This file is over the 4 GB free limit.</p>
-      <p class="muted small mt4">Creative Premium supports transfers up to 100 GB — <a href="/share/plans/" class="upgrade-nudge-link">see plans →</a></p>
-    </div>
-
-    <!-- Options card (shown after file selected) -->
-    <div class="card hidden" id="options-card">
-      <div class="flex-row" id="file-summary">
-        <span class="tag" id="file-name-tag"></span>
-        <span class="muted small" id="file-size-tag"></span>
-      </div>
-      <!-- Turnstile — visible managed widget, shown after file selected -->
-      <div class="mt16 turnstile-wrap hidden" id="turnstile-wrap">
-        <div id="cf-turnstile"></div>
-      </div>
-      <!-- Passphrase toggle -->
-      <div class="mt16">
-        <div class="toggle-row">
-          <div>
-            <div class="toggle-label">Protect with password</div>
-            <div class="toggle-desc">Recipient must enter a password to download</div>
+      <!-- The slip: the ledger in one hairline box; rows fill in place (U-7) -->
+      <div class="up-slip" id="drop-zone">
+        <dl class="rx-ledger">
+          <div class="rx-row">
+            <dt id="up-file-label">File</dt>
+            <dd>
+              <div class="up-for-empty">
+                <span class="up-hint" id="up-hint">Drop it anywhere on this page</span>
+                <div class="up-pick">
+                  <button class="up-fill" id="file-btn" type="button">Choose a file</button>
+                  <button class="up-link" id="folder-btn" type="button">or a folder</button>
+                </div>
+              </div>
+              <div class="up-for-file">
+                <span class="rx-fname"><span id="file-name-tag"></span><button class="up-link up-swap up-for-chosen" id="choose-another-btn" type="button">Choose another</button></span>
+                <small id="up-file-note" hidden></small>
+              </div>
+            </dd>
           </div>
-          <label class="switch">
-            <input type="checkbox" id="passphrase-toggle" />
-            <span class="slider"></span>
-          </label>
-        </div>
+          <div class="rx-row up-for-zipping" id="zip-progress-card">
+            <dt>Zipping</dt>
+            <dd>
+              <div class="rx-track"><b id="zip-bar"></b></div>
+              <div class="rx-readout"><span id="zip-detail"></span><span id="zip-pct"></span></div>
+            </dd>
+          </div>
+          <div class="rx-row up-not-zipping">
+            <dt>Size</dt>
+            <dd><span id="file-size-tag" class="up-dim">—</span>
+              <!-- R-12: "4 GB" is FREE_CAP in frontend/crypto.js -->
+              <small class="hidden" id="cap-warning">Free transfers go up to 4 GB. Paid plans for larger files aren’t open yet. <a class="up-link" href="/share/plans/">See plans</a></small></dd>
+          </div>
+          <div class="rx-row up-not-over">
+            <dt>Available until</dt>
+            <dd><span id="up-until" class="up-dim">7 days after upload</span><small id="up-until-note" hidden>7 days from upload</small></dd>
+          </div>
+          <div class="rx-row up-for-chosen">
+            <dt>Password</dt>
+            <dd>
+              <label class="up-switch"><input type="checkbox" id="passphrase-toggle" /><span class="up-track"></span>Ask for a password</label>
+              <div class="up-pwf hidden" id="passphrase-field-wrap">
+                <input type="password" id="passphrase-input" aria-label="Password" autocomplete="new-password" />
+                <small>Send it separately from the link. Refueler stores only a hash of it.</small>
+              </div>
+            </dd>
+          </div>
+          <div class="rx-row up-for-chosen" id="destroy-toggle-row">
+            <dt>After download</dt>
+            <dd>
+              <label class="up-switch"><input type="checkbox" id="destroy-after-download" /><span class="up-track"></span>Delete the file</label>
+              <p class="rx-once" id="destroy-notice" hidden>The link works once, then the file is deleted.</p>
+            </dd>
+          </div>
+        </dl>
+        <!-- R-12: "Free up to 4 GB" is FREE_CAP in frontend/crypto.js -->
+        <p class="up-facts"><span>No account or email needed ·</span> <span>Encrypted in your browser · Free up to 4 GB</span></p>
       </div>
-      <div class="hidden" id="passphrase-field-wrap">
-        <div class="field mt12">
-          <label for="passphrase-input">Password</label>
-          <input type="password" id="passphrase-input" placeholder="Choose a strong password" autocomplete="new-password" />
-        </div>
-        <div class="muted small mt4">Share this separately. We never store it.</div>
-      </div>
-      <div class="mt16">
-        <button class="btn btn-primary btn-full" id="upload-btn" disabled>Encrypt &amp; upload</button>
-      </div>
-    </div>
 
-    <!-- Progress card -->
-    <div class="card hidden" id="progress-card">
-      <div class="flex-row">
-        <span class="tag" id="progress-stage-tag">Preparing</span>
-        <span class="muted small" id="progress-pct">0%</span>
-      </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar" id="progress-bar"></div>
-      </div>
-      <div class="progress-label mt4" id="progress-detail"></div>
-    </div>
+      <p class="rx-fine up-left up-for-zipping">Folders are zipped in your browser first, up to 2 GB.</p>
+      <p class="up-msg hidden" id="drop-multi-msg" role="alert"></p>
 
-    <!-- Share link panel -->
-    <div class="card hidden" id="share-card">
-      <div class="flex-row">
-        <span class="success-txt small mono">✓</span>
-        <span style="font-size:14px;font-weight:500">Ready to share</span>
+      <!-- File chosen: the check and the button -->
+      <div class="up-for-chosen" id="options-card">
+        <div class="up-check hidden" id="turnstile-wrap">
+          <p class="rx-fine up-left">A quick check by Cloudflare that you’re a person. Not an account.</p>
+          <div id="cf-turnstile"></div>
+        </div>
+        <div class="rx-actions">
+          <button class="rx-btn" id="upload-btn" type="button" disabled>Encrypt and upload</button>
+        </div>
+        <!-- Paid-only options (availability window, permanent record) are injected here
+             by upload.js and stay hidden until paid uploads open (F-10). -->
+        <div id="paid-options" hidden></div>
       </div>
-      <div class="link-box" id="share-link-display"></div>
-      <div class="share-btn-row mt12">
-        <button class="btn btn-primary" id="copy-btn"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.25"/><path d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>Copy link</button>
-        <button class="btn btn-ghost" id="new-upload-btn">New upload</button>
+
+      <div class="rx-actions up-for-over">
+        <button class="rx-btn up-ghost" id="over-another-btn" type="button">Choose another file</button>
       </div>
-      <div id="qr-wrap"></div>
-    </div>
+
+      <!-- Uploading: the receiver's measure -->
+      <div class="rx-measure up-for-uploading" id="progress-card">
+        <div class="rx-pct"><span id="progress-pct">0</span><sup>%</sup></div>
+        <div class="rx-track" id="progress-track" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="progress-bar"></b></div>
+        <div class="rx-readout"><span id="progress-detail"></span><span>Keep this tab open</span></div>
+      </div>
+      <p class="rx-fine up-left up-for-uploading" id="progress-note">If this tab closes, come back to this page to resume.</p>
+
+      <!-- Stopped -->
+      <div class="up-for-stopped">
+        <p class="rx-lede" id="up-stopped-text"></p>
+        <div class="rx-actions"><button class="rx-btn up-ghost" id="up-restart-btn" type="button">Start over</button></div>
+      </div>
+
+      <!-- Link ready -->
+      <div class="up-for-ready" id="share-card">
+        <p class="rx-lede">The key to the file is inside the link. Anyone who has the link can download the file, so send it only to the person it’s for.</p>
+        <div class="up-linkbox" id="share-link-display"></div>
+        <div class="up-btnrow">
+          <button class="rx-btn" id="copy-btn" type="button">Copy link</button>
+          <button class="rx-btn up-ghost" id="qr-btn" type="button" aria-expanded="false" aria-controls="qr-wrap">Show QR code</button>
+        </div>
+        <div class="up-qr" id="qr-wrap" hidden>
+          <canvas id="qr-canvas" role="img" aria-label="QR code of the link"></canvas>
+          <p>Scan with a phone’s camera to download the file on that phone.</p>
+        </div>
+        <dl class="rx-ledger" id="share-ledger"></dl>
+        <p class="rx-send-wrap"><button class="rx-send" id="new-upload-btn" type="button"><span>Send another file</span></button></p>
+      </div>
+    </section>
 
     <!-- ── Receiver (Share-Receiver-2a/2b) ──────────────────────────────────
          Download mode only; download.js shows one sheet at a time.
@@ -342,18 +355,9 @@ function showMaintenanceModal(status) {
       <p class="rx-send-wrap" id="rx-notice-send" hidden><a class="rx-send" href="/share/"><span>Send your own file, free up to 4 GB →</span></a></p>
     </section>
 
-    <!-- Drop zone multi-file rejection message -->
-    <div class="hidden" id="drop-multi-msg" role="alert"></div>
-
   </main>
 </div>
 
-<!-- ── HTTP/3 infrastructure whisper — HQ2 ──────────────────────────────── -->
-<!-- Static, always visible. Above footer. Not part of the upload flow.       -->
-<div class="http3-whisper">
-  <span class="http3-whisper-text">Delivered over Cloudflare HTTP/3.</span>
-</div>
-<div data-refueler-badge="compact"></div>
 {% include "footer.njk" %}
 
 <!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked). Blocking scripts so  -->
@@ -361,22 +365,5 @@ function showMaintenanceModal(status) {
 <script src="/fflate.min.js"></script>
 <script src="/qr-creator.min.js"></script>
 <script type="module" src="/share.js"></script>
-<script type="module" src="/refueler-badge.js"></script>
-<script>
-// ── Share subnav hide on file select — HQ2 ───────────────────────────────────
-// Watches for options-card becoming visible (share.js removes 'hidden' class).
-// When a file is selected the subnav hides with the rest of the pre-upload chrome.
-(function () {
-  const subnav     = document.getElementById('share-subnav');
-  const optionsCard = document.getElementById('options-card');
-  if (!subnav || !optionsCard) return;
-
-  const observer = new MutationObserver(() => {
-    const fileSelected = !optionsCard.classList.contains('hidden');
-    subnav.classList.toggle('hidden', fileSelected);
-  });
-  observer.observe(optionsCard, { attributes: true, attributeFilter: ['class'] });
-})();
-</script>
 </body>
 </html>
