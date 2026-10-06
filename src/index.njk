@@ -258,7 +258,10 @@ function showMaintenanceModal(status) {
       <!-- Stopped -->
       <div class="up-for-stopped">
         <p class="rx-lede" id="up-stopped-text"></p>
-        <div class="rx-actions"><button class="rx-btn up-ghost" id="up-restart-btn" type="button">Start over</button></div>
+        <div class="up-btnrow up-stop-actions">
+          <button class="rx-btn" id="up-retry-btn" type="button" hidden>Try again</button>
+          <button class="rx-btn up-ghost" id="up-restart-btn" type="button">Start over</button>
+        </div>
       </div>
 
       <!-- Link ready -->

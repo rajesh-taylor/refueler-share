@@ -47,6 +47,7 @@ const domRefs = {
   upUntilNote:      $('up-until-note'),
   upStoppedText:    $('up-stopped-text'),
   upRestartBtn:     $('up-restart-btn'),
+  upRetryBtn:       $('up-retry-btn'),
   chooseAnotherBtn: $('choose-another-btn'),
   overAnotherBtn:   $('over-another-btn'),
   fileBtn:          $('file-btn'),
@@ -160,9 +161,12 @@ function revealSheet() {
   window.scrollTo({ top: window.scrollY + top - covered - 16, behavior: instant ? 'auto' : 'smooth' });
 }
 
-// "Stopped" with a plain sentence. F-11 (catching every failure, "Try again") is Share-Upload-2 B2.
-function showStopped(text) {
+// "Stopped" with a plain sentence (F-11). With retry, "Try again" carries on in this tab;
+// without it only "Start over" (a reload) shows. One press per stop.
+function showStopped(text, retry) {
   domRefs.upStoppedText.textContent = text;
+  domRefs.upRetryBtn.hidden = !retry;
+  domRefs.upRetryBtn.onclick = retry ? () => { domRefs.upRetryBtn.onclick = null; retry(); } : null;
   setView('stopped');
 }
 

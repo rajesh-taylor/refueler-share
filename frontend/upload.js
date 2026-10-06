@@ -645,7 +645,8 @@ export function enterUploadMode(domRefs, state, helpers) {
   _injectTransferOptions(domRefs, transferOpts);
 
   // U-10: pressed before the check has passed → "Checking…", start when the token lands.
-  uploadBtn.addEventListener('click', () => {
+  // A fresh-start Try again (F-11) presses it too: a spent token means a new check.
+  pressUpload = () => {
     const go = () => startUpload(domRefs, state, helpers, transferOpts);
     clearDropMsg();
     if (state.turnstileToken) { go(); return; }
@@ -653,7 +654,8 @@ export function enterUploadMode(domRefs, state, helpers) {
     uploadBtn.textContent = 'Checking…';
     uploadBtn.disabled = true;
     renderTurnstile(state, domRefs, helpers);
-  });
+  };
+  uploadBtn.addEventListener('click', pressUpload);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -839,7 +841,7 @@ async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, r
       if (res.status === 403) {
         const txt = await res.text().catch(() => '');
         reportError('direct_put_403', `chunk ${chunkIndex} 403 — URL invalid`, `uuid:${uuid.slice(0, 8)} attempt:${attempt} ${txt.slice(0, 80)}`);
-        throw new Error(`Chunk ${chunkIndex} direct PUT 403: presigned URL rejected`);
+        throw new UploadStop('refused', `Chunk ${chunkIndex} direct PUT 403: presigned URL rejected`);
       }
 
       if (res.status === 429) {
@@ -853,13 +855,13 @@ async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, r
       if (res.status < 500) {
         const txt = await res.text().catch(() => '');
         reportError('direct_put_4xx', `chunk ${chunkIndex} HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
-        throw new Error(`Chunk ${chunkIndex} direct PUT: HTTP ${res.status}`);
+        throw new UploadStop('refused', `Chunk ${chunkIndex} direct PUT: HTTP ${res.status}`);
       }
 
       lastErr = new Error(`HTTP ${res.status}`);
       reportError('direct_put_5xx', `chunk ${chunkIndex} HTTP ${res.status} attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
     } catch (e) {
-      if (e.message?.includes('direct PUT')) throw e; // fatal — propagate immediately
+      if (e instanceof UploadStop) throw e; // fatal — propagate immediately
       lastErr = e;
       if (e.timedOut) {
         reportError('direct_put_timeout', `chunk ${chunkIndex} timed out attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
@@ -869,12 +871,12 @@ async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, r
     }
     if (attempt < _DIRECT_MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, _DIRECT_RETRY_DELAYS[attempt] ?? 60000));
   }
-  throw new Error(`Chunk ${chunkIndex} direct PUT failed after ${_DIRECT_MAX_ATTEMPTS} attempts: ${lastErr?.message}`);
+  throw new UploadStop('network', `Chunk ${chunkIndex} direct PUT failed after ${_DIRECT_MAX_ATTEMPTS} attempts: ${lastErr?.message}`, { tried: true });
 }
 
 // Share-Deps-1 (E): if BLAKE3/secp256k1 can't load even with the pure-JS fallback,
 // say so instead of freezing on the progress bar. Runs before anything is sent.
-// Other upload errors are still silent — that's F-11, Share-Upload-2.
+// Every other stop goes through _stopped (F-11, Share-Upload-4).
 async function _loadDepsOrSay(domRefs, helpers) {
   try {
     await loadDeps();
@@ -886,61 +888,146 @@ async function _loadDepsOrSay(domRefs, helpers) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// F-11 (Share-Upload-4): every way an upload can stop lands on "Stopped" with a
+// plain sentence (build list §1), and "Try again" carries on in the same tab with
+// the file the page still holds — no picker. Before /initiate nothing was sent, so
+// Try again starts afresh (new check, new upload pass); after it, the transfer
+// carries on from the last part that arrived. After a refresh the resume card asks
+// for the file as before.
+//
+// Kinds: network · check · refused · missing (finalise 409: parts absent or the wrong
+// size) · unfinished (all sent, finalise failed) · gone (session spent or expired —
+// can't carry on) · browser (anything unexpected in this tab).
+// ─────────────────────────────────────────────────────────────────────────────
+class UploadStop extends Error {
+  constructor(kind, message, extra = {}) {
+    super(message || kind);
+    this.kind = kind;
+    Object.assign(this, extra);
+  }
+}
+
+const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
+
+// fetch, with a dropped connection turned into a "network" stop.
+async function _send(url, options, what, reportError) {
+  try {
+    return await fetch(url, options);
+  } catch (e) {
+    reportError(`${what}_fetch`, e.message?.slice(0, 120), '');
+    throw new UploadStop('network', `${what}: ${e.message}`);
+  }
+}
+
+// The §1 sentence for a stop. job is null when nothing was sent yet.
+function _stopText(e, job) {
+  const sent = job ? Math.min(job.sent * CHUNK_SIZE, job.file.size) : 0;
+  const pct  = job ? Math.round(sent / job.file.size * 100) : 0;
+  switch (e.kind) {
+    case 'network': {
+      const reached = e.tried ? 'Refueler couldn’t be reached after several tries.' : 'Refueler couldn’t be reached.';
+      return `${reached} Nothing was shared. ${pct > 0 ? `Try again carries on from ${pct}%.` : 'Try again.'}`;
+    }
+    case 'check':      return 'The security check didn’t go through. Try again.';
+    case 'refused':    return 'Refueler refused the upload. Try again; if it keeps happening, check the Status page.';
+    case 'missing':    return 'The upload didn’t finish. Some parts didn’t arrive. Try again.';
+    case 'unfinished': return 'The upload didn’t finish. Everything was sent; Try again finishes it.';
+    default:           return 'Something went wrong in this browser. Try again; if it keeps happening, check the Status page.';
+  }
+}
+
+function _stopped(e, job, domRefs, state, helpers) {
+  if (!(e instanceof UploadStop)) {
+    helpers.reportError('upload_stopped', e?.name || 'Error', String(e?.message || '').slice(0, 160));
+    e = new UploadStop('browser', e?.message);
+  }
+  if (e.kind === 'gone') {
+    if (job) clearResumeState(job.uuid, helpers.reportError).catch(() => {});
+    helpers.showStopped(NO_RESUME);
+    return;
+  }
+  const retry = job
+    ? () => { job.urlMap = new Map(); _carryOnOrStop(job, domRefs, state, helpers); }   // fresh URLs on a retry
+    : () => { helpers.setView('chosen'); pressUpload(); };                              // new check + pass
+  helpers.showStopped(_stopText(e, job), retry);
+}
+
+// Set by enterUploadMode: the upload button's own press (U-10: "Checking…" until
+// the Cloudflare token lands, then start). A fresh-start Try again uses it.
+let pressUpload = () => {};
+
 async function startUpload(domRefs, state, helpers, transferOpts) {
   if (!state.selectedFile) return;
-  const {
-    uploadBtn,
-    passphraseToggle, passphraseInput,
-  } = domRefs;
-  const { setStage, setProgress, formatBytes, reportError, showSharePanel, showStopped } = helpers;
+  let job = null;
+  try {
+    job = await _setUp(domRefs, state, helpers, transferOpts);
+    if (job) await _carryOn(job, domRefs, state, helpers);
+  } catch (e) {
+    _stopped(e, job, domRefs, state, helpers);
+  }
+}
+
+async function _carryOnOrStop(job, domRefs, state, helpers) {
+  try {
+    await _carryOn(job, domRefs, state, helpers);
+  } catch (e) {
+    _stopped(e, job, domRefs, state, helpers);
+  }
+}
+
+// Fresh upload: key, upload pass, /initiate. Returns the job, or null when it has
+// already said why it stopped (deps, a bad pass, the paid-only window).
+async function _setUp(domRefs, state, helpers, transferOpts) {
+  const { uploadBtn, passphraseToggle, passphraseInput } = domRefs;
+  const { setStage, setProgress, formatBytes, reportError, showStopped } = helpers;
+  const file = state.selectedFile;
 
   uploadBtn.disabled = true;
   uploadBtn.textContent = UPLOAD_LABEL;
   helpers.setView('uploading');
-  setProgress(0, `0 B of ${formatBytes(state.selectedFile.size)}`);
+  setProgress(0, `0 B of ${formatBytes(file.size)}`);
 
-  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
+  if (!(await _loadDepsOrSay(domRefs, helpers))) return null;
 
   // Stage words (build list §1): Preparing · Encrypting and uploading · Finishing.
   setStage('Preparing');
-  state.sessionAesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
-  state.sessionIv     = crypto.getRandomValues(new Uint8Array(12));
-  const rawKey  = await crypto.subtle.exportKey('raw', state.sessionAesKey);
-  const keyHex  = bufToHex(rawKey);
-  const ivHex   = bufToHex(state.sessionIv);
+  const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  const iv     = crypto.getRandomValues(new Uint8Array(12));
+  const keyHex = bufToHex(await crypto.subtle.exportKey('raw', aesKey));
+  const ivHex  = bufToHex(iv);
 
+  // The password stays in its field until the link is ready, so a Try again
+  // before /initiate can use it again (cleared in _carryOn on success).
   let p2shHashHex = null;
   if (passphraseToggle.checked && passphraseInput.value.trim()) {
     p2shHashHex = await sha256Hex(new TextEncoder().encode(passphraseInput.value.trim()));
-    passphraseInput.value = '';
   }
 
-  const chunks      = _splitChunks(state.selectedFile, CHUNK_SIZE);
-  const totalChunks = chunks.length;
-  const chunkHashes = [];
-
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   const blinded = await generateBlindedCredential();
 
   let issueRes;
   try {
-    issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
+    issueRes = await _send(`${WORKER_URL}/credential/issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blinded.blindedMsg, tier: 'free' }),
-    });
+    }, 'credential_issue', reportError);
   } finally {
     _spendTurnstileToken(state);   // single-use, whatever the outcome
   }
 
   if (!issueRes.ok) {
-    const errText = await issueRes.text();
+    const errText = await issueRes.text().catch(() => '');
     reportError('credential_issue', `HTTP ${issueRes.status}`, errText.slice(0, 200));
-    throw new Error(`Credential issue failed: ${errText}`);
+    // 400 no token · 403 check failed · 429 token already used → the check; else refused.
+    const check = issueRes.status === 400 || issueRes.status === 403 || (issueRes.status === 429 && /turnstile/i.test(errText));
+    throw new UploadStop(check ? 'check' : 'refused', `Credential issue failed: HTTP ${issueRes.status}`);
   }
   const issued = await issueRes.json();
   const { uuid: issuedUuid, issued_tier: issuedTier, commitment } = issued;
-  if (!issuedUuid || !commitment || !issuedTier) throw new Error('Credential issue response missing uuid, commitment, or issued_tier');
-  state.uploadUUID = issuedUuid;
+  if (!issuedUuid || !commitment || !issuedTier) throw new UploadStop('refused', 'Credential issue response missing uuid, commitment, or issued_tier');
   // Cred-Fix-2b: credential format v2. A bad DLEQ proof stops here, before anything is spent.
   let credential;
   try {
@@ -949,7 +1036,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     if (!(e instanceof CredentialProofError)) throw e;
     reportError('credential_dleq', e.name, String(e.message).slice(0, 120));
     showStopped('Share couldn’t get a valid upload pass. Reload to try again.');
-    return;
+    return null;
   }
 
   _updatePaidFeaturesVisibility(issuedTier, transferOpts);
@@ -965,192 +1052,251 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
     _showTidalError(tidalErr, transferOpts);
     uploadBtn.disabled = false;
     helpers.setView('chosen');
-    return;
+    return null;
   }
 
   const isPaidTier = issuedTier && issuedTier !== 'free' && issuedTier !== 'citizen';
   const wantsPermanentRecord = isPaidTier && transferOpts.permanentRecordToggle && transferOpts.permanentRecordToggle.checked;
   const sealNonceHex = wantsPermanentRecord ? generateSealNonce() : null;
 
-  // Streaming BLAKE3 plaintext root — incremental update per chunk (TH-2)
-  const blake3PlaintextHash = wantsPermanentRecord ? blake3CreateHash() : null;
-
   // ── Direct-to-R2 upload path (Share-6-6b: only path) ─────────────────────
+  // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
+  const initiateHeaders = {
+    'X-Cashu-Credential':      credential,
+    'X-Credential-Commitment': commitment,
+    'X-Issued-Tier':           issuedTier,
+    'X-Total-Chunks':          String(totalChunks),
+    'X-Total-Bytes':           String(file.size),
+    'X-Expiry-Timestamp':      String(expiryTimestamp),
+    'X-File-Name':             'encrypted-payload', // D-1 invariant
+  };
+  if (p2shHashHex)          initiateHeaders['X-P2SH-Secret-Hash']       = p2shHashHex;
+  if (destroyAfterDownload) initiateHeaders['X-Destroy-After-Download'] = '1';
+  if (availableFromUnix)    initiateHeaders['X-Available-From']         = String(availableFromUnix);
+  if (availableUntilUnix)   initiateHeaders['X-Available-Until']        = String(availableUntilUnix);
 
-    // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
-    const initiateHeaders = {
-      'X-Cashu-Credential':      credential,
-      'X-Credential-Commitment': commitment,
-      'X-Issued-Tier':           issuedTier,
-      'X-Total-Chunks':          String(totalChunks),
-      'X-Total-Bytes':           String(state.selectedFile.size),
-      'X-Expiry-Timestamp':      String(expiryTimestamp),
-      'X-File-Name':             'encrypted-payload', // D-1 invariant
-    };
-    if (p2shHashHex)          initiateHeaders['X-P2SH-Secret-Hash']       = p2shHashHex;
-    if (destroyAfterDownload) initiateHeaders['X-Destroy-After-Download'] = '1';
-    if (availableFromUnix)    initiateHeaders['X-Available-From']         = String(availableFromUnix);
-    if (availableUntilUnix)   initiateHeaders['X-Available-Until']        = String(availableUntilUnix);
+  const initRes = await _send(`${WORKER_URL}/upload/${issuedUuid}/initiate`, {
+    method: 'POST',
+    headers: initiateHeaders,
+  }, 'initiate', reportError);
+  if (!initRes.ok) {
+    const txt = await initRes.text().catch(() => '');
+    reportError('initiate', `HTTP ${initRes.status}`, txt.slice(0, 200));
+    throw new UploadStop('refused', `Initiate failed: HTTP ${initRes.status} — ${txt.slice(0, 120)}`);
+  }
+  const initData = await initRes.json();
 
-    const initRes = await fetch(`${WORKER_URL}/upload/${state.uploadUUID}/initiate`, {
-      method: 'POST',
-      headers: initiateHeaders,
-    });
-    if (!initRes.ok) {
-      const txt = await initRes.text().catch(() => '');
-      reportError('initiate', `HTTP ${initRes.status}`, txt.slice(0, 200));
-      throw new Error(`Initiate failed: HTTP ${initRes.status} — ${txt.slice(0, 120)}`);
+  // URL map: index → presigned URL. First batch arrives in initiate response.
+  const urlMap = new Map();
+  for (const entry of (initData.urls || [])) urlMap.set(entry.index, entry.url);
+
+  // B12-1c: a size-signing Worker returns the tail URL separately (tail_url) and
+  // /urls never covers index N−1. An older Worker has no tail_url → unchanged.
+  let tailUrl = null;
+  if (initData.tail_url) {
+    if (initData.tail_url.index !== totalChunks - 1) {
+      throw new UploadStop('refused', `tail_url index ${initData.tail_url.index} ≠ ${totalChunks - 1}`);
     }
-    const initData     = await initRes.json();
-    const sessionToken = initData.session_token;
+    tailUrl = { url: initData.tail_url.url, expires: initData.tail_url.expires };
+  }
 
-    // URL map: index → presigned URL. First batch arrives in initiate response.
-    const urlMap = new Map();
-    for (const entry of (initData.urls || [])) urlMap.set(entry.index, entry.url);
-    let batchNext = initData.batch_next; // null when all URLs delivered upfront (≤ 256 chunks)
-
-    // B12-1c: a size-signing Worker returns the tail URL separately (tail_url) and
-    // /urls never covers index N−1. An older Worker has no tail_url → unchanged.
-    let tailUrl = null;
-    if (initData.tail_url) {
-      if (initData.tail_url.index !== totalChunks - 1) {
-        throw new Error(`tail_url index ${initData.tail_url.index} ≠ ${totalChunks - 1}`);
-      }
-      tailUrl = { url: initData.tail_url.url, expires: initData.tail_url.expires };
-      urlMap.set(totalChunks - 1, tailUrl.url);
-    }
-    const urlLimit = tailUrl ? totalChunks - 1 : totalChunks; // /urls serves indices < urlLimit
-
-    setStage('Encrypting and uploading');
-    const totalBytes = state.selectedFile.size;
-
-    for (let i = 0; i < totalChunks; i++) {
-      // Fetch the next URL batch on demand (chunks > 256)
-      if (!urlMap.has(i)) {
-        if (batchNext === null) throw new Error(`No presigned URL for chunk ${i} and no batch_next`);
-        const newUrls = await _fetchNextUrlBatch(state.uploadUUID, sessionToken, batchNext, Math.min(256, urlLimit - batchNext), reportError);
-        for (const entry of newUrls) urlMap.set(entry.index, entry.url);
-        const maxIdx = newUrls.length > 0 ? Math.max(...newUrls.map(e => e.index)) : batchNext - 1;
-        batchNext = (maxIdx + 1 < urlLimit) ? maxIdx + 1 : null;
-      }
-
-      const presignedUrl = urlMap.get(i);
-      if (!presignedUrl) throw new Error(`Presigned URL for chunk ${i} missing after batch fetch`);
-
-      const raw = await _readChunk(chunks[i]); // fresh FileReader per chunk — fixes NotReadableError
-      if (blake3PlaintextHash) blake3PlaintextHash.update(new Uint8Array(raw));
-
-      const aad = new Uint8Array(4);
-      new DataView(aad.buffer).setUint32(0, i, false); // AAD index = object index = Merkle leaf
-      const encrypted = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
-        state.sessionAesKey, raw
-      );
-
-      let chunkHashHex;
-      try {
-        chunkHashHex = blake3Hash(new Uint8Array(encrypted));
-      } catch (e) {
-        reportError('blake3_hash', e.message, `uuid:${state.uploadUUID.slice(0, 8)} chunk:${i}`);
-        throw e;
-      }
-      chunkHashes.push(chunkHashHex);
-
-      await _putChunkDirect(presignedUrl, encrypted, i, state.uploadUUID, reportError);
-
-      writeChunkState({
-        uuid: state.uploadUUID, chunkIndex: i, totalChunks,
-        fileName: state.selectedFile.name, fileSize: state.selectedFile.size,
-        keyHex, ivHex, tier: issuedTier, expiryTimestamp, timestamp: Date.now(),
-        sealNonceHex: sealNonceHex || undefined,
-        uploadMode: 'direct-r2', sessionToken, // Share-6: resume will need these
-        tailUrl: tailUrl || undefined,          // B12-1c: /urls cannot re-issue the tail
-        sourceType: state.sourceType || 'file', // Part C: folder detection for FOLDER-RESUME discard
-      }, reportError).catch(() => {});
-
-      const sentBytes = Math.min((i + 1) * CHUNK_SIZE, totalBytes);
-      setProgress(sentBytes / totalBytes * 100, `${formatBytes(sentBytes)} of ${formatBytes(totalBytes)}`);
-    }
-
-    clearResumeState(state.uploadUUID, reportError).catch(() => {});
-
-    let permanentRecordOk = false;
-    if (wantsPermanentRecord && blake3PlaintextHash && sealNonceHex) {
-      setStage('Finishing');
-      const blake3PlaintextRoot = blake3PlaintextHash.digest('hex');
-      const prResult = await runPermanentRecord(state.uploadUUID, blake3PlaintextRoot, sealNonceHex, state.sessionAesKey);
-      permanentRecordOk = prResult.ok;
-      if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${state.uploadUUID.slice(0, 8)}`);
-    }
-
-    // ── Share-6-3d: finalise the transfer ─────────────────────────────────────
-    // Client-authoritative CIPHERTEXT-chunk Merkle root over the per-chunk
-    // ciphertext-object digests accumulated in chunkHashes (hex, index order).
-    // buildMerkleTree (frontend/merkle.js) applies the RFC-6962 leaf/node domain
-    // separation internally — feed it the RAW 32-byte digests. Do NOT prepend the
-    // session IV (NONCE trap): the leaves must equal BLAKE3 of the exact stored
-    // bytes the Worker re-hashes at download, or every transfer 409-walls at 6-5.
-    // This is the ciphertext root ONLY — never blake3PlaintextRoot above (TWO ROOTS).
-    setStage('Finishing');
-
-    const leaves = chunkHashes.map(hex => new Uint8Array(hexToBuf(hex)));
-    const { root: merkleRootBytes } = buildMerkleTree(leaves);
-    const finaliseBody = {
-      hashes:      leaves.map(_bytesToB64url), // b64url(raw 32B digest) × total_chunks
-      merkle_root: _bytesToB64url(merkleRootBytes),
-      // tree_algo is NOT sent — the Worker pins 'rfc6962-unbalanced-blake3-v1'.
-    };
-
-    let finRes;
-    try {
-      finRes = await fetch(`${WORKER_URL}/upload/${state.uploadUUID}/finalise`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
-        body: JSON.stringify(finaliseBody),
-      });
-    } catch (e) {
-      reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${state.uploadUUID.slice(0, 8)}`);
-      showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
-      return; // no share URL for an unfinalised transfer
-    }
-
-    if (finRes.status === 409) {
-      let missing = [];
-      try { missing = (await finRes.json()).missing || []; } catch { /* not JSON */ }
-      reportError('finalise_incomplete', `${missing.length} missing: ${missing.slice(0, 20).join(',')}`, `uuid:${state.uploadUUID.slice(0, 8)}`);
-      showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
-      return; // no share URL
-    }
-
-    if (!finRes.ok) {
-      const txt = await finRes.text().catch(() => '');
-      reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${state.uploadUUID.slice(0, 8)} ${txt.slice(0, 120)}`);
-      showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
-      return; // no share URL
-    }
-
-    // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
-    // (permanentRecordOk: paid only, unreachable today, F-10 — reported above, not shown.)
-    setProgress(100);
-    await new Promise(r => setTimeout(r, 500));
-
-    const keyBytesRaw2 = new Uint8Array(await crypto.subtle.exportKey('raw', state.sessionAesKey));
-    const fragmentBlob2 = assembleFragment({
-      keyBytes:  keyBytesRaw2,
-      ivBytes:   new Uint8Array(state.sessionIv),
-      filename:  state.selectedFile.name,
-      sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
-      sizeBytes: state.selectedFile.size, // Share-Size-1: size travels in the fragment, not /meta
-    });
-    const shareUrl2 = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob2}`;
-    history.replaceState(null, '', location.pathname);
-    showSharePanel(shareUrl2, {
-      fileName: state.selectedFile.name, isFolder: state.sourceType === 'folder',
-      sizeBytes: state.selectedFile.size, expiryTimestamp,
+  return {
+    file, uuid: issuedUuid, keyHex, ivHex, totalChunks, expiryTimestamp,
+    tier: issuedTier, sessionToken: initData.session_token, tailUrl,
+    sealNonceHex, sourceType: state.sourceType || 'file',
+    sent: 0, hashes: [], urlMap,
+    // Streaming BLAKE3 plaintext root, fed after each part arrives (TH-2; paid only, F-10)
+    plainHash: wantsPermanentRecord ? blake3CreateHash() : null,
+    info: {
+      fileName: file.name, isFolder: state.sourceType === 'folder',
+      sizeBytes: file.size, expiryTimestamp,
       isProtected: !!p2shHashHex, destroyAfterDownload: !!destroyAfterDownload,
-    });
-    return;
+    },
+  };
+}
 
+// The IndexedDB resume record for a job (chunkIndex = last part that arrived).
+function _recordOf(job) {
+  return {
+    uuid: job.uuid, chunkIndex: job.sent - 1, totalChunks: job.totalChunks,
+    fileName: job.file.name, fileSize: job.file.size,
+    keyHex: job.keyHex, ivHex: job.ivHex, tier: job.tier || 'free',
+    expiryTimestamp: job.expiryTimestamp, timestamp: Date.now(),
+    sealNonceHex: job.sealNonceHex || undefined,
+    uploadMode: 'direct-r2', sessionToken: job.sessionToken, // Share-6: resume needs these
+    tailUrl: job.tailUrl || undefined,                       // B12-1c: /urls cannot re-issue the tail
+    sourceType: job.sourceType,                              // Part C: folder detection for FOLDER-RESUME discard
+  };
+}
+
+// Encrypt part i: same key + session IV + 4-byte BE uint32 AAD (= object index = Merkle leaf).
+async function _encryptChunk(raw, i, state) {
+  const aad = new Uint8Array(4);
+  new DataView(aad.buffer).setUint32(0, i, false);
+  return new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
+    state.sessionAesKey, raw
+  ));
+}
+
+// Send what's left of a job, then finalise and show the link. Shared by a fresh
+// upload, a resume after a refresh and every same-tab Try again. Advances job.sent
+// and job.hashes as parts arrive, so a stop can carry on from there.
+async function _carryOn(job, domRefs, state, helpers) {
+  const { setStage, setProgress, formatBytes, reportError, showSharePanel } = helpers;
+  const totalBytes  = job.file.size;
+  const totalChunks = job.totalChunks;
+  const chunks      = _splitChunks(job.file, CHUNK_SIZE);
+  const short       = job.uuid.slice(0, 8);
+  const progress    = () => {
+    const b = Math.min(job.sent * CHUNK_SIZE, totalBytes);
+    setProgress(b / totalBytes * 100, `${formatBytes(b)} of ${formatBytes(totalBytes)}`);
+  };
+
+  helpers.setView('uploading');
+  setStage('Preparing');
+  progress();
+
+  state.sessionAesKey = await crypto.subtle.importKey('raw', hexToBuf(job.keyHex), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+  state.sessionIv     = new Uint8Array(hexToBuf(job.ivHex));
+  state.uploadUUID    = job.uuid;
+
+  // B12-1c: the tail URL is signed once, at /initiate; /urls serves indices < urlLimit.
+  const urlLimit = job.tailUrl ? totalChunks - 1 : totalChunks;
+  if (job.tailUrl) job.urlMap.set(totalChunks - 1, job.tailUrl.url);
+
+  // Next batch of presigned URLs from index `from`. 401/409 = session expired or
+  // already finalised; 400 on a record with no tailUrl = an old record meeting a
+  // B12-1c Worker (it asked /urls for index N−1, which that Worker never signs).
+  const fetchUrls = async (from) => {
+    let urls;
+    try {
+      urls = await _fetchNextUrlBatch(job.uuid, job.sessionToken, from, Math.min(256, urlLimit - from), reportError);
+    } catch (e) {
+      if (!e.status) throw new UploadStop('network', e.message);
+      if (e.status === 401 || e.status === 409 || (e.status === 400 && !job.tailUrl)) throw new UploadStop('gone', e.message);
+      throw new UploadStop('refused', e.message);
+    }
+    for (const entry of urls) job.urlMap.set(entry.index, entry.url);
+  };
+
+  // Probe the session before any CPU work (a resume, or a retry with fresh URLs).
+  // Skipped when only the tail is left: finalise's 401 is then the session check.
+  if (job.sent < urlLimit && !job.urlMap.has(job.sent)) await fetchUrls(job.sent);
+
+  // HARD RULE 1 (resume after a refresh): re-encrypt the parts already sent to
+  // rebuild their ciphertext hashes — the Merkle leaves for /finalise. A same-tab
+  // Try again still holds them and skips this.
+  if (job.hashes.length < job.sent) {
+    job.hashes.length = 0;
+    const sentBytes = Math.min(job.sent * CHUNK_SIZE, totalBytes);
+    setProgress(sentBytes / totalBytes * 100, 'Checking what was already sent');   // C2: say what the pause is
+    for (let i = 0; i < job.sent; i++) {
+      job.hashes.push(blake3Hash(await _encryptChunk(await _readChunk(chunks[i]), i, state)));
+      setProgress(sentBytes / totalBytes * 100, `Checking what was already sent · ${formatBytes(Math.min((i + 1) * CHUNK_SIZE, totalBytes))} of ${formatBytes(sentBytes)}`);
+    }
+  }
+  job.hashes.length = job.sent;   // a part that was encrypted but never arrived is redone
+
+  setStage('Encrypting and uploading');
+  for (let i = job.sent; i < totalChunks; i++) {
+    if (!job.urlMap.has(i)) {
+      if (i >= urlLimit) throw new UploadStop('gone', `No presigned URL for chunk ${i}`);
+      await fetchUrls(i);
+    }
+    const presignedUrl = job.urlMap.get(i);
+    if (!presignedUrl) throw new UploadStop('refused', `Presigned URL for chunk ${i} missing after batch fetch`);
+
+    const raw = await _readChunk(chunks[i]); // fresh FileReader per chunk — fixes NotReadableError
+    const encrypted = await _encryptChunk(raw, i, state);
+    const chunkHashHex = blake3Hash(encrypted);
+
+    await _putChunkDirect(presignedUrl, encrypted, i, job.uuid, reportError);
+
+    job.hashes.push(chunkHashHex);
+    if (job.plainHash) job.plainHash.update(new Uint8Array(raw));
+    job.sent = i + 1;
+    writeChunkState(_recordOf(job), reportError).catch(() => {});
+    progress();
+  }
+
+  setStage('Finishing');
+  if (job.plainHash && job.sealNonceHex) {
+    const prResult = await runPermanentRecord(job.uuid, job.plainHash.digest('hex'), job.sealNonceHex, state.sessionAesKey);
+    if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${short}`);
+    // (paid only, unreachable today, F-10 — reported, not shown.)
+    job.plainHash = null;   // once per transfer, even if finalise needs a retry
+  }
+
+  // ── Share-6-3d: finalise the transfer ─────────────────────────────────────
+  // Client-authoritative CIPHERTEXT-chunk Merkle root over the per-chunk
+  // ciphertext-object digests in job.hashes (hex, index order).
+  // buildMerkleTree (frontend/merkle.js) applies the RFC-6962 leaf/node domain
+  // separation internally — feed it the RAW 32-byte digests. Do NOT prepend the
+  // session IV (NONCE trap): the leaves must equal BLAKE3 of the exact stored
+  // bytes the Worker re-hashes at download, or every transfer 409-walls at 6-5.
+  // This is the ciphertext root ONLY — never blake3PlaintextRoot (TWO ROOTS).
+  const leaves = job.hashes.map(hex => new Uint8Array(hexToBuf(hex)));
+  const { root: merkleRootBytes } = buildMerkleTree(leaves);
+  const finaliseBody = {
+    hashes:      leaves.map(_bytesToB64url), // b64url(raw 32B digest) × total_chunks
+    merkle_root: _bytesToB64url(merkleRootBytes),
+    // tree_algo is NOT sent — the Worker pins 'rfc6962-unbalanced-blake3-v1'.
+  };
+
+  let finRes;
+  try {
+    finRes = await fetch(`${WORKER_URL}/upload/${job.uuid}/finalise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': job.sessionToken },
+      body: JSON.stringify(finaliseBody),
+    });
+  } catch (e) {
+    reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${short}`);
+    throw new UploadStop('unfinished', e.message);
+  }
+
+  if (finRes.status === 409) {
+    // incomplete → { missing }; B12-1d wrong size → { segments } (the Worker deletes those).
+    // The session stays open: carry on from the first part that has to go again.
+    let body = {};
+    try { body = await finRes.json(); } catch { /* not JSON */ }
+    const redo = (body.missing || body.segments || []).map(s => parseInt(s, 10)).filter(n => n >= 0);
+    reportError(body.error === 'wrong_size' ? 'finalise_wrong_size' : 'finalise_incomplete',
+      `${redo.length}: ${redo.slice(0, 20).join(',')}`, `uuid:${short}`);
+    job.sent = redo.length ? Math.min(job.sent, ...redo) : 0;
+    job.hashes.length = job.sent;
+    writeChunkState(_recordOf(job), reportError).catch(() => {});
+    throw new UploadStop('missing', `finalise 409 ${body.error || ''}`);
+  }
+  if (finRes.status === 401 || finRes.status === 404) {
+    reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${short}`);
+    throw new UploadStop('gone', `finalise ${finRes.status}`);
+  }
+  if (!finRes.ok) {
+    const txt = await finRes.text().catch(() => '');
+    reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${short} ${txt.slice(0, 120)}`);
+    throw new UploadStop(finRes.status >= 500 ? 'unfinished' : 'browser', `finalise ${finRes.status}`);
+  }
+
+  // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
+  // The resume record goes only now: a refresh after a failed finalise can still finish.
+  clearResumeState(job.uuid, reportError).catch(() => {});
+  domRefs.passphraseInput.value = '';
+  setProgress(100);
+  await new Promise(r => setTimeout(r, 500));
+
+  // Fragment grammar v1 (D-1): real filename + key + IV in URL fragment only.
+  const fragmentBlob = assembleFragment({
+    keyBytes:  new Uint8Array(hexToBuf(job.keyHex)),
+    ivBytes:   new Uint8Array(hexToBuf(job.ivHex)),
+    filename:  job.file.name,
+    sealNonce: job.sealNonceHex ? new Uint8Array(hexToBuf(job.sealNonceHex)) : undefined,
+    sizeBytes: job.file.size, // Share-Size-1: size travels in the fragment, not /meta
+  });
+  const shareUrl = `${location.origin}${location.pathname}?uuid=${job.uuid}#${fragmentBlob}`;
+  history.replaceState(null, '', location.pathname);
+  showSharePanel(shareUrl, job.info);
 }
 
 export async function checkResumeState(domRefs, state, helpers) {
@@ -1225,14 +1371,13 @@ export async function checkResumeState(domRefs, state, helpers) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// resumeUpload
+// resumeUpload — after a refresh: ask for the same file, then carry on (_carryOn).
 // ─────────────────────────────────────────────────────────────────────────────
 export async function resumeUpload(record, domRefs, state, helpers) {
   if (!record) return;
   const { resumeCard } = domRefs;
-  const { setStage, setProgress, formatBytes, reportError, showSharePanel, showStopped } = helpers;
-  const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
-  // Back to the resume card with a sentence (file picker cancelled, wrong file, no network).
+  const { formatBytes, reportError, showStopped } = helpers;
+  // Back to the resume card with a sentence (file picker cancelled, wrong file).
   const backToCard = (text) => {
     helpers.setView('empty');
     if (resumeCard) resumeCard.classList.remove('hidden');
@@ -1242,30 +1387,18 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   // ── Mode gate (6-4a): only direct-R2 records supported ────────────────────
   // Pre-6-2 records lack uploadMode / sessionToken and cannot finalise.
   // Discard cleanly rather than taking the legacy relay road.
-  if (record.uploadMode !== 'direct-r2') {
-    await clearResumeState(record.uuid, reportError);
-    showStopped(NO_RESUME);
-    return;
-  }
-
-  const totalChunks     = record.totalChunks;
-  const resumeFrom      = record.chunkIndex + 1;
-  const expiryTimestamp = record.expiryTimestamp
-    || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
-  const sealNonceHex    = record.sealNonceHex || null;
   // sessionToken was minted at /initiate and stored in the record — no re-credential needed.
-  const sessionToken    = record.sessionToken;
-
-  if (!sessionToken) {
+  if (record.uploadMode !== 'direct-r2' || !record.sessionToken) {
     await clearResumeState(record.uuid, reportError);
     showStopped(NO_RESUME);
     return;
   }
 
-  // B12-1c: the size-signed tail URL is issued once, at /initiate. A record that
-  // has one serves index N−1 from it; /urls is asked for full chunks only.
-  const tailUrl  = record.tailUrl || null;
-  const urlLimit = tailUrl ? totalChunks - 1 : totalChunks; // /urls serves indices < urlLimit
+  const totalChunks = record.totalChunks;
+  const resumeFrom  = record.chunkIndex + 1;
+
+  // B12-1c: the size-signed tail URL is issued once, at /initiate.
+  const tailUrl = record.tailUrl || null;
   if (tailUrl && resumeFrom < totalChunks && tailUrl.expires * 1000 <= Date.now()) {
     await clearResumeState(record.uuid, reportError);
     showStopped(NO_RESUME);
@@ -1292,241 +1425,31 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     return;
   }
 
-  const chunks = _splitChunks(resumeFile, CHUNK_SIZE);
-  if (chunks.length !== record.totalChunks) {
+  if (Math.ceil(resumeFile.size / CHUNK_SIZE) !== totalChunks) {
     backToCard('That file doesn’t match the unfinished upload. Discard it and start again.');
-    reportError('resume_chunk_count', `expected ${record.totalChunks} got ${chunks.length}`, `uuid:${record.uuid.slice(0,8)}`);
+    reportError('resume_chunk_count', `expected ${totalChunks} got ${Math.ceil(resumeFile.size / CHUNK_SIZE)}`, `uuid:${record.uuid.slice(0,8)}`);
     return;
   }
 
   if (resumeCard) resumeCard.classList.add('hidden');
   helpers.setView('uploading');
-  setStage('Preparing');
-  setProgress(0, '');
+  helpers.setStage('Preparing');
+  helpers.setProgress(0, '');
 
   if (!(await _loadDepsOrSay(domRefs, helpers))) return;
 
-  // Restore AES-GCM key + session IV from the record.
-  // Per-chunk AAD (4-byte BE uint32 index) differentiates chunks; session IV is shared.
-  const keyBytes = hexToBuf(record.keyHex);
-  const ivBytes  = hexToBuf(record.ivHex);
-  state.sessionAesKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
-  state.sessionIv     = new Uint8Array(ivBytes);
-  state.uploadUUID    = record.uuid;
-
-  // ── Probe session token before CPU work ────────────────────────────────────
-  // 401 = sessionToken expired (transfer window closed) or finalise already spent it.
-  // 409 = upload_complete (finalise already ran — stale IDB record).
-  // Both are terminal: clear the record and surface a clean message.
-  // B12-1c: if only the tail is left there is nothing for /urls to sign, so the
-  // probe is skipped; finalise's 401/409 is then the session check. Re-PUTting
-  // the tail is harmless (same key + IV + AAD → identical ciphertext).
-  const remaining = urlLimit - resumeFrom; // full chunks /urls still has to sign
-
-  if (remaining > 0) {
-    let probeRes;
-    try {
-      probeRes = await fetch(`${WORKER_URL}/upload/${record.uuid}/urls`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
-        body:    JSON.stringify({ from: resumeFrom, count: Math.min(remaining, 256) }),
-      });
-    } catch (e) {
-      reportError('resume_urls_fetch', e.message?.slice(0, 80), `uuid:${record.uuid.slice(0, 8)}`);
-      backToCard('Refueler couldn’t be reached. Check your connection, then choose the file again.');
-      return;
-    }
-
-    if (probeRes.status === 401 || probeRes.status === 409) {
-      await clearResumeState(record.uuid, reportError);
-      showStopped(NO_RESUME);
-      return;
-    }
-
-    // 400 on a record with no tailUrl = an old record meeting a B12-1c Worker
-    // (it asked /urls for index N−1, which that Worker never signs). Can't finish.
-    if (probeRes.status === 400 && !tailUrl) {
-      await clearResumeState(record.uuid, reportError);
-      showStopped(NO_RESUME);
-      return;
-    }
-
-    if (!probeRes.ok) {
-      const txt = await probeRes.text().catch(() => '');
-      reportError('resume_urls_status', `HTTP ${probeRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
-      backToCard('Refueler couldn’t carry on just now. Choose the file again to retry.');
-      return;
-    }
-
-    // Populate the URL map from the initial batch.
-    const initBody = await probeRes.json();
-    var urlMap    = new Map();
-    for (const entry of (initBody.urls || [])) urlMap.set(entry.index, entry.url);
-    const maxInitIdx = initBody.urls?.length > 0 ? Math.max(...initBody.urls.map(e => e.index)) : resumeFrom - 1;
-    var batchNext    = (maxInitIdx + 1 < urlLimit) ? maxInitIdx + 1 : null;
-  } else {
-    // remaining === 0: no full chunks left to sign — either all chunks are in R2
-    // and finalise was interrupted, or only the tail is left (B12-1c tailUrl).
-    var urlMap    = new Map();
-    var batchNext = null;
-  }
-  if (tailUrl) urlMap.set(totalChunks - 1, tailUrl.url);
-
-  // ── HARD RULE 1: re-encrypt prior chunks to rebuild ciphertext hashes ───────
-  // Exactly the same key + session IV + 4-byte BE uint32 AAD as startUpload.
-  // Hash the CIPHERTEXT — these are the Merkle leaves for /finalise.
-  // Parity is proven by the acceptance-gate root-equality check (not by inspection).
-  const chunkHashes = [];
-  // C2 (partly): say what the pause is. Re-hashing what was sent rebuilds the Merkle leaves.
-  const totalBytes = record.fileSize;
-  const sentBytes0 = Math.min(resumeFrom * CHUNK_SIZE, totalBytes);
-  setProgress(sentBytes0 / totalBytes * 100, 'Checking what was already sent');
-  for (let i = 0; i < resumeFrom; i++) {
-    const raw = await _readChunk(chunks[i]);
-    const aad = new Uint8Array(4);
-    new DataView(aad.buffer).setUint32(0, i, false);
-    let encrypted;
-    try {
-      encrypted = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
-        state.sessionAesKey, raw
-      );
-    } catch (e) {
-      reportError('resume_encrypt', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
-      throw e;
-    }
-    let h;
-    try { h = blake3Hash(new Uint8Array(encrypted)); } catch (e) {
-      reportError('resume_hash', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
-      throw e;
-    }
-    chunkHashes.push(h);
-    setProgress(sentBytes0 / totalBytes * 100, `Checking what was already sent · ${formatBytes(Math.min((i + 1) * CHUNK_SIZE, totalBytes))} of ${formatBytes(sentBytes0)}`);
-  }
-
-  // ── Upload remaining chunks to R2 via presigned URLs ──────────────────────
-  // Mirrors startUpload's direct-R2 loop exactly: encrypt → blake3Hash → PUT.
-  setStage('Encrypting and uploading');
-
-  for (let i = resumeFrom; i < totalChunks; i++) {
-    // Page URL batches on demand (> 256 remaining chunks)
-    if (!urlMap.has(i)) {
-      if (batchNext === null) throw new Error(`No presigned URL for chunk ${i} and no batch_next`);
-      let newUrls;
-      try {
-        newUrls = await _fetchNextUrlBatch(record.uuid, sessionToken, batchNext, Math.min(256, urlLimit - batchNext), reportError);
-      } catch (e) {
-        if (e.status === 400 && !tailUrl) { // old record on a B12-1c Worker — see probe above
-          await clearResumeState(record.uuid, reportError);
-          showStopped(NO_RESUME);
-          return;
-        }
-        throw e;
-      }
-      for (const entry of newUrls) urlMap.set(entry.index, entry.url);
-      const maxIdx = newUrls.length > 0 ? Math.max(...newUrls.map(e => e.index)) : batchNext - 1;
-      batchNext = (maxIdx + 1 < urlLimit) ? maxIdx + 1 : null;
-    }
-
-    const presignedUrl = urlMap.get(i);
-    if (!presignedUrl) throw new Error(`Presigned URL for chunk ${i} missing after batch fetch`);
-
-    const raw = await _readChunk(chunks[i]);
-    const aad = new Uint8Array(4);
-    new DataView(aad.buffer).setUint32(0, i, false);
-    let encrypted;
-    try {
-      encrypted = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
-        state.sessionAesKey, raw
-      );
-    } catch (e) {
-      reportError('resume_encrypt_chunk', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
-      throw e;
-    }
-
-    let chunkHashHex;
-    try {
-      chunkHashHex = blake3Hash(new Uint8Array(encrypted));
-    } catch (e) {
-      reportError('resume_blake3_hash', e.message, `uuid:${record.uuid.slice(0, 8)} chunk:${i}`);
-      throw e;
-    }
-    chunkHashes.push(chunkHashHex);
-
-    await _putChunkDirect(presignedUrl, encrypted, i, record.uuid, reportError);
-
-    writeChunkState({
-      uuid: record.uuid, chunkIndex: i, totalChunks,
-      fileName: record.fileName, fileSize: record.fileSize,
-      keyHex: record.keyHex, ivHex: record.ivHex,
-      tier: record.tier || 'free', expiryTimestamp, timestamp: Date.now(),
-      sealNonceHex: sealNonceHex || undefined,
-      uploadMode: 'direct-r2', sessionToken,
-      tailUrl: tailUrl || undefined,
-      sourceType: record.sourceType || 'file',
-    }, reportError).catch(() => {});
-
-    const sentBytes = Math.min((i + 1) * CHUNK_SIZE, totalBytes);
-    setProgress(sentBytes / totalBytes * 100, `${formatBytes(sentBytes)} of ${formatBytes(totalBytes)}`);
-  }
-
-  clearResumeState(record.uuid, reportError).catch(() => {});
-
-  // ── Finalise — identical to 6-3d block in startUpload (TWO ROOTS: ciphertext only) ──
-  setStage('Finishing');
-
-  const leaves = chunkHashes.map(hex => new Uint8Array(hexToBuf(hex)));
-  const { root: merkleRootBytes } = buildMerkleTree(leaves);
-  const finaliseBody = {
-    hashes:      leaves.map(_bytesToB64url),
-    merkle_root: _bytesToB64url(merkleRootBytes),
-    // tree_algo NOT sent — Worker pins 'rfc6962-unbalanced-blake3-v1'.
+  const expiryTimestamp = record.expiryTimestamp
+    || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
+  const job = {
+    file: resumeFile, uuid: record.uuid, keyHex: record.keyHex, ivHex: record.ivHex,
+    totalChunks, expiryTimestamp, tier: record.tier || 'free',
+    sessionToken: record.sessionToken, tailUrl,
+    sealNonceHex: record.sealNonceHex || null, sourceType: record.sourceType || 'file',
+    sent: resumeFrom, hashes: [], urlMap: new Map(), plainHash: null,
+    // A resumed upload doesn't record the password or delete setting: left out of the ledger.
+    info: { fileName: record.fileName, sizeBytes: record.fileSize, expiryTimestamp },
   };
-
-  let finRes;
-  try {
-    finRes = await fetch(`${WORKER_URL}/upload/${record.uuid}/finalise`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
-      body:    JSON.stringify(finaliseBody),
-    });
-  } catch (e) {
-    reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${record.uuid.slice(0, 8)}`);
-    showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
-    return; // no share URL for an unfinalised transfer (HARD RULE 4 — IDB already cleared above)
-  }
-
-  if (finRes.status === 409) {
-    let missing = [];
-    try { missing = (await finRes.json()).missing || []; } catch { /* not JSON */ }
-    reportError('finalise_incomplete', `${missing.length} missing: ${missing.slice(0, 20).join(',')}`, `uuid:${record.uuid.slice(0, 8)}`);
-    showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
-    return;
-  }
-
-  if (!finRes.ok) {
-    const txt = await finRes.text().catch(() => '');
-    reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${record.uuid.slice(0, 8)} ${txt.slice(0, 120)}`);
-    showStopped('The upload didn’t finish. Some parts didn’t arrive. Start over to send it again.');
-    return;
-  }
-
-  // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
-  setProgress(100);
-  await new Promise(r => setTimeout(r, 500));
-
-  // Fragment grammar v1 (D-1): real filename + key + IV in URL fragment only.
-  const resumeFragmentBlob = assembleFragment({
-    keyBytes:  new Uint8Array(hexToBuf(record.keyHex)),
-    ivBytes:   new Uint8Array(hexToBuf(record.ivHex)),
-    filename:  record.fileName,
-    sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
-    sizeBytes: record.fileSize, // Share-Size-1
-  });
-  const shareUrl = `${location.origin}${location.pathname}?uuid=${record.uuid}#${resumeFragmentBlob}`;
-  history.replaceState(null, '', location.pathname);
-  showSharePanel(shareUrl, { fileName: record.fileName, sizeBytes: record.fileSize, expiryTimestamp });
+  await _carryOnOrStop(job, domRefs, state, helpers);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

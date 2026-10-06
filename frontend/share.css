@@ -321,6 +321,9 @@ html.up-dragging body::after {
 
 .rx-btn.up-ghost { background: none; color: var(--fg); border: 1px solid var(--rx-rule-strong); }
 .up-btnrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+/* Stopped (F-11): Try again + Start over side by side; Start over alone when it can't carry on. */
+.up-stop-actions { margin-top: 28px; }
+.up-stop-actions:has(> [hidden]) { grid-template-columns: minmax(0, 1fr); }
 
 /* Resume panel */
 .up-panel { border: 1px solid var(--rx-rule-strong); border-radius: 10px; padding: 20px 22px; margin-top: 32px; }
