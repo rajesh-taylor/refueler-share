@@ -41,13 +41,14 @@ test('share URL contains ?uuid= and a non-empty fragment', async ({ page }) => {
   await page.locator('#file-input').setInputFiles(tmpFile);
   await expect(page.locator('#options-card')).toBeVisible({ timeout: 5000 });
 
-  // Wait for Turnstile to solve (headed browser, real widget — allow 60s)
+  // U-10: the button no longer waits for Turnstile. Pressed early it reads "Checking…"
+  // and the upload starts when the (headed, real) check passes.
   await expect(page.locator('#upload-btn')).toBeEnabled({ timeout: 60000 });
 
   await page.locator('#upload-btn').click();
 
-  // Wait for share card — allow 30s for upload
-  await expect(page.locator('#share-card')).toBeVisible({ timeout: 30000 });
+  // Wait for share card — allow 90s for the check + upload
+  await expect(page.locator('#share-card')).toBeVisible({ timeout: 90000 });
 
   const shareUrl = (await page.locator('#share-link-display').textContent()).trim();
   expect(shareUrl).toBeTruthy();
@@ -79,7 +80,7 @@ test('navigating to a share URL shows receiver card not upload screen', async ({
   await expect(page.locator('#options-card')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#upload-btn')).toBeEnabled({ timeout: 60000 });
   await page.locator('#upload-btn').click();
-  await expect(page.locator('#share-card')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('#share-card')).toBeVisible({ timeout: 90000 });
 
   const shareUrl = (await page.locator('#share-link-display').textContent()).trim();
   fs.unlinkSync(tmpFile);

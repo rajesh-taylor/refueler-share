@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.11 | **Last updated:** Share-Upload-2 · 6 Oct 2026
+> **Version:** 9.12 | **Last updated:** Share-Upload-3 · 6 Oct 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
  
 ---
@@ -205,13 +205,12 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-Upload-2 ✓ (6 Oct 2026) — Share sub-menu on every Share page (refueler.io `580135c`) and the redesigned upload page, B1 (look, copy, structure; shipped `565efd9`). Live-verified on iPhone, Pixel and desktop. B2 (behaviour: hidden check, keep-the-check "Choose another", whole-page drop, F-11 errors + Try again, scroll-to-top on view change) + Part C backlog → Share-Upload-3. Then B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
+**Share-Upload-3 ✓ (6 Oct 2026) — upload page B2 items 1–4 (`4bb3fde`, `627c0d0`): sheet top into view on every view change (F-27), Cloudflare check out of sight unless it needs a click + "Checking…" auto-start + single-use token (U-10), "Choose another" keeps the check (U-11), whole-page drop (U-8). iPhone retest in a fresh tab outstanding (first test ran pre-ship code). Next: Share-Upload-4 (F-11 errors + Try again, Part C) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
 | Share-B12 ✓ | `cc14d21` | Storage/quota/surfaces/billing design locked — `docs/B12-spec-v1.1.md`. |
 | Share-B12-SR ✓ | `4564730` | Security review — `B12-SR-spec-v1.md` (root). Amends B12 A1–A18. |
-| B12-1 ✓ | `3b1b819` | PURGED status, DAD clears `dock_index`, drop `size_bytes` (X4), sweep rules S1.10. |
 | B12-1b ✓ | deploy `0d2f94d9` | Test gate green; R2 proven to enforce signed `content-length` (403 on mismatch, plain and chunked). Optional `contentLength` in presigner. S1.1 build split to B12-1c. |
 | B12-1c ✓ | `413b714` | Frontend half of S1.1: `tail_url` handling in `upload.js` (fresh + resume, `tailUrl` in IDB) and `test-upload.html` (+16 B bodies, 32 MiB locked). Worker half → B12-1d. |
 | B12-1d ✓ | deploy `1c6c7985` | Worker half of S1.1: signed `content-length` on `/initiate` + `/urls`, `tail_url` every N, chunk/byte-count 400, finalise `wrong_size` 409 + `waitUntil` delete. 639 tests. Live: wrong-size PUT → 403; 8.5 GiB / 272 chunks finalised, R2 chunks exactly 33,554,448 B. |
@@ -219,6 +218,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Cred-Fix-2b ✓ | `ca3972c` · deploy `a5ac4f5d` | Browser sends credential format v2 (vendored cashu-ts, DLEQ checked); Worker refuses v1. 642 tests. |
 | Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
 | Share-Upload-2 ✓ | refueler.io `580135c` · `565efd9` | Share sub-menu (`sections.js` + `section-nav.njk`); upload page B1 (open sheet + slip, §1 copy, bytes progress, QR canvas, F-23 `share-early.js`, F-6 tokens). Preview harness `dev/share-harness/`. B2 → Share-Upload-3. |
+| Share-Upload-3 ✓ | `4bb3fde` · `627c0d0` | B2 1–4: F-27 scroll, U-10 hidden check + "Checking…", U-11 keep the check, U-8 whole-page drop. `initTurnstile`/`renderTurnstile` no longer exported. F-11 + Part C → Share-Upload-4. |
  
 ---
  
@@ -228,7 +228,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 (B2 + backlog) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 (F-11 + Part C) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
@@ -263,7 +263,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Repo bloat (found 28 Sep):** 200 Rust build files under `worker/blake3-wasm-src/target/` are tracked in git. Untrack them and gitignore `target/` (keep the vendored `worker/blake3-wasm/` output) → any small tidy session.
 
 **Added Share-B12-1d (5 Oct 2026):**
-- **Share-Upload-2 additions — status after Share-Upload-2 (6 Oct):** → **Share-Upload-3** unless marked.
+- **Share-Upload-2 additions — status after Share-Upload-3 (6 Oct):** → **Share-Upload-4** unless marked. Also F-11 (B2 item 5: every upload failure → "Stopped" with §1 copy; same-tab "Try again" reuses the held file; a failed check needs a fresh token, and the reset widget may be waiting for a click inside the hidden options card).
   1. Resume: button takes 3–6 s to appear after refresh; file picker needs two clicks (Safari desktop). Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
   2. Resume: pause while sent chunks are re-hashed — *partly done (B1: "Checking what was already sent · X of Y")*; speed-up still open.
   3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
@@ -272,12 +272,11 @@ Swept against the repo on import; only items not already done or recorded elsewh
   6. 14 `sourceMappingURL` lines in `frontend/blake3/esm/*` **and** 14 in `src/blake3/` → strip at vendor/copy time.
   7. `test-upload.html` stats refresh per chunk (keep the 100-chunk log line).
   8. `test-upload.html` header comment stale ("NEVER add to sync-share.sh", "NEVER commit to the public mirror").
-  9. Finalise 409 `wrong_size` → B2's F-11 error states.
+  9. Finalise 409 `wrong_size` → F-11 error states (Share-Upload-4).
 - **Write-once chunks** → KV-Audit-Opus / B12-3: also sign `If-None-Match: *` into presigned PUTs so R2 refuses to overwrite an existing chunk (closes "holder of a leaked URL overwrites a chunk with same-size junk for 6 days" → download 409 / DoS, never disclosure). Needs a live R2 gate (like B12-1b) and `upload.js` treating 412 as success on resume retries (saves the re-upload).
 - **Test-Harness-1** (small): combined `npm test` failed locally 5 Oct (workerd runtimes ETIMEDOUT / refused on 127.0.0.1). **Cause: Mullvad VPN** — with it disconnected the suite is clean (639 passed, 10 s); CI (Node 22) green throughout. Local network sharing was already on, so it is not that setting — workaround: disconnect Mullvad while running the suite (or run files singly). Not code. Still open: under `singleWorker: true`, `delete_resume` + `dock_b12` bearer-delete tests fail from cross-file state (pre-existing). Also remove unused `MIME_DENYLIST` (Share-MIME-1).
 
 **Added Cred-Fix-2b (5 Oct 2026):**
-- **Share-Upload-3 (B2, U-10):** Turnstile console warning "Unable to find onload callback 'onTurnstileLoad'…" — drop `?onload=` (and `initTurnstile`'s export) when the check goes `interaction-only`.
 - **Vendor cleanup** (small, both repos): `frontend/noble-secp256k1.js` is no longer imported (credentials use `frontend/cashu-crypto.js`). Remove it from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in one ship — the sync never deletes from the mirror.
 - **cashu-ts upgrades:** bump `worker/package.json` and `bin/vendor-cashu/package.json` together, then `bin/vendor-cashu.sh` + ship + deploy. Browser and Worker must run the same version.
 - **DLEQ key pin** (B7/B8, anonymous rail): the browser checks the DLEQ proof against the key in the same response, not a pinned key (Rajesh, 5 Oct). Pin when credentials are bought separately from transfers.
@@ -294,7 +293,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 3. **"Received" ledger row** on the finished screen — exact local date + time, labelled as the recipient's clock; nothing new reaches the Worker.
 
 **Added Share-Upload-2 (6 Oct 2026):**
-- **Share-Upload-3 (B2):** after every `setView()` change, bring the top of the sheet into view (on phones the % sat under the header, eyebrow + headline scrolled off; desktop "link ready" too). Rajesh to eyeball it over a week of tests.
+- **F-27 scroll ✓ Share-Upload-3** — Rajesh eyeballs it over a week of tests. Turnstile theme is fixed when first drawn (a later Carbon/Paper switch keeps the old colours; only visible when Cloudflare asks) — tiny, fold into Share-Upload-4 if free.
 - **Share-Receiver-3 (own session, A/B brand mock rounds, Rajesh supplies references):** the three receiver items above, plus **link previews in mail apps** (Tutamail shows title + domain + R icon only; check Gmail, Apple Mail, Outlook, Proton, Signal/WhatsApp). One static preview for every link, DAD or not (the server can't know, and must not tell a mail provider which links are one-shot); a quiet `og:image` card + `og:description` **"A file sent with Refueler Share."** (Rajesh, 6 Oct: no "Open the link…" line, it reads like spam); the "works once" message belongs in the sender's own words (link-ready line). Invariant to keep: a page load never starts a download (mail scanners and preview bots open links). Also the receiver password input is 15 px (iOS zooms) → 16 px.
 - **iOS folder picking** works via long-press in Files; "or a folder" stays on iOS (Rajesh).
 

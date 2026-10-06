@@ -162,6 +162,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Credential hardening | ✅ | Upload credentials bound to one transfer (keyed commitment); standard Cashu proofs verified on every upload; DLEQ checked in the browser; reviewed library code on both sides |
 | Share-Size-1 | ✅ | Exact file size moved into the share link; no longer stored in the transfer record or served by the API. Narrows who can learn the size; does not hide it from storage |
 | Share-Upload-2 | ✅ | Redesigned upload page; one Share menu (Send · Plans · Status) on every Share page; links no longer flash the upload page; working QR code |
+| Share-Upload-3 | ✅ | The security check stays out of sight unless Cloudflare asks for a click, and the upload button never waits on it; drop a file anywhere on the page; each step scrolls into view |
 | B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done. Shipped so far: deletion and sweep fixes; every upload URL signed for its exact chunk size, enforced by storage |
 
 ### Roadmap
@@ -170,7 +171,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 
 | Session | Scope |
 |---------|-------|
-| Share-Upload-3 | Clearer upload errors with Try again; the security check stays out of sight unless needed; whole-page drop; resume fixes |
+| Share-Upload-4 | Clearer upload errors with Try again; resume fixes |
 | MCP-Fix-1 | MCP send tool moved onto the current upload path and credential format, then the npm package is published |
 | Security foundations | Review of every key-value store use (nothing in it may grant access unless signed by the Worker); a dedicated origin for signed-in pages |
 | B12 (rest) | Storage quotas, Citizen sign-in (single-use email link), billing, then an audit of what was built |
