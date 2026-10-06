@@ -452,6 +452,9 @@ let turnstileWidgetId = null;
 let turnstilePolling  = false;
 let turnstileFailed   = false;
 let startWhenChecked  = null;   // queued start while the button reads "Checking…"
+let turnstileTheme    = null;   // 'light' | 'dark', as drawn
+let turnstileStale    = false;  // page theme changed while a token was held
+let themeWatch        = null;
 
 function renderTurnstile(state, domRefs, helpers) {
   const container = document.getElementById('cf-turnstile');
@@ -477,12 +480,17 @@ function renderTurnstile(state, domRefs, helpers) {
   if (turnstileWidgetId !== null) return;
   const wrap = document.getElementById('turnstile-wrap');
   container.innerHTML = '';
-  const isDarkMode = document.documentElement.dataset.theme === 'carbon';
+  if (!themeWatch) {
+    // Cloudflare offers light or dark only, fixed when drawn: follow a Carbon/Paper switch.
+    themeWatch = new MutationObserver(() => _followTheme(state, domRefs, helpers));
+    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  turnstileTheme = _pageTheme();
   turnstileWidgetId = window.turnstile.render(container, {
     sitekey: '0x4AAAAAAD0N7GlHlCRuWITr',
-    theme: isDarkMode ? 'dark' : 'light',
+    theme: turnstileTheme,
     appearance: 'interaction-only',
-    size: 'flexible',
+    size: 'normal',   // Cloudflare's 300 × 65 box, not a full-width slab
     'before-interactive-callback': function() {
       if (wrap) wrap.classList.remove('hidden');
     },
@@ -508,6 +516,7 @@ function renderTurnstile(state, domRefs, helpers) {
     },
     'expired-callback': function() {
       state.turnstileToken = null;
+      if (turnstileStale) setTimeout(() => _redrawTurnstile(state, domRefs, helpers), 0);
     },
   });
 }
@@ -519,10 +528,30 @@ function _resetTurnstile() {
   }
 }
 
+const _pageTheme = () => document.documentElement.dataset.theme === 'carbon' ? 'dark' : 'light';
+
+// Theme switched: redraw the widget in the new colours. A token already held is
+// kept (redrawing would throw it away); the redraw then waits for the next reset.
+function _followTheme(state, domRefs, helpers) {
+  if (turnstileWidgetId === null || _pageTheme() === turnstileTheme) return;
+  if (state.turnstileToken) { turnstileStale = true; return; }
+  _redrawTurnstile(state, domRefs, helpers);
+}
+
+function _redrawTurnstile(state, domRefs, helpers) {
+  turnstileStale = false;
+  try { window.turnstile.remove(turnstileWidgetId); } catch (e) {}
+  turnstileWidgetId = null;
+  turnstileFailed = false;
+  document.getElementById('turnstile-wrap')?.classList.add('hidden');
+  renderTurnstile(state, domRefs, helpers);
+}
+
 // Called right after /credential/issue, whatever its outcome: that token is gone.
-function _spendTurnstileToken(state) {
+function _spendTurnstileToken(state, domRefs, helpers) {
   state.turnstileToken = null;
-  _resetTurnstile();
+  if (turnstileStale) _redrawTurnstile(state, domRefs, helpers);
+  else _resetTurnstile();
 }
 
 function _cancelQueuedStart(state, domRefs) {
@@ -1015,7 +1044,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
       body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blinded.blindedMsg, tier: 'free' }),
     }, 'credential_issue', reportError);
   } finally {
-    _spendTurnstileToken(state);   // single-use, whatever the outcome
+    _spendTurnstileToken(state, domRefs, helpers);   // single-use, whatever the outcome
   }
 
   if (!issueRes.ok) {
