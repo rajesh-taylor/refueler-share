@@ -3,6 +3,8 @@
 // Control: GET /_ctl?fail=<issue|initiate|chunk:N|finalise|finalise409|wrong_size|none>&slow=<ms per chunk>
 import http from 'node:http';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
+import { blake3 } from '../../worker/node_modules/@noble/hashes/blake3.js';
+import { buildMerkleTree } from '../../worker/src/merkle.js';
 const KEY = '1'.repeat(64);
 const CHUNK = 32 * 1024 * 1024;
 const T = new Map();             // uuid → { total, bytes, chunks: [], dad, pw, expiry, done }
@@ -48,11 +50,20 @@ http.createServer(async (req, res) => {
       t.chunks[i] = b; res.writeHead(200, cors); return res.end();
     }
     if (p[0] === 'upload' && p[2] === 'finalise') {
-      await body(req); const t = T.get(p[1]);
+      const fb = JSON.parse(await body(req)); const t = T.get(p[1]);
+      if (!t) return json(res, 401, { error: 'session' });
       if (ctl.fail === 'finalise409') return json(res, 409, { error: 'incomplete', missing: [3] });
       if (ctl.fail === 'wrong_size') return json(res, 409, { error: 'wrong_size', segments: [2] });
       if (ctl.fail === 'finalise') return json(res, 500, { error: 'boom' });
-      t.done = true; return json(res, 200, { ok: true, merkle_root: 'x' });
+      // As the real Worker: every part present, leaves = BLAKE3 of the stored bytes, root over them.
+      const b64 = (x) => Buffer.from(x).toString('base64url');
+      const missing = [...Array(t.total).keys()].filter(i => !t.chunks[i]);
+      if (missing.length) return json(res, 409, { error: 'incomplete', missing });
+      const leaves = t.chunks.slice(0, t.total).map(c => blake3(new Uint8Array(c)));
+      const bad = leaves.findIndex((h, i) => b64(h) !== fb.hashes?.[i]);
+      if (bad >= 0 || fb.hashes.length !== t.total) return json(res, 400, { error: 'hash mismatch', index: bad });
+      if (b64(buildMerkleTree(leaves).root) !== fb.merkle_root) return json(res, 400, { error: 'root mismatch' });
+      t.done = true; return json(res, 200, { ok: true, merkle_root: fb.merkle_root });
     }
     if (p[0] === 'meta') {
       const t = T.get(p[1]); if (!t || !t.done) return json(res, 404, { error: 'not found' });

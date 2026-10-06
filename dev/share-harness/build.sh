@@ -17,5 +17,7 @@ cp "$H/turnstile-stub.js" "$A/turnstile-stub.js"
 sed -i '' 's|https://api.share.refueler.io|http://localhost:8766|g' "$A/crypto.js" "$OUT/io/src/share/index.njk"
 sed -i '' 's|https://challenges.cloudflare.com/turnstile/v0/api.js[^"]*|/share/assets/turnstile-stub.js|' "$OUT/io/src/share/index.njk"
 sed -i '' 's|https://refueler.io/notes/|http://localhost:8765/notes/|g' "$A/download.js"
+# Chunk retries wait 2 → 60 s live (~2 min before "Stopped"); 0.2 s each here.
+sed -i '' 's|_DIRECT_RETRY_DELAYS = \[[^]]*\]|_DIRECT_RETRY_DELAYS = [200, 200, 200, 200, 200]|' "$A/upload.js"
 (cd "$OUT/io" && npx @11ty/eleventy --quiet >/dev/null)
 echo "built $(date +%H:%M:%S)"
