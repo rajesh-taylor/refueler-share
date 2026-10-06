@@ -684,6 +684,10 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   domRefs.upUntil.classList.remove('up-dim');
   domRefs.upUntilNote.hidden = false;
   setView('chosen');
+  // Warm the hashing + credential code while the sender looks at the slip, so the
+  // button press doesn't wait for it ("Preparing" at 0 %). Cached; a failure here is
+  // silent and startUpload retries and says so.
+  loadDeps().catch(() => {});
   // U-11: a passed check is kept for the next file. Draw once; restart only after a failure.
   if (turnstileWidgetId === null) renderTurnstile(state, domRefs, helpers);
   else if (turnstileFailed && !state.turnstileToken) _resetTurnstile();
@@ -1207,6 +1211,8 @@ export async function checkResumeState(domRefs, state, helpers) {
     return;
   }
 
+  loadDeps().catch(() => {});   // warm before "Choose the file" (see _handleFileSelection)
+
   if (resumeNoticeBtn) {
     let resumeInFlight = false;
     resumeNoticeBtn.addEventListener('click', async () => {
@@ -1233,11 +1239,6 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     if (domRefs.resumeDetail) domRefs.resumeDetail.textContent = text;
   };
 
-  if (resumeCard) resumeCard.classList.add('hidden');
-  helpers.setView('uploading');
-  setStage('Preparing');
-  setProgress(0, '');
-
   // ── Mode gate (6-4a): only direct-R2 records supported ────────────────────
   // Pre-6-2 records lack uploadMode / sessionToken and cannot finalise.
   // Discard cleanly rather than taking the legacy relay road.
@@ -1246,16 +1247,6 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     showStopped(NO_RESUME);
     return;
   }
-
-  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
-
-  // Restore AES-GCM key + session IV from the record.
-  // Per-chunk AAD (4-byte BE uint32 index) differentiates chunks; session IV is shared.
-  const keyBytes = hexToBuf(record.keyHex);
-  const ivBytes  = hexToBuf(record.ivHex);
-  state.sessionAesKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
-  state.sessionIv     = new Uint8Array(ivBytes);
-  state.uploadUUID    = record.uuid;
 
   const totalChunks     = record.totalChunks;
   const resumeFrom      = record.chunkIndex + 1;
@@ -1283,6 +1274,9 @@ export async function resumeUpload(record, domRefs, state, helpers) {
 
   // ── File prompt + validation ───────────────────────────────────────────────
   // We need the original plaintext bytes to re-encrypt prior chunks (HARD RULE 1).
+  // The picker opens before anything is awaited on the resume path: Safari only
+  // opens a file picker inside the click that asked for it (user activation), so
+  // loading deps first cost a second click (Share-Upload-3).
   let resumeFile = null;
   try {
     resumeFile = await _promptForResumeFile(record.fileName, record.fileSize, domRefs);
@@ -1304,6 +1298,21 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     reportError('resume_chunk_count', `expected ${record.totalChunks} got ${chunks.length}`, `uuid:${record.uuid.slice(0,8)}`);
     return;
   }
+
+  if (resumeCard) resumeCard.classList.add('hidden');
+  helpers.setView('uploading');
+  setStage('Preparing');
+  setProgress(0, '');
+
+  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
+
+  // Restore AES-GCM key + session IV from the record.
+  // Per-chunk AAD (4-byte BE uint32 index) differentiates chunks; session IV is shared.
+  const keyBytes = hexToBuf(record.keyHex);
+  const ivBytes  = hexToBuf(record.ivHex);
+  state.sessionAesKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+  state.sessionIv     = new Uint8Array(ivBytes);
+  state.uploadUUID    = record.uuid;
 
   // ── Probe session token before CPU work ────────────────────────────────────
   // 401 = sessionToken expired (transfer window closed) or finalise already spent it.
