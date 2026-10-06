@@ -9,7 +9,7 @@
  * The `z` field (Share-Size-1) is the exact plaintext byte count (for a folder,
  * the zip as sent). Optional: links made before it parse with sizeBytes null.
  * It moves the size out of the manifest and /meta; it does not hide the size
- * (the chunk count and R2 object sizes still reveal it approximately).
+ * (the chunk count gives it to within 32 MiB; R2 object sizes give it exactly).
  * The AES session key lives in the URL fragment only — never in requests,
  * never in logs, never in the manifest.
  *
