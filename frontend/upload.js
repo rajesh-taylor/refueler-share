@@ -1056,6 +1056,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
       ivBytes:   new Uint8Array(state.sessionIv),
       filename:  state.selectedFile.name,
       sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
+      sizeBytes: state.selectedFile.size, // Share-Size-1: size travels in the fragment, not /meta
     });
     const shareUrl2 = `${location.origin}${location.pathname}?uuid=${state.uploadUUID}#${fragmentBlob2}`;
     history.replaceState(null, '', location.pathname);
@@ -1438,6 +1439,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
     ivBytes:   new Uint8Array(hexToBuf(record.ivHex)),
     filename:  record.fileName,
     sealNonce: sealNonceHex ? new Uint8Array(hexToBuf(sealNonceHex)) : undefined,
+    sizeBytes: record.fileSize, // Share-Size-1
   });
   const shareUrl = `${location.origin}${location.pathname}?uuid=${record.uuid}#${resumeFragmentBlob}`;
   history.replaceState(null, '', location.pathname);

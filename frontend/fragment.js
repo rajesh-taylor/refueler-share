@@ -3,9 +3,13 @@
  *
  * Implements the locked fragment grammar (D-1 filename fix, SW-MCP-4):
  *
- *   { v: 1, k: "<aes-key-b64url>", i: "<iv-b64url>", n: "<real-filename>", s: "<seal-nonce-b64url>" }
+ *   { v: 1, k: "<aes-key-b64url>", i: "<iv-b64url>", n: "<real-filename>", s: "<seal-nonce-b64url>", z: <plaintext-bytes> }
  *
  * The `s` (seal_nonce) field is present only for permanent-record transfers.
+ * The `z` field (Share-Size-1) is the exact plaintext byte count (for a folder,
+ * the zip as sent). Optional: links made before it parse with sizeBytes null.
+ * It moves the size out of the manifest and /meta; it does not hide the size
+ * (the chunk count and R2 object sizes still reveal it approximately).
  * The AES session key lives in the URL fragment only — never in requests,
  * never in logs, never in the manifest.
  *
@@ -69,9 +73,10 @@ function fromBase64url(str) {
  * @param {Uint8Array}  params.ivBytes    — 12-byte AES-GCM IV
  * @param {string}      params.filename   — real filename (not "encrypted-payload")
  * @param {Uint8Array}  [params.sealNonce] — seal nonce for permanent-record transfers
+ * @param {number}      [params.sizeBytes] — exact plaintext byte count (Share-Size-1)
  * @returns {string} base64url-encoded JSON fragment
  */
-export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce } = {}) {
+export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce, sizeBytes } = {}) {
   if (!(keyBytes instanceof Uint8Array) || keyBytes.length === 0) {
     throw new TypeError('keyBytes must be a non-empty Uint8Array');
   }
@@ -96,6 +101,13 @@ export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce } = {}
     obj.s = toBase64url(sealNonce);
   }
 
+  if (sizeBytes !== undefined) {
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) {
+      throw new TypeError('sizeBytes must be a positive safe integer when provided');
+    }
+    obj.z = sizeBytes;
+  }
+
   const json = JSON.stringify(obj);
   // Encode the JSON itself as base64url so it survives URL fragment parsing
   return toBase64url(new TextEncoder().encode(json));
@@ -114,6 +126,7 @@ export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce } = {}
  *   keyBytes:   Uint8Array,
  *   filename:   string | null,  — null for legacy fragments
  *   sealNonce:  Uint8Array | null,
+ *   sizeBytes:  number | null,  — v1 only; null when absent or damaged
  *   legacy:     boolean,
  * }}
  */
@@ -144,12 +157,15 @@ export function parseFragment(fragmentString) {
     const keyBytes  = fromBase64url(decoded.k);
     const ivBytes   = decoded.i ? fromBase64url(decoded.i) : null;
     const sealNonce = decoded.s ? fromBase64url(decoded.s) : null;
+    // z is optional: a missing or damaged size never breaks the link.
+    const sizeBytes = (Number.isSafeInteger(decoded.z) && decoded.z > 0) ? decoded.z : null;
 
     return {
       keyBytes,
       ivBytes,
       filename: decoded.n,
       sealNonce,
+      sizeBytes,
       legacy: false,
     };
   }

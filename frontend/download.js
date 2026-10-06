@@ -41,7 +41,7 @@
 
 // Share-Deps-1: no loadDeps() here. Receiving needs neither BLAKE3 nor secp256k1,
 // so the card never waits on them (and never fails on a browser without WASM, F-20).
-import { hexToBuf, WORKER_URL } from './crypto.js';
+import { hexToBuf, WORKER_URL, CHUNK_SIZE } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -132,12 +132,19 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
   //   - 410 from /meta: deleted transfer (Worker ≥ Share-DAD-2)
   //   - tombstone { consumed, consumed_at } on older Workers: /meta answers 200, every field null
   //   - expiry passed: downloads already 410, so don't offer one
-  const tombstoned = meta.total_chunks == null && meta.total_bytes == null && meta.expiry_timestamp == null;
+  // Never keyed on total_bytes: /meta stops serving it (Share-Size-1).
+  const tombstoned = meta.total_chunks == null && meta.expiry_timestamp == null;
   const expired    = !!meta.expiry_timestamp && meta.expiry_timestamp <= Date.now() / 1000;
   if (tombstoned || expired) {
     _showLinkInactive(domRefs);
     return;
   }
+
+  // ── Size (Share-Size-1) ───────────────────────────────────────────────────
+  // The exact size travels in the fragment (z). /meta's total_bytes is only a
+  // fallback for links made before Share-Size-1. Everything below reads
+  // meta.total_bytes, so resolve it once here; 0 = unknown (chunk-based progress).
+  meta.total_bytes = _resolveSize(detected.sizeBytes, meta);
 
   // ── Resolve IV ────────────────────────────────────────────────────────────
   // v1: IV is in the fragment (detected.ivBytes Uint8Array) — never in manifest.
@@ -594,6 +601,16 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
   _finish(willSelfDestruct, domRefs);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Size from the fragment, if it agrees with the chunk count; else /meta (links
+// made before Share-Size-1); else 0. A damaged z never blocks a download.
+// ─────────────────────────────────────────────────────────────────────────────
+function _resolveSize(fragmentSize, meta) {
+  if (Number.isSafeInteger(fragmentSize) && fragmentSize > 0 &&
+      Math.ceil(fragmentSize / CHUNK_SIZE) === meta.total_chunks) return fragmentSize;
+  return (Number.isSafeInteger(meta.total_bytes) && meta.total_bytes > 0) ? meta.total_bytes : 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
