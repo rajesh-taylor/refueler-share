@@ -552,23 +552,39 @@ export function enterUploadMode(domRefs, state, helpers) {
     permanentRecordToggle: null, permanentRecordNotice: null,
   };
 
-  // The slip takes a drop while a file can still be chosen. (Whole-page drop: Share-Upload-2 B2.)
+  // Whole-page drop (U-8): the page takes a file while one can still be chosen. dragover
+  // fires continuously while a file is held over the page; when it stops for a moment,
+  // the file has left (dragleave is unreliable across child elements and in Safari).
+  // Upload mode only: enterUploadMode never runs on a receiver link.
   const droppable = () => ['empty', 'chosen', 'over'].includes(domRefs.uploadSheet.dataset.view);
-  const dragOff = () => { dropZone.classList.remove('drag-over'); domRefs.upHint.textContent = 'Drop it anywhere on this page'; };
-  dropZone.addEventListener('dragover', e => {
-    if (!droppable()) return;
-    e.preventDefault();
+  const hasFiles  = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  let dragTimer = null;
+  const dragOff = () => {
+    clearTimeout(dragTimer);
+    document.documentElement.classList.remove('up-dragging');
+    dropZone.classList.remove('drag-over');
+    domRefs.upHint.textContent = 'Drop it anywhere on this page';
+  };
+  document.addEventListener('dragover', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();               // never let the browser open the file in place of the page
+    if (!droppable()) { e.dataTransfer.dropEffect = 'none'; return; }
+    e.dataTransfer.dropEffect = 'copy';
+    document.documentElement.classList.add('up-dragging');
     dropZone.classList.add('drag-over');
     domRefs.upHint.textContent = 'Release to add.';
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(dragOff, 250);
   });
-  dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dragOff(); });
-  dropZone.addEventListener('drop', e => {
-    if (!droppable()) return;
+  document.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
     e.preventDefault();
     dragOff();
+    if (!droppable()) return;
     clearDropMsg();
 
     const items = e.dataTransfer.items;
+    if (e.dataTransfer.files.length > 1 || (items && items.length > 1)) { setDropMsg('One file or one folder at a time.'); return; }
     if (items && items.length === 1 && items[0].webkitGetAsEntry) {
       const entry = items[0].webkitGetAsEntry();
       if (entry && entry.isDirectory) {
@@ -576,7 +592,6 @@ export function enterUploadMode(domRefs, state, helpers) {
         return;
       }
     }
-    if (e.dataTransfer.files.length > 1) { setDropMsg('One file or one folder at a time.'); return; }
     if (e.dataTransfer.files[0]) _handleFileSelection(e.dataTransfer.files[0], domRefs, state, helpers, transferOpts);
   });
 

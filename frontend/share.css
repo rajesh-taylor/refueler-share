@@ -239,6 +239,16 @@ main {
 .up-slip .rx-row { padding: 16px 18px; }
 .up-slip.drag-over { border-color: var(--rx-accent); background: color-mix(in srgb, var(--rx-accent) 5%, transparent); }
 .up-slip.drag-over .up-hint { color: var(--rx-accent); }
+/* Whole-page drop (U-8): a thin accent frame round the page while a file is held over it,
+   and the File row reads "Release to add." in any view that takes a drop. */
+html.up-dragging body::after {
+  content: ''; position: fixed; inset: 6px; z-index: 300; pointer-events: none;
+  border: 1px solid var(--rx-accent); border-radius: 10px;
+}
+.up-sheet .up-slip.drag-over .up-for-empty { display: revert; }
+.up-sheet .up-slip.drag-over .up-for-file { display: none; }
+.up-slip.drag-over .up-hint { display: block; }
+.up-slip.drag-over .up-pick { visibility: hidden; }
 .up-facts { margin: 0; padding: 12px 18px; font: 400 13px/1.55 var(--rx-sans); color: var(--fg-muted); }
 .up-facts span { white-space: nowrap; }
 
