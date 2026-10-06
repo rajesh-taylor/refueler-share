@@ -10,7 +10,7 @@ You are the technical co-builder of Refueler Share. Rajesh is a non-coder solo f
 
 **Load:** `CLAUDE.md`, `share-sessions.md` (the Share-Upload-3 entry), `docs/Share-Upload-1-build-list.md` (§1 copy table — the four "Error:" rows; F-11, F-24, F-25), `docs/drafts/share-upload-mock-v3.html` (state "Error"), `Share-Master-Context.md` §Backlog ("Share-Upload-2 additions — status after Share-Upload-3", "Added Cred-Fix-2b"), `dev/share-harness/README.md`. Memories: `proposals-before-edits`, `share-page-two-modes`, `safari-top-priority`, `test-devices`, `working-style`, `mullvad-breaks-tests`. Do NOT load TESTING.md.
 
-**First:** ask Rajesh whether the iPhone retest in a fresh tab passed (Share-Upload-3: his first test ran pre-ship code — button grey until the Cloudflare tick). If the button is still grey for him in a fresh tab, that is the first job.
+**First:** ask Rajesh (1) whether the iPhone retest in a fresh tab passed (Share-Upload-3: his first test ran pre-ship code — button grey until the Cloudflare tick); (2) whether the resume picker now opens on the first click in Safari desktop (`bf0512a`). If either fails, that is the first job. Also confirm the Share-Upload-3 test findings (Master Context backlog 11): which request the console 401 was (likely Turnstile's PAT probe — harmless), and why two chunk PUTs failed with no status after ~3 s (Mullvad was off — network or code).
 
 **How the page works now (don't undo it):** one sender sheet `#upload-sheet`; `share.js` `setView(view, {eyebrow, head})` sets `data-view` (empty · zipping · chosen · over · uploading · ready · stopped) and scrolls the sheet top into view (`revealSheet`); `share.css` shows parts per view (`.up-for-*`). Helpers: `setView`, `showStopped`, `setStage`, `setProgress`, `showSharePanel(url, info)`, `formatWhen`. Turnstile in `upload.js`: `renderTurnstile` (draws once), `_resetTurnstile`, `_spendTurnstileToken` (in a `finally` round `/credential/issue`), `_cancelQueuedStart`, `startWhenChecked` (the "Checking…" queue). Whole-page drop = `document` dragover/drop with a 250 ms timer. Share-Size-1 untouched: both `assembleFragment` calls pass `sizeBytes`; `download.js` `_resolveSize`; never write "size is hidden".
 
@@ -23,11 +23,13 @@ You are the technical co-builder of Refueler Share. Rajesh is a non-coder solo f
 Preview every state in `dev/share-harness/` (`_ctl?fail=issue|initiate|chunk:N|finalise|finalise409|wrong_size`, `?ts=click|slow|fail`) — Carbon + Paper, 375 / 640 / 1000 / 1280 px, upload AND receiver — before shipping.
 
 **Part B — backlog, if time allows (else Share-Upload-5):**
-1. Resume button 3–6 s + two-click picker (Safari desktop). `resumeUpload` calls `input.click()` deep inside after awaits (`upload.js` ~1520 at Share-Upload-3), losing user activation — open the picker first. Only Rajesh's Safari desktop proves it.
+1. Resume card appears 3–6 s after a refresh — time it in Safari (module load vs IndexedDB open) before fixing. (The two-click picker was fixed in Share-Upload-3 `bf0512a`.)
 2. Resume re-hash speed (the pause is labelled) — diagnose first.
+2b. Fresh-upload "Preparing" pause at 0 % (Rajesh, 6 Oct): `loadDeps()` is now warmed when a file is chosen (`bf0512a`); if Rajesh still sees a pause, measure `/credential/issue` + `/initiate`.
 3. `admin/test-upload.html` off esm.sh (= F-25): hosted `noble-blake3.js` + `cashu-crypto.js` `blindMessage`; then delete `noble-secp256k1.js` from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in the same ship (the sync never deletes from the mirror). Own ship; needs Rajesh's admin-key test.
 4. Strip `sourceMappingURL` from `frontend/blake3/esm/*` and `src/blake3/` (14 each) — and make it stick at vendor/copy time.
 5. `test-upload.html`: stats per chunk (keep the 100-chunk log line); fix the stale header comment.
+6. **Store-only folder zip (Rajesh, 6 Oct — do this one even if Part B is cut short; ~15 min):** `upload.js` zips folders with `fflate.ZipDeflate(…, { level: 6 })` — switch to store-only (`level: 0` / `ZipPassThrough`), fixed entry order and fixed timestamps, so the same folder always gives byte-identical zips (prove it in the harness: zip twice, same BLAKE3). Faster for video/photos; it is the base for Share-Folder-Resume-1 (S-031). Check the 2 GB folder cap message still reads right.
 Not in scope: download % at half (with F-22, download track); receiver redesign (Share-Receiver-3).
 
 **Rules learned the hard way:**
@@ -37,6 +39,6 @@ Not in scope: download % at half (with F-22, download track); receiver redesign 
 - Diagnose and propose before any edit; preview in the harness before shipping.
 - Flag every new `export`, signature change, new mirrored file (add to `bin/lib/share-mirror.sh` in the same step) and new request header (add to `corsHeaders()`).
 
-**Close:** `share-sessions.md` entry (file is ~485 lines — trim older entries to table rows if it passes 500); `Share-Master-Context.md` current state + backlog (keep under 350 lines); `docs/Share-Upload-1-build-list.md` item statuses; README roadmap if a row changes; write the next session's prompt. Rajesh commits: give the command, always `&& git push`.
+**Close:** `share-sessions.md` entry (file is ~485 lines — trim older entries to table rows if it passes 500); `Share-Master-Context.md` current state + backlog (keep under 350 lines); `docs/Share-Upload-1-build-list.md` item statuses; README roadmap if a row changes; write the next session's prompt: **Share-Progress-1** (Rajesh, 6 Oct; after it comes **Share-Folder-Resume-1**, S-031) — design pass (mock for upload + download progress, both pages, Rajesh approves) then build: real byte progress (XHR `upload.onprogress` for chunk PUTs; `res.body.getReader()` for downloads = F-22, incl. the download % at half), smooth never-backwards number, time-left line, "Reconnecting…" on retries. See Master Context backlog 11. Rajesh commits: give the command, always `&& git push`.
 
 Start by asking about the iPhone retest, list Part A + Part B with a time estimate each, and ask for the time budget. No code until Rajesh confirms.

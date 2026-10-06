@@ -172,6 +172,8 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Session | Scope |
 |---------|-------|
 | Share-Upload-4 | Clearer upload errors with Try again; resume fixes |
+| Share-Progress-1 | Smooth, honest progress on both pages: real byte counts while uploading and downloading, time left, a clear line when the connection drops |
+| Share-Folder-Resume-1 | Interrupted folder uploads carry on where they stopped (pick the same folder again) |
 | MCP-Fix-1 | MCP send tool moved onto the current upload path and credential format, then the npm package is published |
 | Security foundations | Review of every key-value store use (nothing in it may grant access unless signed by the Worker); a dedicated origin for signed-in pages |
 | B12 (rest) | Storage quotas, Citizen sign-in (single-use email link), billing, then an audit of what was built |

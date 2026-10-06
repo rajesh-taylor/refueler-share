@@ -205,7 +205,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-Upload-3 ✓ (6 Oct 2026) — upload page B2 items 1–4 (`4bb3fde`, `627c0d0`): sheet top into view on every view change (F-27), Cloudflare check out of sight unless it needs a click + "Checking…" auto-start + single-use token (U-10), "Choose another" keeps the check (U-11), whole-page drop (U-8). iPhone retest in a fresh tab outstanding (first test ran pre-ship code). Next: Share-Upload-4 (F-11 errors + Try again, Part C) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
+**Share-Upload-3 ✓ (6 Oct 2026) — upload page B2 items 1–4 (`4bb3fde`, `627c0d0`): sheet top into view on every view change (F-27), Cloudflare check out of sight unless it needs a click + "Checking…" auto-start + single-use token (U-10), "Choose another" keeps the check (U-11), whole-page drop (U-8); extras `bf0512a`: resume picker opens inside the click (Safari two-click), deps warmed early, QR caption. Safari desktop resume check + iPhone retest in a fresh tab outstanding (first test ran pre-ship code). Next: Share-Upload-4 (F-11 errors + Try again, Part C) → Share-Progress-1 (upload + download progress, mock first) → Share-Folder-Resume-1 (S-031) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -218,7 +218,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Cred-Fix-2b ✓ | `ca3972c` · deploy `a5ac4f5d` | Browser sends credential format v2 (vendored cashu-ts, DLEQ checked); Worker refuses v1. 642 tests. |
 | Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
 | Share-Upload-2 ✓ | refueler.io `580135c` · `565efd9` | Share sub-menu (`sections.js` + `section-nav.njk`); upload page B1 (open sheet + slip, §1 copy, bytes progress, QR canvas, F-23 `share-early.js`, F-6 tokens). Preview harness `dev/share-harness/`. B2 → Share-Upload-3. |
-| Share-Upload-3 ✓ | `4bb3fde` · `627c0d0` | B2 1–4: F-27 scroll, U-10 hidden check + "Checking…", U-11 keep the check, U-8 whole-page drop. `initTurnstile`/`renderTurnstile` no longer exported. F-11 + Part C → Share-Upload-4. |
+| Share-Upload-3 ✓ | `4bb3fde` · `627c0d0` | B2 1–4: F-27 scroll, U-10 hidden check + "Checking…", U-11 keep the check, U-8 whole-page drop. `bf0512a`: resume picker before any await, `loadDeps()` warmed, QR caption. `initTurnstile`/`renderTurnstile` no longer exported. F-11 + Part C → Share-Upload-4. |
  
 ---
  
@@ -228,7 +228,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 (F-11 + Part C) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 (F-11 + Part C) → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
@@ -264,7 +264,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 
 **Added Share-B12-1d (5 Oct 2026):**
 - **Share-Upload-2 additions — status after Share-Upload-3 (6 Oct):** → **Share-Upload-4** unless marked. Also F-11 (B2 item 5: every upload failure → "Stopped" with §1 copy; same-tab "Try again" reuses the held file; a failed check needs a fresh token, and the reset widget may be waiting for a click inside the hidden options card).
-  1. Resume: button takes 3–6 s to appear after refresh; file picker needs two clicks (Safari desktop). Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
+  1. Resume: button takes 3–6 s to appear after refresh *(still open — time it in Safari)*; file picker needs two clicks (Safari desktop) *(✅ fix shipped `bf0512a`, picker opens before any await; Rajesh to confirm in Safari)*. Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
   2. Resume: pause while sent chunks are re-hashed — *partly done (B1: "Checking what was already sent · X of Y")*; speed-up still open.
   3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
   4. Upload progress incl. setup stages — ✅ B1 (bytes-based, "X MB of Y MB").
@@ -273,6 +273,9 @@ Swept against the repo on import; only items not already done or recorded elsewh
   7. `test-upload.html` stats refresh per chunk (keep the 100-chunk log line).
   8. `test-upload.html` header comment stale ("NEVER add to sync-share.sh", "NEVER commit to the public mirror").
   9. Finalise 409 `wrong_size` → F-11 error states (Share-Upload-4).
+  10. Fresh upload sits at "Preparing" 0 % for a moment before bytes move (Rajesh, Safari desktop, 6 Oct; 4.7 MB folder). Likely `loadDeps()` (BLAKE3 WASM + bundles, fetched on the first click) + `/credential/issue` + `/initiate` round trips; the bar counts bytes only. Warm `loadDeps()` on file chosen / resume card ✅ shipped `bf0512a`; if a pause remains it's the `/credential/issue` + `/initiate` round trips — measure.
+  11. **Progress (Rajesh, 6 Oct — "looks hung"):** upload bar moves per finished 32 MiB chunk (fetch has no upload progress; 160 MB = 20 % jumps, ~6 s each); download the same (F-22). Real byte progress is possible both ways (XHR `upload.onprogress`; `res.body.getReader()`) → **Share-Progress-1** (design pass + build, both pages) — **after Share-Upload-4, before B12-2 (Rajesh, 6 Oct)**. Same test: two chunk PUTs failed with no status after ~3 s, retried OK (Mullvad was off all session — network or code, not VPN); console 401 on a long URL (probably Turnstile's Private Access Token probe, harmless in Safari) — confirm in Share-Upload-4.
+  12. **Folders can't resume** (by design; S-031). Many large videos → zip is `level: 6` (wasted CPU on video); **Decided (Rajesh, 6 Oct):** store-only zip (`level: 0`, fixed entry order + timestamps → identical bytes every time) in Share-Upload-4; **Share-Folder-Resume-1** (S-031: re-pick the folder, re-zip to the same bytes, check sent parts, carry on) after Share-Progress-1.
 - **Write-once chunks** → KV-Audit-Opus / B12-3: also sign `If-None-Match: *` into presigned PUTs so R2 refuses to overwrite an existing chunk (closes "holder of a leaked URL overwrites a chunk with same-size junk for 6 days" → download 409 / DoS, never disclosure). Needs a live R2 gate (like B12-1b) and `upload.js` treating 412 as success on resume retries (saves the re-upload).
 - **Test-Harness-1** (small): combined `npm test` failed locally 5 Oct (workerd runtimes ETIMEDOUT / refused on 127.0.0.1). **Cause: Mullvad VPN** — with it disconnected the suite is clean (639 passed, 10 s); CI (Node 22) green throughout. Local network sharing was already on, so it is not that setting — workaround: disconnect Mullvad while running the suite (or run files singly). Not code. Still open: under `singleWorker: true`, `delete_resume` + `dock_b12` bearer-delete tests fail from cross-file state (pre-existing). Also remove unused `MIME_DENYLIST` (Share-MIME-1).
 
@@ -301,7 +304,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
 - **S-081** Recipient declaration at link creation: one person (keypair, ≤3 devices) / team (shared secret, counter) / one-time. UI says "access key". Overlaps B8 Mode 2.
 - **S-098** Sovereign size obfuscation: pad the last chunk to a full 32 MiB. Needs an architecture + cost session first.
-- **S-031** True folder resume (re-zip, skip sent chunks). Today folders can't resume (Upload-1 copy says so).
+- **S-031** True folder resume → build slot Share-Folder-Resume-1 (after Share-Progress-1; store-only zip lands first in Share-Upload-4).
 - **S-103** `cdk-dart` as a future mobile client.
 
 **Resolved on import (repo wins):**
