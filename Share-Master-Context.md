@@ -205,7 +205,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-Upload-3 ✓ (6 Oct 2026) — upload page B2 items 1–4 (`4bb3fde`, `627c0d0`): sheet top into view on every view change (F-27), Cloudflare check out of sight unless it needs a click + "Checking…" auto-start + single-use token (U-10), "Choose another" keeps the check (U-11), whole-page drop (U-8); extras `bf0512a`: resume picker opens inside the click (Safari two-click), deps warmed early, QR caption. Safari desktop resume check + iPhone retest in a fresh tab outstanding (first test ran pre-ship code). Next: Share-Upload-4 (F-11 errors + Try again, Part C) → Share-Progress-1 (upload + download progress, mock first) → Share-Folder-Resume-1 (S-031) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
+**Share-Upload-3 ✓ (6 Oct 2026) — upload page B2 items 1–4 (`4bb3fde`, `627c0d0`): sheet top into view on every view change (F-27), Cloudflare check out of sight unless it needs a click + "Checking…" auto-start + single-use token (U-10), "Choose another" keeps the check (U-11), whole-page drop (U-8); extras `bf0512a`: resume picker opens inside the click (Safari two-click), deps warmed early, QR caption. Safari desktop resume + iPhone fresh-tab retest ✓ (Rajesh). Next: Share-Upload-4 (F-11 errors + Try again, Part C) → Share-Progress-1 (upload + download progress, mock first) → Share-Folder-Resume-1 (S-031) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews) as its own session.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
@@ -264,7 +264,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 
 **Added Share-B12-1d (5 Oct 2026):**
 - **Share-Upload-2 additions — status after Share-Upload-3 (6 Oct):** → **Share-Upload-4** unless marked. Also F-11 (B2 item 5: every upload failure → "Stopped" with §1 copy; same-tab "Try again" reuses the held file; a failed check needs a fresh token, and the reset widget may be waiting for a click inside the hidden options card).
-  1. Resume: button takes 3–6 s to appear after refresh *(still open — time it in Safari)*; file picker needs two clicks (Safari desktop) *(✅ fix shipped `bf0512a`, picker opens before any await; Rajesh to confirm in Safari)*. Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
+  1. Resume: button takes 3–6 s to appear after refresh *(still open — time it in Safari)*; file picker needs two clicks (Safari desktop) *(✅ `bf0512a`, confirmed in Safari desktop by Rajesh)*. Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
   2. Resume: pause while sent chunks are re-hashed — *partly done (B1: "Checking what was already sent · X of Y")*; speed-up still open.
   3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
   4. Upload progress incl. setup stages — ✅ B1 (bytes-based, "X MB of Y MB").
