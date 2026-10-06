@@ -316,7 +316,7 @@ html.up-dragging body::after {
 .up-msg { font: 400 14px/1.5 var(--rx-sans); color: var(--warn); margin: 16px 0 0; }
 
 /* Turnstile: shown with a line saying what it is, only when Cloudflare wants a click (U-10).    */
-/* Cloudflare's 300 px box, theme follows Carbon/Paper (Share-Upload-4).                         */
+/* Full width (Cloudflare fixes the height at 65 px); theme follows Carbon/Paper (Share-Upload-4). */
 .up-check { margin-top: 24px; }
 .up-check .rx-fine { margin: 0 0 10px; }
 

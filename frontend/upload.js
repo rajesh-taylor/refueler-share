@@ -490,7 +490,7 @@ function renderTurnstile(state, domRefs, helpers) {
     sitekey: '0x4AAAAAAD0N7GlHlCRuWITr',
     theme: turnstileTheme,
     appearance: 'interaction-only',
-    size: 'normal',   // Cloudflare's 300 × 65 box, not a full-width slab
+    size: 'flexible', // full width like the button; Cloudflare fixes the height at 65 px
     'before-interactive-callback': function() {
       if (wrap) wrap.classList.remove('hidden');
     },
