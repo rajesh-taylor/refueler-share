@@ -12,7 +12,7 @@ wordmarkSection: "Share"
 <!-- F-23: marks a Share link before the modules load, so the upload screen never flashes -->
 <script src="/share-early.js"></script>
 <link rel="stylesheet" href="/share.css">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
 {% endset %}
 {% include "head.njk" %}
 <!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->

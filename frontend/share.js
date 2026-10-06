@@ -139,10 +139,25 @@ const VIEWS = {
 
 function setView(view, { eyebrow, head } = {}) {
   const [e, h] = VIEWS[view];
+  const changed = domRefs.uploadSheet.dataset.view !== view;
   domRefs.uploadSheet.dataset.view = view;
   domRefs.upEyebrow.textContent = eyebrow || e;
   domRefs.upHead.textContent    = head || h;
   if (view !== 'uploading') document.title = PAGE_TITLE;
+  if (changed) revealSheet();
+}
+
+// F-27: a view change keeps the scroll position, so the eyebrow and headline could sit
+// under the pinned header (phone after "Encrypt and upload"; desktop "link ready").
+// Bring the sheet top into view below the header (and status banner); leave it if on screen.
+function revealSheet() {
+  const bars = [document.querySelector('.site-header'), document.getElementById('status-banner')]
+    .filter(el => el && el.getClientRects().length);
+  const covered = Math.max(0, ...bars.map(el => el.getBoundingClientRect().bottom));
+  const top = domRefs.uploadSheet.getBoundingClientRect().top;
+  if (top >= covered && top < window.innerHeight - 120) return;
+  const instant = document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: window.scrollY + top - covered - 16, behavior: instant ? 'auto' : 'smooth' });
 }
 
 // "Stopped" with a plain sentence. F-11 (catching every failure, "Try again") is Share-Upload-2 B2.

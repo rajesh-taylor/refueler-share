@@ -439,70 +439,103 @@ function _clearTidalError(transferOpts) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Turnstile
+// Turnstile (U-10): invisible unless Cloudflare needs a click; then the
+// #turnstile-wrap line and widget show above the button. Drawn once, on the first
+// file chosen, and kept across "Choose another" (U-11); Cloudflare refreshes an
+// expired token itself. A token is single-use: startUpload spends it at
+// /credential/issue, then resets the widget so a retry gets a fresh check.
+// The button never waits on the check: pressed early it reads "Checking…" and
+// the upload starts when the token lands.
 // ─────────────────────────────────────────────────────────────────────────────
-let turnstileWidgetId      = null;
-let turnstileScriptReady   = false;
-let pendingTurnstileRender = false;
+const UPLOAD_LABEL = 'Encrypt and upload';
+let turnstileWidgetId = null;
+let turnstilePolling  = false;
+let turnstileFailed   = false;
+let startWhenChecked  = null;   // queued start while the button reads "Checking…"
 
-export function initTurnstile(state, domRefs) {
-  window.onTurnstileLoad = function() {
-    turnstileScriptReady = true;
-    if (pendingTurnstileRender) {
-      pendingTurnstileRender = false;
-      renderTurnstile(state, domRefs);
-    }
-  };
-}
-
-export function renderTurnstile(state, domRefs, reportError) {
+function renderTurnstile(state, domRefs, helpers) {
   const container = document.getElementById('cf-turnstile');
   if (!container) return;
   if (!window.turnstile) {
-    if (!pendingTurnstileRender) {
-      pendingTurnstileRender = true;
+    if (!turnstilePolling) {
+      turnstilePolling = true;
       const deadline = Date.now() + 15000;
       const poll = setInterval(() => {
         if (window.turnstile) {
           clearInterval(poll);
-          pendingTurnstileRender = false;
-          renderTurnstile(state, domRefs, reportError);
+          turnstilePolling = false;
+          renderTurnstile(state, domRefs, helpers);
         } else if (Date.now() > deadline) {
           clearInterval(poll);
-          pendingTurnstileRender = false;
-          if (reportError) reportError('turnstile_load', 'Turnstile script did not load within 15s', navigator.userAgent.slice(0, 100));
+          turnstilePolling = false;
+          helpers.reportError('turnstile_load', 'Turnstile script did not load within 15s', navigator.userAgent.slice(0, 100));
         }
       }, 200);
     }
     return;
   }
-  if (turnstileWidgetId !== null) {
-    try { window.turnstile.remove(turnstileWidgetId); } catch(e) {}
-    turnstileWidgetId = null;
-  }
+  if (turnstileWidgetId !== null) return;
+  const wrap = document.getElementById('turnstile-wrap');
   container.innerHTML = '';
   const isDarkMode = document.documentElement.dataset.theme === 'carbon';
   turnstileWidgetId = window.turnstile.render(container, {
     sitekey: '0x4AAAAAAD0N7GlHlCRuWITr',
     theme: isDarkMode ? 'dark' : 'light',
+    appearance: 'interaction-only',
+    size: 'flexible',
+    'before-interactive-callback': function() {
+      if (wrap) wrap.classList.remove('hidden');
+    },
     callback: function(token) {
       state.turnstileToken = token;
-      domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
+      turnstileFailed = false;
+      if (wrap) wrap.classList.add('hidden');
+      if (startWhenChecked) {
+        const go = startWhenChecked;
+        startWhenChecked = null;
+        go();
+      }
     },
     'error-callback': function() {
       state.turnstileToken = null;
-      domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
+      turnstileFailed = true;
+      if (startWhenChecked) {
+        _cancelQueuedStart(state, domRefs);
+        helpers.setDropMsg('The security check didn’t go through. Try again.');
+        _resetTurnstile();
+      }
+      return true;
     },
     'expired-callback': function() {
       state.turnstileToken = null;
-      domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
     },
   });
 }
 
+function _resetTurnstile() {
+  turnstileFailed = false;
+  if (turnstileWidgetId !== null && window.turnstile) {
+    try { window.turnstile.reset(turnstileWidgetId); } catch (e) {}
+  }
+}
+
+// Called right after /credential/issue, whatever its outcome: that token is gone.
+function _spendTurnstileToken(state) {
+  state.turnstileToken = null;
+  _resetTurnstile();
+}
+
+function _cancelQueuedStart(state, domRefs) {
+  if (!startWhenChecked) return;
+  startWhenChecked = null;
+  domRefs.uploadBtn.textContent = UPLOAD_LABEL;
+  domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
+}
+
+// Greyed only for a reason the sender can see (no file, empty password) or while "Checking…".
 function _uploadBtnDisabled(state, domRefs) {
   const needsPassphrase = domRefs.passphraseToggle.checked && domRefs.passphraseInput.value.trim().length === 0;
-  return !state.selectedFile || needsPassphrase || !state.turnstileToken;
+  return !state.selectedFile || needsPassphrase || !!startWhenChecked;
 }
 
 export function enterUploadMode(domRefs, state, helpers) {
@@ -547,9 +580,10 @@ export function enterUploadMode(domRefs, state, helpers) {
     if (e.dataTransfer.files[0]) _handleFileSelection(e.dataTransfer.files[0], domRefs, state, helpers, transferOpts);
   });
 
-  // "Choose another" (U-11, simple form; keeping a passed check is B2): back to the
-  // empty rows, password and delete settings kept, focus on "Choose a file".
+  // "Choose another" (U-11): back to the empty rows; password, delete settings and a
+  // passed Cloudflare check kept; focus on "Choose a file".
   const chooseAnother = () => {
+    _cancelQueuedStart(state, domRefs);
     state.selectedFile = null;
     clearDropMsg();
     domRefs.capWarning.classList.add('hidden');
@@ -595,11 +629,16 @@ export function enterUploadMode(domRefs, state, helpers) {
 
   _injectTransferOptions(domRefs, transferOpts);
 
-  initTurnstile(state, domRefs);
-
-  uploadBtn.addEventListener('click', () =>
-    startUpload(domRefs, state, helpers, transferOpts)
-  );
+  // U-10: pressed before the check has passed → "Checking…", start when the token lands.
+  uploadBtn.addEventListener('click', () => {
+    const go = () => startUpload(domRefs, state, helpers, transferOpts);
+    clearDropMsg();
+    if (state.turnstileToken) { go(); return; }
+    startWhenChecked = go;
+    uploadBtn.textContent = 'Checking…';
+    uploadBtn.disabled = true;
+    renderTurnstile(state, domRefs, helpers);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -607,8 +646,9 @@ export function enterUploadMode(domRefs, state, helpers) {
 // ─────────────────────────────────────────────────────────────────────────────
 function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folderFiles = 0) {
   const { capWarning, fileNameTag, fileSizeTag } = domRefs;
-  const { formatBytes, formatWhen, setView, reportError } = helpers;
+  const { formatBytes, formatWhen, setView } = helpers;
 
+  _cancelQueuedStart(state, domRefs);
   state.selectedFile = file;
   state.sourceType   = 'file'; // reset: folder path sets this to 'folder' before upload
   fileNameTag.textContent = file.name;
@@ -629,10 +669,9 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   domRefs.upUntil.classList.remove('up-dim');
   domRefs.upUntilNote.hidden = false;
   setView('chosen');
-  state.turnstileToken = null;
-  const tsWrap = document.getElementById('turnstile-wrap');
-  if (tsWrap) tsWrap.classList.remove('hidden');
-  renderTurnstile(state, domRefs, reportError);
+  // U-11: a passed check is kept for the next file. Draw once; restart only after a failure.
+  if (turnstileWidgetId === null) renderTurnstile(state, domRefs, helpers);
+  else if (turnstileFailed && !state.turnstileToken) _resetTurnstile();
   domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
 }
 
@@ -837,6 +876,7 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
   const { setStage, setProgress, formatBytes, reportError, showSharePanel, showStopped } = helpers;
 
   uploadBtn.disabled = true;
+  uploadBtn.textContent = UPLOAD_LABEL;
   helpers.setView('uploading');
   setProgress(0, `0 B of ${formatBytes(state.selectedFile.size)}`);
 
@@ -862,11 +902,16 @@ async function startUpload(domRefs, state, helpers, transferOpts) {
 
   const blinded = await generateBlindedCredential();
 
-  const issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blinded.blindedMsg, tier: 'free' }),
-  });
+  let issueRes;
+  try {
+    issueRes = await fetch(`${WORKER_URL}/credential/issue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turnstile_token: state.turnstileToken, blinded_message: blinded.blindedMsg, tier: 'free' }),
+    });
+  } finally {
+    _spendTurnstileToken(state);   // single-use, whatever the outcome
+  }
 
   if (!issueRes.ok) {
     const errText = await issueRes.text();
