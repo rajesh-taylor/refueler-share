@@ -9,11 +9,11 @@
 # ── What gets mirrored ────────────────────────────────────────────────────────
 # Every top-level frontend/*.js and *.css MUST appear in exactly one of the lists below.
 # An unlisted file is a hard failure (this is the merkle.js / Share-6-3d trap, now closed).
-SM_JS="share.js crypto.js upload.js download.js timestamp.js refueler-badge.js fragment.js merkle.js"
+SM_JS="share.js share-early.js crypto.js upload.js download.js timestamp.js refueler-badge.js fragment.js merkle.js"
 SM_CSS="share.css share-tokens.css status.css"
 SM_VENDOR="fflate.min.js qr-creator.min.js noble-secp256k1.js noble-blake3.js cashu-crypto.js"
 SM_CANARY="mirror-canary.txt"             # pipeline canary — edit freely to prove a deploy, never app code
-SM_CANON_ONLY="upgrade.css"               # deliberately NOT mirrored (pages.dev-era; refueler.io uses plans.css)
+SM_CANON_ONLY=""                          # none since Share-Upload-2 (upgrade.css removed)
 SM_MIRROR_ONLY="plans.css"                # owned by refueler.io, lives in the mirror folder, not ours
 
 SM_ASSETS="$SM_JS $SM_CSS $SM_VENDOR $SM_CANARY"

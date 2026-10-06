@@ -1,0 +1,15 @@
+{#- Local-preview stub (npm run build only). Canonical: refueler.io src/_includes/section-nav.njk + src/_data/sections.js. -#}
+{%- set sections = { share: [ { label: "Send", url: "/share/" }, { label: "Plans", url: "/share/plans/" }, { label: "Status", url: "/share/status/" } ] } -%}
+{%- set section = "share" -%}
+{#- Section sub-menu (Share-Upload-2, U-3): one centred segmented pill under the site header.
+    Items come from _data/sections.js; renders nothing for pages without a section. -#}
+{%- set sectionItems = sections[section] if section else [] -%}
+{%- if sectionItems | length %}
+<div class="section-nav">
+  <nav class="section-nav-pill" aria-label="{{ wordmarkSection or section }}">
+    {%- for item in sectionItems %}
+    <a href="{{ item.url }}"{% if page.url == item.url %} aria-current="page"{% endif %}>{{ item.label }}</a>
+    {%- endfor %}
+  </nav>
+</div>
+{%- endif %}

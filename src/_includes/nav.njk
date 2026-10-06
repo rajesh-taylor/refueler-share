@@ -1,15 +1,27 @@
-<header class="site-header">
+<header class="site-header{% if wordmarkSection %} has-wordmark-section{% endif %}" id="site-header">
   <div class="header-inner">
     <a href="/" class="wordmark">
-      Refueler
-      <span class="wordmark-divider">/</span>
-      <span class="wordmark-section">Share</span>
+      Refueler{% if wordmarkSection %}<span class="wordmark-divider">/</span><span class="wordmark-section">{{ wordmarkSection }}</span>{% endif %}
     </a>
     <nav class="site-nav">
-      <a href="https://refueler.io/notes/"{% if activePage == 'notes' %} class="active"{% endif %}>Notes</a>
-      <a href="/upgrade.html"{% if activePage == 'upgrade' %} class="active"{% endif %}>Upgrade</a>
-      <a href="https://refueler.io/support/">Support</a>
+      <a href="/share/"{% if activePage == 'share' or section == 'share' %} class="active"{% endif %}>Share</a>
+      <a href="/legend/"{% if activePage == 'legend' %} class="active"{% endif %}>Legend</a>
+      <a href="/notes/"{% if activePage == 'notes' %} class="active"{% endif %}>Notes</a>
+      <a href="/editorial/"{% if activePage == 'editorial' %} class="active"{% else %} class="nav-secondary"{% endif %}>Editorial</a>
+      <a href="/support/"{% if activePage == 'support' %} class="active"{% else %} class="nav-secondary"{% endif %}>Support</a>
+      <a href="/privacy/"{% if activePage == 'privacy' %} class="active"{% else %} class="nav-secondary"{% endif %}>Privacy</a>
+      <button class="nav-hamburger" id="navHamburger" aria-label="Menu" onclick="toggleNavDrawer()">
+        <span></span><span></span><span></span>
+      </button>
       <button class="theme-pill" id="themePill" onclick="toggleTheme()">Carbon / Paper</button>
     </nav>
+  </div>
+  <div class="nav-drawer" id="navDrawer">
+    <a href="/share/"{% if activePage == 'share' or section == 'share' %} class="active"{% endif %}>Share</a>
+    <a href="/legend/"{% if activePage == 'legend' %} class="active"{% endif %}>Legend</a>
+    <a href="/notes/"{% if activePage == 'notes' %} class="active"{% endif %}>Notes</a>
+    <a href="/editorial/"{% if activePage == 'editorial' %} class="active"{% endif %}>Editorial</a>
+    <a href="/support/"{% if activePage == 'support' %} class="active"{% endif %}>Support</a>
+    <a href="/privacy/"{% if activePage == 'privacy' %} class="active"{% endif %}>Privacy</a>
   </div>
 </header>
