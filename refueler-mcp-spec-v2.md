@@ -658,9 +658,16 @@ fragment = base64url( utf8( JSON.stringify({
   "v": 1,
   "k": "<base64url of the raw AES-GCM key bytes>",
   "n": "<real filename, a plain JSON string — JSON handles unicode>",
-  "s": "<base64url of the 16-byte seal_nonce>"   // present ONLY for permanent-record transfers
+  "s": "<base64url of the 16-byte seal_nonce>",  // present ONLY for permanent-record transfers
+  "z": <integer plaintext byte count>            // optional — Share-Size-1, 6 Oct 2026
 }) ) )
 ```
+- **`z` (Share-Size-1, 6 Oct 2026):** exact plaintext size, optional, still `v: 1`
+  (parsers ignore unknown keys). The consumer frontend writes it; the receiver
+  trusts it only if `ceil(z / CHUNK_SIZE) == total_chunks`. The Worker stores no
+  size: `/meta` `total_bytes` is null for new transfers and receipts carry
+  `size_bytes: null` (key kept in `refueler.receipt.v1`). The MCP send tool should
+  add `z` at MCP-Fix-1. Opt-in size in receipts for Chartered: Master Context 11d‴.
 - **Send / upload (MCP send tool AND consumer `upload.js`):** build the blob above;
   send `X-File-Name: "encrypted-payload"` (a **constant** placeholder — not random;
   random only adds entropy the Worker would log for no gain) to the Worker. The

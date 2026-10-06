@@ -6,7 +6,8 @@
  *   uuid:                    string
  *   tier:                    'free' | 'creative' | 'production' | 'enterprise'
  *   total_chunks:            number
- *   total_bytes:             number
+ *   (no total_bytes — Share-Size-1: the exact size travels in the link fragment;
+ *    manifests written before 6 Oct 2026 may still carry it until they expire)
  *   expiry_timestamp:        number  (unix seconds)
  *   created_at:              number  (unix seconds)
  *   blake3_root:             string  (hex — rolling root hash from client)
@@ -75,7 +76,6 @@ export function createManifest({
   uuid,
   tier,
   totalChunks,
-  totalBytes,
   expiryTimestamp,
   blake3Root,
   p2shSecretHash = null,
@@ -84,7 +84,6 @@ export function createManifest({
     uuid,
     tier,
     total_chunks: totalChunks,
-    total_bytes: totalBytes,
     expiry_timestamp: expiryTimestamp,
     created_at: Math.floor(Date.now() / 1000),
     blake3_root: blake3Root,

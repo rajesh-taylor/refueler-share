@@ -128,7 +128,8 @@ A companion MCP (Model Context Protocol) server lives at [`refueler-mcp`](https:
 | AES-GCM key | No — URL fragment, never transmitted | No |
 | Real filename | No — URL fragment | No |
 | Sender / recipient identity (Bearer rail) | No | No |
-| File sizes and transfer timestamps | Yes | Yes |
+| File sizes | Not as a field since 6 Oct 2026 — the exact size travels in the link. But the encrypted chunks we store are the file plus 16 bytes per 32 MiB chunk | Yes — anyone with access to our storage can work out the exact size |
+| Transfer timestamps | Yes | Yes |
 | Client IP addresses | Briefly — rate-limit counters, about a minute | Yes, within that window |
 | Stripe subscriber email (Registered rail) | Yes | Yes |
 | Lightning payment hashes (from B7) | Yes, 25 h | Yes, within that window |
@@ -148,7 +149,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 
 ## Build Status
 
-**642 tests passing (refueler-share) · 228 (refueler-mcp)**
+**646 tests passing (refueler-share) · 228 (refueler-mcp)**
 
 | Block | Status | Scope |
 |-------|--------|-------|
@@ -159,6 +160,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Share-6 | ✅ | Direct-to-R2 uploads, Merkle root at upload, ciphertext storage verification at download (B9-1…B9-3) |
 | Ops | ✅ | Navy Office admin dashboard; batched, resumable deletes; one-command frontend deploy with byte-level live check, pre-push guard and CI mirror check |
 | Credential hardening | ✅ | Upload credentials bound to one transfer (keyed commitment); standard Cashu proofs verified on every upload; DLEQ checked in the browser; reviewed library code on both sides |
+| Share-Size-1 | ✅ | Exact file size moved into the share link; no longer stored in the transfer record or served by the API. Narrows who can learn the size; does not hide it from storage |
 | B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done. Shipped so far: deletion and sweep fixes; every upload URL signed for its exact chunk size, enforced by storage |
 
 ### Roadmap
@@ -167,7 +169,6 @@ Designs are written down before they are built, and security-sensitive blocks ge
 
 | Session | Scope |
 |---------|-------|
-| Share-Size-1 | The exact file size moves into the share link (the URL fragment) and is no longer stored in the transfer record or served by the API. It narrows who can learn the size; it does not hide it from our storage |
 | Share-Upload-2 | Redesigned upload page; clearer upload errors and resume |
 | MCP-Fix-1 | MCP send tool moved onto the current upload path and credential format, then the npm package is published |
 | Security foundations | Review of every key-value store use (nothing in it may grant access unless signed by the Worker); a dedicated origin for signed-in pages |

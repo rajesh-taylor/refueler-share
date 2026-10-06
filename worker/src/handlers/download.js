@@ -146,7 +146,7 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
       status:      200,
       latency:     0,
       totalChunks: manifest.total_chunks ?? 0,
-      totalBytes:  manifest.total_bytes  ?? 0,
+      // no totalBytes (Share-Size-1): double5 logs 0; nothing reads it
     });
   }
 
@@ -352,7 +352,7 @@ export function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dl
                 live_key:     manifest.api_live_key,
                 uuid,
                 transfer_ref: manifest.api_transfer_ref ?? null,
-                size_bytes:   manifest.total_bytes  ?? 0,
+                size_bytes:   null,   // Share-Size-1: size not stored; key kept for the receipt schema
                 chunk_count:  manifest.total_chunks ?? 0,
                 issued_at:    Math.floor(Date.now() / 1000),
                 collected_at: Math.floor(Date.now() / 1000),

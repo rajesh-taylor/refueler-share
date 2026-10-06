@@ -27,7 +27,7 @@
  *
  * AE schema (index.js §Analytics Engine):
  *   blob1 endpoint · blob2 tier · blob3 error_message · blob4 http_protocol
- *   double1 latency_ms · double2 status_code · … · double5 total_bytes
+ *   double1 latency_ms · double2 status_code · … · double5 total_bytes (0 since Share-Size-1)
  */
 
 const QUOTA_PREFIX = 'api_quota_';

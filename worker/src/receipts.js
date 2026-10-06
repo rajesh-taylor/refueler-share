@@ -150,7 +150,8 @@ async function signReceiptObject(whsecString, receiptMember) {
  *   live_key       — rfs_live_… string (identifies the client)
  *   uuid           — transfer UUID
  *   transfer_ref   — client attribution string or null
- *   size_bytes     — total bytes declared at upload
+ *   size_bytes     — null since Share-Size-1 (6 Oct 2026): the Worker no longer stores
+ *                    the size. Key kept for the v1 schema. Opt-in for Chartered: roadmap 11d‴.
  *   chunk_count    — total chunks declared at upload
  *   issued_at      — unix seconds (now at issuance)
  *   wh_created_at  — created_at from wh_config_ KV (whsec rotation salt)
@@ -197,7 +198,7 @@ export async function buildSignedReceipt(env, fields) {
     live_key,
     uuid,
     transfer_ref: transfer_ref ?? null,
-    size_bytes:   size_bytes   ?? 0,
+    size_bytes:   size_bytes   ?? null,
     chunk_count:  chunk_count  ?? 0,
     issued_at:    issued_at    ?? 0,
   };

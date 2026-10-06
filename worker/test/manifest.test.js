@@ -123,7 +123,7 @@ describe('createManifest', () => {
     expect(m.uuid).toBe(UUID);
     expect(m.tier).toBe('free');
     expect(m.total_chunks).toBe(4);
-    expect(m.total_bytes).toBe(1024);
+    expect('total_bytes' in m).toBe(false);   // Share-Size-1
     expect(m.expiry_timestamp).toBe(NOW_SEC + 3600);
     expect(m.blake3_root).toBe('a'.repeat(64));
     expect(m.chunks_received).toEqual([]);

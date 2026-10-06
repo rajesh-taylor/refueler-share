@@ -69,6 +69,7 @@ import { handleDeleteTransfer, handleOwnerDelete }    from './handlers/delete_tr
 // Schema (one data point per request):
 //   blobs:   [endpoint, tier, error_message, http_protocol]
 //   doubles: [latency_ms, status_code, chunk_index, total_chunks, total_bytes]
+//            (total_bytes always 0 since Share-Size-1 — the size is not stored)
 //   indexes: [endpoint]   <- enables fast GROUP BY in AE SQL
 //
 // blob4 (http_protocol): 'HTTP/3' | 'HTTP/2' | 'HTTP/1.1' | '' — from request.cf.httpProtocol.
@@ -1360,7 +1361,10 @@ async function handleAuth(request, env, uuid) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Meta — GET /meta/:uuid
-// Public, no auth. Returns filename, size, expiry, passphrase flag from manifest.
+// Public, no auth. Returns filename, expiry, chunk count, passphrase flag from manifest.
+// total_bytes (Share-Size-1): new manifests don't store it, so it is null for them;
+// served only for manifests written before 6 Oct 2026 until they expire. Key kept
+// so the response shape is unchanged. Hard-null follow-up once those have gone.
 async function handleMeta(request, env, uuid) {
   const { manifest } = await safeGetManifest(env.BUCKET, uuid, env);
   if (!manifest) {
@@ -1722,7 +1726,8 @@ async function handleInitiate(request, env, ctx, uuid) {
     uuid,
     tier: resolvedTier,
     totalChunks,
-    totalBytes,
+    // No totalBytes (Share-Size-1): the size is used above for the cap, cost and
+    // tail URL, then dropped. The recipient gets it from the link fragment.
     expiryTimestamp: expiryTs,
     blake3Root: null,
     p2shSecretHash: p2shHash,

@@ -27,7 +27,16 @@ describe('GET /meta — deleted transfers (Share-DAD-2)', () => {
   it('live transfer: 200 with metadata', async () => {
     const { status, body } = await meta(live);
     expect(status).toBe(200);
-    expect(body.total_bytes).toBe(1234);
+    expect(body.total_bytes).toBe(1234);   // pre-Share-Size-1 manifest: still served until it expires
+    expect(body.total_chunks).toBe(2);
+  });
+
+  it('Share-Size-1: manifest without total_bytes → key present, value null', async () => {
+    const { total_bytes, ...noSize } = live;
+    const { status, body } = await meta(noSize);
+    expect(status).toBe(200);
+    expect('total_bytes' in body).toBe(true);
+    expect(body.total_bytes).toBeNull();
     expect(body.total_chunks).toBe(2);
   });
 

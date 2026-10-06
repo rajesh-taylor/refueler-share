@@ -135,6 +135,24 @@ describe('B12-1d — /initiate signs content-length', () => {
   });
 });
 
+describe('Share-Size-1 — the Worker stores no size', () => {
+  it('initiate: manifest has total_chunks but no total_bytes; /meta returns total_bytes null', async () => {
+    const e = env();
+    const bytes = 3 * CHUNK_SIZE + 12345;
+    const { status } = await initiate(e, bytes);
+    expect(status).toBe(200);
+    const m = JSON.parse(e.BUCKET._store.get(`${UUID}/manifest.json`).body);
+    expect(m.total_chunks).toBe(4);
+    expect('total_bytes' in m).toBe(false);
+    expect(JSON.stringify(m)).not.toContain(String(bytes));
+    const res  = await worker.fetch(new Request(`https://api.share.test/meta/${UUID}`), e, ctx());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.total_bytes).toBeNull();
+    expect(body.total_chunks).toBe(4);
+  });
+});
+
 describe('B12-1d — /urls serves full chunks only', () => {
   async function started(chunksMinusTail, tail = 99) {
     const e = env();

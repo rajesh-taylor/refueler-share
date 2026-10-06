@@ -212,19 +212,10 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Cred-Fix-2 ✓ (5 Oct 2026) — credential format v2 end to end: the browser builds a standard Cashu proof `{id, amount, secret, C}` with vendored cashu-ts 4.11.0 (`frontend/cashu-crypto.js`) and checks the NUT-12 DLEQ proof; the Worker verifies `k·Y == C` (serial `hex(Y)`) and refuses format v1. Deploys `4c9730b2` (2a) + `a5ac4f5d` (2b); frontend `ca3972c`. Live-verified in Safari + Brave. Next: Share-Size-1 → Share-Upload-2 → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct.**
+**Share-Size-1 ✓ (6 Oct 2026) — exact file size moved into the link fragment (`z`, still grammar v1); new manifests store no `total_bytes`, `/meta` returns it null for new transfers, receipts `size_bytes: null`. Frontend `27582c7`, deploy `69a99b89`. Live-verified in Safari. Not hidden: R2 object sizes give the exact size to storage access. Next: Share-Upload-2 → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Share-6-3b ✓ | `ec37c17` | `worker/src/merkle.js` — RFC-6962-unbalanced-BLAKE3 tree fn + inline N=1..4 vectors (Opus). |
-| Share-6-3c ✓ | `frontend/merkle.js` | Browser Merkle twin — WASM-BLAKE3 parity, same pinned vectors, `selfTest()` gate (Opus). |
-| Share-6-3d ✓ | `050998b` · `f97b7d9` · `a00351a`/`b8906f9` | `upload.js` finalise wiring + first real end-to-end send. Worker CORS `X-Upload-Session` fix; `merkle.js` added to `sync-share.sh`. |
-| Share-6-4a ✓ | `616e7b9` · `00163c7` | Upload resume close: single-file resume (Sonnet, pre-session) + folder auto-discard in `checkResumeState` (Opus). |
-| Share-6-4b ✓ | `ed4a48d` · `00163c7` | Folder RAM cap — `FOLDER_ZIP_CAP` = 2 GiB in `zipAndSelect` (post-zip) + pre-zip input-bytes guard; over-cap steers to a pre-zipped single file. |
-| Share-6-5a ✓ | `f31dc124` (deployed) | Worker download-verify server half (`handlers/download_verify.js`; `download.js` extracted). 19 unit pass. |
-| Share-6-5b ✓ | `8761e7c` · `75d15c5`/`2e8e632`/`237bdb3` | Download-verify consumer half — recipient card reads `X-Integrity` + `integrity_failed` 409s. `WORKER_URL` flip deferred to 6-6b. |
-| Share-B10-1 ✓ | `7c874ed` (refueler-io) | Navy Office: Growth Signal Pro Bono blue, axis labels, annotation flags, issuances modal subtitle. |
-| Share-B10-2 ✓ | `bc5e163` (refueler-io) | Navy Office: KV timestamp ×1000 fix, Execution Dock tier display names. |
 | Share-6-6a ✓ | — | 100 GiB soak upload ✓ (3200/3200). Download-409 fixed at B10-3. |
 | Share-B10-3 ✓ | `49399ca` (deploy `b81116e2`) | Download-409 fixed: root reconstruction gated by KV `root_verified:{uuid}`, once per transfer. |
 | Share-B11-1 ✓ | `76799ae` (deploy `28d43b55`) | DAD destruction sequence wired in `finishDownload` (6 steps, `ctx.waitUntil`). 410 on second download. |
@@ -235,6 +226,8 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | B12-1c ✓ | `413b714` | Frontend half of S1.1: `tail_url` handling in `upload.js` (fresh + resume, `tailUrl` in IDB) and `test-upload.html` (+16 B bodies, 32 MiB locked). Worker half → B12-1d. |
 | B12-1d ✓ | deploy `1c6c7985` | Worker half of S1.1: signed `content-length` on `/initiate` + `/urls`, `tail_url` every N, chunk/byte-count 400, finalise `wrong_size` 409 + `waitUntil` delete. 639 tests. Live: wrong-size PUT → 403; 8.5 GiB / 272 chunks finalised, R2 chunks exactly 33,554,448 B. |
 | Cred-Fix-2a ✓ | deploy `4c9730b2` | Credential format v2 accepted (`verifyProofV2`, `@cashu/cashu-ts` 4.11.0 pinned), `keyset_id` + `dleq` at issue, anonymous-rail API issuance explicit 503 until B7. 659 tests incl. official NUT-00/02/12 vectors. v1 removal → 2b. |
+| Cred-Fix-2b ✓ | `ca3972c` · deploy `a5ac4f5d` | Browser sends credential format v2 (vendored cashu-ts, DLEQ checked); Worker refuses v1. 642 tests. |
+| Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
  
 ---
  
@@ -244,13 +237,14 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 (exact size into URL fragment) → Share-Upload-2 (Rajesh, 5 Oct) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 (Rajesh, 5 Oct) → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
 | 11d′ | **Pricing-v2-Opus** (1–2 sessions) → plans-page rewrite | ❌ | Rate card v2: holding time + per-32 MiB billing, GBP↔credits, credit blocks, Pro Bono × agents, personal agent key vs `Sovereign ⊅ API`. Plans rewrite after B12-4a from `docs/drafts/` (draft B). Agents/MCP first. Log: Share-MCP-Chat-1. |
 | 11d″ | **Padding-Opus** (design + planning, no build slot yet) | ❌ | Size padding (e.g. Padmé buckets) so R2 sees a size band, not an exact size. Open: everyone-light vs paid-stronger (paid-only padding marks the sender as a customer), storage cost, interaction with per-32 MiB API billing. Also scope a Wormhole-style short-code mode (PAKE) as a possible paid feature — async storage makes short codes harder than in Wormhole. Raised Share-B12-1b. |
+| 11d‴ | **Receipt size opt-in** (only if a Chartered client asks) | ❌ | Share-Size-1 (6 Oct 2026) stops storing the exact size; receipt `size_bytes` is `null`. If a Chartered client asks for it: per-transfer opt-in, **off by default**, identity rail only, size written only into that transfer's signed receipt — never the manifest or `/meta`, never the anonymous rail. Note the receipt sits in KV 7 days, so opting in re-stores the size there. Agreed by Rajesh, Share-Size-1. Not built. |
 | 11e | B12-4c Sovereign ledger + portability | ✅ | Needs B8-1 (Deed derivation) + B7 live. Runs alongside SD-block. |
 | 12 | B8-Opus → B8 build — NUT-11 Mode 2 | ❌ | Pure cryptography on existing Worker. B8-Opus first. |
 | — | **Hetzner commitment point** | ✅ | NB-2 provision. First new recurring cost. |
@@ -271,7 +265,6 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **S-004** Retune `VERIFY_INLINE_CHUNK_THRESHOLD` (128) after the large-download work → Share-DL track.
 - **S-095** Question: move ciphertext verification off the download hot path (verify at finalise + background sweep) if WASM isn't enough → Share-DL / B9 build.
 - **S-019** Spec a client self-serve transfer status check (own transfer, own token) for "my transfer isn't downloading" → with B12-4b Chambers / B12-5 Harbourmaster.
-- **S-024** Manifest still stores exact `total_bytes` (the X4 fix covered `dock_index` only). Dropping it turns the receiver card's size into an estimate → decide at the next manifest/initiate session.
 - **S-025** Whitepaper "honest scope": the operator never sees the real filename (Worker gets `encrypted-payload`; name lives in the fragment) → `docs/WHITEPAPER-OUTLINE.md` at B9-4.
 - **S-030** refueler.io `command-centre` still uses `localStorage` `rfTheme`, not the `rs-theme` cookie → low, any refueler.io tidy.
 - **S-041** Speed benchmark (1/4/10/25/50 GB; fibre / broadband / 4G / rural) against WeTransfer, Smash, SwissTransfer → after the Share-DL track; possible Notes article.
@@ -297,6 +290,12 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Vendor cleanup** (small, both repos): `frontend/noble-secp256k1.js` is no longer imported (credentials use `frontend/cashu-crypto.js`). Remove it from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in one ship — the sync never deletes from the mirror.
 - **cashu-ts upgrades:** bump `worker/package.json` and `bin/vendor-cashu/package.json` together, then `bin/vendor-cashu.sh` + ship + deploy. Browser and Worker must run the same version.
 - **DLEQ key pin** (B7/B8, anonymous rail): the browser checks the DLEQ proof against the key in the same response, not a pinned key (Rajesh, 5 Oct). Pin when credentials are bought separately from transfers.
+
+**Added Share-Size-1 (6 Oct 2026):**
+- **`/meta` hard-null** (tiny Worker session, from 13 Oct): `total_bytes: null` for every manifest. First check R2 for any manifest still carrying `total_bytes` with a future expiry (soak/test transfers may outlive 7 days). Then drop the `/meta` fallback in `download.js`.
+- **MCP-Fix-1:** send tool adds `z` to the fragment (consumer grammar, `refueler-mcp-spec-v2.md` §7.2).
+- **Acceptance receipt never emitted:** `index.js` says `cargo.accepted` moved to `/finalise`, but `finalise.js` never emits it — only `cargo.discharged` is sent. Contradicts MCP spec (acceptance immediately). → MCP-Fix-1 or the next API session.
+- **Navy Office "R2 bytes uploaded (90d)" is dead:** it sums `double5` on `upload` AE events, which stopped at Share-6-6b (Worker-relay path retired). Replace (e.g. R2 bucket metrics) or remove → refueler-io.
 
 **Ideas, parked (no build slot):**
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
