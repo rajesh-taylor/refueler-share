@@ -417,27 +417,27 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
   }
 
   const prog = _makeDlProgress(domRefs, totalBytes, totalChunks, 1);
-  const fetchPart = (i) => _fetchPart(uuid, i, state, prog);
-  let nextChunkPromise = null;
+  const DECRYPT_STOP = {};
 
   try {
     let bytesWritten = 0;
-    nextChunkPromise = fetchPart(0);
-    for (let i = 0; i < totalChunks; i++) {
-      const ciphertextBuf = await nextChunkPromise;
-      if (i + 1 < totalChunks) nextChunkPromise = fetchPart(i + 1);
-
-      let plaintext;
-      try {
-        plaintext = await _decryptPart(state, ciphertextBuf, i, totalChunks);
-      } catch (e) {
-        reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
-        await writable.abort();
-        _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
-        return;
-      }
-      await writable.write(new Uint8Array(plaintext));
-      bytesWritten += plaintext.byteLength;   // the bar counts bytes as they arrive (prog)
+    try {
+      await _eachPartInOrder(uuid, totalChunks, state, prog, async (ciphertextBuf, i) => {
+        let plaintext;
+        try {
+          plaintext = await _decryptPart(state, ciphertextBuf, i, totalChunks);
+        } catch (e) {
+          reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
+          throw DECRYPT_STOP;
+        }
+        await writable.write(new Uint8Array(plaintext));
+        bytesWritten += plaintext.byteLength;   // the bar counts bytes as they arrive (prog)
+      }, willSelfDestruct);
+    } catch (e) {
+      if (e !== DECRYPT_STOP) throw e;
+      await writable.abort();
+      _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
+      return;
     }
 
     if (state.linkVersion === 2 && bytesWritten !== totalBytes) {
@@ -451,7 +451,6 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 
   } catch (e) {
     try { await writable.abort(); } catch {}
-    nextChunkPromise?.catch(() => {});
     _downloadFailed(e, uuid, domRefs, reportError);
   }
 }
@@ -477,7 +476,7 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
   const prog = _makeDlProgress(domRefs, totalBytes, totalChunks, 0.9);
   const chunks = [];
   try {
-    for (let i = 0; i < totalChunks; i++) chunks.push(await _fetchPart(uuid, i, state, prog));
+    await _eachPartInOrder(uuid, totalChunks, state, prog, (buf) => { chunks.push(buf); }, willSelfDestruct);
   } catch (e) {
     _downloadFailed(e, uuid, domRefs, reportError);   // chunks discarded, never assembled
     return;
@@ -645,10 +644,15 @@ function _showProgress(domRefs, stage, totalBytes) {
   _showSheet('download-card');
 }
 
+function _setBar(domRefs, pct) {
+  const shown = Math.floor(pct);
+  domRefs.dlPct.textContent = String(shown);
+  domRefs.dlBar.style.width = Math.min(100, pct).toFixed(1) + '%';   // bar finer than the number
+  $('dl-track').setAttribute('aria-valuenow', String(shown));
+}
+
 function _setProgress(domRefs, pct, doneBytes, totalBytes, tail = '') {
-  domRefs.dlPct.textContent = String(pct);
-  domRefs.dlBar.style.width = pct + '%';
-  $('dl-track').setAttribute('aria-valuenow', String(pct));
+  _setBar(domRefs, pct);
   const bytes = totalBytes > 0 ? _bytesOf(doneBytes, totalBytes) : '';
   $('dl-mb').textContent = [bytes, tail].filter(Boolean).join(' · ');
 }
@@ -661,25 +665,69 @@ function _makeDlProgress(domRefs, totalBytes, totalChunks, share) {
   const cipherTotal = totalBytes > 0 ? totalBytes + 16 * totalChunks : (CHUNK_SIZE + 16) * totalChunks;
   const meter = makeRateMeter();
   const drop  = $('dl-drop');
-  let got = 0;
-  const show = (tail) => {
+  let got = 0, textAt = 0;
+  // The words under the bar change at most 4 times a second (the font's digits
+  // aren't all one width, so faster looks like flicker); the bar every read.
+  const show = (tail, force) => {
     const f = Math.min(got / cipherTotal, 1);
-    _setProgress(domRefs, Math.floor(f * share * 100), Math.round(f * totalBytes), totalBytes, tail);
+    const pct = f * share * 100;
+    const now = performance.now();
+    if (!force && now - textAt < 250) return _setBar(domRefs, pct);
+    textAt = now;
+    _setProgress(domRefs, pct, Math.round(f * totalBytes), totalBytes, tail);
   };
   return {
+    stopped: false,   // set when the download has failed: tries still waiting give up
     onBytes(n) {
       got += n;
       meter.add(got);
-      show(meter.left(cipherTotal - got));
+      show(meter.left(cipherTotal - got), n < 0);
     },
     onWait(secs) {
       if (!secs) { meter.reset(); drop.hidden = true; return; }   // a try starts again
       // (not hidden on bytes: on the stream path the next part is already arriving)
       drop.textContent = `Connection lost. Trying again in ${secs} s.`;
       drop.hidden = false;
-      show('');   // no time left while waiting
+      show('', true);   // no time left while waiting
     },
   };
+}
+
+// Parts in order, overlapped (Share-Progress-1). The Worker reads and checks a whole
+// part before its first byte, so one part at a time left the bar standing still at
+// every part. The next part is asked for as soon as the one before it starts
+// arriving, so one part is always waiting while others stream; at most DL_IN_FLIGHT
+// are held (128 MiB on the stream path). Part 0 goes first (it records the download
+// start). On a delete-after-download transfer (holdLast) the last part is asked for
+// only once every earlier part has fully arrived: serving it starts the deletion on
+// the Worker (handlers/download.js finishDownload). On a failure the rest stop.
+const DL_IN_FLIGHT = 4;
+async function _eachPartInOrder(uuid, n, state, prog, use, holdLast) {
+  const pending = new Map();
+  let next = 0, waiting = 0, arrived = 0;
+  const fill = () => {
+    while (next < n && waiting === 0 && pending.size < DL_IN_FLIGHT) {
+      if (holdLast && next === n - 1 && arrived < n - 1) break;
+      waiting++;
+      let started = false;
+      const begin = () => { if (!started) { started = true; waiting--; fill(); } };
+      const p = _fetchPart(uuid, next, state, prog, begin);
+      p.then(() => { arrived++; begin(); fill(); }, () => { if (!started) { started = true; waiting--; } });
+      pending.set(next++, p);
+    }
+  };
+  try {
+    for (let i = 0; i < n; i++) {
+      fill();
+      const buf = await pending.get(i);
+      pending.delete(i);
+      fill();
+      await use(buf, i);
+    }
+  } catch (e) {
+    prog.stopped = true;
+    throw e;
+  }
 }
 
 // One part, read as it arrives so the bar moves within a part, with the upload's
@@ -687,13 +735,15 @@ function _makeDlProgress(domRefs, totalBytes, totalChunks, share) {
 // 6-5b). 400/401/410/416 → err.fatal. 409 is a definitive integrity verdict and an
 // empty body a cut one: IntegrityError, never retried. A body cut mid-read (no 409
 // on the >128 path) throws in read() and is retried, as before.
-async function _fetchPart(uuid, idx, state, { onBytes, onWait }) {
+async function _fetchPart(uuid, idx, state, prog, onStart) {
+  const { onBytes, onWait } = prog;
   const padded  = String(idx).padStart(4, '0');
   const headers = {};
   if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
   const tries = RETRY_DELAYS_MS.length + 1;
   let lastErr;
   for (let attempt = 0; attempt < tries; attempt++) {
+    if (prog.stopped) throw new Error('stopped');
     let got = 0;
     try {
       const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
@@ -702,6 +752,7 @@ async function _fetchPart(uuid, idx, state, { onBytes, onWait }) {
       }
       if (res.status === 409) throw new IntegrityError(await _parse409Body(res));
       if (res.ok) {
+        if (onStart) onStart();   // headers in: the next part can be asked for
         const pieces = [];
         const reader = res.body.getReader();
         for (;;) {
@@ -723,7 +774,7 @@ async function _fetchPart(uuid, idx, state, { onBytes, onWait }) {
       lastErr = e;
     }
     if (got) onBytes(-got);
-    if (attempt < tries - 1) { await waitForRetry(RETRY_DELAYS_MS[attempt], onWait); onWait(0); }
+    if (attempt < tries - 1 && !prog.stopped) { await waitForRetry(RETRY_DELAYS_MS[attempt], onWait); onWait(0); }
   }
   const err = new Error(lastErr?.message || 'Network error'); err.retryExhausted = true; throw err;
 }

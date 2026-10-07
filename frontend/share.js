@@ -182,7 +182,7 @@ function setStage(label) {
 function setProgress(pct, detail) {
   const p = Math.max(0, Math.min(100, Math.round(pct)));
   domRefs.progressPct.textContent = String(p);
-  domRefs.progressBar.style.width = p + '%';
+  domRefs.progressBar.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%';   // bar finer than the number
   domRefs.progressTrack.setAttribute('aria-valuenow', String(p));
   if (detail !== undefined) domRefs.progressDetail.textContent = detail;
   document.title = `${p}% · Refueler Share`;

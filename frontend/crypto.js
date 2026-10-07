@@ -83,22 +83,27 @@ export function timeLeftText(seconds) {
 // Speed over the last 10 s; nothing until 5 s of bytes to judge it on. A step
 // back (a part starting again) starts the measurement again; so does reset(),
 // called when a try starts after a wait, so the wait doesn't count as slow bytes.
-export function makeRateMeter(windowMs = 10_000, settleMs = 5_000) {
-  let samples = [];
+// A figure is held for 2 s so the line doesn't keep changing length.
+export function makeRateMeter(windowMs = 10_000, settleMs = 5_000, holdMs = 2_000) {
+  let samples = [], held = '', heldAt = 0;
+  const reset = () => { samples = []; held = ''; };
   return {
-    reset() { samples = []; },
+    reset,
     add(bytes, now = performance.now()) {
       const last = samples[samples.length - 1];
-      if (last && bytes < last.b) samples = [];
+      if (last && bytes < last.b) reset();
       samples.push({ t: now, b: bytes });
       while (samples.length > 2 && now - samples[1].t > windowMs) samples.shift();
     },
     left(remaining, now = performance.now()) {
+      if (held && now - heldAt < holdMs) return held;
       if (samples.length < 2) return '';
       const first = samples[0], last = samples[samples.length - 1];
       if (now - first.t < settleMs) return '';
       const rate = (last.b - first.b) / ((last.t - first.t) / 1000);
-      return rate > 0 ? timeLeftText(remaining / rate) : '';
+      held = rate > 0 ? timeLeftText(remaining / rate) : '';
+      heldAt = now;
+      return held;
     },
   };
 }

@@ -971,6 +971,7 @@ class UploadStop extends Error {
   }
 }
 
+const TEXT_EVERY_MS = 250;   // Share-Progress-1: words under the bar, at most 4 a second
 // Share-Progress-1: the resume screen is one box; the page headline says what happened.
 const RESUME_HEAD = { eyebrow: 'Interrupted', head: 'An upload didn’t finish.' };
 const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
@@ -1215,11 +1216,16 @@ async function _carryOn(job, domRefs, state, helpers) {
   const short       = job.uuid.slice(0, 8);
   // Share-Progress-1: the bar counts bytes as they leave (inFlight = this part's
   // bytes so far), with time left once there's speed to judge it on.
+  // The words under the bar change at most 4 times a second (the font's digits
+  // aren't all one width, so faster looks like flicker); the bar every event.
   const meter = makeRateMeter();
-  let inFlight = 0;
+  let inFlight = 0, textAt = 0;
   const progress = () => {
     const b = Math.min(job.sent * CHUNK_SIZE + inFlight, totalBytes);
     meter.add(b);
+    const now = performance.now();
+    if (now - textAt < TEXT_EVERY_MS) return setProgress(b / totalBytes * 100);
+    textAt = now;
     const left = meter.left(totalBytes - b);
     setProgress(b / totalBytes * 100, `${formatBytes(b)} of ${formatBytes(totalBytes)}${left ? ` · ${left}` : ''}`);
   };
@@ -1229,7 +1235,7 @@ async function _carryOn(job, domRefs, state, helpers) {
     if (drop) {
       drop.textContent = `Connection lost. Trying again in ${secs} s.`;
       drop.hidden = false;
-      if (inFlight) { inFlight = 0; progress(); }   // the part starts again: step back to the last one that arrived
+      if (inFlight) { inFlight = 0; textAt = 0; progress(); }   // the part starts again: step back to the last one that arrived
     }
   };
   if (drop) drop.hidden = true;
@@ -1315,6 +1321,7 @@ async function _carryOn(job, domRefs, state, helpers) {
     if (job.plainHash) job.plainHash.update(new Uint8Array(raw));
     job.sent = i + 1;
     writeChunkState(_recordOf(job), reportError).catch(() => {});
+    textAt = 0;
     progress();
   }
 
