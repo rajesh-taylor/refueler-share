@@ -147,6 +147,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 const FOLDER_MAX_DEPTH  = 20;
 const FOLDER_WARN_FILES = 500;
 const FOLDER_MAX_FILES  = 2000;
+const IOS_LOCAL_ROOT    = 'File Provider Storage';
 const FOLDER_ZIP_CAP    = 2 * 1024 ** 3; // 2 GiB — folder zips are held in RAM during upload (Share-6-spec §7)
 
 function sanitiseSegment(seg) {
@@ -828,7 +829,10 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
   }
 
   const firstPath = fileList[0].webkitRelativePath || fileList[0].name;
-  const folderName = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
+  const rootName  = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
+  // iOS picker: "Open" at the top of On My iPhone reports that root as
+  // "File Provider Storage". Name only — entry paths drop the root, so bytes are unchanged.
+  const folderName = rootName === IOS_LOCAL_ROOT ? 'On My iPhone' : rootName;
   _startZipView(folderName, fileList.length, domRefs, helpers);
   showZipStage('Gathering', 0, '');
 
