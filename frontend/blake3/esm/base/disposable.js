@@ -24,4 +24,3 @@ export const using = (disposable, fn) => {
         throw err;
     });
 };
-//# sourceMappingURL=disposable.js.map

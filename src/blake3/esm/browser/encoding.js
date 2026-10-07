@@ -25,4 +25,3 @@ export const mustGetEncoder = (encoding) => {
     }
     return encoder;
 };
-//# sourceMappingURL=encoding.js.map

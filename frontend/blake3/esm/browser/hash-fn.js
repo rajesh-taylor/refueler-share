@@ -39,4 +39,3 @@ export function keyedHash(key, input, { length = defaultHashLength } = {}) {
     derive.digest(result);
     return result;
 }
-//# sourceMappingURL=hash-fn.js.map

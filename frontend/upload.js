@@ -205,17 +205,31 @@ async function readDirectoryEntry(dirEntry, pathPrefix, depth) {
   return results;
 }
 
-const SKIP_COMPRESS_EXTENSIONS = new Set([
-  'mov', 'mp4', 'mxf', 'r3d', 'braw', 'ari', 'mkv', 'avi', 'wmv', 'webm', 'm4v', 'mpg', 'mpeg',
-  'mp3', 'aac', 'm4a', 'ogg', 'flac', 'opus', 'wma',
-  'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif',
-  'zip', 'gz', 'bz2', 'xz', '7z', 'rar',
-  'pdf', 'docx', 'xlsx', 'pptx',
-]);
+// Store-only folder zips (Share-Upload-5): no compression, entries in path order,
+// each file's own modified date — the same folder always zips to the same bytes,
+// the base for folder resume (S-031). Dates go in twice: the zip's own field (local
+// time, 2 s steps) and the extended UTC timestamp (0x5455) most unzip tools restore
+// exactly. Unknown or out-of-range dates (zip fields run 1980–2038) use 1 Jan 1980.
+const ZIP_DATE_MIN = new Date(1980, 0, 1, 12).getTime();
+const ZIP_DATE_MAX = 2 ** 31 * 1000 - 1;
 
-function shouldSkipCompression(relativePath) {
-  const ext = relativePath.split('.').pop().toLowerCase();
-  return SKIP_COMPRESS_EXTENSIONS.has(ext);
+function _zipDate(file) {
+  const t = file.lastModified;
+  return t >= ZIP_DATE_MIN && t <= ZIP_DATE_MAX ? t : ZIP_DATE_MIN;
+}
+
+function _zipUtcStamp(t) {
+  const b = new Uint8Array(5);
+  b[0] = 1;   // flags: modified time only
+  new DataView(b.buffer).setUint32(1, Math.floor(t / 1000), true);
+  return b;
+}
+
+// Exact size of that zip: per file a 30 B local header, 16 B data descriptor,
+// 46 B central entry, a 9 B timestamp in each header and the name twice; 22 B end record.
+function _zipSize(entries) {
+  const enc = new TextEncoder();
+  return entries.reduce((acc, e) => acc + (e.file.size || 0) + 110 + 2 * enc.encode(e.relativePath).length, 22);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,21 +239,20 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
   const { showZipStage, hideZipCard, handleFileSelection, formatBytes, setDropMsg, reportError } = helpers;
   const zipName  = `${folderName}.zip`;
   const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
+  entries = [...entries].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
 
-  // Pre-zip RAM guard (Share-6-spec §7) — a folder is read wholly into memory to
-  // compress, so refuse BEFORE the read loop when the input already exceeds the
-  // cap. The post-zip check further down can't help here: an over-cap folder
-  // throws an allocation error mid-compression, before any blob exists, and the
-  // user sees only a generic "Compression failed". Guarding on input bytes lets
-  // the useful "zip it yourself" copy show instead.
-  if (totalBytes > FOLDER_ZIP_CAP) {
+  // RAM guard (Share-6-spec §7): the zip is held in memory, so refuse BEFORE the
+  // read loop. Checked once, on the zip's exact size (files + headers), so the
+  // "zip it yourself" copy shows before any zipping starts.
+  const zipBytes = _zipSize(entries);
+  if (zipBytes > FOLDER_ZIP_CAP) {
     hideZipCard();
     _resetRows(domRefs); helpers.setView('empty');
-    setDropMsg(_folderTooBig(totalBytes, formatBytes));
+    setDropMsg(_folderTooBig(zipBytes, formatBytes));
     return;
   }
 
-  showZipStage('Compressing', 0, `0 B of ${formatBytes(totalBytes)}`);
+  showZipStage('Zipping', 0, `0 B of ${formatBytes(totalBytes)}`);
 
   const zipChunks = [];
   let bytesProcessed = 0;
@@ -260,12 +273,10 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
           const buf  = await file.arrayBuffer();
           const data = new Uint8Array(buf);
 
-          let entry;
-          if (shouldSkipCompression(relativePath)) {
-            entry = new fflate.ZipPassThrough(relativePath);
-          } else {
-            entry = new fflate.ZipDeflate(relativePath, { level: 6 });
-          }
+          const entry = new fflate.ZipPassThrough(relativePath);
+          const when  = _zipDate(file);
+          entry.mtime = when;
+          entry.extra = { 0x5455: _zipUtcStamp(when) };
           zipper.add(entry);
           entry.push(data, true);
           // eslint-disable-next-line no-unused-expressions
@@ -273,7 +284,7 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
 
           bytesProcessed += file.size;
           const pct = Math.min(Math.round((bytesProcessed / totalBytes) * 95), 95);
-          showZipStage('Compressing', pct, `${formatBytes(bytesProcessed)} of ${formatBytes(totalBytes)}`);
+          showZipStage('Zipping', pct, `${formatBytes(bytesProcessed)} of ${formatBytes(totalBytes)}`);
           await new Promise(r => setTimeout(r, 0));
         }
         if (!zipError) {
@@ -292,17 +303,7 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
 
   if (!zipBlob) return;
 
-  // Folder RAM cap (Share-6-spec §7) — the zip lives entirely in memory; refuse
-  // over-cap folders and steer the user to lodging a pre-zipped single file,
-  // which streams from disk with no in-RAM ceiling.
-  if (zipBlob.size > FOLDER_ZIP_CAP) {
-    hideZipCard();
-    _resetRows(domRefs); helpers.setView('empty');
-    setDropMsg(_folderTooBig(zipBlob.size, formatBytes));
-    return;
-  }
-
-  showZipStage('Compressing', 100, `${formatBytes(totalBytes)} of ${formatBytes(totalBytes)}`);
+  showZipStage('Zipping', 100, `${formatBytes(totalBytes)} of ${formatBytes(totalBytes)}`);
   await new Promise(r => setTimeout(r, 300));
   hideZipCard();
 
@@ -440,12 +441,14 @@ function _clearTidalError(transferOpts) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Turnstile (U-10): invisible unless Cloudflare needs a click; then the
-// #turnstile-wrap line and widget show above the button. Drawn once, on the first
-// file chosen, and kept across "Choose another" (U-11); Cloudflare refreshes an
+// #turnstile-wrap line and widget show above the button. Drawn once, when the upload
+// page opens (Share-Upload-5: a slow check runs while the sender picks a file), and
+// kept across "Choose another" (U-11); Cloudflare refreshes an
 // expired token itself. A token is single-use: startUpload spends it at
 // /credential/issue, then resets the widget so a retry gets a fresh check.
 // The button never waits on the check: pressed early it reads "Checking…" and
-// the upload starts when the token lands.
+// the upload starts when the token lands; past CHECK_WAIT_MS the line shows, so
+// the wait has a reason before Cloudflare's box (if any) appears.
 // ─────────────────────────────────────────────────────────────────────────────
 const UPLOAD_LABEL = 'Encrypt and upload';
 let turnstileWidgetId = null;
@@ -455,6 +458,9 @@ let startWhenChecked  = null;   // queued start while the button reads "Checking
 let turnstileTheme    = null;   // 'light' | 'dark', as drawn
 let turnstileStale    = false;  // page theme changed while a token was held
 let themeWatch        = null;
+let turnstileAsking   = false;  // Cloudflare's box is showing (wants a click)
+let checkWaitTimer    = null;
+const CHECK_WAIT_MS   = 2000;
 
 function renderTurnstile(state, domRefs, helpers) {
   const container = document.getElementById('cf-turnstile');
@@ -492,11 +498,14 @@ function renderTurnstile(state, domRefs, helpers) {
     appearance: 'interaction-only',
     size: 'flexible', // full width like the button; Cloudflare fixes the height at 65 px
     'before-interactive-callback': function() {
+      turnstileAsking = true;
       if (wrap) wrap.classList.remove('hidden');
     },
     callback: function(token) {
       state.turnstileToken = token;
       turnstileFailed = false;
+      turnstileAsking = false;
+      clearTimeout(checkWaitTimer);
       if (wrap) wrap.classList.add('hidden');
       if (startWhenChecked) {
         const go = startWhenChecked;
@@ -543,6 +552,7 @@ function _redrawTurnstile(state, domRefs, helpers) {
   try { window.turnstile.remove(turnstileWidgetId); } catch (e) {}
   turnstileWidgetId = null;
   turnstileFailed = false;
+  turnstileAsking = false;
   document.getElementById('turnstile-wrap')?.classList.add('hidden');
   renderTurnstile(state, domRefs, helpers);
 }
@@ -557,6 +567,8 @@ function _spendTurnstileToken(state, domRefs, helpers) {
 function _cancelQueuedStart(state, domRefs) {
   if (!startWhenChecked) return;
   startWhenChecked = null;
+  clearTimeout(checkWaitTimer);
+  if (!turnstileAsking) document.getElementById('turnstile-wrap')?.classList.add('hidden');
   domRefs.uploadBtn.textContent = UPLOAD_LABEL;
   domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
 }
@@ -683,8 +695,16 @@ export function enterUploadMode(domRefs, state, helpers) {
     uploadBtn.textContent = 'Checking…';
     uploadBtn.disabled = true;
     renderTurnstile(state, domRefs, helpers);
+    clearTimeout(checkWaitTimer);
+    checkWaitTimer = setTimeout(() => {
+      if (startWhenChecked) document.getElementById('turnstile-wrap')?.classList.remove('hidden');
+    }, CHECK_WAIT_MS);
   };
   uploadBtn.addEventListener('click', pressUpload);
+
+  // Start the check now, not on the first file: on hardened browsers (Vanadium)
+  // Cloudflare can take ~10 s to decide it wants a click.
+  renderTurnstile(state, domRefs, helpers);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -719,7 +739,7 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   // button press doesn't wait for it ("Preparing" at 0 %). Cached; a failure here is
   // silent and startUpload retries and says so.
   loadDeps().catch(() => {});
-  // U-11: a passed check is kept for the next file. Draw once; restart only after a failure.
+  // U-11: a passed check is kept for the next file. Drawn at page open; restart only after a failure.
   if (turnstileWidgetId === null) renderTurnstile(state, domRefs, helpers);
   else if (turnstileFailed && !state.turnstileToken) _resetTurnstile();
   domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);

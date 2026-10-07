@@ -7,4 +7,3 @@ export const defaultHashLength = 32;
  * @hidden
  */
 export const inputToArray = (input) => input instanceof Uint8Array ? input : new Uint8Array(input);
-//# sourceMappingURL=hash-fn.js.map

@@ -15,4 +15,3 @@ export const getWasm = () => {
 export const provideWasm = (w) => {
     wasm = w;
 };
-//# sourceMappingURL=wasm.js.map

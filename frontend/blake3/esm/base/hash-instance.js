@@ -54,4 +54,3 @@ export class BaseHash {
         this.hash = undefined;
     }
 }
-//# sourceMappingURL=hash-instance.js.map

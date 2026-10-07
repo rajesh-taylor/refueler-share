@@ -23,4 +23,3 @@ export class Hash extends Uint8Array {
         return mustGetEncoder(encoding)(this);
     }
 }
-//# sourceMappingURL=hash.js.map

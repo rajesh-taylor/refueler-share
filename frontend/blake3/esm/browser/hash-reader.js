@@ -22,4 +22,3 @@ export class BrowserHashReader extends BaseHashReader {
         return new Hash(bytes);
     }
 }
-//# sourceMappingURL=hash-reader.js.map

@@ -38,4 +38,3 @@ export const createHash = () => new BrowserHasher(getWasm().create_hasher(), l =
  * A Node.js crypto-like createHash method.
  */
 export const createKeyed = (key) => new BrowserHasher(getWasm().create_keyed(key), l => new Hash(l), r => new BrowserHashReader(r));
-//# sourceMappingURL=hash-instance.js.map

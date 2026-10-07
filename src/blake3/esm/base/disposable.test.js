@@ -65,4 +65,3 @@ describe('disposable', () => {
         }));
     });
 });
-//# sourceMappingURL=disposable.test.js.map
