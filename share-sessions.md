@@ -486,3 +486,8 @@ Full narrative: git history before Share-Upload-5.
 **Found:** Safari "This web page was reloaded because a problem occurred" once, on ⌘R during an upload (record survived, resume worked; Rajesh has seen it a few times) → backlog. A `/log/error` fires at the end of a download (again; payload not captured) → backlog. "Fetch API cannot load …/log/error due to access control checks" after a refresh = the old page's report cut off; Worker CORS checked fine. `e.useCache` rejection + `ewe-content-main.js` = Cloudflare widget / an ad-block extension, not Share. Resume screen shows the card **and** the empty sheet — calmer: one box (card only; Discard brings the sheet back) → Share-Progress-1 (Rajesh).
 **Decided:** an encryption review runs next — Share-Crypto-Opus-1 (Opus), ahead of Share-Upload-7, Share-Progress-1 and MCP-Fix-1 (Rajesh). Notes off-repo.
 **Next:** Share-Crypto-Opus-1 → its build → Share-Upload-7 (prompt `Share-Upload-7-prompt.md`) → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (refueler-io) → KV-Audit-Opus. MCP-Fix-1 after the encryption build.
+
+## Share-Crypto-Opus-1 (7 Oct 2026) — Encryption review (Opus, design only)
+
+Encryption review: design decided; detail kept off-repo (Rajesh's private folder). No code changed, nothing shipped. Decisions cover the build, link format, unfinished uploads, the MCP send tool and test transfers in storage. Public wording after the build: Rajesh decides at its close.
+**Next:** Share-Crypto-1 (build; prompt given in chat) → Share-Upload-7 (prompt `Share-Upload-7-prompt.md`) → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (refueler-io) → KV-Audit-Opus. MCP-Fix-1 after Share-Crypto-1; `refueler-mcp` stays unpublished until then.
