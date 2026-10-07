@@ -46,7 +46,8 @@
 
 // Share-Deps-1: no loadDeps() here. Receiving needs neither BLAKE3 nor secp256k1,
 // so the card never waits on them (and never fails on a browser without WASM, F-20).
-import { hexToBuf, derivePartKey, decryptPart, decryptPartV1, WORKER_URL, CHUNK_SIZE } from './crypto.js';
+import { hexToBuf, derivePartKey, decryptPart, decryptPartV1, WORKER_URL, CHUNK_SIZE,
+         RETRY_DELAYS_MS, waitForRetry, makeRateMeter } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -391,7 +392,7 @@ function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FSAA streaming download — Share-6-5b changes:
-//   1. fetchChunkWithRetry detects 409 → throws IntegrityError (never retried)
+//   1. _fetchPart detects 409 → throws IntegrityError (never retried)
 //   2. No Range header ever sent — confirmed and locked; fetch uses the full URL only
 //   3. Truncated-body guard: if buf.byteLength === 0 on a chunk that should have bytes → IntegrityError
 //   4. Catch block handles IntegrityError → _showIntegrityFailure, abort writable, no partial file
@@ -415,71 +416,16 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
     return;
   }
 
-  // ── fetchChunkWithRetry (FSAA path) ────────────────────────────────────────
-  // 6-5b invariant: NO Range header ever sent on any chunk request.
-  // 409 → IntegrityError (not retried). 416 would mean we somehow sent Range — should never occur.
-  // Truncated read (byteLength === 0 on a non-empty transfer) → IntegrityError (>128-chunk path).
-  async function fetchChunkWithRetry(chunkIdx) {
-    const padded  = String(chunkIdx).padStart(4, '0');
-    // Auth header only — never a Range header (locked 6-5b).
-    const headers = {};
-    if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
-
-    const RETRYABLE_DELAYS = [1000, 2000, 4000];
-    let lastErr;
-    for (let attempt = 0; attempt <= RETRYABLE_DELAYS.length; attempt++) {
-      try {
-        const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
-
-        // ── Fatal non-retry statuses ─────────────────────────────────────────
-        if (res.status === 400 || res.status === 401 || res.status === 410) {
-          const err = new Error(`HTTP ${res.status}`); err.fatal = true; err.status = res.status; throw err;
-        }
-
-        // ── 409 integrity failure (≤128 path: clean JSON body) ──────────────
-        // 409 is never retried — it is a definitive integrity verdict.
-        if (res.status === 409) {
-          const chunkBad = await _parse409Body(res);
-          throw new IntegrityError(chunkBad);
-        }
-
-        // ── 416 would mean a Range header was sent — should be impossible ───
-        if (res.status === 416) {
-          const err = new Error('HTTP 416 — unexpected Range response on verified path');
-          err.fatal = true; err.status = 416; throw err;
-        }
-
-        if (res.ok) {
-          const buf = await res.arrayBuffer();
-
-          // ── Truncated-body guard (>128 path) ───────────────────────────────
-          // If the connection was cut mid-body, the Worker never sent 409.
-          // byteLength === 0 on chunk 0 is a legitimate empty file edge case, but
-          // chunk_count ≥ 1 guarantees chunk 0 is non-empty (AES-GCM tag alone = 16 B).
-          if (buf.byteLength === 0) {
-            throw new IntegrityError(chunkIdx);
-          }
-
-          return buf;
-        }
-
-        lastErr = new Error(`HTTP ${res.status}`);
-      } catch (e) {
-        if (e instanceof IntegrityError) throw e; // never retry integrity failures
-        if (e.fatal) throw e;
-        lastErr = e;
-      }
-      if (attempt < RETRYABLE_DELAYS.length) await new Promise(r => setTimeout(r, RETRYABLE_DELAYS[attempt]));
-    }
-    const err = new Error(lastErr?.message || 'Network error'); err.retryExhausted = true; throw err;
-  }
+  const prog = _makeDlProgress(domRefs, totalBytes, totalChunks, 1);
+  const fetchPart = (i) => _fetchPart(uuid, i, state, prog);
+  let nextChunkPromise = null;
 
   try {
     let bytesWritten = 0;
-    let nextChunkPromise = fetchChunkWithRetry(0);
+    nextChunkPromise = fetchPart(0);
     for (let i = 0; i < totalChunks; i++) {
       const ciphertextBuf = await nextChunkPromise;
-      if (i + 1 < totalChunks) nextChunkPromise = fetchChunkWithRetry(i + 1);
+      if (i + 1 < totalChunks) nextChunkPromise = fetchPart(i + 1);
 
       let plaintext;
       try {
@@ -491,11 +437,7 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
         return;
       }
       await writable.write(new Uint8Array(plaintext));
-      bytesWritten += plaintext.byteLength;
-      const pct = totalBytes > 0
-        ? Math.min(Math.round((bytesWritten / totalBytes) * 100), 100)
-        : Math.round(((i + 1) / totalChunks) * 100);
-      _setProgress(domRefs, pct, bytesWritten, totalBytes);
+      bytesWritten += plaintext.byteLength;   // the bar counts bytes as they arrive (prog)
     }
 
     if (state.linkVersion === 2 && bytesWritten !== totalBytes) {
@@ -509,19 +451,8 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
 
   } catch (e) {
     try { await writable.abort(); } catch {}
-
-    // ── IntegrityError — the 409 and truncated-body paths ───────────────────
-    if (e instanceof IntegrityError) {
-      reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)}`);
-      _showIntegrityFailure(domRefs, reportError, uuid, e.chunk);
-      return;
-    }
-
-    reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
-    if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
-    else if (e.status === 410)  _showLinkInactive(domRefs);
-    else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
-    else                        _showDownloadError('Download failed. Please try again.', domRefs);
+    nextChunkPromise?.catch(() => {});
+    _downloadFailed(e, uuid, domRefs, reportError);
   }
 }
 
@@ -542,53 +473,14 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
   const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
   _showProgress(domRefs, 'Downloading', totalBytes);
 
+  // Share-Progress-1: downloading fills 0–90 % as bytes arrive, preparing the last 10 %.
+  const prog = _makeDlProgress(domRefs, totalBytes, totalChunks, 0.9);
   const chunks = [];
-  let bytesReceived = 0;
-
-  for (let i = 0; i < totalChunks; i++) {
-    // Auth header only — never a Range header (locked 6-5b).
-    const headers = {};
-    if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
-    const padded = String(i).padStart(4, '0');
-    const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
-
-    // ── 409 integrity failure ────────────────────────────────────────────────
-    // 409 is a definitive verdict — parse body for chunk index, then bail.
-    // No partial file is kept (chunks array is discarded, never assembled).
-    if (res.status === 409) {
-      const chunkBad = await _parse409Body(res);
-      reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)}`);
-      _showIntegrityFailure(domRefs, reportError, uuid, chunkBad);
-      return;
-    }
-
-    if (res.status === 410) { _showLinkInactive(domRefs); return; }
-    if (res.status === 401) {
-      _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
-      return;
-    }
-    if (!res.ok) {
-      reportError('download_chunk', `HTTP ${res.status} chunk ${i}`, `uuid:${uuid.slice(0,8)}`);
-      _showDownloadError(`Download failed (${res.status}). Please try again.`, domRefs);
-      return;
-    }
-
-    const buf = await res.arrayBuffer();
-
-    // ── Truncated-body guard (>128 path — connection cut mid-body, no 409) ──
-    // AES-GCM tag alone is 16 B, so any real chunk is > 0 bytes.
-    if (buf.byteLength === 0) {
-      reportError('integrity_check_failed', 'truncated_body', `uuid:${uuid.slice(0,8)} chunk:${i}`);
-      _showIntegrityFailure(domRefs, reportError, uuid, i);
-      return;
-    }
-
-    chunks.push(buf);
-    bytesReceived += buf.byteLength;
-    const pct = totalBytes > 0
-      ? Math.min(Math.round((bytesReceived / totalBytes) * 50), 50)
-      : Math.round(((i + 1) / totalChunks) * 50);
-    _setProgress(domRefs, pct, bytesReceived, totalBytes);
+  try {
+    for (let i = 0; i < totalChunks; i++) chunks.push(await _fetchPart(uuid, i, state, prog));
+  } catch (e) {
+    _downloadFailed(e, uuid, domRefs, reportError);   // chunks discarded, never assembled
+    return;
   }
 
   // Second pass (Safari/Firefox): decrypt in memory, then hand the file over (item 8).
@@ -605,8 +497,8 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
       _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
       return;
     }
-    const pct = 50 + Math.round(((i + 1) / chunks.length) * 50);
-    _setProgress(domRefs, pct, totalBytes, totalBytes);
+    _setProgress(domRefs, 90 + Math.round(((i + 1) / chunks.length) * 10), totalBytes, totalBytes);
+    $('dl-mb').textContent = 'Decrypting…';
   }
   if (state.linkVersion === 2 && plainBytes !== totalBytes) {
     reportError('decrypt', `size ${plainBytes} != ${totalBytes}`, `uuid:${uuid.slice(0,8)}`);
@@ -748,14 +640,106 @@ function _showWindowClosed(untilTs) {
 function _showProgress(domRefs, stage, totalBytes) {
   domRefs.dlStageTag.textContent = stage;
   _setProgress(domRefs, 0, 0, totalBytes);
+  $('dl-mb').textContent = 'Connecting…';   // until the first bytes arrive (Share-Progress-1)
+  $('dl-drop').hidden = true;
   _showSheet('download-card');
 }
 
-function _setProgress(domRefs, pct, doneBytes, totalBytes) {
+function _setProgress(domRefs, pct, doneBytes, totalBytes, tail = '') {
   domRefs.dlPct.textContent = String(pct);
   domRefs.dlBar.style.width = pct + '%';
   $('dl-track').setAttribute('aria-valuenow', String(pct));
-  $('dl-mb').textContent = totalBytes > 0 ? _bytesOf(doneBytes, totalBytes) : '';
+  const bytes = totalBytes > 0 ? _bytesOf(doneBytes, totalBytes) : '';
+  $('dl-mb').textContent = [bytes, tail].filter(Boolean).join(' · ');
+}
+
+// Share-Progress-1: the bar counts bytes as they arrive, across every part in
+// flight; a failed try takes its bytes back. `share` = the bar's part for
+// downloading (1, or 0.9 where decrypting comes after). Old links without a size
+// (total 0) estimate from the part count and show no byte figures.
+function _makeDlProgress(domRefs, totalBytes, totalChunks, share) {
+  const cipherTotal = totalBytes > 0 ? totalBytes + 16 * totalChunks : (CHUNK_SIZE + 16) * totalChunks;
+  const meter = makeRateMeter();
+  const drop  = $('dl-drop');
+  let got = 0;
+  const show = (tail) => {
+    const f = Math.min(got / cipherTotal, 1);
+    _setProgress(domRefs, Math.floor(f * share * 100), Math.round(f * totalBytes), totalBytes, tail);
+  };
+  return {
+    onBytes(n) {
+      got += n;
+      meter.add(got);
+      show(meter.left(cipherTotal - got));
+    },
+    onWait(secs) {
+      if (!secs) { meter.reset(); drop.hidden = true; return; }   // a try starts again
+      // (not hidden on bytes: on the stream path the next part is already arriving)
+      drop.textContent = `Connection lost. Trying again in ${secs} s.`;
+      drop.hidden = false;
+      show('');   // no time left while waiting
+    },
+  };
+}
+
+// One part, read as it arrives so the bar moves within a part, with the upload's
+// retry rule (RETRY_DELAYS_MS). Auth header only — never a Range header (locked
+// 6-5b). 400/401/410/416 → err.fatal. 409 is a definitive integrity verdict and an
+// empty body a cut one: IntegrityError, never retried. A body cut mid-read (no 409
+// on the >128 path) throws in read() and is retried, as before.
+async function _fetchPart(uuid, idx, state, { onBytes, onWait }) {
+  const padded  = String(idx).padStart(4, '0');
+  const headers = {};
+  if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
+  const tries = RETRY_DELAYS_MS.length + 1;
+  let lastErr;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    let got = 0;
+    try {
+      const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+      if (res.status === 400 || res.status === 401 || res.status === 410 || res.status === 416) {
+        const err = new Error(`HTTP ${res.status}`); err.fatal = true; err.status = res.status; throw err;
+      }
+      if (res.status === 409) throw new IntegrityError(await _parse409Body(res));
+      if (res.ok) {
+        const pieces = [];
+        const reader = res.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          pieces.push(value);
+          got += value.byteLength;
+          onBytes(value.byteLength);
+        }
+        if (got === 0) throw new IntegrityError(idx);
+        const buf = new Uint8Array(got);
+        let off = 0;
+        for (const p of pieces) { buf.set(p, off); off += p.byteLength; }
+        return buf.buffer;
+      }
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      if (e instanceof IntegrityError || e.fatal) throw e;
+      lastErr = e;
+    }
+    if (got) onBytes(-got);
+    if (attempt < tries - 1) { await waitForRetry(RETRY_DELAYS_MS[attempt], onWait); onWait(0); }
+  }
+  const err = new Error(lastErr?.message || 'Network error'); err.retryExhausted = true; throw err;
+}
+
+// Where a download that stopped lands — both paths (was the stream path's catch).
+function _downloadFailed(e, uuid, domRefs, reportError) {
+  if (e instanceof IntegrityError) {
+    reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)}`);
+    _showIntegrityFailure(domRefs, reportError, uuid, e.chunk);
+    return;
+  }
+  reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
+  if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
+  else if (e.status === 410)  _showLinkInactive(domRefs);
+  else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
+  else                        _showDownloadError('Download failed. Please try again.', domRefs);
 }
 
 // Both figures in the total's unit, same units as share.js formatBytes (Size row).

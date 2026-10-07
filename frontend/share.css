@@ -326,11 +326,14 @@ html.up-dragging body::after {
 .up-stop-actions { margin-top: 28px; }
 .up-stop-actions:has(> [hidden]) { grid-template-columns: minmax(0, 1fr); }
 
-/* Resume panel */
+/* Resume panel — one box (Share-Progress-1): while it shows on the empty page, the
+   slip goes and the page headline says "An upload didn’t finish." (upload.js RESUME_HEAD).
+   Discard brings the slip back. A file dropped anyway shows the slip (chosen view). */
 .up-panel { border: 1px solid var(--rx-rule-strong); border-radius: 10px; padding: 20px 22px; margin-top: 32px; }
-.up-panel .rx-eyebrow { margin-bottom: 12px; }
-.up-panel-title { font: 400 17px/1.4 var(--rx-sans); color: var(--fg); margin: 0; }
-.up-panel .rx-ledger { margin-top: 14px; }
+.up-panel .rx-ledger { margin-top: 0; border-top: 0; }
+.up-panel .rx-row:first-child { padding-top: 0; }
+.up-panel .rx-row:last-child { border-bottom: 0; }
+.up-sheet[data-view="empty"]:has(#resume-card:not(.hidden)) .up-slip { display: none; }
 .up-panel .up-btnrow { margin-top: 20px; }
 .up-panel + .up-slip { margin-top: 16px; }
 

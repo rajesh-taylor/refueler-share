@@ -17,6 +17,7 @@
 //   hexToBuf(hex)                      — hex string → ArrayBuffer
 //   WORKER_URL, CHUNK_SIZE, FREE_CAP, FREE_EXPIRY, TIER_EXPIRY_SECONDS
 //   CHUNK_UPLOAD_TIMEOUT_MS
+//   RETRY_DELAYS_MS, waitForRetry, timeLeftText, makeRateMeter — progress (Share-Progress-1)
 //
 // Architectural note: blake3 and cashu are module-level mutable state.
 // loadDeps() must be awaited before calling blake3Hash() or any NUT-00 function.
@@ -43,6 +44,64 @@ export const TIER_EXPIRY_SECONDS = {
 
 // Safari fetch timeout — Safari silently hangs on network drops.
 export const CHUNK_UPLOAD_TIMEOUT_MS = 60_000; // 60 s per chunk
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Progress and retries — one rule for both pages (Share-Progress-1)
+// ─────────────────────────────────────────────────────────────────────────────
+// Waits between tries of one part, upload and both download paths. No wait is
+// longer than 10 s (the page counts it down); about 2 min of trying in all.
+export const RETRY_DELAYS_MS = [2000, 5000, 10000, 10000, 10000, 10000, 10000,
+                                10000, 10000, 10000, 10000, 10000, 10000];   // 13 waits, 14 tries, 127 s
+
+// Waits `ms`, calling onTick(seconds left) once a second. Ends early when the
+// browser says it's back online.
+export function waitForRetry(ms, onTick) {
+  return new Promise(resolve => {
+    const end = Date.now() + ms;
+    let timer;
+    const done = () => { clearInterval(timer); window.removeEventListener('online', done); resolve(); };
+    const tick = () => {
+      const left = end - Date.now();
+      if (left <= 0) return done();
+      if (onTick) onTick(Math.ceil(left / 1000));
+    };
+    window.addEventListener('online', done);
+    timer = setInterval(tick, 1000);
+    tick();
+  });
+}
+
+// "about 40 s left" · "about 3 min left" · "about 1 h 10 min left"
+export function timeLeftText(seconds) {
+  if (!(seconds >= 0) || !isFinite(seconds)) return '';
+  if (seconds < 55) return `about ${Math.max(5, Math.ceil(seconds / 5) * 5)} s left`;
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `about ${mins} min left`;
+  return `about ${Math.floor(mins / 60)} h ${mins % 60} min left`;
+}
+
+// Speed over the last 10 s; nothing until 5 s of bytes to judge it on. A step
+// back (a part starting again) starts the measurement again; so does reset(),
+// called when a try starts after a wait, so the wait doesn't count as slow bytes.
+export function makeRateMeter(windowMs = 10_000, settleMs = 5_000) {
+  let samples = [];
+  return {
+    reset() { samples = []; },
+    add(bytes, now = performance.now()) {
+      const last = samples[samples.length - 1];
+      if (last && bytes < last.b) samples = [];
+      samples.push({ t: now, b: bytes });
+      while (samples.length > 2 && now - samples[1].t > windowMs) samples.shift();
+    },
+    left(remaining, now = performance.now()) {
+      if (samples.length < 2) return '';
+      const first = samples[0], last = samples[samples.length - 1];
+      if (now - first.t < settleMs) return '';
+      const rate = (last.b - first.b) / ((last.t - first.t) / 1000);
+      return rate > 0 ? timeLeftText(remaining / rate) : '';
+    },
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dynamic dependencies — local files only, loaded once, reused (Share-Deps-1)

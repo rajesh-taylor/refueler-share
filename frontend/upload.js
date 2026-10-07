@@ -32,6 +32,9 @@ import {
   FREE_EXPIRY,
   TIER_EXPIRY_SECONDS,
   CHUNK_UPLOAD_TIMEOUT_MS,
+  RETRY_DELAYS_MS,
+  waitForRetry,
+  makeRateMeter,
 } from './crypto.js';
 
 import {
@@ -126,24 +129,28 @@ export async function clearResumeState(uuid, reportError) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Safari upload timeout wrapper
+// One PUT by XMLHttpRequest — fetch can't report upload progress (Share-Progress-1).
+// The browser sets Content-Length from the body, as fetch did, so the presigned
+// signature (B12-1c signs content-length) still matches. The timer is a stall
+// timer: it restarts on every progress event, so a slow link isn't cut off while
+// bytes are moving (Safari hangs silently on a dropped network).
 // ─────────────────────────────────────────────────────────────────────────────
-async function fetchWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timer);
-    return res;
-  } catch (e) {
-    clearTimeout(timer);
-    if (e.name === 'AbortError') {
-      const err = new Error(`Chunk upload timed out after ${timeoutMs / 1000}s`);
-      err.timedOut = true;
-      throw err;
-    }
-    throw e;
-  }
+function _xhrPut(url, body, stallMs, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let timer;
+    const stall = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { xhr.abort(); reject(Object.assign(new Error(`Chunk upload stalled for ${stallMs / 1000}s`), { timedOut: true })); }, stallMs);
+    };
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = (e) => { stall(); if (onProgress) onProgress(e.loaded); };
+    xhr.onload  = () => { clearTimeout(timer); resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, etag: xhr.getResponseHeader('ETag') || '', text: xhr.responseText || '' }); };
+    xhr.onerror = () => { clearTimeout(timer); reject(new Error('Network error')); };
+    stall();
+    xhr.send(body);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -883,49 +890,35 @@ async function _fetchNextUrlBatch(uuid, sessionToken, from, count, reportError) 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // _putChunkDirect — PUT one encrypted chunk to R2 via a presigned URL.
-// Returns the ETag string (R2 ACK). Implements Share-5 retry budget (6 attempts).
+// Returns the ETag string (R2 ACK). Retries on RETRY_DELAYS_MS (Share-Progress-1:
+// no wait over 10 s, about 2 min in all). onProgress(bytes of this part sent);
+// onWait(seconds) counts down a wait, onWait(0) when a try starts again.
 // ─────────────────────────────────────────────────────────────────────────────
-const _DIRECT_RETRY_DELAYS = [2000, 5000, 15000, 30000, 60000];
-const _DIRECT_MAX_ATTEMPTS = _DIRECT_RETRY_DELAYS.length + 1; // 6
-
-async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, reportError) {
+async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, reportError, { onProgress, onWait } = {}) {
+  const tries = RETRY_DELAYS_MS.length + 1;
   let lastErr;
-  for (let attempt = 0; attempt < _DIRECT_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < tries; attempt++) {
     try {
-      const res = await fetchWithTimeout(presignedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: encryptedBytes,
-      }, CHUNK_UPLOAD_TIMEOUT_MS);
+      const res = await _xhrPut(presignedUrl, encryptedBytes, CHUNK_UPLOAD_TIMEOUT_MS, onProgress);
 
-      if (res.ok) {
-        const etag = res.headers.get('ETag') || res.headers.get('etag') || '';
-        return etag.replace(/"/g, '');
-      }
+      if (res.ok) return res.etag.replace(/"/g, '');
 
       // 403 = signature invalid / URL reused — unrecoverable without a new URL
       if (res.status === 403) {
-        const txt = await res.text().catch(() => '');
-        reportError('direct_put_403', `chunk ${chunkIndex} 403 — URL invalid`, `uuid:${uuid.slice(0, 8)} attempt:${attempt} ${txt.slice(0, 80)}`);
+        reportError('direct_put_403', `chunk ${chunkIndex} 403 — URL invalid`, `uuid:${uuid.slice(0, 8)} attempt:${attempt} ${res.text.slice(0, 80)}`);
         throw new UploadStop('refused', `Chunk ${chunkIndex} direct PUT 403: presigned URL rejected`);
       }
 
       if (res.status === 429) {
-        const waitMs = _DIRECT_RETRY_DELAYS[attempt] ?? 60000;
         reportError('direct_put_429', `chunk ${chunkIndex} 429 attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
         lastErr = new Error('HTTP 429');
-        if (attempt < _DIRECT_MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, waitMs));
-        continue;
-      }
-
-      if (res.status < 500) {
-        const txt = await res.text().catch(() => '');
-        reportError('direct_put_4xx', `chunk ${chunkIndex} HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} ${txt.slice(0, 80)}`);
+      } else if (res.status < 500) {
+        reportError('direct_put_4xx', `chunk ${chunkIndex} HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} ${res.text.slice(0, 80)}`);
         throw new UploadStop('refused', `Chunk ${chunkIndex} direct PUT: HTTP ${res.status}`);
+      } else {
+        lastErr = new Error(`HTTP ${res.status}`);
+        reportError('direct_put_5xx', `chunk ${chunkIndex} HTTP ${res.status} attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
       }
-
-      lastErr = new Error(`HTTP ${res.status}`);
-      reportError('direct_put_5xx', `chunk ${chunkIndex} HTTP ${res.status} attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
     } catch (e) {
       if (e instanceof UploadStop) throw e; // fatal — propagate immediately
       lastErr = e;
@@ -935,9 +928,12 @@ async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, uuid, r
         reportError('direct_put_err', `chunk ${chunkIndex} attempt ${attempt}: ${e.message?.slice(0, 80)}`, `uuid:${uuid.slice(0, 8)}`);
       }
     }
-    if (attempt < _DIRECT_MAX_ATTEMPTS - 1) await new Promise(r => setTimeout(r, _DIRECT_RETRY_DELAYS[attempt] ?? 60000));
+    if (attempt < tries - 1) {
+      await waitForRetry(RETRY_DELAYS_MS[attempt], onWait);
+      if (onWait) onWait(0);
+    }
   }
-  throw new UploadStop('network', `Chunk ${chunkIndex} direct PUT failed after ${_DIRECT_MAX_ATTEMPTS} attempts: ${lastErr?.message}`, { tried: true });
+  throw new UploadStop('network', `Chunk ${chunkIndex} direct PUT failed after ${tries} attempts: ${lastErr?.message}`, { tried: true });
 }
 
 // Share-Deps-1 (E): if BLAKE3/secp256k1 can't load even with the pure-JS fallback,
@@ -975,6 +971,8 @@ class UploadStop extends Error {
   }
 }
 
+// Share-Progress-1: the resume screen is one box; the page headline says what happened.
+const RESUME_HEAD = { eyebrow: 'Interrupted', head: 'An upload didn’t finish.' };
 const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
 const NOT_SAME_FILE = 'That file doesn’t match the unfinished upload. Discard it and start again.';
 const SCHEME = 2;   // part key schedule + link format v2 (crypto.js, fragment.js)
@@ -1055,7 +1053,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   uploadBtn.disabled = true;
   uploadBtn.textContent = UPLOAD_LABEL;
   helpers.setView('uploading');
-  setProgress(0, `0 B of ${formatBytes(file.size)}`);
+  setProgress(0, 'Getting an upload pass…');   // Share-Progress-1: say each setup step (option A)
 
   if (!(await _loadDepsOrSay(domRefs, helpers))) return null;
 
@@ -1142,6 +1140,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   if (availableFromUnix)    initiateHeaders['X-Available-From']         = String(availableFromUnix);
   if (availableUntilUnix)   initiateHeaders['X-Available-Until']        = String(availableUntilUnix);
 
+  setProgress(0, 'Setting up the transfer…');
   const initRes = await _send(`${WORKER_URL}/upload/${issuedUuid}/initiate`, {
     method: 'POST',
     headers: initiateHeaders,
@@ -1214,14 +1213,30 @@ async function _carryOn(job, domRefs, state, helpers) {
   const totalChunks = job.totalChunks;
   const chunks      = _splitChunks(job.file, CHUNK_SIZE);
   const short       = job.uuid.slice(0, 8);
-  const progress    = () => {
-    const b = Math.min(job.sent * CHUNK_SIZE, totalBytes);
-    setProgress(b / totalBytes * 100, `${formatBytes(b)} of ${formatBytes(totalBytes)}`);
+  // Share-Progress-1: the bar counts bytes as they leave (inFlight = this part's
+  // bytes so far), with time left once there's speed to judge it on.
+  const meter = makeRateMeter();
+  let inFlight = 0;
+  const progress = () => {
+    const b = Math.min(job.sent * CHUNK_SIZE + inFlight, totalBytes);
+    meter.add(b);
+    const left = meter.left(totalBytes - b);
+    setProgress(b / totalBytes * 100, `${formatBytes(b)} of ${formatBytes(totalBytes)}${left ? ` · ${left}` : ''}`);
   };
+  const drop = domRefs.progressDrop;
+  const onWait = (secs) => {
+    if (!secs) { meter.reset(); return; }   // a try starts again
+    if (drop) {
+      drop.textContent = `Connection lost. Trying again in ${secs} s.`;
+      drop.hidden = false;
+      if (inFlight) { inFlight = 0; progress(); }   // the part starts again: step back to the last one that arrived
+    }
+  };
+  if (drop) drop.hidden = true;
 
   helpers.setView('uploading');
   setStage('Preparing');
-  progress();
+  if (job.sent) progress(); else setProgress(0, 'Encrypting…');
 
   state.sessionAesKey = await crypto.subtle.importKey('raw', hexToBuf(job.keyHex), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);   // date seal only
   state.partKey       = await derivePartKey(new Uint8Array(hexToBuf(job.keyHex)), ['encrypt']);
@@ -1285,7 +1300,16 @@ async function _carryOn(job, domRefs, state, helpers) {
     const encrypted = await _encryptChunk(raw, i, totalChunks, state);
     const chunkHashHex = blake3Hash(encrypted);
 
-    await _putChunkDirect(presignedUrl, encrypted, i, job.uuid, reportError);
+    const partLen = Math.min(CHUNK_SIZE, totalBytes - i * CHUNK_SIZE);
+    await _putChunkDirect(presignedUrl, encrypted, i, job.uuid, reportError, {
+      onProgress: (loaded) => {
+        if (drop && !drop.hidden && loaded > 0) drop.hidden = true;   // bytes moving again
+        inFlight = Math.min(loaded, partLen);
+        progress();
+      },
+      onWait,
+    });
+    inFlight = 0;
 
     job.hashes.push(chunkHashHex);
     if (job.plainHash) job.plainHash.update(new Uint8Array(raw));
@@ -1295,6 +1319,7 @@ async function _carryOn(job, domRefs, state, helpers) {
   }
 
   setStage('Finishing');
+  setProgress(100, 'Checking every part arrived…');
   if (job.plainHash && job.sealNonceHex) {
     const prResult = await runPermanentRecord(job.uuid, job.plainHash.digest('hex'), job.sealNonceHex, state.sessionAesKey);
     if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${short}`);
@@ -1422,11 +1447,13 @@ export async function checkResumeState(domRefs, state, helpers) {
   domRefs.resumeUploaded.replaceChildren(`${pct}%`, Object.assign(document.createElement('small'),
     { textContent: `${formatBytes(sentBytes)} of ${formatBytes(record.fileSize)}` }));
   if (resumeCard) resumeCard.classList.remove('hidden');
+  helpers.setView('empty', RESUME_HEAD);   // one box: share.css hides the empty slip while the card shows
 
   if (resumeDiscardBtn) {
     resumeDiscardBtn.addEventListener('click', async () => {
       await clearResumeState(record.uuid, helpers.reportError);
       if (resumeCard) resumeCard.classList.add('hidden');
+      helpers.setView('empty');   // back to the normal page
     }, { once: true });
   }
 
@@ -1458,7 +1485,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   const { formatBytes, reportError, showStopped } = helpers;
   // Back to the resume card with a sentence (file picker cancelled, wrong file).
   const backToCard = (text) => {
-    helpers.setView('empty');
+    helpers.setView('empty', RESUME_HEAD);
     if (resumeCard) resumeCard.classList.remove('hidden');
     if (domRefs.resumeDetail) domRefs.resumeDetail.textContent = text;
   };

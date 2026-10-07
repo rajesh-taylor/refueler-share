@@ -154,9 +154,8 @@ function showMaintenanceModal(status) {
       <h1 class="rx-head" id="up-head">Send a file.</h1>
 
       <!-- Resume: shown on arrival when this browser has an unfinished upload -->
+      <!-- One box (Share-Progress-1): the page headline says "An upload didn’t finish." -->
       <div class="up-panel hidden" id="resume-card">
-        <p class="rx-eyebrow">Interrupted</p>
-        <p class="up-panel-title" id="resume-title">An upload didn’t finish.</p>
         <dl class="rx-ledger">
           <div class="rx-row"><dt>File</dt><dd id="resume-file">—</dd></div>
           <div class="rx-row" id="resume-uploaded-row"><dt>Uploaded</dt><dd id="resume-uploaded">—</dd></div>
@@ -253,6 +252,7 @@ function showMaintenanceModal(status) {
         <div class="rx-track" id="progress-track" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="progress-bar"></b></div>
         <div class="rx-readout"><span id="progress-detail"></span><span>Keep this tab open</span></div>
       </div>
+      <p class="rx-once up-for-uploading" id="progress-drop" role="status" hidden></p>
       <p class="rx-fine up-left up-for-uploading" id="progress-note">If this tab closes, come back to this page to resume.</p>
 
       <!-- Stopped -->
@@ -333,6 +333,7 @@ function showMaintenanceModal(status) {
         <div class="rx-track" id="dl-track" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><b id="dl-bar"></b></div>
         <div class="rx-readout"><span id="dl-mb"></span><span>Keep this tab open</span></div>
       </div>
+      <p class="rx-once" id="dl-drop" role="status" hidden></p>
     </section>
 
     <!-- Finished -->
