@@ -205,11 +205,10 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-Crypto-1 ✓ (7 Oct 2026) — Encryption review build `493ea4b`: per-part key schedule, link format v2 (`z` required, no `i`); older resume records discarded, resume re-checks sent parts against the record. Rajesh live ✓ Safari (Mullvad on), old v1 link still opens; test transfers purged. Next: **Share-Upload-7** → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct.** **Share-Upload-6 ✓ (7 Oct 2026) — iOS folder root "File Provider Storage" → "On My iPhone" `9d63880`; resume keeps sent parts' hashes, no re-encrypt for an unchanged file `b1eea41`; resume card delay not reproduced (closed); 0 % pause measured (Share-Progress-1 shows it; `/initiate` speed-up → backlog). Rajesh live ✓ Safari, Mullvad on is the default now. Next: Share-Crypto-Opus-1 ✓ → **Share-Crypto-1** (build) → Share-Upload-7 (admin page off esm.sh = F-25, `noble-secp256k1.js` removal) → Share-Progress-1 (+ one-box resume screen) → Share-Folder-Resume-1 (S-031) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 after the encryption build; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews, + F-24) as its own session.**
+**Share-Upload-7 ✓ (7 Oct 2026) — admin test page off esm.sh (F-25) `c78cc9d`: vendored `noble-blake3.js` + `cashu-crypto.js` `blindMessage`; stats per chunk; header rule. `noble-secp256k1.js` removed from `frontend/`, `SM_VENDOR` and the mirror (refueler.io `8fb9ac2` — the ship never deletes dropped files). Rajesh live ✓ Safari (Mullvad on): admin soak + Share page both modes. Next: **Share-Progress-1** → Share-Folder-Resume-1 → B12-2 → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Crypto-1 ✓ (7 Oct 2026) — Encryption review build `493ea4b`: per-part key schedule, link format v2 (`z` required, no `i`); older resume records discarded, resume re-checks sent parts against the record. Rajesh live ✓ Safari (Mullvad on), old v1 link still opens; test transfers purged.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Cred-Fix-2b ✓ | `ca3972c` · deploy `a5ac4f5d` | Browser sends credential format v2 (vendored cashu-ts, DLEQ checked); Worker refuses v1. 642 tests. |
 | Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
 | Share-Upload-2 ✓ | refueler.io `580135c` · `565efd9` | Share sub-menu (`sections.js` + `section-nav.njk`); upload page B1 (open sheet + slip, §1 copy, bytes progress, QR canvas, F-23 `share-early.js`, F-6 tokens). Preview harness `dev/share-harness/`. B2 → Share-Upload-3. |
 | Share-Upload-3 ✓ | `4bb3fde` · `627c0d0` | B2 1–4: F-27 scroll, U-10 hidden check + "Checking…", U-11 keep the check, U-8 whole-page drop. `bf0512a`: resume picker before any await, `loadDeps()` warmed, QR caption. `initTurnstile`/`renderTurnstile` no longer exported. F-11 + Part C → Share-Upload-4. |
@@ -217,6 +216,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-Upload-5 ✓ | `45dde47` · `2a9f081` | Store-only zip (path order, own date + UTC stamp, `_zipSize` cap before zipping); Turnstile at page open, 2 s line, tick never starts an upload; source maps stripped, `sm_check_canon` refuses them. No new exports, headers or mirrored files. |
 | Share-Upload-6 ✓ | `9d63880` · `b1eea41` | iOS root name → "On My iPhone" (zip bytes unchanged); resume record keeps `hashes` + `fileModified`, re-check only if the file changed. Timings measured (session log). No new exports, headers or mirrored files. |
 | Share-Crypto-1 ✓ | `493ea4b` (refueler.io `ad063a6`) | Encryption review build: part key + per-part IV in `crypto.js`, link format v2, record `scheme: 2`, receiver part-count/size checks; v0/v1 open the old way. 633 worker tests + 31 new. Test transfers purged. |
+| Share-Upload-7 ✓ | `c78cc9d` (refueler.io `64771e5`, `8fb9ac2`) | Admin page on vendored BLAKE3 + Cashu blinding (no esm.sh), stats per chunk; `noble-secp256k1.js` removed everywhere; harness serves the admin page. |
  
 ---
  
@@ -226,7 +226,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → **Share-Upload-7** → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → **Share-Progress-1** → Share-Folder-Resume-1 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
@@ -261,15 +261,15 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Repo bloat (found 28 Sep):** 200 Rust build files under `worker/blake3-wasm-src/target/` are tracked in git. Untrack them and gitignore `target/` (keep the vendored `worker/blake3-wasm/` output) → any small tidy session.
 
 **Added Share-B12-1d (5 Oct 2026):**
-- **Share-Upload-2 additions — status after Share-Upload-6 (7 Oct):** 1, 2, 10 + iOS folder name done or closed in **Share-Upload-6**; 5, 7, 8 → **Share-Upload-7**. F-11 + Try again ✅ Share-Upload-4 (`2fb1b30`).
+- **Share-Upload-2 additions — status after Share-Upload-7 (7 Oct):** 1, 2, 10 + iOS folder name done or closed in **Share-Upload-6**; 5, 7, 8 ✅ **Share-Upload-7** (`c78cc9d`). F-11 + Try again ✅ Share-Upload-4 (`2fb1b30`).
   1. Resume: button takes 3–6 s to appear after refresh *(not reproduced Share-Upload-6: 0.3–0.5 s in Safari, Mullvad on or off; closed)*; file picker needs two clicks (Safari desktop) *(✅ `bf0512a`, confirmed in Safari desktop by Rajesh)*. Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
   2. Resume: pause while sent chunks are re-hashed — ✅ `b1eea41` (record keeps the hashes; re-check only if the file changed).
   3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
   4. Upload progress incl. setup stages — ✅ B1 (bytes-based, "X MB of Y MB").
-  5. `admin/test-upload.html` esm.sh (= F-25) → use hosted `noble-blake3.js` + `cashu-crypto.js` `blindMessage`, then delete `noble-secp256k1.js` from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in the same ship.
+  5. `admin/test-upload.html` esm.sh (= F-25) ✅ Share-Upload-7 (+ `noble-secp256k1.js` removed). Left: it prints "4/53 chunks passed" when the verify count exceeds the chunk count (count `verifyIndices.length`) — fold into the next admin-page touch.
   6. Source maps ✅ Share-Upload-5 (28 BLAKE3 lines + `qr-creator.min.js`; `sm_check_canon` refuses any new one).
-  7. `test-upload.html` stats refresh per chunk (keep the 100-chunk log line).
-  8. `test-upload.html` header comment stale ("NEVER add to sync-share.sh", "NEVER commit to the public mirror").
+  7. `test-upload.html` stats refresh per chunk ✅ Share-Upload-7.
+  8. `test-upload.html` header comment ✅ Share-Upload-7.
   9. Finalise 409 `wrong_size` → F-11 error states ✅ `2fb1b30` (resends from the first bad part).
   10. "Preparing" 0 % — measured Share-Upload-6: issue 0.64 s + initiate 1.48 s + first-part encrypt 0.56 s, then the first 32 MiB lands before the bar moves → shown by Share-Progress-1. **`/initiate` speed-up** (own Worker session, tests): manifest put + session KV put + presign can run together after the Supabase spend (≈0.3–0.5 s).
   11. **Progress (Rajesh, 6 Oct — "looks hung"):** also the **one-box resume screen** (card only, Discard brings the sheet back; Rajesh 7 Oct, option A). upload bar moves per finished 32 MiB chunk (fetch has no upload progress; 160 MB = 20 % jumps, ~6 s each); download the same (F-22). Real byte progress is possible both ways (XHR `upload.onprogress`; `res.body.getReader()`) → **Share-Progress-1** (design pass + build, both pages) — after Share-Upload-7, before B12-2 (Rajesh, 7 Oct: keep the order). Also the iPhone download that takes 5–10 s to show anything (97 MB folder, 7 Oct). Console 401 not seen again (Share-Upload-5); closed.
@@ -279,7 +279,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Test-Harness-1** (small): combined `npm test` failed locally 5 Oct (workerd runtimes ETIMEDOUT / refused on 127.0.0.1). **Cause: Mullvad VPN** — with it disconnected the suite is clean (639 passed, 10 s); CI (Node 22) green throughout. Local network sharing was already on, so it is not that setting — workaround: disconnect Mullvad while running the suite (or run files singly). Not code. Still open: under `singleWorker: true`, `delete_resume` + `dock_b12` bearer-delete tests fail from cross-file state (pre-existing). Also remove unused `MIME_DENYLIST` (Share-MIME-1).
 
 **Added Cred-Fix-2b (5 Oct 2026):**
-- **Vendor cleanup** (small, both repos): `frontend/noble-secp256k1.js` is no longer imported (credentials use `frontend/cashu-crypto.js`). Remove it from `frontend/`, `SM_VENDOR` and refueler.io `src/share/assets/` in one ship — the sync never deletes from the mirror.
+- **Ship never deletes from the mirror** (Share-Upload-7): `ship-frontend.sh` stages only listed paths, so a file dropped from `share-mirror.sh` stays in refueler.io until a direct `git rm` there (done for `noble-secp256k1.js`, `8fb9ac2`). Small `bin/` fix: stage removals of files no longer listed, or fail on a "mirror-only file" warning that isn't in `SM_MIRROR_ONLY`.
 - **cashu-ts upgrades:** bump `worker/package.json` and `bin/vendor-cashu/package.json` together, then `bin/vendor-cashu.sh` + ship + deploy. Browser and Worker must run the same version.
 - **DLEQ key pin** (B7/B8, anonymous rail): the browser checks the DLEQ proof against the key in the same response, not a pinned key (Rajesh, 5 Oct). Pin when credentials are bought separately from transfers.
 

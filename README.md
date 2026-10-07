@@ -166,6 +166,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Share-Upload-4 | ✅ | Every upload failure says what happened in plain words, and Try again carries on from where it stopped without choosing the file again; the security check follows the light/dark theme |
 | Share-Upload-5 | ✅ | Folders zip faster and to identical bytes every time, keeping each file's own date; the security check starts when the page opens and never starts an upload by itself |
 | Share-Upload-6 | ✅ | Folders picked at the top of "On My iPhone" keep that name; an interrupted upload carries on without re-checking the parts already sent |
+| Share-Upload-7 | ✅ | The internal test page runs only Refueler's own copies of its code, nothing from a third-party site; an unused library is gone from the site |
 | B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done. Shipped so far: deletion and sweep fixes; every upload URL signed for its exact chunk size, enforced by storage |
 
 ### Roadmap
@@ -175,7 +176,6 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Session | Scope |
 |---------|-------|
 | Encryption review | Design review of how files are encrypted in the browser (Opus), then the fixes it calls for |
-| Share-Upload-7 | Admin test page off third-party code |
 | Share-Progress-1 | Smooth, honest progress on both pages: real byte counts while uploading and downloading, time left, a clear line when the connection drops |
 | Share-Folder-Resume-1 | Interrupted folder uploads carry on where they stopped (pick the same folder again) |
 | MCP-Fix-1 | MCP send tool moved onto the current upload path, credential format and encryption, then the npm package is published |
