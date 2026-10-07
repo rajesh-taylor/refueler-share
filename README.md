@@ -164,6 +164,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Share-Upload-2 | ✅ | Redesigned upload page; one Share menu (Send · Plans · Status) on every Share page; links no longer flash the upload page; working QR code |
 | Share-Upload-3 | ✅ | The security check stays out of sight unless Cloudflare asks for a click, and the upload button never waits on it; drop a file anywhere on the page; each step scrolls into view |
 | Share-Upload-4 | ✅ | Every upload failure says what happened in plain words, and Try again carries on from where it stopped without choosing the file again; the security check follows the light/dark theme |
+| Share-Upload-5 | ✅ | Folders zip faster and to identical bytes every time, keeping each file's own date; the security check starts when the page opens and never starts an upload by itself |
 | B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done. Shipped so far: deletion and sweep fixes; every upload URL signed for its exact chunk size, enforced by storage |
 
 ### Roadmap
@@ -172,7 +173,8 @@ Designs are written down before they are built, and security-sensitive blocks ge
 
 | Session | Scope |
 |---------|-------|
-| Share-Upload-5 | Faster folder zipping (identical bytes every time, the base for folder resume); resume card speed; admin test page off third-party code |
+| Share-Upload-6 | Folder name from iPhone Files; resume card and first-second pauses timed and fixed |
+| Share-Upload-7 | Admin test page off third-party code |
 | Share-Progress-1 | Smooth, honest progress on both pages: real byte counts while uploading and downloading, time left, a clear line when the connection drops |
 | Share-Folder-Resume-1 | Interrupted folder uploads carry on where they stopped (pick the same folder again) |
 | MCP-Fix-1 | MCP send tool moved onto the current upload path and credential format, then the npm package is published |
