@@ -3,9 +3,12 @@
   worker/src/share/admin/test-upload.html  (Share-Admin-2)
 
   Hidden admin soak-test page.
-  - NEVER add to bin/sync-share.sh
-  - NEVER commit to the public mirror
-  - Served ONLY from refueler.io/share/admin/test-upload.html (internal path)
+  - In the mirror pipeline (bin/lib/share-mirror.sh SM_C_ADMIN → refueler.io
+    src/share/admin/), shipped by bin/ship-frontend.sh — never into src/share/assets/
+  - Served ONLY from refueler.io/share/admin/test-upload.html — never linked from a public page
+  - No third-party code: BLAKE3 and Cashu blinding come from the vendored files the
+    Share page uses (/share/assets/noble-blake3.js, cashu-crypto.js) (Share-Upload-7, F-25)
+  - Uploads random bytes, unencrypted; makes no share link
 
   Purpose: drive large dummy uploads through the full direct-to-R2 pipeline
   (credential/issue → /upload/:uuid/initiate → /urls → presigned PUTs → /finalise)
@@ -194,9 +197,9 @@
 </div>
 
 <script type="module">
-// ─── Noble BLAKE3 (CDN — admin-only page, no CSP restriction) ────────────────
-import { blake3 } from 'https://esm.sh/@noble/hashes@1.8.0/blake3';
-import * as secp from 'https://esm.sh/@noble/secp256k1@2.2.1';
+// ─── Vendored crypto — the same files the Share page loads (Share-Upload-7, F-25) ──
+import { blake3 } from '../assets/noble-blake3.js';
+import { blindMessage } from '../assets/cashu-crypto.js';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -246,14 +249,14 @@ function randomChunk(size) {
   return buf;
 }
 
-// ─── BDHKE blind (same as share.js) ──────────────────────────────────────────
-async function blindedMessage() {
-  const secret  = crypto.getRandomValues(new Uint8Array(32));
-  const Y       = secp.ProjectivePoint.fromPrivateKey(secret);
-  const rBytes  = crypto.getRandomValues(new Uint8Array(32));
-  const r       = secp.utils.normPrivateKeyToScalar(rBytes);
-  const B_      = Y.add(secp.ProjectivePoint.BASE.multiply(r));
-  return { blinded_message: B_.toHex(true), r, secret };
+// ─── Cashu blinded message (NUT-00, as crypto.js generateBlindedCredential) ──
+// /admin/test-credential signs it; /initiate does not verify a test credential's
+// proof, so the signature is not unblinded here.
+function blindedMessage() {
+  const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)),
+                            b => b.toString(16).padStart(2, '0')).join('');
+  const { B_ } = blindMessage(new TextEncoder().encode(secret));
+  return { blinded_message: B_.toHex(true) };
 }
 
 // ─── Merkle tree (rfc6962-unbalanced-blake3-v1) ────────────────────────────────
@@ -422,7 +425,7 @@ $('btnStart').addEventListener('click', async () => {
     // ── Step 1: request test credential ──────────────────────────────────────
     emit('\n[1/5] Requesting test credential…', 'head');
 
-    const { blinded_message } = await blindedMessage();
+    const { blinded_message } = blindedMessage();
 
     const credRes = await fetch(`${workerUrl}/admin/test-credential`, {
       method: 'POST',
@@ -564,11 +567,10 @@ $('btnStart').addEventListener('click', async () => {
 
         succeeded++;
         bytesUploaded += chunkBytes;
+        updateStats(); // stats every chunk; log line every 100
 
-        // Log every 100 chunks
         if (succeeded - lastLogChunk >= 100 || succeeded === totalChunks) {
           lastLogChunk = succeeded;
-          updateStats();
           const elapsed = Math.round((Date.now() - tStart) / 1000);
           emit(`   ${succeeded}/${totalChunks} chunks — ${fmtBytes(bytesUploaded)} in ${fmtSeconds(elapsed)}`, 'info');
         }
