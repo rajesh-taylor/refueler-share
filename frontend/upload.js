@@ -1187,6 +1187,8 @@ function _recordOf(job) {
     uploadMode: 'direct-r2', sessionToken: job.sessionToken, // Share-6: resume needs these
     tailUrl: job.tailUrl || undefined,                       // B12-1c: /urls cannot re-issue the tail
     sourceType: job.sourceType,                              // Part C: folder detection for FOLDER-RESUME discard
+    hashes: job.hashes.slice(0, job.sent),                   // Share-Upload-6: sent parts' ciphertext hashes (resume skips re-encrypting)
+    fileModified: job.file.lastModified,                     // …trusted only while the chosen file is unchanged
   };
 }
 
@@ -1246,8 +1248,9 @@ async function _carryOn(job, domRefs, state, helpers) {
   if (job.sent < urlLimit && !job.urlMap.has(job.sent)) await fetchUrls(job.sent);
 
   // HARD RULE 1 (resume after a refresh): re-encrypt the parts already sent to
-  // rebuild their ciphertext hashes — the Merkle leaves for /finalise. A same-tab
-  // Try again still holds them and skips this.
+  // rebuild their ciphertext hashes — the Merkle leaves for /finalise. Skipped when
+  // the job already holds them: a same-tab Try again, or a resume record that kept
+  // them for an unchanged file (Share-Upload-6).
   if (job.hashes.length < job.sent) {
     job.hashes.length = 0;
     const sentBytes = Math.min(job.sent * CHUNK_SIZE, totalBytes);
@@ -1467,7 +1470,8 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   }
 
   // ── File prompt + validation ───────────────────────────────────────────────
-  // We need the original plaintext bytes to re-encrypt prior chunks (HARD RULE 1).
+  // We need the original plaintext bytes for the parts still to send, and to
+  // re-encrypt prior chunks when the record can't vouch for them (HARD RULE 1).
   // The picker opens before anything is awaited on the resume path: Safari only
   // opens a file picker inside the click that asked for it (user activation), so
   // loading deps first cost a second click (Share-Upload-3).
@@ -1501,12 +1505,18 @@ export async function resumeUpload(record, domRefs, state, helpers) {
 
   const expiryTimestamp = record.expiryTimestamp
     || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
+  // Share-Upload-6: reuse the sent parts' hashes only for the same file, unchanged
+  // since (lastModified); otherwise _carryOn re-encrypts them as before. A changed
+  // file then still fails the stored-bytes check rather than mixing silently.
+  const savedHashes = Array.isArray(record.hashes) && record.hashes.length === resumeFrom
+    && record.fileModified === resumeFile.lastModified
+    && record.hashes.every(h => /^[0-9a-f]{64}$/.test(h)) ? record.hashes.slice() : [];
   const job = {
     file: resumeFile, uuid: record.uuid, keyHex: record.keyHex, ivHex: record.ivHex,
     totalChunks, expiryTimestamp, tier: record.tier || 'free',
     sessionToken: record.sessionToken, tailUrl,
     sealNonceHex: record.sealNonceHex || null, sourceType: record.sourceType || 'file',
-    sent: resumeFrom, hashes: [], urlMap: new Map(), plainHash: null,
+    sent: resumeFrom, hashes: savedHashes, urlMap: new Map(), plainHash: null,
     // A resumed upload doesn't record the password or delete setting: left out of the ledger.
     info: { fileName: record.fileName, sizeBytes: record.fileSize, expiryTimestamp },
   };
