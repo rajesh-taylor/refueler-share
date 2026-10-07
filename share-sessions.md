@@ -423,25 +423,16 @@ Full narrative of these entries: git history before `Cred-Fix-2b`.
 
 Full narrative: git history before Share-Upload-4.
 
-## Cred-Fix-2a → Share-Size-1 — compact log (5–6 Oct 2026, compacted Share-Upload-5)
+## Cred-Fix-2a → Share-Upload-2 — compact log (5–6 Oct 2026, compacted Share-Upload-5 / Share-Crypto-1)
 
 | Session | Commit / deploy | Summary |
 |---|---|---|
 | Cred-Fix-2a · 5 Oct | deploy `4c9730b2` | Worker accepts credential format v2 (standard Cashu proof, `verifyProofV2`, `@cashu/cashu-ts` 4.11.0); `keyset_id` + `dleq` at issue; anonymous-rail API issuance 503 until B7. 659 tests. In the workerd pool import cashu-ts after the Worker modules. |
 | Cred-Fix-2b · 5 Oct | `ca3972c` (refueler.io `31b4457`) · deploy `a5ac4f5d` | Browser sends v2 via vendored `frontend/cashu-crypto.js` (`bin/vendor-cashu.sh`), DLEQ checked, key not pinned (B7/B8); Worker refuses v1. Public note `docs/Cred-verification-note-v1.md`. Live ✓ Safari. |
 | Share-Size-1 · 6 Oct | `27582c7` (refueler.io `0369317`) · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`. Honest scope: R2 object sizes still give it exactly. `/meta` hard-null from 13 Oct. |
+| Share-Upload-2 · 6 Oct | refueler.io `580135c` · `565efd9` (refueler.io `beb611b`) | Share sub-menu (`sections.js`, `section-nav.njk`); upload page B1: one sender sheet, `setView()` views, slip, bytes progress + % tab title, QR canvas, F-23 `share-early.js` (mirrored), F-6 tokens. Preview harness `dev/share-harness/` born. Live ✓ iPhone, Pixel, desktop. |
 
-Full narrative: git history before Share-Upload-5.
-
-## Share-Upload-2 (6 Oct 2026) — Share sub-menu + upload page redesign (B1) · refueler.io `580135c` · shipped `565efd9` (refueler.io `beb611b`)
-
-**Scope check:** F-12/13/14 (Cleanup-1) and F-20/21 (Deps-1) confirmed against the code. Rajesh agreed: C3 (download % at half) moves to the download track with F-22; C4, C9 and the Turnstile `?onload=` fold into the build; Part B split B1 (look/copy/structure) + B2 (behaviour); "Try again" in the same tab reuses the held file ("Try again carries on from 42%."); receiver A/B brand mock = its own session.
-**Part A (refueler.io `580135c`, own git):** `_data/sections.js`, `share/share.11tydata.json`, `section-nav.njk` (centred segmented pill, current item from `page.url`), Plans/Status out of `nav.njk`, Plans + Status on the shared header/footer (back links gone), `share-nav.njk`/`share-footer.njk` retired, Plans "Encrypted in your browser" ×3, Status title. Pill colours mixed from `--fg` so `share-tokens.css` can't change them. Live ✓ (Rajesh: Safari, Brave, iPhone, Pixel).
-**Part B1 (`565efd9`):** one sender sheet on the receiver's parts, `data-view` set by `share.js` `setView()` (empty · zipping · chosen · over · uploading · ready · stopped); the slip (U-7), facts row, "Choose a file" / "or a folder", drop line only on `(hover: hover) and (pointer: fine)`; copy per build list §1; bytes-based progress + `%` tab title (C4); "Stopped" view for the failures that already had a message (full F-11 = B2); QR = real canvas, dark on light, whole pixels per module, decodes to the link (F-16/F-19); simple "Choose another"; F-23 `frontend/share-early.js` (new mirrored file, `SM_JS`); receiver tokens page-wide + leftover `--card-*` mapped (F-6); F-8/F-15 rules removed (F-18: "/ Share" fits); `upgrade.css` + `status-back-link` CSS removed; local `nav.njk` stub refreshed, `section-nav.njk` stub added; password input 16 px (iOS zoom). `showSharePanel(url, info)` signature change (internal). No new exports, no new request headers. Folders over 4 GB now get the 2 GB folder message.
-**Harness:** `dev/share-harness/` (new): refueler.io copy + canonical page + fake Worker (real `nut00.js` signing, fault injection) + Turnstile stub. Every state previewed Carbon/Paper, 375–1280 px.
-**Live ✓ (Rajesh):** iPhone 13 mini Safari both themes; folder from Files (long-press to pick a folder — iOS behaviour; "or a folder" stays on iOS); password + DAD; Pixel 9a received, dead link on second open; desktop link ready + QR scanned by iPhone → dead link.
-**Found:** after a view change the page keeps its scroll position, so on a phone the % sits under the header and the eyebrow/headline are off-screen (also desktop "link ready") → B2: bring the sheet top into view on every view change. Mail-app link previews (Tutamail: title + domain + R icon only) = branding opportunity → Share-Receiver-3. Receiver password input 15 px (iOS zoom) → Share-Receiver-3.
-**Next:** Share-Upload-3 (B2 + Part C; prompt `Share-Upload-3-prompt.md`) → B12-2 (refueler-io) → KV-Audit-Opus. Share-Receiver-3 (A/B brand mock) as its own session.
+Full narrative: git history before Share-Upload-5 (Share-Upload-2: before Share-Crypto-1).
 
 ## Share-Upload-3 (6 Oct 2026) — upload page B2, items 1–4 · shipped `4bb3fde` (refueler.io `3c61c32`) + `627c0d0`
 
@@ -491,3 +482,12 @@ Full narrative: git history before Share-Upload-5.
 
 Encryption review: design decided; detail kept off-repo (Rajesh's private folder). No code changed, nothing shipped. Decisions cover the build, link format, unfinished uploads, the MCP send tool and test transfers in storage. Public wording after the build: Rajesh decides at its close.
 **Next:** Share-Crypto-1 (build; prompt given in chat) → Share-Upload-7 (prompt `Share-Upload-7-prompt.md`) → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (refueler-io) → KV-Audit-Opus. MCP-Fix-1 after Share-Crypto-1; `refueler-mcp` stays unpublished until then.
+
+## Share-Crypto-1 (7 Oct 2026) — Encryption review build: per-part key schedule, link format v2 · shipped `493ea4b` (refueler.io `ad063a6`)
+
+**Built:** `crypto.js` derives a part key from the link key and gives each part its own IV with a last-part flag (`derivePartKey`, `partNonce`, `partAad`, `encryptPart`, `decryptPart`, `decryptPartV1`). New links are v2 `{ v:2, k, n, s?, z }` (`z` required, no `i`, strict parse); `detectMode` passes `v`. Upload records carry `scheme: 2`; older records are discarded. Resume re-encrypts sent parts when the file changed and stops at the first that differs from the record ("That file doesn’t match…"). Receiver: part count vs `z` before any download request, exact part sizes and total; v0/v1 links decrypt the old way. Stored sizes, Worker, `timestamp.js`, mirror list unchanged. Worker `vitest.config.js` alias lets tests import `frontend/crypto.js`.
+**Tests:** `worker/test/part-crypto.test.js` (31, known-answer vectors) · `tests/resume.test.js` 45 · worker suite 633 passed / 29 skipped (Mullvad off). Harness: v2 + v1 links on both download paths, altered size field, resume, folder.
+**Rajesh live ✓ (Safari, Mac, Mullvad on):** v1 link from before the ship, 70 MiB, 5 MB, resume with the same file (twice), a different same-name file → stop sentence, folder, upload page; SHA-256 matched each time.
+**Test transfers purged:** 32 complete transfers (9 already tombstoned) via the admin purge; all now 404; none had a timestamp state. Unfinished leftovers → orphan sweep. Admin key: run `read -s` and the `curl` in one line, in the Terminal app.
+**Backlog:** remove old link format support on or after 12 Jan 2027.
+**Next:** Share-Upload-7 (prompt `Share-Upload-7-prompt.md`) → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (refueler-io) → KV-Audit-Opus. MCP-Fix-1 (adopts v2) week of 12 Oct.

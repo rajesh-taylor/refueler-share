@@ -205,11 +205,10 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-Crypto-Opus-1 ✓ (7 Oct 2026) — Encryption review: design decided; detail kept off-repo. Next: **Share-Crypto-1** (build).** **Share-Upload-6 ✓ (7 Oct 2026) — iOS folder root "File Provider Storage" → "On My iPhone" `9d63880`; resume keeps sent parts' hashes, no re-encrypt for an unchanged file `b1eea41`; resume card delay not reproduced (closed); 0 % pause measured (Share-Progress-1 shows it; `/initiate` speed-up → backlog). Rajesh live ✓ Safari, Mullvad on is the default now. Next: Share-Crypto-Opus-1 ✓ → **Share-Crypto-1** (build) → Share-Upload-7 (admin page off esm.sh = F-25, `noble-secp256k1.js` removal) → Share-Progress-1 (+ one-box resume screen) → Share-Folder-Resume-1 (S-031) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 after the encryption build; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews, + F-24) as its own session.**
+**Share-Crypto-1 ✓ (7 Oct 2026) — Encryption review build `493ea4b`: per-part key schedule, link format v2 (`z` required, no `i`); older resume records discarded, resume re-checks sent parts against the record. Rajesh live ✓ Safari (Mullvad on), old v1 link still opens; test transfers purged. Next: **Share-Upload-7** → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct.** **Share-Upload-6 ✓ (7 Oct 2026) — iOS folder root "File Provider Storage" → "On My iPhone" `9d63880`; resume keeps sent parts' hashes, no re-encrypt for an unchanged file `b1eea41`; resume card delay not reproduced (closed); 0 % pause measured (Share-Progress-1 shows it; `/initiate` speed-up → backlog). Rajesh live ✓ Safari, Mullvad on is the default now. Next: Share-Crypto-Opus-1 ✓ → **Share-Crypto-1** (build) → Share-Upload-7 (admin page off esm.sh = F-25, `noble-secp256k1.js` removal) → Share-Progress-1 (+ one-box resume screen) → Share-Folder-Resume-1 (S-031) → B12-2 (refueler-io session) → KV-Audit-Opus; MCP-Fix-1 after the encryption build; `/meta` hard-null from 13 Oct. Share-Receiver-3 (receiver A/B brand mock + link previews, + F-24) as its own session.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Cred-Fix-2a ✓ | deploy `4c9730b2` | Credential format v2 accepted (`verifyProofV2`, `@cashu/cashu-ts` 4.11.0 pinned), `keyset_id` + `dleq` at issue, anonymous-rail API issuance explicit 503 until B7. 659 tests incl. official NUT-00/02/12 vectors. v1 removal → 2b. |
 | Cred-Fix-2b ✓ | `ca3972c` · deploy `a5ac4f5d` | Browser sends credential format v2 (vendored cashu-ts, DLEQ checked); Worker refuses v1. 642 tests. |
 | Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
 | Share-Upload-2 ✓ | refueler.io `580135c` · `565efd9` | Share sub-menu (`sections.js` + `section-nav.njk`); upload page B1 (open sheet + slip, §1 copy, bytes progress, QR canvas, F-23 `share-early.js`, F-6 tokens). Preview harness `dev/share-harness/`. B2 → Share-Upload-3. |
@@ -217,6 +216,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | Share-Upload-4 ✓ | `2fb1b30` · `fa3b2a1` | F-11: `UploadStop` kinds → §1 copy; fresh + resume share `_carryOn(job)`; same-tab Try again; `showStopped(text, retry)`; `#up-retry-btn`. Turnstile theme follow (full width kept). Harness finalise checks leaves + root. Part B + F-24 → Share-Upload-5 / Share-Receiver-3. |
 | Share-Upload-5 ✓ | `45dde47` · `2a9f081` | Store-only zip (path order, own date + UTC stamp, `_zipSize` cap before zipping); Turnstile at page open, 2 s line, tick never starts an upload; source maps stripped, `sm_check_canon` refuses them. No new exports, headers or mirrored files. |
 | Share-Upload-6 ✓ | `9d63880` · `b1eea41` | iOS root name → "On My iPhone" (zip bytes unchanged); resume record keeps `hashes` + `fileModified`, re-check only if the file changed. Timings measured (session log). No new exports, headers or mirrored files. |
+| Share-Crypto-1 ✓ | `493ea4b` (refueler.io `ad063a6`) | Encryption review build: part key + per-part IV in `crypto.js`, link format v2, record `scheme: 2`, receiver part-count/size checks; v0/v1 open the old way. 633 worker tests + 31 new. Test transfers purged. |
  
 ---
  
@@ -226,7 +226,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → **Share-Crypto-1 (encryption review build; notes off-repo)** → Share-Upload-7 → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → **Share-Upload-7** → Share-Progress-1 → Share-Folder-Resume-1 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
@@ -290,6 +290,9 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Navy Office Client errors card needs explaining → B12-2 (Rajesh, 6 Oct; do it properly there).** Context column shows `upload.js` code names (`direct_put_err` …). Plan: one line under each card saying what it counts; plain label + "what it means / when to worry" per code; move expected events — `410 meta` (expired or DAD links reopened), per-attempt `direct_put_err` whose retry then succeeded (Safari "Load failed" = dropped connection) — to a new quiet **Expected events** card, so red counts real failures only. Check the headline number changes with the tab (both showed 17). Frontend side (Share-Upload-5 or B12-2): report one `upload_stopped:<kind>` line when an upload actually stops — today only per-attempt lines and unexpected errors reach `/log/error`.
 - **Navy Office "R2 bytes uploaded (90d)" is dead:** it sums `double5` on `upload` AE events, which stopped at Share-6-6b (Worker-relay path retired). Replace (e.g. R2 bucket metrics) or remove → refueler-io.
 
+**Added Share-Crypto-1 (7 Oct 2026):**
+- **Remove old link format support on or after 12 Jan 2027** (v0/v1 links; small frontend session; brief off-repo). Also MCP-Fix-1 sends link format v2.
+
 **Added Share-Upload-2 (6 Oct 2026) — receiver page, agreed by Rajesh (order of value); A/B mock iterations first, then a download-side session:**
 1. **"How this worked"** — quiet link under the ledger on the ready card *and* the finished screen, opens three lines: encrypted in the sender's browser before upload · the key was in your link and never sent to Refueler · (DAD only) the stored copy is now deleted. Facts on request, not a tagline (R-4 holds).
 2. **Notes card unboxed** — hairline rule above the label instead of a box, so it reads as editorial, not an ad slot; the send line stays last.
@@ -309,10 +312,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 
 **Resolved on import (repo wins):**
 - **S-065** Lodge/Collect register stays for internal/whitepaper use; UI copy uses plain words (R-3 "Download", "lodged" dropped).
-- **S-052** Sovereign portability via Signal/SimpleX QR: superseded by B12-SR QR pairing with a 6-digit check code.
 - **S-142** Harbourmaster = Chartered client surface at reduced resolution (B12 spec), never in the public menu. BRIDGE v9.6 "Navy Office view" wording is stale → next BRIDGE bump.
-- **S-120** Live Plans page prices yearly = 12 × monthly (no discount): the July £120/£240 table is dead.
-- **S-028** Brave theme cookie, **S-029** phoenixd toggle: resolved (Rajesh, 28 Sep).
  
 ---
  

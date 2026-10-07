@@ -1,6 +1,7 @@
 // tests/resume.test.js — RU1a unit tests
 // Coverage: IDB expiry-awareness, chunk-skip logic, zip progress fix,
-//           fetchWithTimeout Safari stub, writeChunkState tier field.
+//           fetchWithTimeout Safari stub, writeChunkState tier field,
+//           scheme gate + changed-file check (Share-Crypto-1).
 //
 // Run: npx vitest run tests/resume.test.js
 
@@ -29,10 +30,14 @@ function makeRecord(overrides = {}) {
     fileName:        'test.zip',
     fileSize:        1024 * 1024 * 500, // 500 MB
     keyHex:          'a'.repeat(64),
-    ivHex:           'b'.repeat(24),
+    scheme:          2,        // Share-Crypto-1: part key schedule, link format v2
     tier:            'free',
     expiryTimestamp: Math.floor(nowSecs()) + 6 * 24 * 60 * 60, // 6 days from now
     timestamp:       Date.now(),
+    uploadMode:      'direct-r2',
+    sessionToken:    'tok',
+    hashes:          ['1'.repeat(64), '2'.repeat(64), '3'.repeat(64)], // one per sent part (chunkIndex + 1)
+    fileModified:    1700000000000,
   };
   return { ...defaults, ...overrides };
 }
@@ -180,10 +185,16 @@ describe('writeChunkState record shape', () => {
   it('record includes all required fields', () => {
     const record = makeRecord();
     const required = ['uuid', 'chunkIndex', 'totalChunks', 'fileName', 'fileSize',
-                       'keyHex', 'ivHex', 'tier', 'expiryTimestamp', 'timestamp'];
+                       'keyHex', 'scheme', 'tier', 'expiryTimestamp', 'timestamp', 'hashes'];
     for (const field of required) {
       expect(record).toHaveProperty(field);
     }
+  });
+
+  it('record carries scheme 2 and no IV (link format v2)', () => {
+    const record = makeRecord();
+    expect(record.scheme).toBe(2);
+    expect(record).not.toHaveProperty('ivHex');
   });
 
   it('chunkIndex is the index of the last confirmed chunk (0-based)', () => {
@@ -382,5 +393,89 @@ describe('Resume file identity check', () => {
     const record = makeRecord({ fileName: 'project.zip', fileSize: 1024 });
     const file   = { name: 'other.zip', size: 2048 };
     expect(fileMatchesRecord(file, record)).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite 8 — Scheme gate (Share-Crypto-1)
+//
+// Mirrors resumeUpload(): a record must be direct-r2, carry scheme 2 and keep one
+// well-formed hash per sent part; anything else is discarded (NO_RESUME).
+// checkResumeState() drops a record without scheme 2 before offering it.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Scheme gate', () => {
+  function canResume(record) {
+    if (record.uploadMode !== 'direct-r2' || !record.sessionToken) return false;
+    const resumeFrom = record.chunkIndex + 1;
+    const ok = Array.isArray(record.hashes) && record.hashes.length === resumeFrom
+      && record.hashes.every(h => /^[0-9a-f]{64}$/.test(h));
+    return record.scheme === 2 && ok;
+  }
+  const offered = (record) => record.scheme === 2;
+
+  it('a v2 record resumes', () => {
+    expect(canResume(makeRecord())).toBe(true);
+    expect(offered(makeRecord())).toBe(true);
+  });
+
+  it('a record from before v2 (no scheme, has ivHex) is discarded and not offered', () => {
+    const record = makeRecord({ scheme: undefined, ivHex: 'b'.repeat(24) });
+    expect(canResume(record)).toBe(false);
+    expect(offered(record)).toBe(false);
+  });
+
+  it('a record with an unknown scheme is discarded', () => {
+    expect(canResume(makeRecord({ scheme: 3 }))).toBe(false);
+  });
+
+  it('a v2 record with missing, short or malformed hashes is discarded', () => {
+    expect(canResume(makeRecord({ hashes: undefined }))).toBe(false);
+    expect(canResume(makeRecord({ hashes: ['1'.repeat(64)] }))).toBe(false);
+    expect(canResume(makeRecord({ hashes: ['1'.repeat(64), '2'.repeat(64), 'zz'] }))).toBe(false);
+  });
+
+  it('nothing sent yet (chunkIndex -1) needs no hashes', () => {
+    expect(canResume(makeRecord({ chunkIndex: -1, hashes: [] }))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite 9 — Changed-file check (Share-Crypto-1)
+//
+// Mirrors resumeUpload() + _carryOn(): unchanged file (same lastModified) keeps
+// the record's hashes; otherwise every sent part is re-encrypted and must equal
+// the record's hash for that part, or the upload stops before sending anything.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Changed-file check', () => {
+  // reencrypt(i) → hash of part i as the chosen file gives it now
+  function resumeCheck(record, fileModified, reencrypt) {
+    const expected = record.hashes;
+    if (record.fileModified === fileModified) return { ok: true, hashes: expected.slice(), reencrypted: 0 };
+    const hashes = [];
+    for (let i = 0; i < expected.length; i++) {
+      const h = reencrypt(i);
+      if (h !== expected[i]) return { ok: false, stoppedAt: i, reencrypted: i + 1 };
+      hashes.push(h);
+    }
+    return { ok: true, hashes, reencrypted: expected.length };
+  }
+
+  it('same file, unchanged: record hashes kept, nothing re-encrypted', () => {
+    const r = makeRecord();
+    const res = resumeCheck(r, r.fileModified, () => { throw new Error('should not re-encrypt'); });
+    expect(res).toMatchObject({ ok: true, reencrypted: 0 });
+    expect(res.hashes).toEqual(r.hashes);
+  });
+
+  it('same bytes, touched (new lastModified): re-encrypted, every hash matches, carries on', () => {
+    const r = makeRecord();
+    const res = resumeCheck(r, r.fileModified + 1, i => r.hashes[i]);
+    expect(res).toMatchObject({ ok: true, reencrypted: 3 });
+  });
+
+  it('different file, same name and size: stops at the first part that differs', () => {
+    const r = makeRecord();
+    const res = resumeCheck(r, r.fileModified + 1, i => (i === 1 ? 'f'.repeat(64) : r.hashes[i]));
+    expect(res).toMatchObject({ ok: false, stoppedAt: 1, reencrypted: 2 });
   });
 });
