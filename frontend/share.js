@@ -4,17 +4,18 @@
 // Crypto → crypto.js  |  Upload → upload.js  |  Download → download.js
 // Loaded as <script type="module" src="/share.js"></script> — do not change type.
 //
-// Fragment grammar v1 (D-1 filename fix, SW-MCP-4):
+// Link format v2 (Share-Crypto-1; grammar in fragment.js):
 //   URL format: https://refueler.io/share/?uuid=<uuid>#<base64url-JSON-blob>
-//   Fragment blob: base64url( JSON { v:1, k:"<aes-key-b64url>", n:"<filename>", s:"<seal-nonce-b64url>" } )
+//   Fragment blob: base64url( JSON { v:2, k:"<key-b64url>", n:"<filename>", s:"<seal-nonce-b64url>"?, z:<bytes> } )
 //   UUID travels in the query string (?uuid=) — not secret, never in the fragment.
-//   AES session key travels in the fragment only — never in requests, never in logs.
+//   The key travels in the fragment only — never in requests, never in logs.
 //
-// Legacy fallback: pre-v1 links used #uuid=X&key=Y&iv=Z — handled transparently.
+// Older links still open: v1 blobs ({ v:1, k, i, n, s?, z? }) and pre-v1
+// #uuid=X&key=Y&iv=Z links — handled transparently.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { WORKER_URL, FREE_EXPIRY }                      from './crypto.js';
-import { parseFragment as parseFragmentV1 }             from './fragment.js';
+import { parseFragment }                                from './fragment.js';
 import { enterUploadMode, checkResumeState }            from './upload.js';
 import { enterDownloadMode }                            from './download.js';
 
@@ -26,8 +27,10 @@ const state = {
   selectedFile:   null,
   turnstileToken: null,
   downloadToken:  null,
-  sessionAesKey:  null,
-  sessionIv:      null,
+  sessionAesKey:  null,   // upload: K as AES-GCM (date seal only) · receiver: the key that opens parts
+  sessionIv:      null,   // receiver, links before v2 only
+  partKey:        null,   // upload: part key derived from K (crypto.js derivePartKey)
+  linkVersion:    null,   // receiver: 2, 1 or 0
   uploadUUID:     null,
 };
 
@@ -334,17 +337,17 @@ function detectMode() {
   const raw = location.hash.slice(1);
   if (!raw) return null;
 
-  // ── Attempt v1 fragment parse first ──────────────────────────────────────
+  // ── Attempt a v2 / v1 fragment parse first ───────────────────────────────
   try {
-    const parsed = parseFragmentV1(raw);
+    const parsed = parseFragment(raw);
     if (!parsed.legacy) {
-      // v1: uuid lives in query string
+      // v2 and v1: uuid lives in query string
       const uuid = new URLSearchParams(location.search).get('uuid');
-      if (!uuid) return null; // malformed v1 link — no uuid in query
-            return { v: 1, uuid, keyBytes: parsed.keyBytes, ivBytes: parsed.ivBytes, filename: parsed.filename, sealNonce: parsed.sealNonce, sizeBytes: parsed.sizeBytes };
+      if (!uuid) return null; // malformed link — no uuid in query
+      return { v: parsed.v, uuid, keyBytes: parsed.keyBytes, ivBytes: parsed.ivBytes, filename: parsed.filename, sealNonce: parsed.sealNonce, sizeBytes: parsed.sizeBytes };
     }
   } catch {
-    // not a v1 blob — fall through to legacy check
+    // not a v2/v1 blob — fall through to legacy check
   }
 
   // ── Legacy: #uuid=X&key=Y&iv=Z[&sn=W] ───────────────────────────────────

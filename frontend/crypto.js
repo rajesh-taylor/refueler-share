@@ -10,6 +10,9 @@
 //   sha256Hex(data)                    — SHA-256, returns hex string
 //   generateBlindedCredential()        — NUT-00 blind sig step 1 (credential format v2)
 //   unblindSignature(issued, blinded)  — NUT-12 DLEQ check + NUT-00 step 2 → credential JSON
+//   derivePartKey, partNonce, partAad  — part key schedule (link format v2)
+//   encryptPart, decryptPart           — part i of n under the part key (v2)
+//   decryptPartV1                      — parts of links made before v2
 //   bufToHex(buf)                      — ArrayBuffer/Uint8Array → hex string
 //   hexToBuf(hex)                      — hex string → ArrayBuffer
 //   WORKER_URL, CHUNK_SIZE, FREE_CAP, FREE_EXPIRY, TIER_EXPIRY_SECONDS
@@ -142,6 +145,64 @@ export function blake3CreateHash() {
 export async function sha256Hex(data) {
   const buf = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Part encryption (link format v2, Share-Crypto-1)
+//
+// K = the 32-byte transfer key in the link. Parts use a key derived from it:
+//   part_key = HKDF-SHA256(K, salt = empty, info = utf8("refueler.share.payload.v2") ‖ 0x00)
+//   nonce_i  = 0x00 ×7 ‖ BE32(i) ‖ last   (last = 0x01 on part N−1, else 0x00)
+//   AAD_i    = BE32(i)
+// Stored part = AES-256-GCM(part_key, nonce_i, AAD_i, P_i) = ciphertext ‖ 16-byte tag.
+// The date seal (timestamp.js) stays on K itself, with its own random IV.
+// Links before v2 (v0/v1) decrypt with decryptPartV1: K directly + the link's IV.
+// ─────────────────────────────────────────────────────────────────────────────
+const _PAYLOAD_INFO = new Uint8Array([...new TextEncoder().encode('refueler.share.payload.v2'), 0x00]);
+
+/** K (32 bytes) → AES-GCM CryptoKey for parts. usages: ['encrypt'] or ['decrypt']. */
+export async function derivePartKey(kBytes, usages) {
+  const k = kBytes instanceof Uint8Array ? kBytes : new Uint8Array(kBytes);
+  if (k.length !== 32) throw new TypeError('derivePartKey: K must be 32 bytes');
+  const ikm = await crypto.subtle.importKey('raw', k, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: _PAYLOAD_INFO },
+    ikm, { name: 'AES-GCM', length: 256 }, false, usages,
+  );
+}
+
+/** 12-byte nonce for part i; last = true on the final part. */
+export function partNonce(i, last) {
+  const n = new Uint8Array(12);
+  new DataView(n.buffer).setUint32(7, i, false);
+  n[11] = last ? 1 : 0;
+  return n;
+}
+
+/** 4-byte AAD for part i (BE uint32 = object index = Merkle leaf index). */
+export function partAad(i) {
+  const a = new Uint8Array(4);
+  new DataView(a.buffer).setUint32(0, i, false);
+  return a;
+}
+
+/** Encrypt part i of n → Uint8Array (ciphertext ‖ tag). */
+export async function encryptPart(partKey, raw, i, n) {
+  return new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: partNonce(i, i === n - 1), additionalData: partAad(i) }, partKey, raw,
+  ));
+}
+
+/** Decrypt part i of n → ArrayBuffer. Throws if the part, its index or its place as last doesn't check out. */
+export function decryptPart(partKey, ct, i, n) {
+  return crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: partNonce(i, i === n - 1), additionalData: partAad(i) }, partKey, ct,
+  );
+}
+
+/** Links before v2: K imported directly as AES-GCM, the link's 12-byte IV, AAD = BE32(i). */
+export function decryptPartV1(key, iv, ct, i) {
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: partAad(i) }, key, ct);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,20 +1,24 @@
 /**
- * fragment.js — URL fragment grammar v1 helper
+ * fragment.js — URL fragment grammar helper
  *
- * Implements the locked fragment grammar (D-1 filename fix, SW-MCP-4):
+ * Link format v2 (Share-Crypto-1) — the only shape senders produce:
  *
- *   { v: 1, k: "<aes-key-b64url>", i: "<iv-b64url>", n: "<real-filename>", s: "<seal-nonce-b64url>", z: <plaintext-bytes> }
+ *   { v: 2, k: "<transfer-key-b64url, 32 B>", n: "<real-filename>", s: "<seal-nonce-b64url>", z: <plaintext-bytes> }
  *
- * The `s` (seal_nonce) field is present only for permanent-record transfers.
- * The `z` field (Share-Size-1) is the exact plaintext byte count (for a folder,
- * the zip as sent). Optional: links made before it parse with sizeBytes null.
- * It moves the size out of the manifest and /meta; it does not hide the size
+ * `k` is the transfer key K; parts are encrypted under a key derived from it
+ * (crypto.js derivePartKey), so v2 carries no IV. `z` is required: the exact
+ * plaintext byte count (for a folder, the zip as sent); the receiver checks
+ * ceil(z / CHUNK_SIZE) against the stored part count before downloading.
+ * `s` (seal_nonce) is present only for permanent-record transfers.
+ *
+ * Older links still parse (receivers decrypt them the old way):
+ *   v1: { v: 1, k, i: "<iv-b64url>", n, s?, z? }   (z optional, Share-Size-1)
+ *   legacy: the raw base64url key with no JSON wrapper (no `v` field).
+ *
+ * `z` moves the size out of the manifest and /meta; it does not hide the size
  * (the chunk count gives it to within 32 MiB; R2 object sizes give it exactly).
- * The AES session key lives in the URL fragment only — never in requests,
- * never in logs, never in the manifest.
- *
- * Legacy fallback: pre-v1 links carried the raw base64url key with no JSON
- * wrapper. parseFragment() handles these transparently (no `v` field).
+ * The key lives in the URL fragment only — never in requests, never in logs,
+ * never in the manifest.
  */
 
 // ---------------------------------------------------------------------------
@@ -59,40 +63,34 @@ function fromBase64url(str) {
 // ---------------------------------------------------------------------------
 
 /**
- * assembleFragment({ keyBytes, filename, sealNonce }) → string
+ * assembleFragment({ keyBytes, filename, sealNonce, sizeBytes }) → string
  *
- * Builds the base64url-encoded JSON fragment blob per §7.2:
- *   { v: 1, k: "<b64url key>", n: "<filename>", s: "<b64url seal_nonce>" }
+ * Builds the base64url-encoded JSON fragment blob, link format v2:
+ *   { v: 2, k: "<b64url K>", n: "<filename>", s: "<b64url seal_nonce>"?, z: <bytes> }
  *
  * `s` is included only when `sealNonce` is provided (permanent-record transfers).
- *
  * The returned string is suitable for appending after `#` in a share URL.
  *
  * @param {object}      params
- * @param {Uint8Array}  params.keyBytes   — 32-byte AES session key
- * @param {Uint8Array}  params.ivBytes    — 12-byte AES-GCM IV
- * @param {string}      params.filename   — real filename (not "encrypted-payload")
+ * @param {Uint8Array}  params.keyBytes    — 32-byte transfer key K
+ * @param {string}      params.filename    — real filename (not "encrypted-payload")
  * @param {Uint8Array}  [params.sealNonce] — seal nonce for permanent-record transfers
- * @param {number}      [params.sizeBytes] — exact plaintext byte count (Share-Size-1)
+ * @param {number}      params.sizeBytes   — exact plaintext byte count
  * @returns {string} base64url-encoded JSON fragment
  */
-export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce, sizeBytes } = {}) {
-  if (!(keyBytes instanceof Uint8Array) || keyBytes.length === 0) {
-    throw new TypeError('keyBytes must be a non-empty Uint8Array');
-  }
-  if (!(ivBytes instanceof Uint8Array) || ivBytes.length === 0) {
-    throw new TypeError('ivBytes must be a non-empty Uint8Array');
+export function assembleFragment({ keyBytes, filename, sealNonce, sizeBytes } = {}) {
+  if (!(keyBytes instanceof Uint8Array) || keyBytes.length !== 32) {
+    throw new TypeError('keyBytes must be a 32-byte Uint8Array');
   }
   if (typeof filename !== 'string' || filename.length === 0) {
     throw new TypeError('filename must be a non-empty string');
   }
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) {
+    throw new TypeError('sizeBytes must be a positive safe integer');
+  }
 
-  const obj = {
-    v: 1,
-    k: toBase64url(keyBytes),
-    i: toBase64url(ivBytes),
-    n: filename,
-  };
+  // Key order: v, k, n, s?, z
+  const obj = { v: 2, k: toBase64url(keyBytes), n: filename };
 
   if (sealNonce !== undefined) {
     if (!(sealNonce instanceof Uint8Array) || sealNonce.length === 0) {
@@ -101,12 +99,7 @@ export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce, sizeB
     obj.s = toBase64url(sealNonce);
   }
 
-  if (sizeBytes !== undefined) {
-    if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) {
-      throw new TypeError('sizeBytes must be a positive safe integer when provided');
-    }
-    obj.z = sizeBytes;
-  }
+  obj.z = sizeBytes;
 
   const json = JSON.stringify(obj);
   // Encode the JSON itself as base64url so it survives URL fragment parsing
@@ -114,19 +107,22 @@ export function assembleFragment({ keyBytes, ivBytes, filename, sealNonce, sizeB
 }
 
 /**
- * parseFragment(fragmentString) → { keyBytes, filename, sealNonce, legacy }
+ * parseFragment(fragmentString) → { v, keyBytes, ivBytes, filename, sealNonce, sizeBytes, legacy }
  *
- * Parses a URL fragment string produced by assembleFragment().
- * Also handles legacy pre-v1 fragments (raw base64url key, no JSON wrapper).
+ * Parses a URL fragment string produced by assembleFragment() (v2), a v1
+ * fragment, or a legacy pre-v1 fragment (raw base64url key, no JSON wrapper).
  *
- * Throws on malformed input.
+ * Throws on malformed input. A v2 blob is checked strictly (k exactly 32 bytes,
+ * n non-empty, z a positive safe integer) and never falls back to legacy.
  *
  * @param {string} fragmentString — the raw fragment value (after `#`)
  * @returns {{
+ *   v:          2 | 1 | undefined,  — undefined for legacy fragments
  *   keyBytes:   Uint8Array,
+ *   ivBytes:    Uint8Array | null,  — v1 only; v2 carries no IV
  *   filename:   string | null,  — null for legacy fragments
  *   sealNonce:  Uint8Array | null,
- *   sizeBytes:  number | null,  — v1 only; null when absent or damaged
+ *   sizeBytes:  number | null,  — always set for v2; v1: null when absent or damaged
  *   legacy:     boolean,
  * }}
  */
@@ -145,7 +141,36 @@ export function parseFragment(fragmentString) {
     decoded = null;
   }
 
-  // v1 fragment: has a numeric `v` field
+  // v2 fragment: strict — anything malformed throws (never read as a legacy raw key)
+  if (decoded !== null && typeof decoded === 'object' && decoded.v === 2) {
+    if (typeof decoded.k !== 'string') throw new Error('Fragment v2: missing key field (k)');
+    let keyBytes;
+    try { keyBytes = fromBase64url(decoded.k); } catch { throw new Error('Fragment v2: key field (k) is not base64url'); }
+    if (keyBytes.length !== 32) throw new Error('Fragment v2: key field (k) must be 32 bytes');
+    if (typeof decoded.n !== 'string' || decoded.n.length === 0) {
+      throw new Error('Fragment v2: missing or empty filename field (n)');
+    }
+    if (!Number.isSafeInteger(decoded.z) || decoded.z < 1) {
+      throw new Error('Fragment v2: size field (z) must be a positive integer');
+    }
+    let sealNonce = null;
+    if (decoded.s !== undefined) {
+      if (typeof decoded.s !== 'string') throw new Error('Fragment v2: bad seal nonce field (s)');
+      try { sealNonce = fromBase64url(decoded.s); } catch { throw new Error('Fragment v2: bad seal nonce field (s)'); }
+      if (sealNonce.length === 0) throw new Error('Fragment v2: bad seal nonce field (s)');
+    }
+    return {
+      v: 2,
+      keyBytes,
+      ivBytes: null,
+      filename: decoded.n,
+      sealNonce,
+      sizeBytes: decoded.z,
+      legacy: false,
+    };
+  }
+
+  // v1 fragment (links made before v2)
   if (decoded !== null && typeof decoded === 'object' && decoded.v === 1) {
     if (typeof decoded.k !== 'string' || decoded.k.length === 0) {
       throw new Error('Fragment v1: missing or empty key field (k)');
@@ -161,6 +186,7 @@ export function parseFragment(fragmentString) {
     const sizeBytes = (Number.isSafeInteger(decoded.z) && decoded.z > 0) ? decoded.z : null;
 
     return {
+      v: 1,
       keyBytes,
       ivBytes,
       filename: decoded.n,
@@ -185,6 +211,6 @@ export function parseFragment(fragmentString) {
       legacy: true,
     };
   } catch (err) {
-    throw new Error(`Malformed fragment: cannot parse as v1 or legacy key — ${err.message}`);
+    throw new Error(`Malformed fragment: cannot parse as v2, v1 or legacy key — ${err.message}`);
   }
 }

@@ -20,13 +20,18 @@
 // Exports:
 //   enterDownloadMode(detected, domRefs, state, helpers)
 //
-// Fragment grammar v1 (D-1 filename fix, SW-MCP-4):
-//   detected.v === 1  → { v:1, uuid, keyBytes (Uint8Array), filename, sealNonce (Uint8Array|null) }
+// Link formats (detectMode in share.js; grammar in fragment.js):
+//   detected.v === 2  → { v:2, uuid, keyBytes (K), filename, sealNonce, sizeBytes (z, required) }
+//   detected.v === 1  → { v:1, uuid, keyBytes, ivBytes, filename, sealNonce, sizeBytes|null }
 //   detected.v === 0  → { v:0, uuid, key (hex), iv (hex|null), sn (hex|null) }  [legacy]
 //
-//   IV source:
-//     v1: URL fragment (detected.ivBytes) — never in manifest. See Share-4.
-//     v0: fragment iv param (hex) — backward compat for old links.
+//   Decrypting parts (_decryptPart):
+//     v2: part key derived from K, per-part nonce with a last-part flag
+//         (crypto.js decryptPart). Before any download request the receiver checks
+//         ceil(z / CHUNK_SIZE) == /meta total_chunks; while writing, every part but
+//         the last must be exactly CHUNK_SIZE and the total must equal z.
+//     v1: K directly + the IV from the URL fragment (detected.ivBytes).
+//     v0: K directly + the fragment iv param (hex) — backward compat for old links.
 //
 // Share-Receiver-2a (docs/Share-Receiver-1-build-list.md N-2a, items 1–9):
 //   One sheet at a time (src/index.njk): #receiver-card → #unlock-screen →
@@ -41,7 +46,7 @@
 
 // Share-Deps-1: no loadDeps() here. Receiving needs neither BLAKE3 nor secp256k1,
 // so the card never waits on them (and never fails on a browser without WASM, F-20).
-import { hexToBuf, WORKER_URL, CHUNK_SIZE } from './crypto.js';
+import { hexToBuf, derivePartKey, decryptPart, decryptPartV1, WORKER_URL, CHUNK_SIZE } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -100,15 +105,17 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
   // and the upload sheet. Wordmark and theme pill stay.
   document.documentElement.classList.add('rx-mode');
 
-  // ── Resolve AES key bytes ─────────────────────────────────────────────────
-  // v1: keyBytes is already a Uint8Array from parseFragment()
+  // ── Resolve key bytes ─────────────────────────────────────────────────────
+  // v2/v1: keyBytes is already a Uint8Array from parseFragment()
   // v0: key is a hex string — convert with hexToBuf()
-  const rawKeyBytes = detected.v === 1 ? detected.keyBytes : hexToBuf(detected.key);
+  const isV2        = detected.v === 2;
+  const rawKeyBytes = detected.v >= 1 ? detected.keyBytes : hexToBuf(detected.key);
+  state.linkVersion = isV2 ? 2 : detected.v;
 
-  // ── Import AES key — IV resolved after meta fetch (v1) or from fragment (v0) ──
-  state.sessionAesKey = await crypto.subtle.importKey(
-    'raw', rawKeyBytes, { name: 'AES-GCM' }, false, ['decrypt'],
-  );
+  // ── The key that opens parts — v2: derived part key; v1/v0: K itself (IV below) ──
+  state.sessionAesKey = isV2
+    ? await derivePartKey(rawKeyBytes, ['decrypt'])
+    : await crypto.subtle.importKey('raw', rawKeyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
 
   // Clear fragment + query from URL bar now (key is imported, no longer needed)
   history.replaceState(null, '', location.pathname);
@@ -136,16 +143,25 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
     return;
   }
 
+  // ── v2: the stored part count must match the link's size, before any download ──
+  if (isV2 && meta.total_chunks !== Math.ceil(detected.sizeBytes / CHUNK_SIZE)) {
+    helpers.reportError('part_count', `link ${Math.ceil(detected.sizeBytes / CHUNK_SIZE)} meta ${meta.total_chunks}`, `uuid:${uuid.slice(0,8)}`);
+    _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
+    return;
+  }
+
   // ── Size (Share-Size-1) ───────────────────────────────────────────────────
   // The exact size travels in the fragment (z). /meta's total_bytes is only a
   // fallback for links made before Share-Size-1. Everything below reads
   // meta.total_bytes, so resolve it once here; 0 = unknown (chunk-based progress).
   meta.total_bytes = _resolveSize(detected.sizeBytes, meta);
 
-  // ── Resolve IV ────────────────────────────────────────────────────────────
+  // ── Resolve IV (links before v2 only; v2 needs none) ───────────────────────
   // v1: IV is in the fragment (detected.ivBytes Uint8Array) — never in manifest.
   // v0: IV came from the fragment iv param (hex string) — backward compat.
-  if (detected.v === 1) {
+  if (isV2) {
+    state.sessionIv = null;
+  } else if (detected.v === 1) {
     if (!detected.ivBytes || detected.ivBytes.length === 0) {
       _showDownloadError('Link is missing IV — was this link generated before today\'s update? Please ask the sender for a new link.', domRefs);
       return;
@@ -159,10 +175,10 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
     state.sessionIv = new Uint8Array(hexToBuf(detected.iv));
   }
 
-  // ── Filename (v1 carries real name in fragment; v0 falls back to meta) ───
-  // In v1 the Worker always saw "encrypted-payload" as X-File-Name, so meta.file_name
+  // ── Filename (v2/v1 carry the real name in the fragment; v0 falls back to meta) ──
+  // In v2/v1 the Worker always saw "encrypted-payload" as X-File-Name, so meta.file_name
   // is that constant placeholder. Real name comes from the fragment.
-  const fileName = (detected.v === 1 && detected.filename)
+  const fileName = (detected.v >= 1 && detected.filename)
     ? detected.filename
     : (meta.file_name || `refueler-${uuid.slice(0, 8)}`);
 
@@ -465,15 +481,13 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
       const ciphertextBuf = await nextChunkPromise;
       if (i + 1 < totalChunks) nextChunkPromise = fetchChunkWithRetry(i + 1);
 
-      const aad = new Uint8Array(4);
-      new DataView(aad.buffer).setUint32(0, i, false);
       let plaintext;
       try {
-        plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: state.sessionIv, additionalData: aad }, state.sessionAesKey, ciphertextBuf);
+        plaintext = await _decryptPart(state, ciphertextBuf, i, totalChunks);
       } catch (e) {
         reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
         await writable.abort();
-        _showDownloadError('Decryption failed — wrong key or corrupted data. No partial file was saved.', domRefs);
+        _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
         return;
       }
       await writable.write(new Uint8Array(plaintext));
@@ -484,6 +498,12 @@ async function _startDownloadStream(uuid, meta, fileHandle, fileName, willSelfDe
       _setProgress(domRefs, pct, bytesWritten, totalBytes);
     }
 
+    if (state.linkVersion === 2 && bytesWritten !== totalBytes) {
+      reportError('decrypt', `size ${bytesWritten} != ${totalBytes}`, `uuid:${uuid.slice(0,8)}`);
+      await writable.abort();
+      _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
+      return;
+    }
     await writable.close();
     _finish(willSelfDestruct, domRefs);
 
@@ -574,19 +594,24 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
   // Second pass (Safari/Firefox): decrypt in memory, then hand the file over (item 8).
   domRefs.dlStageTag.textContent = 'Preparing file';
   const decrypted = [];
+  let plainBytes = 0;
   for (let i = 0; i < chunks.length; i++) {
     try {
-      const aad = new Uint8Array(4);
-      new DataView(aad.buffer).setUint32(0, i, false);
-      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: state.sessionIv, additionalData: aad }, state.sessionAesKey, chunks[i]);
+      const plain = await _decryptPart(state, chunks[i], i, totalChunks);
       decrypted.push(plain);
+      plainBytes += plain.byteLength;
     } catch (e) {
       reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
-      _showDownloadError('Decryption failed — wrong key or corrupted data.', domRefs);
+      _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
       return;
     }
     const pct = 50 + Math.round(((i + 1) / chunks.length) * 50);
     _setProgress(domRefs, pct, totalBytes, totalBytes);
+  }
+  if (state.linkVersion === 2 && plainBytes !== totalBytes) {
+    reportError('decrypt', `size ${plainBytes} != ${totalBytes}`, `uuid:${uuid.slice(0,8)}`);
+    _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
+    return;
   }
 
   const blob    = new Blob(decrypted, { type: 'application/octet-stream' });
@@ -597,6 +622,22 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
   _finish(willSelfDestruct, domRefs);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Decrypt part i of n — one helper for both download paths.
+// v2: part key + per-part nonce (the last-part flag means a shortened or extended
+// transfer fails here); every part but the last must be exactly CHUNK_SIZE.
+// v1/v0: the old path (K + the link's IV). Throws on any failure.
+// ─────────────────────────────────────────────────────────────────────────────
+const DECRYPT_FAILED_FSAA = 'Decryption failed — wrong key or corrupted data. No partial file was saved.';
+const DECRYPT_FAILED_BLOB = 'Decryption failed — wrong key or corrupted data.';
+
+async function _decryptPart(state, ct, i, n) {
+  if (state.linkVersion !== 2) return decryptPartV1(state.sessionAesKey, state.sessionIv, ct, i);
+  const plain = await decryptPart(state.sessionAesKey, ct, i, n);
+  if (i < n - 1 && plain.byteLength !== CHUNK_SIZE) throw new Error(`part ${i} is ${plain.byteLength} bytes`);
+  return plain;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@
 //   checkResumeState(domRefs, state, helpers)
 //
 // Receives shared mutable state object from share.js — mutations are visible
-// to all holders (sessionAesKey, sessionIv, uploadUUID set here; read by download.js).
+// to all holders (sessionAesKey, partKey, uploadUUID set here).
 //
 // Share-6-6b: legacy Worker-relay path (PUT /upload/:uuid/:chunk) removed.
 // Direct-to-R2 is the only upload path. USE_DIRECT_R2 flag retired.
@@ -24,6 +24,8 @@ import {
   CredentialProofError,
   bufToHex,
   hexToBuf,
+  derivePartKey,
+  encryptPart,
   WORKER_URL,
   CHUNK_SIZE,
   FREE_CAP,
@@ -53,6 +55,9 @@ import { buildMerkleTree } from './merkle.js';
 //   tier, expiryTimestamp, timestamp, sealNonceHex }
 // Share-6 added uploadMode, sessionToken, sourceType. B12-1c added tailUrl
 // { url, expires } — the size-signed tail URL, issued only at /initiate.
+// Share-Upload-6 added hashes, fileModified. Share-Crypto-1 added scheme: 2 (part
+// key schedule, link format v2) and dropped ivHex; a record without scheme 2 is
+// discarded, never resumed.
 // ─────────────────────────────────────────────────────────────────────────────
 const IDB_NAME    = 'refueler-share-resume';
 const IDB_STORE   = 'transfers';
@@ -959,7 +964,8 @@ async function _loadDepsOrSay(domRefs, helpers) {
 //
 // Kinds: network · check · refused · missing (finalise 409: parts absent or the wrong
 // size) · unfinished (all sent, finalise failed) · gone (session spent or expired —
-// can't carry on) · browser (anything unexpected in this tab).
+// can't carry on) · changed (resume: the chosen file's sent parts differ from the
+// record) · browser (anything unexpected in this tab).
 // ─────────────────────────────────────────────────────────────────────────────
 class UploadStop extends Error {
   constructor(kind, message, extra = {}) {
@@ -970,6 +976,8 @@ class UploadStop extends Error {
 }
 
 const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
+const NOT_SAME_FILE = 'That file doesn’t match the unfinished upload. Discard it and start again.';
+const SCHEME = 2;   // part key schedule + link format v2 (crypto.js, fragment.js)
 
 // fetch, with a dropped connection turned into a "network" stop.
 async function _send(url, options, what, reportError) {
@@ -1003,9 +1011,9 @@ function _stopped(e, job, domRefs, state, helpers) {
     helpers.reportError('upload_stopped', e?.name || 'Error', String(e?.message || '').slice(0, 160));
     e = new UploadStop('browser', e?.message);
   }
-  if (e.kind === 'gone') {
+  if (e.kind === 'gone' || e.kind === 'changed') {
     if (job) clearResumeState(job.uuid, helpers.reportError).catch(() => {});
-    helpers.showStopped(NO_RESUME);
+    helpers.showStopped(e.kind === 'changed' ? NOT_SAME_FILE : NO_RESUME);
     return;
   }
   const retry = job
@@ -1054,9 +1062,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   // Stage words (build list §1): Preparing · Encrypting and uploading · Finishing.
   setStage('Preparing');
   const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
-  const iv     = crypto.getRandomValues(new Uint8Array(12));
-  const keyHex = bufToHex(await crypto.subtle.exportKey('raw', aesKey));
-  const ivHex  = bufToHex(iv);
+  const keyHex = bufToHex(await crypto.subtle.exportKey('raw', aesKey));   // K: the transfer key in the link
 
   // The password stays in its field until the link is ready, so a Try again
   // before /initiate can use it again (cleared in _carryOn on success).
@@ -1162,7 +1168,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   }
 
   return {
-    file, uuid: issuedUuid, keyHex, ivHex, totalChunks, expiryTimestamp,
+    file, uuid: issuedUuid, keyHex, scheme: SCHEME, totalChunks, expiryTimestamp,
     tier: issuedTier, sessionToken: initData.session_token, tailUrl,
     sealNonceHex, sourceType: state.sourceType || 'file',
     sent: 0, hashes: [], urlMap,
@@ -1181,7 +1187,7 @@ function _recordOf(job) {
   return {
     uuid: job.uuid, chunkIndex: job.sent - 1, totalChunks: job.totalChunks,
     fileName: job.file.name, fileSize: job.file.size,
-    keyHex: job.keyHex, ivHex: job.ivHex, tier: job.tier || 'free',
+    keyHex: job.keyHex, scheme: job.scheme, tier: job.tier || 'free',
     expiryTimestamp: job.expiryTimestamp, timestamp: Date.now(),
     sealNonceHex: job.sealNonceHex || undefined,
     uploadMode: 'direct-r2', sessionToken: job.sessionToken, // Share-6: resume needs these
@@ -1192,14 +1198,11 @@ function _recordOf(job) {
   };
 }
 
-// Encrypt part i: same key + session IV + 4-byte BE uint32 AAD (= object index = Merkle leaf).
-async function _encryptChunk(raw, i, state) {
-  const aad = new Uint8Array(4);
-  new DataView(aad.buffer).setUint32(0, i, false);
-  return new Uint8Array(await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: state.sessionIv, additionalData: aad },
-    state.sessionAesKey, raw
-  ));
+// Encrypt part i of n under the part key (crypto.js encryptPart: per-part nonce,
+// last-part flag, 4-byte BE uint32 AAD = object index = Merkle leaf).
+// Deterministic: the same bytes give the same stored part, so resume can re-check.
+function _encryptChunk(raw, i, n, state) {
+  return encryptPart(state.partKey, raw, i, n);
 }
 
 // Send what's left of a job, then finalise and show the link. Shared by a fresh
@@ -1220,8 +1223,8 @@ async function _carryOn(job, domRefs, state, helpers) {
   setStage('Preparing');
   progress();
 
-  state.sessionAesKey = await crypto.subtle.importKey('raw', hexToBuf(job.keyHex), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
-  state.sessionIv     = new Uint8Array(hexToBuf(job.ivHex));
+  state.sessionAesKey = await crypto.subtle.importKey('raw', hexToBuf(job.keyHex), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);   // date seal only
+  state.partKey       = await derivePartKey(new Uint8Array(hexToBuf(job.keyHex)), ['encrypt']);
   state.uploadUUID    = job.uuid;
 
   // B12-1c: the tail URL is signed once, at /initiate; /urls serves indices < urlLimit.
@@ -1250,13 +1253,20 @@ async function _carryOn(job, domRefs, state, helpers) {
   // HARD RULE 1 (resume after a refresh): re-encrypt the parts already sent to
   // rebuild their ciphertext hashes — the Merkle leaves for /finalise. Skipped when
   // the job already holds them: a same-tab Try again, or a resume record that kept
-  // them for an unchanged file (Share-Upload-6).
+  // them for an unchanged file (Share-Upload-6). Each one must equal the hash the
+  // record kept for that part (expectedHashes): the first that doesn't means the
+  // chosen file isn't the one that was being sent, so stop before sending anything.
   if (job.hashes.length < job.sent) {
     job.hashes.length = 0;
     const sentBytes = Math.min(job.sent * CHUNK_SIZE, totalBytes);
     setProgress(sentBytes / totalBytes * 100, 'Checking what was already sent');   // C2: say what the pause is
     for (let i = 0; i < job.sent; i++) {
-      job.hashes.push(blake3Hash(await _encryptChunk(await _readChunk(chunks[i]), i, state)));
+      const h = blake3Hash(await _encryptChunk(await _readChunk(chunks[i]), i, totalChunks, state));
+      if (job.expectedHashes && h !== job.expectedHashes[i]) {
+        reportError('resume_part_mismatch', `part ${i} of ${job.sent}`, `uuid:${short}`);
+        throw new UploadStop('changed', `resume part ${i} differs`);
+      }
+      job.hashes.push(h);
       setProgress(sentBytes / totalBytes * 100, `Checking what was already sent · ${formatBytes(Math.min((i + 1) * CHUNK_SIZE, totalBytes))} of ${formatBytes(sentBytes)}`);
     }
   }
@@ -1272,7 +1282,7 @@ async function _carryOn(job, domRefs, state, helpers) {
     if (!presignedUrl) throw new UploadStop('refused', `Presigned URL for chunk ${i} missing after batch fetch`);
 
     const raw = await _readChunk(chunks[i]); // fresh FileReader per chunk — fixes NotReadableError
-    const encrypted = await _encryptChunk(raw, i, state);
+    const encrypted = await _encryptChunk(raw, i, totalChunks, state);
     const chunkHashHex = blake3Hash(encrypted);
 
     await _putChunkDirect(presignedUrl, encrypted, i, job.uuid, reportError);
@@ -1350,13 +1360,12 @@ async function _carryOn(job, domRefs, state, helpers) {
   setProgress(100);
   await new Promise(r => setTimeout(r, 500));
 
-  // Fragment grammar v1 (D-1): real filename + key + IV in URL fragment only.
+  // Link format v2 (D-1): real filename + key + size in the URL fragment only.
   const fragmentBlob = assembleFragment({
     keyBytes:  new Uint8Array(hexToBuf(job.keyHex)),
-    ivBytes:   new Uint8Array(hexToBuf(job.ivHex)),
     filename:  job.file.name,
     sealNonce: job.sealNonceHex ? new Uint8Array(hexToBuf(job.sealNonceHex)) : undefined,
-    sizeBytes: job.file.size, // Share-Size-1: size travels in the fragment, not /meta
+    sizeBytes: job.file.size, // Share-Size-1: size travels in the fragment, not /meta (required in v2)
   });
   const shareUrl = `${location.origin}${location.pathname}?uuid=${job.uuid}#${fragmentBlob}`;
   history.replaceState(null, '', location.pathname);
@@ -1385,6 +1394,12 @@ export async function checkResumeState(domRefs, state, helpers) {
     if (typeof helpers.setDropMsg === 'function') {
       helpers.setDropMsg('A folder upload didn’t finish. Folders can’t be resumed, so start again.');
     }
+    return;
+  }
+
+  // Share-Crypto-1: records from before link format v2 can't carry on; drop them quietly.
+  if (record.scheme !== SCHEME) {
+    await clearResumeState(record.uuid, helpers.reportError);
     return;
   }
 
@@ -1461,6 +1476,17 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   const totalChunks = record.totalChunks;
   const resumeFrom  = record.chunkIndex + 1;
 
+  // ── Scheme gate (Share-Crypto-1): link format v2 records only ──────────────
+  // An older record can't finish as a v2 link, and every v2 record keeps one
+  // hash per sent part: the changed-file check below needs them all.
+  const recordHashes = Array.isArray(record.hashes) && record.hashes.length === resumeFrom
+    && record.hashes.every(h => /^[0-9a-f]{64}$/.test(h)) ? record.hashes.slice() : null;
+  if (record.scheme !== SCHEME || !recordHashes) {
+    await clearResumeState(record.uuid, reportError);
+    showStopped(NO_RESUME);
+    return;
+  }
+
   // B12-1c: the size-signed tail URL is issued once, at /initiate.
   const tailUrl = record.tailUrl || null;
   if (tailUrl && resumeFrom < totalChunks && tailUrl.expires * 1000 <= Date.now()) {
@@ -1491,7 +1517,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   }
 
   if (Math.ceil(resumeFile.size / CHUNK_SIZE) !== totalChunks) {
-    backToCard('That file doesn’t match the unfinished upload. Discard it and start again.');
+    backToCard(NOT_SAME_FILE);
     reportError('resume_chunk_count', `expected ${totalChunks} got ${Math.ceil(resumeFile.size / CHUNK_SIZE)}`, `uuid:${record.uuid.slice(0,8)}`);
     return;
   }
@@ -1506,13 +1532,12 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   const expiryTimestamp = record.expiryTimestamp
     || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
   // Share-Upload-6: reuse the sent parts' hashes only for the same file, unchanged
-  // since (lastModified); otherwise _carryOn re-encrypts them as before. A changed
-  // file then still fails the stored-bytes check rather than mixing silently.
-  const savedHashes = Array.isArray(record.hashes) && record.hashes.length === resumeFrom
-    && record.fileModified === resumeFile.lastModified
-    && record.hashes.every(h => /^[0-9a-f]{64}$/.test(h)) ? record.hashes.slice() : [];
+  // since (lastModified). Otherwise _carryOn re-encrypts them and checks each one
+  // against the record (expectedHashes, Share-Crypto-1): a different file stops
+  // there, before any part is sent.
+  const savedHashes = record.fileModified === resumeFile.lastModified ? recordHashes.slice() : [];
   const job = {
-    file: resumeFile, uuid: record.uuid, keyHex: record.keyHex, ivHex: record.ivHex,
+    file: resumeFile, uuid: record.uuid, keyHex: record.keyHex, scheme: SCHEME, expectedHashes: recordHashes,
     totalChunks, expiryTimestamp, tier: record.tier || 'free',
     sessionToken: record.sessionToken, tailUrl,
     sealNonceHex: record.sealNonceHex || null, sourceType: record.sourceType || 'file',
