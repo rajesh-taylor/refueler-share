@@ -1,6 +1,9 @@
 // Fake Share Worker for the Share-Upload-2 preview harness. In-memory, localhost only.
 // Real credential signing (worker/src/nut00.js) so the browser's DLEQ check passes.
-// Control: GET /_ctl?fail=<issue|initiate|chunk:N|finalise|finalise409|wrong_size|none>&slow=<ms per chunk>
+// Control: GET /_ctl?fail=<issue|initiate|chunk:N|drop:N|finalise|finalise409|wrong_size|none>&slow=<ms per chunk>&rate=<MB/s>
+// rate: chunk PUTs and downloads move at that speed, so byte progress shows (Share-Progress-1).
+// drop:N: part N's PUT or download is cut halfway once, then works (Chrome re-sends a cut PUT by itself).
+// down:N: part N's PUT and download answer 503 until fail changes — the page's retry line shows.
 import http from 'node:http';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
 import { blake3 } from '../../worker/node_modules/@noble/hashes/blake3.js';
@@ -8,17 +11,24 @@ import { buildMerkleTree } from '../../worker/src/merkle.js';
 const KEY = '1'.repeat(64);
 const CHUNK = 32 * 1024 * 1024;
 const T = new Map();             // uuid → { total, bytes, chunks: [], dad, pw, expiry, done }
-let ctl = { fail: 'none', slow: 0 };
+let ctl = { fail: 'none', slow: 0, rate: 0 };
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
 const json = (res, code, o) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
-const body = (req) => new Promise(r => { const b = []; req.on('data', c => b.push(c)); req.on('end', () => r(Buffer.concat(b))); });
+const body = (req) => new Promise(r => { const b = []; req.on('data', c => { b.push(c); if (ctl.rate) { req.pause(); setTimeout(() => req.resume(), c.length / (ctl.rate * 1048.576)); } }); req.on('end', () => r(Buffer.concat(b))); });
+const dropOnce = (i) => { if (ctl.fail !== 'drop:' + i) return false; ctl.fail = 'none'; return true; };
+const send = async (res, b, cut) => {
+  const step = 256 * 1024, end = cut ? b.length >> 1 : b.length;
+  for (let o = 0; o < end; o += step) { res.write(b.subarray(o, Math.min(o + step, end))); if (ctl.rate) await sleep(step / (ctl.rate * 1048.576)); }
+  if (cut) return res.socket.destroy();
+  res.end();
+};
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const url = (u, i) => `http://localhost:8766/r2/${u}/${i}`;
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean);
   if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
   try {
-    if (p[0] === '_ctl') { ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0) }; return json(res, 200, ctl); }
+    if (p[0] === '_ctl') { ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0), rate: +(u.searchParams.get('rate') || 0) }; return json(res, 200, ctl); }
     if (p[0] === 'status') return json(res, 200, { state: u.searchParams.get('s') || 'operational' });
     if (p[0] === 'log') { await body(req); return json(res, 200, { ok: true }); }
     if (p[0] === 'credential') {
@@ -51,7 +61,10 @@ http.createServer(async (req, res) => {
       return json(res, 200, { urls: [...Array(b.count)].map((_, k) => ({ index: b.from + k, url: url(p[1], b.from + k) })) });
     }
     if (p[0] === 'r2') {
-      const b = await body(req); const t = T.get(p[1]); const i = +p[2];
+      const i = +p[2];
+      if (dropOnce(i)) { setTimeout(() => req.socket.destroy(), 1500); return; }
+      const b = await body(req); const t = T.get(p[1]);
+      if (ctl.fail === 'down:' + i) return json(res, 503, { error: 'unavailable' });
       if (ctl.slow) await sleep(ctl.slow);
       if (ctl.fail === 'chunk:' + i) { req.socket.destroy(); return; }
       t.chunks[i] = b; res.writeHead(200, cors); return res.end();
@@ -80,10 +93,11 @@ http.createServer(async (req, res) => {
     if (p[0] === 'auth') { await body(req); return json(res, 200, { token: 'dl-token' }); }
     if (p[0] === 'download') {
       const t = T.get(p[1]); if (!t) return json(res, 410, { error: 'gone' });
+      if (ctl.fail === 'down:' + +p[2]) return json(res, 503, { error: 'unavailable' });
       const b = t.chunks[+p[2]]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,
         'X-Integrity': 'ciphertext-storage-verified', 'X-Chunk-Index': p[2], 'Access-Control-Expose-Headers': 'X-Integrity, X-Chunk-Index' });
       if (t.dad && +p[2] === t.total - 1) setTimeout(() => T.delete(p[1]), 2000);
-      return res.end(b);
+      return send(res, b, dropOnce(+p[2]));
     }
     json(res, 404, { error: 'no route ' + u.pathname });
   } catch (e) { console.error(e); json(res, 500, { error: String(e) }); }
