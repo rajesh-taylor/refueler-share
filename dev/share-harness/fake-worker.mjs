@@ -28,6 +28,13 @@ http.createServer(async (req, res) => {
       return json(res, 200, { uuid: crypto.randomUUID(), issued_tier: 'free', commitment: 'c'.repeat(64),
         signed_point: s.signedPoint, mint_pubkey: s.mintPubkey, keyset_id: s.keysetId, dleq: s.dleq });
     }
+    if (p[0] === 'admin' && p[1] === 'test-credential') {   // soak page (worker/src/share/admin/test-upload.html)
+      const b = JSON.parse(await body(req));
+      if (!req.headers['x-admin-key']) return json(res, 401, { error: 'admin key' });
+      const s = issueBlindSignature(b.blinded_message, KEY);
+      return json(res, 200, { uuid: crypto.randomUUID(), issued_tier: 'free', commitment: 'c'.repeat(64),
+        allocation_bytes: b.cap_bytes, signed_point: s.signedPoint, mint_pubkey: s.mintPubkey });
+    }
     if (p[0] === 'upload' && p[2] === 'initiate') {
       await body(req);
       if (ctl.fail === 'initiate') return json(res, 401, { error: 'invalid credential' });
@@ -73,7 +80,8 @@ http.createServer(async (req, res) => {
     if (p[0] === 'auth') { await body(req); return json(res, 200, { token: 'dl-token' }); }
     if (p[0] === 'download') {
       const t = T.get(p[1]); if (!t) return json(res, 410, { error: 'gone' });
-      const b = t.chunks[+p[2]]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length });
+      const b = t.chunks[+p[2]]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,
+        'X-Integrity': 'ciphertext-storage-verified', 'X-Chunk-Index': p[2], 'Access-Control-Expose-Headers': 'X-Integrity, X-Chunk-Index' });
       if (t.dad && +p[2] === t.total - 1) setTimeout(() => T.delete(p[1]), 2000);
       return res.end(b);
     }
