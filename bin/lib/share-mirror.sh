@@ -111,6 +111,10 @@ sm_check_canon() { # sm_check_canon SHARE_ROOT
       sm_fail "src/blake3/$f differs from frontend/blake3/$f — run: cd $s && npm run build"
     fi
   done
+  # No .map files ship, so a sourceMappingURL line only makes dev tools fetch a missing file (Share-Upload-5)
+  for f in $(grep -rl 'sourceMappingURL' "$s/$SM_C_B3SRC" 2>/dev/null); do
+    sm_fail "${f#$s/} has a sourceMappingURL line — strip it: perl -0pi -e 's/\\n?\\/\\/# sourceMappingURL=\\S*\\s*\\z/\\n/' $f && cd $s && npm run build"
+  done
 }
 
 # ── The comparison. Returns via SM_FAILS; prints only problems. ──────────────

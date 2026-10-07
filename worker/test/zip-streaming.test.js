@@ -9,12 +9,14 @@
  * and a fake File with a tracked arrayBuffer() call. Count concurrent
  * in-flight reads — must never exceed 1.
  *
- * Also asserts:
- * - shouldSkipCompression() returns true for all skip-list extensions
- * - shouldSkipCompression() returns false for compressible types
+ * Also asserts (Share-Upload-5, store-only zips):
+ * - every entry is ZipPassThrough (no compression) with the file's own date (+ UTC stamp)
+ * - entries are added in path order, whatever order the folder was read in
+ * - _zipSize() matches fflate's store-only layout (cap checked once, before zipping)
  * - Progress detail format: "X of Y" byte string pattern
  *
- * Does NOT test actual compression output — that's the manual smoke test.
+ * Byte-identical output from real fflate is proven in dev/share-harness (zip twice,
+ * same BLAKE3) — fflate isn't a Worker dependency.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -23,31 +25,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // share.js is a browser module with DOM side-effects — we extract only
 // the functions we can unit-test without a DOM.
 
-// shouldSkipCompression and zipAndSelect are not exported. We replicate
+// _zipSize and zipAndSelect are not exported. We replicate
 // their logic here for testing, keeping them in sync manually. If the
 // implementation changes, update these tests to match.
-// Rationale: share.js is a browser module loaded via <script type="module">
+// Rationale: upload.js is a browser module loaded via <script type="module">
 // — it cannot be imported directly in Vitest without a full DOM scaffold.
-// The functions are simple enough to replicate without risk of drift.
 
-// ── shouldSkipCompression ─────────────────────────────────────────────────────
-const SKIP_COMPRESS_EXTENSIONS = new Set([
-  'mov', 'mp4', 'mxf', 'r3d', 'braw', 'ari', 'mkv', 'avi', 'wmv', 'webm', 'm4v', 'mpg', 'mpeg',
-  'mp3', 'aac', 'm4a', 'ogg', 'flac', 'opus', 'wma',
-  'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif',
-  'zip', 'gz', 'bz2', 'xz', '7z', 'rar',
-  'pdf', 'docx', 'xlsx', 'pptx',
-]);
+const ZIP_DATE_MIN = new Date(1980, 0, 1, 12).getTime();
+const ZIP_DATE_MAX = 2 ** 31 * 1000 - 1;
 
-function shouldSkipCompression(relativePath) {
-  const ext = relativePath.split('.').pop().toLowerCase();
-  return SKIP_COMPRESS_EXTENSIONS.has(ext);
+function _zipDate(file) {
+  const t = file.lastModified;
+  return t >= ZIP_DATE_MIN && t <= ZIP_DATE_MAX ? t : ZIP_DATE_MIN;
+}
+
+function _zipUtcStamp(t) {
+  const b = new Uint8Array(5);
+  b[0] = 1;
+  new DataView(b.buffer).setUint32(1, Math.floor(t / 1000), true);
+  return b;
+}
+
+function _zipSize(entries) {
+  const enc = new TextEncoder();
+  return entries.reduce((acc, e) => acc + (e.file.size || 0) + 110 + 2 * enc.encode(e.relativePath).length, 22);
 }
 
 // ── Streaming zip implementation under test ───────────────────────────────────
 // Replicated from share.js zipAndSelect() — the core memory discipline loop.
 // This is the exact pattern; keep in sync with the source.
 async function zipAndSelectTestable(entries, folderName, fflate, onProgress) {
+  entries = [...entries].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
   const totalInputBytes = entries.reduce((acc, e) => acc + (e.file ? e.file.size || 0 : 0), 0);
   const outputChunks = [];
   let concurrentReads = 0;
@@ -74,15 +82,12 @@ async function zipAndSelectTestable(entries, folderName, fflate, onProgress) {
 
           const data = new Uint8Array(buf);
 
-          if (shouldSkipCompression(relativePath)) {
-            const entry = new fflate.ZipPassThrough(relativePath);
-            zip.add(entry);
-            entry.push(data, true);
-          } else {
-            const entry = new fflate.ZipDeflate(relativePath, { level: 6 });
-            zip.add(entry);
-            entry.push(data, true);
-          }
+          const entry = new fflate.ZipPassThrough(relativePath);
+          const when  = _zipDate(file);
+          entry.mtime = when;
+          entry.extra = { 0x5455: _zipUtcStamp(when) };
+          zip.add(entry);
+          entry.push(data, true);
 
           bytesProcessed += file.size || 0;
           if (onProgress) onProgress(bytesProcessed, totalInputBytes, i);
@@ -120,7 +125,7 @@ function makeMockFflate() {
   }
 
   class MockZip {
-    constructor(cb) { ondata = cb; this.files = []; }
+    constructor(cb) { ondata = cb; this.files = []; MockZip.last = this; }
     add(entry) { this.files.push(entry); }
     end() {
       // Signal completion with an empty final chunk
@@ -145,47 +150,37 @@ function makeFakeFile(name, sizeBytes) {
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('shouldSkipCompression', () => {
-  // Video
-  it.each(['mov', 'mp4', 'mxf', 'r3d', 'braw', 'ari', 'mkv', 'avi', 'wmv', 'webm', 'm4v', 'mpg', 'mpeg'])(
-    'skips %s (video)', ext => { expect(shouldSkipCompression(`file.${ext}`)).toBe(true); }
-  );
-
-  // Audio
-  it.each(['mp3', 'aac', 'm4a', 'ogg', 'flac', 'opus', 'wma'])(
-    'skips %s (audio)', ext => { expect(shouldSkipCompression(`file.${ext}`)).toBe(true); }
-  );
-
-  // Already-compressed images
-  it.each(['jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif'])(
-    'skips %s (compressed image)', ext => { expect(shouldSkipCompression(`file.${ext}`)).toBe(true); }
-  );
-
-  // Archives
-  it.each(['zip', 'gz', 'bz2', 'xz', '7z', 'rar'])(
-    'skips %s (archive)', ext => { expect(shouldSkipCompression(`file.${ext}`)).toBe(true); }
-  );
-
-  // Office + PDF
-  it.each(['pdf', 'docx', 'xlsx', 'pptx'])(
-    'skips %s (office/pdf)', ext => { expect(shouldSkipCompression(`file.${ext}`)).toBe(true); }
-  );
-
-  // Compressible types — must NOT be skipped
-  it.each(['png', 'tiff', 'tif', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'js', 'css'])(
-    'does NOT skip %s (compressible)', ext => { expect(shouldSkipCompression(`file.${ext}`)).toBe(false); }
-  );
-
-  // Case insensitivity
-  it('handles uppercase extension', () => {
-    expect(shouldSkipCompression('VIDEO.MOV')).toBe(true);
-    expect(shouldSkipCompression('photo.JPG')).toBe(true);
+describe('_zipSize — store-only zip layout', () => {
+  it('adds 110 B per file, each name twice, and a 22 B end record', () => {
+    const entries = [
+      { relativePath: 'clip/A001.mov', file: { size: 3000 } },
+      { relativePath: 'unknown.txt',   file: { size: 1 } },
+      { relativePath: 'é.bin',         file: { size: 10 } },   // UTF-8 names count in bytes
+    ];
+    // 3423 B = the real fflate zip of these three files (Share-Upload-5 scratch test)
+    expect(_zipSize(entries)).toBe(3423);
   });
 
-  // Nested path
-  it('handles nested path correctly', () => {
-    expect(shouldSkipCompression('assets/photos/hero.jpg')).toBe(true);
-    expect(shouldSkipCompression('assets/docs/readme.md')).toBe(false);
+  it('is just the end record for an empty list', () => {
+    expect(_zipSize([])).toBe(22);
+  });
+});
+
+describe('_zipDate / _zipUtcStamp — each file keeps its own date', () => {
+  it('keeps an in-range date', () => {
+    const t = Date.UTC(2026, 8, 14, 9, 31, 7, 450);
+    expect(_zipDate({ lastModified: t })).toBe(t);
+  });
+
+  it('uses 1 Jan 1980 for unknown, too-early or too-late dates', () => {
+    expect(_zipDate({ lastModified: 0 })).toBe(ZIP_DATE_MIN);
+    expect(_zipDate({})).toBe(ZIP_DATE_MIN);
+    expect(_zipDate({ lastModified: Date.UTC(1975, 0, 1) })).toBe(ZIP_DATE_MIN);
+    expect(_zipDate({ lastModified: Date.UTC(2050, 0, 1) })).toBe(ZIP_DATE_MIN);
+  });
+
+  it('writes flags 1 + Unix seconds, little-endian', () => {
+    expect(Array.from(_zipUtcStamp(Date.UTC(2026, 8, 14, 9, 31, 7, 450)))).toEqual([1, 0xdb, 0xbe, 0xa7, 0x6a]);
   });
 });
 
@@ -231,36 +226,22 @@ describe('zipAndSelect streaming — memory discipline', () => {
     }
   });
 
-  it('uses ZipPassThrough for skip-list files, ZipDeflate for compressible', async () => {
+  it('stores every file (no compression) with its own date, in path order', async () => {
     const fflate = makeMockFflate();
-    const addedClasses = [];
-
-    // Wrap constructors to track which class was used for each file
-    const origPassThrough = fflate.ZipPassThrough;
-    const origDeflate = fflate.ZipDeflate;
-    fflate.ZipPassThrough = class extends origPassThrough {
-      constructor(p) { super(p); addedClasses.push({ path: p, type: 'passthrough' }); }
-    };
-    fflate.ZipDeflate = class extends origDeflate {
-      constructor(p, o) { super(p, o); addedClasses.push({ path: p, type: 'deflate' }); }
-    };
-
     const entries = [
-      { relativePath: 'photo.jpg',   file: makeFakeFile('photo.jpg', 1024) },
-      { relativePath: 'readme.txt',  file: makeFakeFile('readme.txt', 512) },
       { relativePath: 'video.mp4',   file: makeFakeFile('video.mp4', 2048) },
-      { relativePath: 'data.csv',    file: makeFakeFile('data.csv', 256) },
-      { relativePath: 'archive.zip', file: makeFakeFile('archive.zip', 4096) },
+      { relativePath: 'b/readme.txt', file: makeFakeFile('readme.txt', 512) },
+      { relativePath: 'B.txt',       file: makeFakeFile('B.txt', 256) },
+      { relativePath: 'a.jpg',       file: makeFakeFile('a.jpg', 1024) },
     ];
 
     await zipAndSelectTestable(entries, 'test', fflate);
 
-    const byPath = Object.fromEntries(addedClasses.map(c => [c.path, c.type]));
-    expect(byPath['photo.jpg']).toBe('passthrough');   // jpg → skip
-    expect(byPath['readme.txt']).toBe('deflate');      // txt → compress
-    expect(byPath['video.mp4']).toBe('passthrough');   // mp4 → skip
-    expect(byPath['data.csv']).toBe('deflate');        // csv → compress
-    expect(byPath['archive.zip']).toBe('passthrough'); // zip → skip
+    const added = fflate.Zip.last.files;
+    expect(added.every(e => e instanceof fflate.ZipPassThrough)).toBe(true);
+    expect(added.every(e => e.mtime === ZIP_DATE_MIN)).toBe(true);   // fake files carry no date
+    expect(added.every(e => e.extra[0x5455][0] === 1)).toBe(true);
+    expect(added.map(e => e.path)).toEqual(['B.txt', 'a.jpg', 'b/readme.txt', 'video.mp4']);
   });
 
   it('reports progress in bytes, not file count', async () => {
