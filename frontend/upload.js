@@ -448,7 +448,8 @@ function _clearTidalError(transferOpts) {
 // /credential/issue, then resets the widget so a retry gets a fresh check.
 // The button never waits on the check: pressed early it reads "Checking…" and
 // the upload starts when the token lands; past CHECK_WAIT_MS the line shows, so
-// the wait has a reason before Cloudflare's box (if any) appears.
+// the wait has a reason. If Cloudflare's box appears, the queued press is dropped:
+// a tick never starts an upload, the sender presses the button after it (Rajesh, 7 Oct).
 // ─────────────────────────────────────────────────────────────────────────────
 const UPLOAD_LABEL = 'Encrypt and upload';
 let turnstileWidgetId = null;
@@ -500,6 +501,8 @@ function renderTurnstile(state, domRefs, helpers) {
     'before-interactive-callback': function() {
       turnstileAsking = true;
       if (wrap) wrap.classList.remove('hidden');
+      _cancelQueuedStart(state, domRefs);
+      domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
     },
     callback: function(token) {
       state.turnstileToken = token;
@@ -507,6 +510,7 @@ function renderTurnstile(state, domRefs, helpers) {
       turnstileAsking = false;
       clearTimeout(checkWaitTimer);
       if (wrap) wrap.classList.add('hidden');
+      domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
       if (startWhenChecked) {
         const go = startWhenChecked;
         startWhenChecked = null;
@@ -516,6 +520,8 @@ function renderTurnstile(state, domRefs, helpers) {
     'error-callback': function() {
       state.turnstileToken = null;
       turnstileFailed = true;
+      turnstileAsking = false;
+      domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
       if (startWhenChecked) {
         _cancelQueuedStart(state, domRefs);
         helpers.setDropMsg('The security check didn’t go through. Try again.');
@@ -573,10 +579,11 @@ function _cancelQueuedStart(state, domRefs) {
   domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
 }
 
-// Greyed only for a reason the sender can see (no file, empty password) or while "Checking…".
+// Greyed only for a reason the sender can see (no file, empty password, Cloudflare's
+// box waiting for its tick) or while "Checking…".
 function _uploadBtnDisabled(state, domRefs) {
   const needsPassphrase = domRefs.passphraseToggle.checked && domRefs.passphraseInput.value.trim().length === 0;
-  return !state.selectedFile || needsPassphrase || !!startWhenChecked;
+  return !state.selectedFile || needsPassphrase || !!startWhenChecked || (turnstileAsking && !state.turnstileToken);
 }
 
 export function enterUploadMode(domRefs, state, helpers) {
@@ -694,6 +701,7 @@ export function enterUploadMode(domRefs, state, helpers) {
     startWhenChecked = go;
     uploadBtn.textContent = 'Checking…';
     uploadBtn.disabled = true;
+    if (turnstileFailed) _resetTurnstile();
     renderTurnstile(state, domRefs, helpers);
     clearTimeout(checkWaitTimer);
     checkWaitTimer = setTimeout(() => {
