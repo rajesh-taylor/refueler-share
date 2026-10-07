@@ -151,6 +151,19 @@ remains unimplemented — do not claim end-to-end file integrity until B9 build 
 
 ---
 
+## Encryption rule — every Refueler repo (locked 7 Oct 2026)
+
+Applies to every repo: product, hackathon, test or throwaway. Check any new encryption code against it before it ships.
+
+- **Never encrypt two things under the same key and IV/nonce.** With AES-GCM or ChaCha20-Poly1305, every encryption under one key needs its own unique nonce. A fixed IV, or one IV shared across chunks, parts, records, leaves or messages, is a bug — different AAD does not make it safe.
+- **One key per job, derived and tagged.** Derive per-purpose keys from a master key with HKDF-SHA256, `info = utf8("refueler.<product>.<purpose>.vN") ‖ 0x00`. Never use one key for two jobs (e.g. file parts and a seal).
+- **Chunked data → counter nonce with a last-chunk flag** under a derived key: `nonce = 0x00×7 ‖ BE32(i) ‖ last` (age/STREAM style). It also catches reordered, dropped or added chunks. Reference: refueler-share `frontend/crypto.js` (`derivePartKey`, `encryptPart`, `decryptPart`) + `worker/test/part-crypto.test.js`.
+- **Independent messages → a fresh random nonce per message** (96-bit for AES-GCM), or a scheme that handles it for you (XChaCha20, NIP-44).
+- **Re-encrypting is only safe when the bytes are identical** (same key, same nonce, same plaintext — e.g. resume). If they could differ, compare before sending.
+- **No hand-rolled ciphers.** WebCrypto or an audited library; add known-answer test vectors for any new scheme.
+
+---
+
 ## B12 / B12-SR security locks (24 Sep 2026)
 
 Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (security review; **wins on any conflict**). Build sessions read B12-SR §C first. B8 and Share-6 specs also live in `docs/` (moved 25 Sep 2026).
