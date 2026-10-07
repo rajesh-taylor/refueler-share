@@ -47,7 +47,7 @@
 // Share-Deps-1: no loadDeps() here. Receiving needs neither BLAKE3 nor secp256k1,
 // so the card never waits on them (and never fails on a browser without WASM, F-20).
 import { hexToBuf, derivePartKey, decryptPart, decryptPartV1, WORKER_URL, CHUNK_SIZE,
-         RETRY_DELAYS_MS, waitForRetry, makeRateMeter } from './crypto.js';
+         RETRY_DELAYS_MS, waitForRetry, makeSteadyProgress, progressBytesText, setCalmText } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -496,8 +496,8 @@ async function _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, s
       _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
       return;
     }
-    _setProgress(domRefs, 90 + Math.round(((i + 1) / chunks.length) * 10), totalBytes, totalBytes);
-    $('dl-mb').textContent = 'Decrypting…';
+    _setBar(domRefs, 90 + ((i + 1) / chunks.length) * 10);
+    setCalmText($('dl-mb'), 'Decrypting…');
   }
   if (state.linkVersion === 2 && plainBytes !== totalBytes) {
     reportError('decrypt', `size ${plainBytes} != ${totalBytes}`, `uuid:${uuid.slice(0,8)}`);
@@ -639,7 +639,7 @@ function _showWindowClosed(untilTs) {
 function _showProgress(domRefs, stage, totalBytes) {
   domRefs.dlStageTag.textContent = stage;
   _setProgress(domRefs, 0, 0, totalBytes);
-  $('dl-mb').textContent = 'Connecting…';   // until the first bytes arrive (Share-Progress-1)
+  setCalmText($('dl-mb'), 'Connecting…');   // until the first bytes arrive (Share-Progress-1)
   $('dl-drop').hidden = true;
   _showSheet('download-card');
 }
@@ -653,43 +653,41 @@ function _setBar(domRefs, pct) {
 
 function _setProgress(domRefs, pct, doneBytes, totalBytes, tail = '') {
   _setBar(domRefs, pct);
-  const bytes = totalBytes > 0 ? _bytesOf(doneBytes, totalBytes) : '';
-  $('dl-mb').textContent = [bytes, tail].filter(Boolean).join(' · ');
+  const bytes = totalBytes > 0 ? progressBytesText(doneBytes, totalBytes) : '';
+  setCalmText($('dl-mb'), [bytes, tail].filter(Boolean).join(' · '));   // soft fade on a change
 }
 
 // Share-Progress-1: the bar counts bytes as they arrive, across every part in
-// flight; a failed try takes its bytes back. `share` = the bar's part for
-// downloading (1, or 0.9 where decrypting comes after). Old links without a size
-// (total 0) estimate from the part count and show no byte figures.
+// flight; a failed try takes its bytes back. Shown calmly: makeSteadyProgress
+// (crypto.js) climbs at the measured speed rather than a part at a time, words
+// every 2 s, time left every 5 s and none while waiting to retry. `share` = the
+// bar's part for downloading (1, or 0.9 where decrypting comes after). Old links
+// without a size (total 0) estimate from the part count and show no byte figures.
 function _makeDlProgress(domRefs, totalBytes, totalChunks, share) {
   const cipherTotal = totalBytes > 0 ? totalBytes + 16 * totalChunks : (CHUNK_SIZE + 16) * totalChunks;
-  const meter = makeRateMeter();
   const drop  = $('dl-drop');
-  let got = 0, textAt = 0;
-  // The words under the bar change at most 4 times a second (the font's digits
-  // aren't all one width, so faster looks like flicker); the bar every read.
-  const show = (tail, force) => {
-    const f = Math.min(got / cipherTotal, 1);
-    const pct = f * share * 100;
-    const now = performance.now();
-    if (!force && now - textAt < 250) return _setBar(domRefs, pct);
-    textAt = now;
-    _setProgress(domRefs, pct, Math.round(f * totalBytes), totalBytes, tail);
-  };
+  let got = 0, waiting = 0;
+  const steady = makeSteadyProgress(cipherTotal, (b, words) => {
+    const f = Math.min(b / cipherTotal, 1);
+    if (!words) return _setBar(domRefs, f * share * 100);
+    _setProgress(domRefs, f * share * 100, Math.round(f * totalBytes), totalBytes, waiting ? '' : steady.left());
+  });
   return {
     stopped: false,   // set when the download has failed: tries still waiting give up
-    onBytes(n) {
-      got += n;
-      meter.add(got);
-      show(meter.left(cipherTotal - got), n < 0);
-    },
+    onBytes(n) { got += n; steady.set(got); },
     onWait(secs) {
-      if (!secs) { meter.reset(); drop.hidden = true; return; }   // a try starts again
+      if (!secs) {   // a try starts again
+        waiting = Math.max(0, waiting - 1);
+        steady.reset();
+        if (!waiting) drop.hidden = true;
+        return;
+      }
       // (not hidden on bytes: on the stream path the next part is already arriving)
+      if (drop.hidden) { waiting++; steady.redraw(); }
       drop.textContent = `Connection lost. Trying again in ${secs} s.`;
       drop.hidden = false;
-      show('', true);   // no time left while waiting
     },
+    stop() { steady.stop(); },
   };
 }
 
@@ -727,6 +725,8 @@ async function _eachPartInOrder(uuid, n, state, prog, use, holdLast) {
   } catch (e) {
     prog.stopped = true;
     throw e;
+  } finally {
+    prog.stop();   // the bar's ticker ends with the parts
   }
 }
 
@@ -791,14 +791,6 @@ function _downloadFailed(e, uuid, domRefs, reportError) {
   else if (e.status === 410)  _showLinkInactive(domRefs);
   else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
   else                        _showDownloadError('Download failed. Please try again.', domRefs);
-}
-
-// Both figures in the total's unit, same units as share.js formatBytes (Size row).
-function _bytesOf(done, total) {
-  const units = [['GB', 1024 ** 3, 2], ['MB', 1024 ** 2, 1], ['KB', 1024, 1]];
-  const [unit, div, dp] = units.find(([, d]) => total >= d) || ['B', 1, 0];
-  const f = b => (Math.min(b, total) / div).toFixed(dp);
-  return `${f(done)} ${unit} of ${f(total)} ${unit}`;
 }
 
 function _setUnlockError(input, errEl, msg, invalid) {

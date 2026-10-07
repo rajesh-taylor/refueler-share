@@ -14,7 +14,7 @@
 // #uuid=X&key=Y&iv=Z links — handled transparently.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { WORKER_URL, FREE_EXPIRY }                      from './crypto.js';
+import { WORKER_URL, FREE_EXPIRY, setCalmText }         from './crypto.js';
 import { parseFragment }                                from './fragment.js';
 import { enterUploadMode, checkResumeState }            from './upload.js';
 import { enterDownloadMode }                            from './download.js';
@@ -184,7 +184,7 @@ function setProgress(pct, detail) {
   domRefs.progressPct.textContent = String(p);
   domRefs.progressBar.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%';   // bar finer than the number
   domRefs.progressTrack.setAttribute('aria-valuenow', String(p));
-  if (detail !== undefined) domRefs.progressDetail.textContent = detail;
+  if (detail !== undefined) setCalmText(domRefs.progressDetail, detail);   // soft fade on a change
   document.title = `${p}% · Refueler Share`;
 }
 

@@ -34,7 +34,8 @@ import {
   CHUNK_UPLOAD_TIMEOUT_MS,
   RETRY_DELAYS_MS,
   waitForRetry,
-  makeRateMeter,
+  makeSteadyProgress,
+  progressBytesText,
 } from './crypto.js';
 
 import {
@@ -971,7 +972,6 @@ class UploadStop extends Error {
   }
 }
 
-const TEXT_EVERY_MS = 250;   // Share-Progress-1: words under the bar, at most 4 a second
 // Share-Progress-1: the resume screen is one box; the page headline says what happened.
 const RESUME_HEAD = { eyebrow: 'Interrupted', head: 'An upload didn’t finish.' };
 const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
@@ -1215,34 +1215,31 @@ async function _carryOn(job, domRefs, state, helpers) {
   const chunks      = _splitChunks(job.file, CHUNK_SIZE);
   const short       = job.uuid.slice(0, 8);
   // Share-Progress-1: the bar counts bytes as they leave (inFlight = this part's
-  // bytes so far), with time left once there's speed to judge it on.
-  // The words under the bar change at most 4 times a second (the font's digits
-  // aren't all one width, so faster looks like flicker); the bar every event.
-  const meter = makeRateMeter();
-  let inFlight = 0, textAt = 0;
-  const progress = () => {
-    const b = Math.min(job.sent * CHUNK_SIZE + inFlight, totalBytes);
-    meter.add(b);
-    const now = performance.now();
-    if (now - textAt < TEXT_EVERY_MS) return setProgress(b / totalBytes * 100);
-    textAt = now;
-    const left = meter.left(totalBytes - b);
-    setProgress(b / totalBytes * 100, `${formatBytes(b)} of ${formatBytes(totalBytes)}${left ? ` · ${left}` : ''}`);
-  };
+  // bytes so far), calmly: makeSteadyProgress (crypto.js) climbs at the measured
+  // speed, words every 2 s, time left every 5 s and none while waiting to retry.
+  let inFlight = 0, waiting = false;
+  const steady = makeSteadyProgress(totalBytes, (b, words) => {
+    if (!words) return setProgress(b / totalBytes * 100);
+    const left = waiting ? '' : steady.left();
+    setProgress(b / totalBytes * 100, `${progressBytesText(b, totalBytes)}${left ? ` · ${left}` : ''}`);
+  });
+  const progress = () => steady.set(Math.min(job.sent * CHUNK_SIZE + inFlight, totalBytes));
   const drop = domRefs.progressDrop;
   const onWait = (secs) => {
-    if (!secs) { meter.reset(); return; }   // a try starts again
+    if (!secs) { waiting = false; steady.reset(); return; }   // a try starts again
+    waiting = true;
     if (drop) {
       drop.textContent = `Connection lost. Trying again in ${secs} s.`;
       drop.hidden = false;
-      if (inFlight) { inFlight = 0; textAt = 0; progress(); }   // the part starts again: step back to the last one that arrived
     }
+    if (inFlight) { inFlight = 0; progress(); }   // the part starts again: step back to the last one that arrived
   };
   if (drop) drop.hidden = true;
 
   helpers.setView('uploading');
   setStage('Preparing');
-  if (job.sent) progress(); else setProgress(0, 'Encrypting…');
+  const sentBytes0 = Math.min(job.sent * CHUNK_SIZE, totalBytes);
+  setProgress(sentBytes0 / totalBytes * 100, job.sent ? progressBytesText(sentBytes0, totalBytes) : 'Encrypting…');
 
   state.sessionAesKey = await crypto.subtle.importKey('raw', hexToBuf(job.keyHex), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);   // date seal only
   state.partKey       = await derivePartKey(new Uint8Array(hexToBuf(job.keyHex)), ['encrypt']);
@@ -1294,6 +1291,7 @@ async function _carryOn(job, domRefs, state, helpers) {
   job.hashes.length = job.sent;   // a part that was encrypted but never arrived is redone
 
   setStage('Encrypting and uploading');
+  try {
   for (let i = job.sent; i < totalChunks; i++) {
     if (!job.urlMap.has(i)) {
       if (i >= urlLimit) throw new UploadStop('gone', `No presigned URL for chunk ${i}`);
@@ -1321,8 +1319,10 @@ async function _carryOn(job, domRefs, state, helpers) {
     if (job.plainHash) job.plainHash.update(new Uint8Array(raw));
     job.sent = i + 1;
     writeChunkState(_recordOf(job), reportError).catch(() => {});
-    textAt = 0;
     progress();
+  }
+  } finally {
+    steady.stop();   // the bar's ticker ends with the sending, however it ends
   }
 
   setStage('Finishing');
