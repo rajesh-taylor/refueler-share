@@ -18,7 +18,7 @@
 //   WORKER_URL, CHUNK_SIZE, FREE_CAP, FREE_EXPIRY, TIER_EXPIRY_SECONDS
 //   CHUNK_UPLOAD_TIMEOUT_MS
 //   RETRY_DELAYS_MS, waitForRetry, timeLeftText, makeRateMeter,
-//   progressBytesText, setCalmText, makeSteadyProgress — progress (Share-Progress-1)
+//   progressBytesText, setCalmText, setProgressWords, makeSteadyProgress — progress (Share-Progress-1)
 //
 // Architectural note: blake3 and cashu are module-level mutable state.
 // loadDeps() must be awaited before calling blake3Hash() or any NUT-00 function.
@@ -117,18 +117,44 @@ export function makeRateMeter(windowMs = 10_000, settleMs = 5_000, holdMs = 2_00
 // "362 MB of 404 MB" · "1.2 GB of 3.8 GB" — both in the total's unit, whole MB, so
 // the words under the bar change calmly (Share-Progress-1).
 export function progressBytesText(done, total) {
+  const [a, b] = _progressBytes(done, total);
+  return `${a} of ${b}`;
+}
+function _progressBytes(done, total) {
   const [unit, div, dp] = total >= 1024 ** 3 ? ['GB', 1024 ** 3, 1] : total >= 1024 ** 2 ? ['MB', 1024 ** 2, 0] : ['KB', 1024, 0];
   const f = b => (Math.min(Math.max(b, 0), total) / div).toFixed(dp);
-  return `${f(done)} ${unit} of ${f(total)} ${unit}`;
+  return [`${f(done)} ${unit}`, `${f(total)} ${unit}`];
 }
 
 // Sets an element's words with a soft fade (share.css .rx-fade), only when they change.
 export function setCalmText(el, text) {
-  if (!el || el.textContent === text) return;
+  if (!el || (el.textContent === text && !el.dataset.words)) return;
+  delete el.dataset.words;
+  _fadeTo(el, text);
+}
+function _fadeTo(el, text) {
   el.textContent = text;
   el.classList.remove('rx-fade');
   void el.offsetWidth;   // restart the fade
   el.classList.add('rx-fade');
+}
+
+// "362 MB of 404 MB · about 40 s left" where only what changed fades: the amount
+// sent, and the time left. " of 404 MB" stays still (Rajesh, 7 Oct).
+export function setProgressWords(el, done, total, left) {
+  if (!el) return;
+  if (!el.dataset.words) {
+    el.textContent = '';
+    el.classList.remove('rx-fade');
+    el.append(document.createElement('span'), document.createTextNode(''), document.createElement('span'));
+    el.dataset.words = '1';
+  }
+  const [doneEl, ofText, leftEl] = el.childNodes;
+  const [a, b] = _progressBytes(done, total);
+  if (doneEl.textContent !== a) _fadeTo(doneEl, a);
+  ofText.textContent = ` of ${b}`;
+  const l = left ? ` · ${left}` : '';
+  if (leftEl.textContent !== l) _fadeTo(leftEl, l);
 }
 
 // The bar, the % and the words under it, calm (Share-Progress-1, Rajesh 7 Oct).

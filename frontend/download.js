@@ -47,7 +47,7 @@
 // Share-Deps-1: no loadDeps() here. Receiving needs neither BLAKE3 nor secp256k1,
 // so the card never waits on them (and never fails on a browser without WASM, F-20).
 import { hexToBuf, derivePartKey, decryptPart, decryptPartV1, WORKER_URL, CHUNK_SIZE,
-         RETRY_DELAYS_MS, waitForRetry, makeSteadyProgress, progressBytesText, setCalmText } from './crypto.js';
+         RETRY_DELAYS_MS, waitForRetry, makeSteadyProgress, setProgressWords, setCalmText } from './crypto.js';
 
 // Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
 // refueler.io/share/. A missing file answers 200 + the homepage, so only a body
@@ -653,8 +653,8 @@ function _setBar(domRefs, pct) {
 
 function _setProgress(domRefs, pct, doneBytes, totalBytes, tail = '') {
   _setBar(domRefs, pct);
-  const bytes = totalBytes > 0 ? progressBytesText(doneBytes, totalBytes) : '';
-  setCalmText($('dl-mb'), [bytes, tail].filter(Boolean).join(' · '));   // soft fade on a change
+  if (totalBytes > 0) setProgressWords($('dl-mb'), doneBytes, totalBytes, tail);   // only what changed fades
+  else setCalmText($('dl-mb'), tail);
 }
 
 // Share-Progress-1: the bar counts bytes as they arrive, across every part in

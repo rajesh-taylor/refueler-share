@@ -36,6 +36,7 @@ import {
   waitForRetry,
   makeSteadyProgress,
   progressBytesText,
+  setProgressWords,
 } from './crypto.js';
 
 import {
@@ -1219,9 +1220,8 @@ async function _carryOn(job, domRefs, state, helpers) {
   // speed, words every 2 s, time left every 5 s and none while waiting to retry.
   let inFlight = 0, waiting = false;
   const steady = makeSteadyProgress(totalBytes, (b, words) => {
-    if (!words) return setProgress(b / totalBytes * 100);
-    const left = waiting ? '' : steady.left();
-    setProgress(b / totalBytes * 100, `${progressBytesText(b, totalBytes)}${left ? ` · ${left}` : ''}`);
+    setProgress(b / totalBytes * 100);
+    if (words) setProgressWords(domRefs.progressDetail, b, totalBytes, waiting ? '' : steady.left());
   });
   const progress = () => steady.set(Math.min(job.sent * CHUNK_SIZE + inFlight, totalBytes));
   const drop = domRefs.progressDrop;
@@ -1239,7 +1239,7 @@ async function _carryOn(job, domRefs, state, helpers) {
   helpers.setView('uploading');
   setStage('Preparing');
   const sentBytes0 = Math.min(job.sent * CHUNK_SIZE, totalBytes);
-  setProgress(sentBytes0 / totalBytes * 100, job.sent ? progressBytesText(sentBytes0, totalBytes) : 'Encrypting…');
+  setProgress(sentBytes0 / totalBytes * 100, job.sent ? progressBytesText(sentBytes0, totalBytes) : 'Encrypting…');   // whole line until bytes move
 
   state.sessionAesKey = await crypto.subtle.importKey('raw', hexToBuf(job.keyHex), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);   // date seal only
   state.partKey       = await derivePartKey(new Uint8Array(hexToBuf(job.keyHex)), ['encrypt']);
