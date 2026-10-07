@@ -1,5 +1,5 @@
 # Share-Master-Context — refueler-share
-> **Version:** 9.12 | **Last updated:** Share-Upload-3 · 6 Oct 2026
+> **Version:** 9.13 | **Last updated:** Share-Progress-1 · 7 Oct 2026
 > Load alongside `CLAUDE.md` and `share-sessions.md` at every session start.
  
 ---
@@ -205,18 +205,17 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Share-Upload-7 ✓ (7 Oct 2026) — admin test page off esm.sh (F-25) `c78cc9d`: vendored `noble-blake3.js` + `cashu-crypto.js` `blindMessage`; stats per chunk; header rule. `noble-secp256k1.js` removed from `frontend/`, `SM_VENDOR` and the mirror (refueler.io `8fb9ac2` — the ship never deletes dropped files). Rajesh live ✓ Safari (Mullvad on): admin soak + Share page both modes. Next: **Share-Progress-1** → Share-Folder-Resume-1 → B12-2 → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Crypto-1 ✓ (7 Oct 2026) — Encryption review build `493ea4b`: per-part key schedule, link format v2 (`z` required, no `i`); older resume records discarded, resume re-checks sent parts against the record. Rajesh live ✓ Safari (Mullvad on), old v1 link still opens; test transfers purged.**
+**Share-Progress-1 ✓ (7 Oct 2026) — progress on both pages: byte counts shown as a steady climb (`makeSteadyProgress`), words every 2 s, time left every 5 s, only the changing amount fades; connection-lost line + retries capped at 10 s per wait (~2 min) on upload and both download paths; overlapped part downloads (DAD: last part after all others); one-box resume. Shipped `93bde7d` · `a6ac30b` · `dad6a6a` · `c6ea396`. Rajesh live ✓ Safari (Mullvad on), SHA-256 matched; iPhone not checked. Next: **Share-Folder-Resume-1** (8 Oct) → B12-2 → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Upload-7 ✓ (7 Oct 2026) — admin test page off esm.sh (F-25) `c78cc9d`; `noble-secp256k1.js` removed everywhere (refueler.io `8fb9ac2`).**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Share-Size-1 ✓ | `27582c7` · deploy `69a99b89` | Exact size in the fragment (`z`); no `total_bytes` in new manifests; `/meta` null for new; receipts `size_bytes: null`; AE `double5` 0. 646 tests. |
-| Share-Upload-2 ✓ | refueler.io `580135c` · `565efd9` | Share sub-menu (`sections.js` + `section-nav.njk`); upload page B1 (open sheet + slip, §1 copy, bytes progress, QR canvas, F-23 `share-early.js`, F-6 tokens). Preview harness `dev/share-harness/`. B2 → Share-Upload-3. |
 | Share-Upload-3 ✓ | `4bb3fde` · `627c0d0` | B2 1–4: F-27 scroll, U-10 hidden check + "Checking…", U-11 keep the check, U-8 whole-page drop. `bf0512a`: resume picker before any await, `loadDeps()` warmed, QR caption. `initTurnstile`/`renderTurnstile` no longer exported. F-11 + Part C → Share-Upload-4. |
 | Share-Upload-4 ✓ | `2fb1b30` · `fa3b2a1` | F-11: `UploadStop` kinds → §1 copy; fresh + resume share `_carryOn(job)`; same-tab Try again; `showStopped(text, retry)`; `#up-retry-btn`. Turnstile theme follow (full width kept). Harness finalise checks leaves + root. Part B + F-24 → Share-Upload-5 / Share-Receiver-3. |
 | Share-Upload-5 ✓ | `45dde47` · `2a9f081` | Store-only zip (path order, own date + UTC stamp, `_zipSize` cap before zipping); Turnstile at page open, 2 s line, tick never starts an upload; source maps stripped, `sm_check_canon` refuses them. No new exports, headers or mirrored files. |
 | Share-Upload-6 ✓ | `9d63880` · `b1eea41` | iOS root name → "On My iPhone" (zip bytes unchanged); resume record keeps `hashes` + `fileModified`, re-check only if the file changed. Timings measured (session log). No new exports, headers or mirrored files. |
 | Share-Crypto-1 ✓ | `493ea4b` (refueler.io `ad063a6`) | Encryption review build: part key + per-part IV in `crypto.js`, link format v2, record `scheme: 2`, receiver part-count/size checks; v0/v1 open the old way. 633 worker tests + 31 new. Test transfers purged. |
 | Share-Upload-7 ✓ | `c78cc9d` (refueler.io `64771e5`, `8fb9ac2`) | Admin page on vendored BLAKE3 + Cashu blinding (no esm.sh), stats per chunk; `noble-secp256k1.js` removed everywhere; harness serves the admin page. |
+| Share-Progress-1 ✓ | `93bde7d` · `a6ac30b` · `dad6a6a` · `c6ea396` | XHR part PUTs with byte progress; streamed part reads; `RETRY_DELAYS_MS` (≤10 s waits, ~2 min) on all three paths; overlapped downloads; calm readout; one-box resume. 8 new `crypto.js` exports (session log). |
  
 ---
  
@@ -226,7 +225,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 |---|---|---|---|
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
-| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → **Share-Progress-1** → Share-Folder-Resume-1 → B12-2 (run in refueler-io) → KV-Audit-Opus. |
+| 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → Share-Progress-1 ✓ → **Share-Folder-Resume-1** → B12-2 (run in refueler-io) → KV-Audit-Opus. |
 | 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
@@ -261,7 +260,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Repo bloat (found 28 Sep):** 200 Rust build files under `worker/blake3-wasm-src/target/` are tracked in git. Untrack them and gitignore `target/` (keep the vendored `worker/blake3-wasm/` output) → any small tidy session.
 
 **Added Share-B12-1d (5 Oct 2026):**
-- **Share-Upload-2 additions — status after Share-Upload-7 (7 Oct):** 1, 2, 10 + iOS folder name done or closed in **Share-Upload-6**; 5, 7, 8 ✅ **Share-Upload-7** (`c78cc9d`). F-11 + Try again ✅ Share-Upload-4 (`2fb1b30`).
+- **Share-Upload-2 additions — status after Share-Progress-1 (7 Oct):** 1, 2, 10 + iOS folder name done or closed in **Share-Upload-6**; 11 ✅ Share-Progress-1; 5, 7, 8 ✅ **Share-Upload-7** (`c78cc9d`). F-11 + Try again ✅ Share-Upload-4 (`2fb1b30`).
   1. Resume: button takes 3–6 s to appear after refresh *(not reproduced Share-Upload-6: 0.3–0.5 s in Safari, Mullvad on or off; closed)*; file picker needs two clicks (Safari desktop) *(✅ `bf0512a`, confirmed in Safari desktop by Rajesh)*. Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
   2. Resume: pause while sent chunks are re-hashed — ✅ `b1eea41` (record keeps the hashes; re-check only if the file changed).
   3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
@@ -272,7 +271,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
   8. `test-upload.html` header comment ✅ Share-Upload-7.
   9. Finalise 409 `wrong_size` → F-11 error states ✅ `2fb1b30` (resends from the first bad part).
   10. "Preparing" 0 % — measured Share-Upload-6: issue 0.64 s + initiate 1.48 s + first-part encrypt 0.56 s, then the first 32 MiB lands before the bar moves → shown by Share-Progress-1. **`/initiate` speed-up** (own Worker session, tests): manifest put + session KV put + presign can run together after the Supabase spend (≈0.3–0.5 s).
-  11. **Progress (Rajesh, 6 Oct — "looks hung"):** also the **one-box resume screen** (card only, Discard brings the sheet back; Rajesh 7 Oct, option A). upload bar moves per finished 32 MiB chunk (fetch has no upload progress; 160 MB = 20 % jumps, ~6 s each); download the same (F-22). Real byte progress is possible both ways (XHR `upload.onprogress`; `res.body.getReader()`) → **Share-Progress-1** (design pass + build, both pages) — after Share-Upload-7, before B12-2 (Rajesh, 7 Oct: keep the order). Also the iPhone download that takes 5–10 s to show anything (97 MB folder, 7 Oct). Console 401 not seen again (Share-Upload-5); closed.
+  11. Progress + one-box resume ✅ **Share-Progress-1** (7 Oct). Left: link → receiver card takes several seconds in Safari, and the iPhone 97 MB folder 5–10 s before anything shows — measure first (Network timeline, fresh tab, Mullvad on), own small session. Watch-face A/B for bar + readout (Plex Mono figures, minute-track ticks, hand tip) → with the brand work.
   12. **Folders can't resume** (by design; S-031). Many large videos → zip is `level: 6` (wasted CPU on video); Store-only zip ✅ Share-Upload-5 (`45dde47`: path order, each file's own date + UTC stamp; identical only on the same device timezone); **Share-Folder-Resume-1** (S-031: re-pick the folder, re-zip to the same bytes, check sent parts, carry on) after Share-Progress-1.
 - **Safari page crash on refresh mid-upload (Share-Upload-6):** "This web page was reloaded because a problem occurred" after ⌘R during a 404 MB upload; record survived, resume worked; Rajesh has seen it a few times. Cause unknown (WebKit teardown of a page with a 32 MiB PUT in flight?) → watch; look with the DL track memory work. **Also:** a `/log/error` fires at the end of a download (Share-Upload-5 + 6); capture its payload (Network → `error` → Request) → B12-2 Client errors split.
 - **Write-once chunks** → KV-Audit-Opus / B12-3: also sign `If-None-Match: *` into presigned PUTs so R2 refuses to overwrite an existing chunk (closes "holder of a leaked URL overwrites a chunk with same-size junk for 6 days" → download 409 / DoS, never disclosure). Needs a live R2 gate (like B12-1b) and `upload.js` treating 412 as success on resume retries (saves the re-upload).
