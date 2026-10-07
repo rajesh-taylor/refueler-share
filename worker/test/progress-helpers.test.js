@@ -52,6 +52,14 @@ describe('makeRateMeter', () => {
     for (let t = 11_000; t <= 30_000; t += 1000) m.add(1e6 + (t - 10_000) * 1000, t);   // then 1 MB/s
     expect(m.left(30e6, 30_000)).toBe('about 30 s left');
   });
+  it('holds a figure for 2 s so the line doesn\'t keep changing', () => {
+    const m = makeRateMeter();
+    m.add(0, 0); m.add(5e6, 5000);
+    expect(m.left(60e6, 5000)).toBe('about 1 min left');
+    m.add(15e6, 6000);                                    // much faster now
+    expect(m.left(20e6, 6000)).toBe('about 1 min left');  // held
+    expect(m.left(20e6, 7000)).not.toBe('about 1 min left');
+  });
   it('starts again after a step back or a reset', () => {
     const m = makeRateMeter();
     m.add(0, 0); m.add(10e6, 10_000);

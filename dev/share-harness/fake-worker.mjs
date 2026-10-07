@@ -1,6 +1,6 @@
 // Fake Share Worker for the Share-Upload-2 preview harness. In-memory, localhost only.
 // Real credential signing (worker/src/nut00.js) so the browser's DLEQ check passes.
-// Control: GET /_ctl?fail=<issue|initiate|chunk:N|drop:N|finalise|finalise409|wrong_size|none>&slow=<ms per chunk>&rate=<MB/s>
+// Control: GET /_ctl?fail=<issue|initiate|chunk:N|drop:N|finalise|finalise409|wrong_size|none>&slow=<ms per chunk PUT, and before each download's first byte>&rate=<MB/s>
 // rate: chunk PUTs and downloads move at that speed, so byte progress shows (Share-Progress-1).
 // drop:N: part N's PUT or download is cut halfway once, then works (Chrome re-sends a cut PUT by itself).
 // down:N: part N's PUT and download answer 503 until fail changes — the page's retry line shows.
@@ -94,6 +94,8 @@ http.createServer(async (req, res) => {
     if (p[0] === 'download') {
       const t = T.get(p[1]); if (!t) return json(res, 410, { error: 'gone' });
       if (ctl.fail === 'down:' + +p[2]) return json(res, 503, { error: 'unavailable' });
+      console.log(`GET part ${p[2]} ${Date.now() % 100000}`);
+      if (ctl.slow) await sleep(ctl.slow);   // like the Worker: whole part read and checked before the first byte
       const b = t.chunks[+p[2]]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,
         'X-Integrity': 'ciphertext-storage-verified', 'X-Chunk-Index': p[2], 'Access-Control-Expose-Headers': 'X-Integrity, X-Chunk-Index' });
       if (t.dad && +p[2] === t.total - 1) setTimeout(() => T.delete(p[1]), 2000);
