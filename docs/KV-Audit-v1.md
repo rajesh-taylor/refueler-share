@@ -116,7 +116,7 @@ MAC input follows the B12-SR encoding rule: `utf8(tag) ‖ 0x00 ‖ fixed-length
 
 ## 5. What Sonnet builds — by session
 
-**KV-Fix-1a** (Sonnet, ~1 session, now; Worker + refueler.io `status.njk`, a refueler.io-owned file, not mirrored)
+**KV-Fix-1a ✓ 8 Oct 2026** (deploy `318772eb`; Sonnet, ~1 session, now; Worker + refueler.io `status.njk`, a refueler.io-owned file, not mirrored)
 1. Status page: the rendering fix in the private note (P1); `/admin/status` validates the incident shape; `/status` serves known fields only. Live check as the private note describes.
 2. `requireAdmin()` with `timingSafeEqual`, used by every admin handler (one call site per route; grep in the session log).
 3. Finalise → 409 when `manifest.upload_complete === true`.

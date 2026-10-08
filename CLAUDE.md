@@ -67,7 +67,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - DO NOT edit inline CSS/JS in `src/index.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
 - **Sovereign storage cap: 100 GB. Locked TH-Opus-1.**
-- **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.**
+- **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.** Target, not live: until B12-4a every upload gets the free cap, so API issue and capabilities report `CHARTERED_CAP_BYTES` (`manifest.js`, = free cap). Never promise 250 GB before then (KV-Fix-1a).
 - **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
 - **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
 - **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.

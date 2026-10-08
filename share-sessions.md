@@ -441,19 +441,11 @@ Full narrative: git history before Share-Upload-4.
 
 Full narrative: git history before Share-Folder-Resume-1 (Share-Upload-2: before Share-Crypto-1; Share-Upload-3/4: before Share-Upload-7; Share-Upload-5: before Share-Progress-1 close; Share-Upload-6 + Share-Crypto-Opus-1: before Share-Folder-Resume-1 close; Share-Crypto-1 + Share-Upload-7: before B12-2 close).
 
-## Share-Progress-1 (7 Oct 2026) — progress on both pages, retries, one-box resume · shipped `93bde7d` (refueler.io `cdfa257`) · `a6ac30b` (`dd6f70e`) · `dad6a6a` (`9408925`) · `c6ea396` (`1b2c78e`) + pre-ship `a794462`, `73bfedf`, `82bd14f`
+## Share-Progress-1 (7 Oct 2026) — compact (compacted KV-Fix-1a)
 
-**Start:** no problems since Share-Upload-7; 2 h budget, then Rajesh lifted it. Mock artifact approved: setup steps as one changing line (option A), Safari download 90/10 (review in a month), drop line "Connection lost. Trying again in N s." with no wait over 10 s (Rajesh: a minute is agony), one-box resume.
-**Upload (`93bde7d`):** part PUT by XHR (`upload.onprogress`; browser sets Content-Length, so the B12-1c signature matched live); stall timer (60 s without progress) instead of 60 s per part; readout: Getting an upload pass… · Setting up the transfer… · Encrypting… · bytes · Checking every part arrived…; a retry steps the bar back to the last part that arrived.
-**Retries:** `RETRY_DELAYS_MS` 2, 5, then 10 s × 11 (14 tries, ≈2 min), early on the browser's `online` event — upload and both download paths. Safari/iPhone downloads had no retry at all before. Chrome silently re-sends a PUT cut on a reused connection, so short blips never reach the page.
-**Download (`93bde7d` + `a6ac30b`):** parts read by `res.body.getReader()`; "Connecting…" until the first bytes; Safari path 0–90 % download, 90–100 % "Decrypting…". Rajesh saw the % stop at every 32 MB: the Worker reads and checks a whole part before its first byte. Now the next part is asked for when the one before starts arriving (≤4 held, 128 MiB on the stream path); part 0 first; on a DAD link the last part only after every earlier one has fully arrived (serving it starts the deletion — `finishDownload`).
-**Calm (`dad6a6a` + `c6ea396`, Rajesh):** DM Sans as loaded has no tabular figures (measured), so the line jiggled. `makeSteadyProgress`: bar and % climb at the measured speed, never past the real bytes, a burst caught up over ~2 s; words every 2 s in whole MB (`362 MB of 404 MB`), time left every 5 s in 10 s steps, none while waiting; only the changing amount and the time left fade (`.rx-fade`, the arrival easing). Bar moves in tenths.
-**Resume:** card only, headline "Interrupted · An upload didn’t finish."; Discard → normal page. Line "If this tab closes, come back to this page to resume." removed (confusing; folders can't resume) — ships with the close.
-**New exports (`crypto.js`):** `RETRY_DELAYS_MS`, `waitForRetry`, `timeLeftText`, `makeRateMeter`, `progressBytesText`, `setCalmText`, `setProgressWords`, `makeSteadyProgress`. DOM: + `progress-drop`, `dl-drop`; − `resume-title`, `progress-note`. No new headers, mirrored files or Worker change.
-**Tests:** `worker/test/progress-helpers.test.js` (9) · part-crypto 31 · resume 45. Harness fake Worker: `rate=` (MB/s), `slow=` also delays each download's first byte, `drop:N`, `down:N` (503 until cleared).
-**Rajesh live ✓ (Safari, Mac, Mullvad on):** 404 MB upload, ⌘R at 32 % → one box → carried on; download SHA-256 matched the original (`39d7a8ff…2a1fb4a0`) twice; Wi-Fi off/on mid-upload and mid-download recovered (a download drop can fall back to 0 %: cut parts restart whole, no Range on verified transfers). Not checked: iPhone.
-**Found → backlog:** link → receiver card takes several seconds in Safari (measure with the Network timeline; likely the same as the iPhone 5–10 s); watch-face A/B for the bar and readout (Plex Mono figures, minute-track ticks, hand tip) at the brand work.
-**Next:** Share-Folder-Resume-1 (8 Oct morning) → B12-2 (refueler-io) → KV-Audit-Opus. MCP-Fix-1 (adopts v2) week of 12 Oct.
+| Session | Commit | Summary |
+|---|---|---|
+| Share-Progress-1 · 7 Oct | `93bde7d` · `a6ac30b` · `dad6a6a` · `c6ea396` (+ pre-ship `a794462`, `73bfedf`, `82bd14f`) | Progress on both pages, retries ≤ 10 s, overlapped downloads, one-box resume. Full narrative in git history. |
 
 ## Share-Folder-Resume-1 (7–8 Oct 2026) — interrupted folder uploads continue (S-031) · shipped `a783656` (refueler.io `014ddc1`) + pre-ship `b942bd7`
 
@@ -485,3 +477,18 @@ Full narrative: git history before Share-Folder-Resume-1 (Share-Upload-2: before
 **Live today:** a status-page rendering hole on the Share origin (high, small); test flag also skips the expiry ceiling. **Latent:** Chartered initiate debits the pool a plain header names; DLQ entries get signed with the client's real whsec; `wh_config_` URL not re-checked at delivery. **Broken:** API webhooks/receipts never fire; onboarding runbook writes an unusable record; sandbox issue likely unreachable (unverified).
 **Sessions:** KV-Fix-1a → KV-Fix-1b → (MCP-Fix-1) → KV-Fix-2 (precondition of B12-3) → API-Repair-1 (before first Chartered client). B8-Opus: Locke-set MAC. B7: Lightning rebuild, `btc_ref_rate` MAC before pricing.
 **Next:** KV-Fix-1a.
+
+## KV-Fix-1a (8 Oct 2026) — status-page hole closed + small KV-Audit items · deploy `318772eb` · refueler.io `8fd9fdb`
+
+**Start:** 3 h budget; all seven items approved before code.
+**Status page (P1):** refueler.io `status.njk` — severity from a fixed list, never interpolated; times must be integers, updates an array. Worker `status_shape.js` `cleanStatus()`: `/admin/status` strict (400 on bad incident shape, caps, unknown keys dropped, stored value re-cleaned on write); `/status` lenient (known fields only, bad incidents dropped). Navy Office's `"false"` toggle still accepted.
+**requireAdmin():** `utils.js`, SHA-256 both sides then `crypto.subtle.timingSafeEqual`; missing `ADMIN_KEY` fails closed. Replaces all 26 checks in 16 files (incl. sandbox's hand-rolled loop, news-events `isAdmin`). Grep proof: `grep -rn "ADMIN_KEY" worker/src` → only `utils.js:172` (inside `requireAdmin`). `/admin/patch-merkle-root` wrong key now 401 (was 403).
+**Finalise:** 409 `already_complete` when `upload_complete === true`, before any write.
+**root_verified:** `kvmac.js` — `KV_MAC_KEY` (new secret, Rajesh) → HKDF-SHA256 (empty salt, info `refueler.share.kvmac.rootv.v1` ‖ 0x00) → HMAC over tag ‖ 0x00 ‖ uuid16 ‖ merkle_root32, stored `{v:1, mac}`. Legacy `'1'`, forged, moved or stale values = absent → reconstruct. No secret → never trusted, never written. KAT computed independently with Node `hkdfSync` + `createHmac`.
+**Lightning:** `/subscription/lightning`, `/subscription/lightning/status`, `/webhook/lightning`, `lightning.js`, `lightning-routes.js` + 2 test files deleted (B7 rebuilds). `lightning_available` status field kept (Navy Office).
+**Capabilities:** `webhook: false`, `receipts: false` (until API-Repair-1). `CHARTERED_CAP_BYTES` (`manifest.js`, = `TIER_CAPS.free`) feeds API issue `allocation_bytes` and capabilities `max_file_size_gb` (4). For MCP-Fix-1: MCP spec §7.1 `max_transfer_bytes: 250000000000` (both copies), `refueler-mcp/test/capabilities.test.js` fixture. README Chartered row + CLAUDE.md cap line corrected.
+**Client-error log:** UUIDs in `path` and `msg` written as `{uuid}`.
+**Tests:** `worker/test/kv_fix_1a.test.js` 27; `btc_rate.test.js` cap 250 → 4. Suite per file (Mullvad on): 31 files, 634 passed (`b12-1d` loopback flake once, passed on rerun).
+**Live ✓:** `/status` known fields only; Lightning routes 404; admin no/wrong key 401; refueler.io/share/status/ serves the new code, renders, no console errors. Rajesh: bogus severity → 400 with the shape message; `lightning_available:"false"` → 200. Optional KV-forge read check not run (not approved).
+**Next:** KV-Fix-1b → MCP-Fix-1 (week of 12 Oct) → KV-Fix-2 → API-Repair-1.
+

@@ -78,7 +78,7 @@ The Worker stores encrypted bytes. It has no key.
 | **Pro Bono** | — | 4 GB | 7 days | Live |
 | **Citizen** | Registered (Stripe) | 100 GB | 7 / 30 / 90 days | Account sign-in in build (B12) |
 | **Sovereign** | Bearer (Lightning) | 100 GB | 7 / 30 / 90 days | Needs Lightning (B7) |
-| **Chartered** | Registered or Bearer | 250 GB + overage | 90 days | Registered-rail API live; Bearer with B7 |
+| **Chartered** | Registered or Bearer | 250 GB + overage (4 GB until account sign-in) | 90 days | Registered-rail API live; Bearer with B7 |
 
 Until Citizen sign-in ships, web uploads run on Pro Bono limits. Registered users will sign in with a single-use email link and a secure session; the tier comes from that session, never from anything the browser claims.
 
