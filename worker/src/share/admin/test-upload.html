@@ -251,7 +251,7 @@ function randomChunk(size) {
 
 // ─── Cashu blinded message (NUT-00, as crypto.js generateBlindedCredential) ──
 // /admin/test-credential signs it; /initiate does not verify a test credential's
-// proof, so the signature is not unblinded here.
+// proof (the X-Test-Credential header selects the bypass), so it is not unblinded here.
 function blindedMessage() {
   const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)),
                             b => b.toString(16).padStart(2, '0')).join('');
@@ -442,7 +442,9 @@ $('btnStart').addEventListener('click', async () => {
 
     const cred = await credRes.json();
     ({ uuid } = cred);
-    const { issued_tier, commitment, allocation_bytes, signed_point, mint_pubkey } = cred;
+    const { issued_tier, commitment, allocation_bytes, signed_point, mint_pubkey, test_credential } = cred;
+    // KV-Fix-1b: the MAC'd X-Test-Credential is the only thing /initiate's bypass accepts.
+    if (typeof test_credential !== 'string') { emit('Error: Worker returned no test_credential header value (pre-KV-Fix-1b Worker?)', 'err'); return; }
 
     emit(`   UUID         : ${uuid}`, 'ok');
     emit(`   Issued tier  : ${issued_tier}`, 'ok');
@@ -454,7 +456,8 @@ $('btnStart').addEventListener('click', async () => {
     // ── Step 2: initiate ──────────────────────────────────────────────────────
     emit('\n[2/5] Initiating transfer…', 'head');
 
-    const expiryTs = Math.floor(Date.now() / 1000) + 90 * 24 * 3600;
+    // KV-Fix-1b: test credentials obey the normal 7-day expiry ceiling; soaks use 2 days.
+    const expiryTs = Math.floor(Date.now() / 1000) + 2 * 24 * 3600;
 
     const initiateRes = await fetch(`${workerUrl}/upload/${uuid}/initiate`, {
       method: 'POST',
@@ -467,6 +470,7 @@ $('btnStart').addEventListener('click', async () => {
         'X-Expiry-Timestamp':      String(expiryTs),
         'X-Credential-Commitment': commitment,
         'X-Issued-Tier':           issued_tier,
+        'X-Test-Credential':       test_credential,
         'X-File-Name':             'soak-test-payload',
       },
     });
