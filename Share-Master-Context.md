@@ -189,7 +189,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
  
 See `CLAUDE.md` §Known broken for the full authoritative list. Key items not duplicated in CLAUDE.md:
  
-- DO NOT write quota write-back synchronously — fire-and-forget KV put
+- DO NOT write quota write-back synchronously — fire-and-forget KV put *(retires at KV-Fix-2: the Supabase spend RPC is the write and is awaited)*
 - DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset
 - DO NOT use `blake3` npm package — `@noble/hashes/blake3.js` only
 - DO NOT import `@noble/hashes/blake3` without `.js` extension
@@ -198,20 +198,20 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 - DO NOT run `npm publish` in a session — dry-run only; Rajesh publishes manually
 - DO NOT re-chase "finalise rejects the opaque session token (HMAC)" — false; `finalise.js` byte-compares vs KV like `handleUploadUrls`; fresh uploads finalise 200. Live-verified 20–21 Sep.
 - **B12-SR (24 Sep 2026) — do-not-retry** (the other B12-SR locks live in CLAUDE.md):
-  - DO NOT let any KV value authorise access, lift a limit, or select a privileged branch unless it is MAC'd under a Worker secret. KV is compromised for **write** as well as read (X1). Live offenders pending the KV audit: `test_credential:{uuid}` flag, `api_quota_*`, the `rfs_live_` → org mapping, B8 Locke pubkey set.
+  - DO NOT let any KV value authorise access, lift a limit, or select a privileged branch unless it is MAC'd under a Worker secret. KV is compromised for **write** as well as read (X1). Audited KV-Audit-Opus (8 Oct, `docs/KV-Audit-v1.md`): fixes in KV-Fix-1a/1b, KV-Fix-2, API-Repair-1; B8 Locke set → B8-Opus.
   - DO NOT persist `size_bytes` in `dock_index` (X4 — fixed in B12-1).
 - DO NOT re-chase "Worker omits CORS on `/download`" — false; `index.js` wraps every download response (+500 catch) in `addCors`, OPTIONS → 204+CORS. curl confirmed ACAO on the "failing" chunk. Browser-side "CORS/503" download failures were **Brave** + intermittent 503s on the custom hostname before 6-6b (a 503 carries no CORS header); Safari downloads cleanly.
 ---
  
 ## Current state
  
-**B12-2 ✓ (8 Oct 2026) — Navy Office: Client errors split into real failures / quiet Expected events with plain explanations per code (headline follows the tab; Worker log states its real coverage); Storage & Billing row from new `GET /admin/storage` (R2 aggregates only, 500 GiB budget, ≈ monthly cost); nudge badge retired; Sign out in the header. Worker: per-code AE counts, bot 404s + BTC 503s out of the KV log, dead bytes query gone. Frontend: one `upload_stopped:<kind>` per stop, dead A/B ping removed. Next: KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Folder-Resume-1 ✓ (8 Oct 2026) — interrupted folder uploads continue: the record keeps a folder print (`crypto.js` `folderPrint`: name, file count, `list` = paths + sizes + dates, `local` = the zip's local-time date fields); re-pick → print check before reading a byte (different folder / changed / time zone, each a plain sentence) → re-zip (`zipFolder`, moved to `crypto.js`) → every sent part re-encrypted and checked → rest sent. Resume copy says "continue"; buttons "Choose file" / "Choose folder". Shipped `a783656` (refueler.io `014ddc1`) + pre-ship `b942bd7`. Rajesh live ✓ Safari Mac (Mullvad on, 427 MB, refresh at 86 %, unzipped download identical to the original, dates kept; DAD link gone after) and iPhone 13 mini (On My iPhone root, refresh at 36 %, re-pick → continued from 29 %). Next: B12-2 (refueler-io) → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Progress-1 ✓ (7 Oct 2026) — progress, retries ≤10 s, overlapped downloads, one-box resume.**
+**KV-Audit-Opus ✓ (8 Oct 2026) — every STATUS_KV prefix audited against X1 (`docs/KV-Audit-v1.md`; attack detail in `refueler-share-private/KV-Audit-v1-detail.md` until fixed). 20 prefixes: 11 fine, 5 MAC, 3 families to Supabase, Lightning code deleted. Live: one status-page rendering hole on the Share origin (high, small fix) and the test-credential flag. Next: **KV-Fix-1a** → KV-Fix-1b → MCP-Fix-1 (week of 12 Oct); KV-Fix-2 before B12-3; API-Repair-1 before the first Chartered client.** **B12-2 ✓ (8 Oct 2026) — Navy Office: Client errors split into real failures / quiet Expected events with plain explanations per code (headline follows the tab; Worker log states its real coverage); Storage & Billing row from new `GET /admin/storage` (R2 aggregates only, 500 GiB budget, ≈ monthly cost); nudge badge retired; Sign out in the header. Worker: per-code AE counts, bot 404s + BTC 503s out of the KV log, dead bytes query gone. Frontend: one `upload_stopped:<kind>` per stop, dead A/B ping removed. Next: KV-Audit-Opus; MCP-Fix-1 week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Folder-Resume-1 ✓ (8 Oct 2026) — interrupted folder uploads continue: the record keeps a folder print (`crypto.js` `folderPrint`: name, file count, `list` = paths + sizes + dates, `local` = the zip's local-time date fields); re-pick → print check before reading a byte (different folder / changed / time zone, each a plain sentence) → re-zip (`zipFolder`, moved to `crypto.js`) → every sent part re-encrypted and checked → rest sent. Resume copy says "continue"; buttons "Choose file" / "Choose folder". Shipped `a783656` (refueler.io `014ddc1`) + pre-ship `b942bd7`. Rajesh live ✓ Safari Mac (Mullvad on, 427 MB, refresh at 86 %, unzipped download identical to the original, dates kept; DAD link gone after) and iPhone 13 mini (On My iPhone root, refresh at 36 %, re-pick → continued from 29 %). Next: B12-2 (refueler-io) → KV-Audit-Opus; MCP-Fix-1 (adopts v2) week of 12 Oct; `/meta` hard-null from 13 Oct.** **Share-Progress-1 ✓ (7 Oct 2026) — progress, retries ≤10 s, overlapped downloads, one-box resume.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| Share-Progress-1 ✓ | `93bde7d` · `a6ac30b` · `dad6a6a` · `c6ea396` | XHR part PUTs with byte progress; streamed part reads; `RETRY_DELAYS_MS` (≤10 s waits, ~2 min) on all three paths; overlapped downloads; calm readout; one-box resume. 8 new `crypto.js` exports (session log). |
 | Share-Folder-Resume-1 ✓ | `a783656` · `b942bd7` | Folder resume: record `folder` print, re-pick check, re-zip, sent parts re-checked. New `crypto.js` exports `zipFolder`, `zipSize`, `zipDate`, `zipDosTime`, `sortZipEntries`, `folderPrint` (zip code moved from `upload.js`). No new headers or mirrored files. `worker/test/folder-resume.test.js` (7, real fflate) + `dev/share-harness/zip-tz-check.mjs`; 649 worker tests. |
 | B12-2 ✓ | Worker + refueler-share + refueler.io (see session log) | Navy Office: real vs expected client errors with explanations; Storage & Billing from `/admin/storage`; Sign out in header. Frontend: `upload_stopped:<kind>`. |
+| KV-Audit-Opus ✓ | docs only | `docs/KV-Audit-v1.md`: X1 test sharpened (forge / roll back / delete), full prefix table, `KV_MAC_KEY`, KV-Fix-1a/1b · KV-Fix-2 · API-Repair-1 designed. |
  
 ---
  
@@ -222,7 +222,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
 | 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → Share-Progress-1 ✓ → Share-Folder-Resume-1 ✓ → B12-2 ✓ → **KV-Audit-Opus**. |
-| 11b | **Security foundations** — KV-Audit-Opus (+ B8 Locke-set MAC amendment) → KV fixes · X3 naming · X5 dedicated app origin | ❌ | First week after Berlin. Before B8 build. |
+| 11b | **Security foundations** — KV-Audit-Opus ✓ → **KV-Fix-1a** (status page, admin compare, finalise guard, `root_verified` MAC, Lightning code out, capabilities honesty) → **KV-Fix-1b** (S2 test credential) → **KV-Fix-2** (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1** (webhooks/receipts from R2, HMAC'd Chartered initiate) before the first Chartered client. | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
@@ -260,11 +260,8 @@ Swept against the repo on import; only items not already done or recorded elsewh
 
 **Added Share-B12-1d (5 Oct 2026):**
 - **Share-Upload-2 additions — status after Share-Progress-1 (7 Oct):** 1, 2, 10 + iOS folder name done or closed in **Share-Upload-6**; 11 ✅ Share-Progress-1; 5, 7, 8 ✅ **Share-Upload-7** (`c78cc9d`). F-11 + Try again ✅ Share-Upload-4 (`2fb1b30`).
-  1. Resume: button takes 3–6 s to appear after refresh *(not reproduced Share-Upload-6: 0.3–0.5 s in Safari, Mullvad on or off; closed)*; file picker needs two clicks (Safari desktop) *(✅ `bf0512a`, confirmed in Safari desktop by Rajesh)*. Likely cause: `resumeUpload` awaits (`loadDeps`, …) before `input.click()`, so the click loses user activation — open the picker first.
-  2. Resume: pause while sent chunks are re-hashed — ✅ `b1eea41` (record keeps the hashes; re-check only if the file changed).
   3. Download % at ~half → **download track with F-22** (Rajesh, 6 Oct).
   5. `admin/test-upload.html` esm.sh (= F-25) ✅ Share-Upload-7 (+ `noble-secp256k1.js` removed). Left: it prints "4/53 chunks passed" when the verify count exceeds the chunk count (count `verifyIndices.length`) — fold into the next admin-page touch.
-  9. Finalise 409 `wrong_size` → F-11 error states ✅ `2fb1b30` (resends from the first bad part).
   10. "Preparing" 0 % — measured Share-Upload-6: issue 0.64 s + initiate 1.48 s + first-part encrypt 0.56 s, then the first 32 MiB lands before the bar moves → shown by Share-Progress-1. **`/initiate` speed-up** (own Worker session, tests): manifest put + session KV put + presign can run together after the Supabase spend (≈0.3–0.5 s).
   11. Progress + one-box resume ✅ **Share-Progress-1** (7 Oct). Left: link → receiver card takes several seconds in Safari, and the iPhone 97 MB folder 5–10 s before anything shows — measure first (Network timeline, fresh tab, Mullvad on), own small session. Same session: iPhone upload looked stalled for seconds after ~49 % (110 MB, Wi-Fi + Mullvad, Share-Folder-Resume-1 live test) — measure uplink speed vs how iOS Safari reports `upload.onprogress` (lumpy?) before changing anything. Watch-face A/B for bar + readout (Plex Mono figures, minute-track ticks, hand tip) → with the brand work.
   12. Folder resume ✅ **Share-Folder-Resume-1** (S-031, `a783656`). Left: drag the folder back in to resume (desktop only, ≈30–45 min; reuse `readDirectoryEntry` → `_resumeFolder`) — with the slow-link session.
@@ -279,11 +276,15 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **cashu-ts upgrades:** bump `worker/package.json` and `bin/vendor-cashu/package.json` together, then `bin/vendor-cashu.sh` + ship + deploy. Browser and Worker must run the same version.
 - **DLEQ key pin** (B7/B8, anonymous rail): the browser checks the DLEQ proof against the key in the same response, not a pinned key (Rajesh, 5 Oct). Pin when credentials are bought separately from transfers.
 
+**Added KV-Audit-Opus (8 Oct 2026)** — full list `docs/KV-Audit-v1.md` §3, §6:
+- **Decided (Rajesh, 8 Oct):** 1a → 1b → MCP-Fix-1 → KV-Fix-2 → API-Repair-1 · revoked API key ≤ 60 s · live `api_client_` is a test (delete, don't migrate) · Chartered promises the Pro Bono cap until B12-4a (KV-Fix-1a) · **at KV-Fix-2 close: revoke/re-scope every Cloudflare API token with Workers KV Storage:Edit** (`wrangler login` stays).
+- **API webhooks + receipts never fire** (no path writes `dock_index.api_key_hash`); capabilities says they do → KV-Fix-1a flips them false, API-Repair-1 repairs. Absorbs the Share-Size-1 "acceptance receipt never emitted" item.
+- **`ONBOARDING-RUNBOOK.md` Step 3/4 are wrong** (record the Worker can't authenticate; wrong header) → rewritten in KV-Fix-2 around `POST /admin/api-client`.
+- **Write-once chunks** (item below) → B12-3 with the session-token MAC.
+
 **Added Share-Size-1 (6 Oct 2026):**
 - **`/meta` hard-null** (tiny Worker session, from 13 Oct): `total_bytes: null` for every manifest. First check R2 for any manifest still carrying `total_bytes` with a future expiry (soak/test transfers may outlive 7 days). Then drop the `/meta` fallback in `download.js`.
 - **MCP-Fix-1:** send tool adds `z` to the fragment (consumer grammar, `refueler-mcp-spec-v2.md` §7.2).
-- **Acceptance receipt never emitted:** `index.js` says `cargo.accepted` moved to `/finalise`, but `finalise.js` never emits it — only `cargo.discharged` is sent. Contradicts MCP spec (acceptance immediately). → MCP-Fix-1 or the next API session.
-- Navy Office Client errors card + dead "R2 bytes uploaded" ✅ **B12-2** (8 Oct).
 
 **Added Share-Crypto-1 (7 Oct 2026):**
 - **Remove old link format support on or after 12 Jan 2027** (v0/v1 links; small frontend session; brief off-repo). Also MCP-Fix-1 sends link format v2.
@@ -302,7 +303,6 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **S-039/S-040/S-096** `@handle.share` vanity handles / Chartered namespaces: a handle puts transfers "on the register", so Registered/Chartered only; squatting, routing and directory-leak questions open. Not in BRIDGE yet.
 - **S-081** Recipient declaration at link creation: one person (keypair, ≤3 devices) / team (shared secret, counter) / one-time. UI says "access key". Overlaps B8 Mode 2.
 - **S-098** Sovereign size obfuscation: pad the last chunk to a full 32 MiB. Needs an architecture + cost session first.
-- **S-031** True folder resume → build slot Share-Folder-Resume-1 (after Share-Progress-1; store-only zip lands first in Share-Upload-4).
 - **S-103** `cdk-dart` as a future mobile client.
 
 **Resolved on import (repo wins):**
