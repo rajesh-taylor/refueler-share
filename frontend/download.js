@@ -549,8 +549,6 @@ function _finish(willSelfDestruct, domRefs) {
   if (willSelfDestruct) $('rx-done-deleted').hidden = false;   // before the sheet shows: it joins the arrival
   _showSheet('rx-done');
 
-  try { _logReceiverEvent('receiver_ab_downloaded', sessionStorage.getItem('rs-usp-variant') || 'unknown'); } catch {}
-
   _showNotesCard(domRefs.dlSignoff);
 }
 
@@ -895,14 +893,4 @@ function _showLinkInactive(_domRefs) {
 // No progress figures on an error (DAD-ERROR-TEXT, Share-B10-3): the notice sheet has none.
 function _showDownloadError(msg, _domRefs) {
   _showNotice('Stopped', 'The download stopped.', msg);
-}
-
-function _logReceiverEvent(event, variant) {
-  try {
-    fetch(`${WORKER_URL}/log/error`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context: 'receiver_ab', message: String(event).slice(0, 64), detail: `variant:${variant}`, ts: Date.now() }),
-    }).catch(() => {});
-  } catch {}
 }

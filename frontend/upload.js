@@ -966,10 +966,10 @@ function _stopText(e, job) {
 }
 
 function _stopped(e, job, domRefs, state, helpers) {
-  if (!(e instanceof UploadStop)) {
-    helpers.reportError('upload_stopped', e?.name || 'Error', String(e?.message || '').slice(0, 160));
-    e = new UploadStop('browser', e?.message);
-  }
+  if (!(e instanceof UploadStop)) e = new UploadStop('browser', `${e?.name || 'Error'}: ${e?.message || ''}`);
+  // B12-2: one line per stop, whatever the kind — Navy Office counts these as the
+  // real failures; the per-try lines before it are retries or detail.
+  helpers.reportError(`upload_stopped:${e.kind}`, String(e.message || '').slice(0, 160), job ? `uuid:${job.uuid.slice(0, 8)}` : '');
   if (e.kind === 'gone' || e.kind === 'changed') {
     if (job) clearResumeState(job.uuid, helpers.reportError).catch(() => {});
     helpers.showStopped(e.kind === 'changed' ? (job?.folder ? NOT_SAME_FOLDER : NOT_SAME_FILE) : NO_RESUME);
