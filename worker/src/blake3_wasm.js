@@ -49,6 +49,8 @@ import {
   hash,
   __wbindgen_init_externref_table,
 } from '../blake3-wasm/blake3_wasm_bg.js';
+import incrModule from '../blake3-wasm-incr/blake3_js_bg.wasm';
+import initIncr, { create_hasher } from '../blake3-wasm-incr/blake3_js.js';
 
 // Instantiate synchronously, once, at module scope. The single import the binary
 // declares is the externref-table initialiser exported by the bg.js glue.
@@ -68,4 +70,46 @@ __wbg_set_wasm(instance.exports);
  */
 export function hashOneShot(bytes) {
   return hash(bytes);
+}
+
+// ── Streaming BLAKE3 (Safari-Slow-Link-1) ────────────────────────────────────
+// The bundle above is one-shot only, so hashing a part meant holding all of it.
+// hashStream() hashes a part as it is read and keeps nothing: the same BLAKE3,
+// from blake3-wasm 2.1.5's web build, vendored unchanged in ../blake3-wasm-incr/
+// (byte-identical to frontend/blake3/dist/wasm/web — the bundle the browser
+// already hashes with). Its glue instantiates asynchronously, so it starts on
+// first use, once per isolate; a failed start is retried on the next call.
+
+let incrReady = null;
+const incrInit = () => (incrReady ??= initIncr(incrModule).catch((e) => { incrReady = null; throw e; }));
+
+/**
+ * BLAKE3-256 over everything a ReadableStream yields, piece by piece.
+ * Memory: one piece at a time, never the whole stream. Throws if the stream errors.
+ *
+ * @param {ReadableStream<Uint8Array>} stream  e.g. an R2 object body
+ * @returns {Promise<Uint8Array>} 32-byte digest
+ */
+export async function hashStream(stream) {
+  await incrInit();
+  const hasher = create_hasher();
+  try {
+    const reader = stream.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hasher.update(value);
+    }
+    const out = new Uint8Array(32);
+    hasher.digest(out);
+    return out;
+  } finally {
+    hasher.free();
+  }
+}
+
+/** Test hook: bytes of the streaming hasher's WASM memory (0 before first use). */
+export async function incrHeapBytes() {
+  const wasm = await incrInit();
+  return wasm.memory.buffer.byteLength;
 }

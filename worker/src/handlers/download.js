@@ -22,7 +22,7 @@
  *
  * Share-B10-3 — fix for false 409 under load on large transfers:
  *   Root of the bug: reconstructAndCheckRoot() was called on every chunk request.
- *   For transfers >128 chunks (>4 GiB, streaming path), the noble tree over N
+ *   For transfers >128 chunks (>4 GiB), the noble tree over N
  *   leaves exhausted cpu_ms under concurrent load, causing the try/catch inside
  *   reconstructAndCheckRoot to catch the CPU-kill and return integrity_failed —
  *   a false 409 with no actual tamper event. Fix: replaced reconstructAndCheckRoot()
@@ -32,7 +32,7 @@
  *     - caches the result as KV flag `root_verified:{uuid}` (TTL = transfer expiry);
  *     - on subsequent chunks: reads the sidecar from R2 (always needed for step 4),
  *       sees the KV flag, and skips reconstruction entirely.
- *   Security: verifyChunkBody (step 4) still runs on every chunk. The root check
+ *   Security: verifyChunkStream (step 4) still runs on every chunk. The root check
  *   defends against sidecar tampering; by caching it we accept that subsequent
  *   chunks rely on a proof established on the first request. An adversary who can
  *   write to R2 and patch both a chunk and its sidecar entry would evade step 3
@@ -83,8 +83,7 @@ import { destroyTransfer } from './delete_transfer.js';
 import {
   isVerifiedPath,
   readSidecarWithRootCheck,
-  verifyChunkBody,
-  VERIFY_INLINE_CHUNK_THRESHOLD,
+  verifyChunkStream,
 } from './download_verify.js';
 
 // Local AE writer — mirrors index.js logEvent's data-point shape exactly, so
@@ -186,36 +185,58 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
       return err(400, 'Invalid chunk index');
     }
 
+    // Safari-Slow-Link-1: verify, then stream — the Worker never holds a part.
+    // Read 1 hashes the stored bytes as they pass and keeps none of them. On a
+    // match, read 2 streams the same object (etagMatches: one that changed between
+    // the reads is refused) straight to the recipient. No byte leaves before the
+    // part verifies, at any size. Was: each whole 33.5 MB part buffered plus a WASM
+    // copy; a browser's 4 parts in flight passed the 128 MB isolate limit and every
+    // request on the isolate was reset together ("Network connection lost.").
+    let first;
+    try {
+      first = await env.BUCKET.get(key);
+    } catch (e) {
+      console.error('verified chunk GET failed:', e);
+      return err(502, 'Chunk unavailable');
+    }
+    if (!first) return err(404, 'Chunk not found');
+
+    let match;
+    try {
+      match = await verifyChunkStream(first.body, sidecar, chunkIndex);
+    } catch (e) {
+      console.error('verified chunk read failed:', e);
+      return err(502, 'Chunk unavailable');
+    }
+    if (!match) {
+      logEvent(env, { endpoint: 'download', status: 409, chunkIndex, errorMsg: 'chunk_hash_mismatch' });
+      return json({ error: 'integrity_failed', chunk: chunkIndex }, 409);
+    }
+
     let obj;
     try {
-      obj = await env.BUCKET.get(key);
+      obj = await env.BUCKET.get(key, { onlyIf: { etagMatches: first.etag } });
     } catch (e) {
       console.error('verified chunk GET failed:', e);
       return err(502, 'Chunk unavailable');
     }
     if (!obj) return err(404, 'Chunk not found');
-
-    const baseHeaders = {
-      'Content-Type':    'application/octet-stream',
-      'Cache-Control':   'private, no-store',
-      'X-Transfer-UUID': uuid,
-      'X-Chunk-Index':   String(chunkIndex),
-      'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
-      'X-Integrity':     'ciphertext-storage-verified',
-    };
-
-    if (chunkCount <= VERIFY_INLINE_CHUNK_THRESHOLD) {
-      const bytes = new Uint8Array(await obj.arrayBuffer());
-      if (!verifyChunkBody(bytes, sidecar, chunkIndex)) {
-        logEvent(env, { endpoint: 'download', status: 409, chunkIndex, errorMsg: 'chunk_hash_mismatch' });
-        return json({ error: 'integrity_failed', chunk: chunkIndex }, 409);
-      }
-      const dlResponse = new Response(bytes, { status: 200, headers: baseHeaders });
-      return finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse);
+    if (!obj.body) {   // onlyIf failed: the object changed after it verified
+      logEvent(env, { endpoint: 'download', status: 409, chunkIndex, errorMsg: 'chunk_changed_between_reads' });
+      return json({ error: 'integrity_failed', chunk: chunkIndex }, 409);
     }
 
-    const verifyingStream = makeVerifyingStream(obj.body, sidecar, chunkIndex, env, uuid);
-    const dlResponse = new Response(verifyingStream, { status: 200, headers: baseHeaders });
+    const dlResponse = new Response(obj.body, {
+      status: 200,
+      headers: {
+        'Content-Type':    'application/octet-stream',
+        'Cache-Control':   'private, no-store',
+        'X-Transfer-UUID': uuid,
+        'X-Chunk-Index':   String(chunkIndex),
+        'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
+        'X-Integrity':     'ciphertext-storage-verified',
+      },
+    });
     return finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse);
   }
 
@@ -240,53 +261,6 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
 
   const dlResponse = new Response(obj.body, { status, headers });
   return finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse);
-}
-
-// ── Streaming verify-then-flush for large (> threshold) verified transfers ────
-function makeVerifyingStream(sourceBody, sidecar, i, env, uuid) {
-  const chunks = [];
-  const reader = sourceBody.getReader();
-  return new ReadableStream({
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-        if (done) {
-          let total = 0;
-          for (const c of chunks) total += c.length;
-          const joined = new Uint8Array(total);
-          let off = 0;
-          for (const c of chunks) { joined.set(c, off); off += c.length; }
-          if (!verifyChunkBody(joined, sidecar, i)) {
-            logEventStatic(env, 409, i, 'chunk_hash_mismatch_stream');
-            controller.error(new Error('integrity_failed'));
-            return;
-          }
-          controller.close();
-          return;
-        }
-        chunks.push(value);
-        controller.enqueue(value);
-      } catch (e) {
-        controller.error(e);
-      }
-    },
-    cancel(reason) {
-      try { reader.cancel(reason); } catch { /* noop */ }
-    },
-  });
-}
-
-function logEventStatic(env, status, chunkIndex, errorMsg) {
-  if (!env.AE) return;
-  try {
-    env.AE.writeDataPoint({
-      blobs:   ['download', 'free', errorMsg, ''],
-      doubles: [0, status, chunkIndex, 0, 0],
-      indexes: ['download'],
-    });
-  } catch (e) {
-    console.error('AE write failed:', e);
-  }
 }
 
 // ── Shared tail: DAD destruction + pending_destruction flip + cargo.discharged receipt ──

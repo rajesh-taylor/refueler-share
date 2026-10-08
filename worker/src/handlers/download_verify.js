@@ -47,7 +47,7 @@
  *   check is untouched. Security trade documented in download.js.
  */
 
-import { hashOneShot } from '../blake3_wasm.js';
+import { hashOneShot, hashStream } from '../blake3_wasm.js';
 import { reconstructRoot, TREE_ALGO } from '../merkle.js';
 import { deriveKvMacKey, makeRootVerifiedValue, checkRootVerifiedValue } from '../kvmac.js';
 
@@ -58,15 +58,11 @@ const DIGEST_LEN = 32;
 // transfer. The value is '1' — presence is the signal, content is irrelevant.
 const ROOT_VERIFIED_PREFIX = 'root_verified:';
 
-// Hybrid failure-mode threshold (founder decision, this session): at or under
-// this many chunks the verified path buffers each whole chunk, hashes it, and
-// releases it only on match — a clean 409 is always possible because no byte is
-// on the wire until the chunk verifies. Above it, the large-file path streams
-// with inline verify-then-abort (a mid-stream mismatch truncates the connection;
-// a clean status is impossible once bytes are flushed). Free tier = 128 chunks
-// (4 GiB @ 32 MiB), so essentially every consumer transfer gets the clean 409.
-// Named + tunable so the Share-6-6 250 GB soak can retune without a code hunt.
-export const VERIFY_INLINE_CHUNK_THRESHOLD = 128;
+// Safari-Slow-Link-1: one download path for every size. The ≤128-chunk buffer
+// path and the >128 stream-then-abort path (VERIFY_INLINE_CHUNK_THRESHOLD) are
+// gone: download.js hashes each part as it is read (verifyChunkStream), then
+// streams a second read of the same object. Every part now verifies before its
+// first byte, so every mismatch is a clean 409.
 
 // ── Gate predicate ───────────────────────────────────────────────────────────
 // Per-manifest, NOT a global flag (session brief: "gate switch = per-manifest
@@ -339,4 +335,19 @@ export function verifyChunkBody(chunkBytes, sidecar, i) {
   const expected = sidecar.subarray(i * DIGEST_LEN, (i + 1) * DIGEST_LEN);
   const actual = hashOneShot(chunkBytes); // 32-byte digest over the stored bytes (WASM)
   return ctEqualBytes(actual, expected);
+}
+
+/**
+ * verifyChunkBody over a stream: hashes the stored bytes as they are read
+ * (hashStream), holding none of them. Same digest, same comparison.
+ * Throws if the stream errors (the caller answers 502, retryable).
+ *
+ * @param {ReadableStream<Uint8Array>} stream  body of {uuid}/{iiii}
+ * @param {Uint8Array} sidecar  the full decoded sidecar
+ * @param {number} i            chunk index
+ * @returns {Promise<boolean>}  true iff the digest equals sidecar[i]
+ */
+export async function verifyChunkStream(stream, sidecar, i) {
+  const expected = sidecar.subarray(i * DIGEST_LEN, (i + 1) * DIGEST_LEN);
+  return ctEqualBytes(await hashStream(stream), expected);
 }

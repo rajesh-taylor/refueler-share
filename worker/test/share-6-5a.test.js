@@ -30,7 +30,6 @@ import {
   verifyChunkBody,
   b64urlToBytes,
   ctEqualBytes,
-  VERIFY_INLINE_CHUNK_THRESHOLD,
 } from '../src/handlers/download_verify.js';
 
 // ── Fixture helpers (NOT production code) ────────────────────────────────────
@@ -231,9 +230,6 @@ describe('6-5a §pins', () => {
   it('tree_algo pin flows through from merkle.js', () => {
     expect(TREE_ALGO).toBe('rfc6962-unbalanced-blake3-v1');
   });
-  it('hybrid threshold is the free-tier chunk ceiling (128)', () => {
-    expect(VERIFY_INLINE_CHUNK_THRESHOLD).toBe(128);
-  });
 });
 
 // ── Integration — Worker harness (npm run test:integration, wrangler dev --local) ──
@@ -247,7 +243,7 @@ describe.skip('download handler — Worker harness (6-5a)', () => {
   it('sidecar length-mismatch: GET → 409 {"error":"integrity_failed"}, no chunk body served');
   it('root-mismatch (manifest root ≠ reconstructed): GET → 409 {"error":"integrity_failed"}');
   it('single-chunk tamper at i (≤128): buffered path → 409 {"error":"integrity_failed","chunk":i}; chunks 0..i-1 already served 200; AE logged; R2 object NOT deleted');
-  it('single-chunk tamper at i (>128): streamed path → connection truncates mid-body; AE logged; object NOT deleted');
+  it('single-chunk tamper at i (>128): same verify-first path since Safari-Slow-Link-1 → clean 409 (test/slow-link-1.test.js)');
   it('Range header on a verified transfer → 416 (no partial "verified" 206)');
   it('pre-6-3 manifest (no merkle_root): legacy serve → 200, NO sidecar read, NO 409, Range still 206');
   it('mismatch does NOT touch date-seal.ots.enc (deletion invariant separate)');

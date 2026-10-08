@@ -10,7 +10,7 @@ import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 vi.mock('../src/nut11.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
 vi.mock('../src/receipts.js',                  () => ({ emitReceipt: vi.fn() }));
 vi.mock('../src/webhook_delivery.js',          () => ({ findApiKeyHashForUuid: vi.fn() }));
-vi.mock('../src/handlers/download_verify.js',  () => ({ isVerifiedPath: vi.fn(), readSidecarWithRootCheck: vi.fn(), verifyChunkBody: vi.fn(), VERIFY_INLINE_CHUNK_THRESHOLD: 0 }));
+vi.mock('../src/handlers/download_verify.js',  () => ({ isVerifiedPath: vi.fn(), readSidecarWithRootCheck: vi.fn(), verifyChunkStream: vi.fn() }));
 // DAD flips on the last chunk of an armed transfer — pin that predicate so this
 // test exercises the destruction SEQUENCE, not manifest_tg's internals.
 vi.mock('../src/manifest_tg.js', () => ({
