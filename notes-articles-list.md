@@ -1,5 +1,5 @@
 # notes-articles-list.md — refueler.io /notes/ pipeline
-> **Version:** 1.3 | **Created:** AP-1 · 29 July 2026 | **Updated:** Share-Deps-1 · 28 Sep 2026 (article 15)
+> **Version:** 1.4 | **Created:** AP-1 · 29 July 2026 | **Updated:** MCP-Fix-1 · 8 Oct 2026 (article 16)
 > Editorial planning document. Lives in `refueler-share/` alongside CLAUDE.md and TESTING.md.
 > Load when in an editorial planning or article build session. Not by default.
 > Publishing platform: `refueler.io/notes/` (main domain, not share subdomain).
@@ -226,6 +226,13 @@ the articles are context, not a campaign.
 **Audience:** GrapheneOS users, privacy-hardened Android, people who keep Vanadium on its defaults
 **Product dependency:** None for the claim. Share works on Vanadium's default settings (JIT off): Rajesh received a link from a Mac and sent one back on a Pixel 9a, 28 Sep 2026.
 **Note:** The honest angle: most web tools quietly need the JavaScript JIT or WebAssembly, and the usual advice is "turn the JIT back on for this site". Share doesn't ask that: receiving needs neither, and sending falls back to a pure-JS BLAKE3 when WebAssembly isn't there. Also true since Deps-1: no third-party script on the page (no CDN), so nothing outside refueler.io runs next to the key. **Say plainly:** big sends are slower with the JIT off (hashing ~1–2.5 MB/s, so a 4 GB send spends tens of minutes hashing); small and medium files are fine. **Before drafting:** time a ~100 MB send on the Pixel; find out whether Vanadium ran the WASM interpreter or the JS fallback (USB remote debugging, `blake3Impl()`); ideally the CSP (`docs/Share-CSP-1-notes.md`) is live so the piece can say so. iPhone Lockdown Mode is the same situation (no JIT, no WebAssembly); worth one line, after a test.
+
+## Article 16 — What a timestamp proves about a file you sent, and what it doesn't
+**Status:** Idea — added MCP-Fix-1 · 8 Oct 2026. **Accompanies the MCP npm publish** (not before: docs must be ready for people arriving from the MCP directories and GitHub).
+**Audience:** security engineers, people evaluating MCP servers, anyone who has to evidence that a file existed on a date
+**Product dependency:** Permanent record is live for sender opt-in. The MMR / transparency-log half is a **design note only** (`merkle-spec-v1.md`) — write it as direction, never as shipped.
+**Note:** Security people at btc++ (Oct 2026) reacted to the `.ots` use for file-transfer logging more than to anything else, which is the signal: the piece is about **Bitcoin-anchored existence proof applied to a transfer**, not "we use OpenTimestamps". Honest scope, stated early and not buried: it proves the bytes existed on or before a block date. **Not authorship. Not truth. Not delivery.** Three things to separate, because almost everyone conflates them: existence proof (SHA-256 / OTS, client-side, never touches the Worker) · ciphertext storage integrity (the Worker's Merkle check — "the encrypted object served equals the encrypted object stored") · end-to-end file integrity (the recipient's plaintext check, which Refueler never performs and must never claim). Let a table do that separation. The forward half — MMR roots anchored through the Share OTS relay as a transparency log, never a "smart contract" — gets a short closing section marked as direction. **Also the natural home for the unilateral-exit honesty:** the seal proves the bytes existed; it does not hand anyone the bytes if Refueler vanishes. That earns the self-hostable node a mention rather than a boast.
+**Voice check:** one punchy line maximum, no performative opening, let the tables persuade.
 
 ---
 
