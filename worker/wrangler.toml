@@ -30,6 +30,7 @@ LIGHTNING_BACKEND = "lnbits"
 # set this to refueler-share-dev; the /admin/r2-presign-test endpoint always
 # forces the dev bucket regardless of this value.
 R2_BUCKET_NAME = "refueler-share-prod"
+R2_BUDGET_GIB  = "500"   # B12-2: Navy Office occupancy budget (display only)
 BLINK_WALLET_ID            = ""
 BLINK_API_KEY              = ""
 PRICE_CREATIVE_MONTHLY_GBP = "12"

@@ -97,6 +97,9 @@ export async function handleClientErrorsLog(request, env) {
     source:      'server_observed_kv',
     window_days: 90,
     total:       log.length,
+    max_entries: MAX_ENTRIES,
+    // B12-2: real coverage — the 500-entry cap can bite well before 90 days.
+    oldest_ts:   log.length ? log[log.length - 1].ts : null,
     count_4xx:   count4xx,
     count_5xx:   count5xx,
     entries:     log,

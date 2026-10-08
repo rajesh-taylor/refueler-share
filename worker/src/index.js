@@ -11,6 +11,7 @@ import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } 
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
+import { handleAdminStorage } from './handlers/storage.js';                // B12-2: Storage & Billing
 import { handleFinalise } from './handlers/finalise.js';                       // Share-Dash-2 fold
 import { handleDownload } from './handlers/download.js';                       // Share-6-5a full extraction
 import { handleClientErrorsLog, appendClientError } from './handlers/client_errors_kv.js'; // Share-Dash-2
@@ -120,7 +121,9 @@ export default {
         // Share-Dash-2: server-observed error log (KV, 90d). Fire-and-forget —
         // never blocks the response. Thrown errors are logged once in the outer
         // catch instead, so this covers only returned 4xx/5xx (no double-count).
-        if (response.status >= 400) {
+        // B12-2: the BTC ticker's 503 (CoinGecko down) is skipped — it is the
+        // chart overlay only and was half the log.
+        if (response.status >= 400 && endpoint !== 'admin_btc_price') {
           ctx.waitUntil(appendClientError(env, {
             status: response.status, endpoint, path, method: request.method,
           }));
@@ -472,6 +475,11 @@ export default {
         return timed('admin_execution_dock', () => handleExecutionDock(request, env).then(r => addCors(r, request)));
       }
 
+      // B12-2: Navy Office Storage & Billing — aggregates of what R2 holds now.
+      if (request.method === 'GET' && path === '/admin/storage') {
+        return timed('admin_storage', () => handleAdminStorage(request, env).then(r => addCors(r, request)));
+      }
+
       // ── Share-Dash-2: Navy Office admin surfaces ──────────────────────────
       // Server-observed 4xx/5xx log (KV, 90d) — distinct from /log/error (AE).
       if (request.method === 'GET' && path === '/admin/client-errors-log') {
@@ -571,7 +579,8 @@ export default {
       }
 
       logEvent(env, { endpoint: 'unknown', status: 404, latency: performance.now() - t0 });
-            ctx.waitUntil(appendClientError(env, { status: 404, endpoint: 'unknown', path, method: request.method }));
+            // B12-2: no KV log entry — bot probes (/.env, /.git/config …) filled the
+            // 500-entry log and burned KV writes. AE above still counts them.
             return new Response('Not found', { status: 404, headers: corsHeaders(request) });
 
     } catch (e) {

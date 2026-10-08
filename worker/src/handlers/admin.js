@@ -286,7 +286,7 @@ async function fetchAeMetricsData(env) {
     return res.json();
   }
 
-  const [issuanceResult, uploadResult, downloadResult, latencyResult, errorRateResult, clientErrorsResult, clientErrorsDetailResult] = await Promise.allSettled([
+  const [issuanceResult, byContextResult, downloadResult, latencyResult, errorRateResult, clientErrorsResult, clientErrorsDetailResult] = await Promise.allSettled([
 
     aeQuery(`
       SELECT blob2 AS tier, count() AS issued
@@ -296,12 +296,16 @@ async function fetchAeMetricsData(env) {
       GROUP BY tier
     `),
 
+    // B12-2: per-code counts so Navy Office can split real failures from
+    // expected events (the old r2_bytes_uploaded query sat here — dead since
+    // Share-6-6b; /admin/storage replaces it).
     aeQuery(`
-      SELECT sum(double5) AS total_bytes_uploaded
+      SELECT blob2 AS context, count() AS n
       FROM share_events
-      WHERE blob1 = 'upload'
-      AND double3 = 0
-      AND timestamp > NOW() - INTERVAL '90' DAY
+      WHERE blob1 = 'client_error'
+      AND timestamp > NOW() - INTERVAL '1' DAY
+      GROUP BY context
+      ORDER BY n DESC
     `),
 
     aeQuery(`
@@ -355,7 +359,7 @@ async function fetchAeMetricsData(env) {
       WHERE blob1 = 'client_error'
       AND timestamp > NOW() - INTERVAL '1' DAY
       ORDER BY ts_ms DESC
-      LIMIT 20
+      LIMIT 100
     `),
   ]);
 
@@ -372,13 +376,12 @@ async function fetchAeMetricsData(env) {
     credentialIssuancesNote = `AE query failed: ${issuanceResult.reason?.message}`;
   }
 
-  let r2BytesUploaded = null;
-  let r2BytesNote = null;
-  if (uploadResult.status === 'fulfilled') {
-    const rows = uploadResult.value?.data ?? [];
-    r2BytesUploaded = parseFloat(rows[0]?.total_bytes_uploaded ?? 0);
-  } else {
-    r2BytesNote = `AE query failed: ${uploadResult.reason?.message}`;
+  let clientErrorsByContext = null;
+  if (byContextResult.status === 'fulfilled') {
+    clientErrorsByContext = {};
+    for (const r of byContextResult.value?.data ?? []) {
+      clientErrorsByContext[r.context ?? ''] = parseInt(r.n ?? 0, 10);
+    }
   }
 
   let r2ChunkSuccessRate = null;
@@ -457,16 +460,12 @@ async function fetchAeMetricsData(env) {
     as_of: new Date().toISOString(),
     window_notes: {
       credential_issuances: 'Rolling 30 days',
-      r2_bytes_uploaded: 'Rolling 90 days (chunk-0 events only; total_bytes logged on first chunk per transfer)',
       r2_chunk_retrieval_success_rate: 'Rolling 24 hours',
       latency: 'Rolling 24 hours — p95/p99 per endpoint',
       error_rate: 'Rolling 24 hours — 5xx / total per endpoint',
     },
     credential_issuances_by_tier: credentialIssuancesByTier,
     credential_issuances_note: credentialIssuancesNote,
-    r2_bytes_uploaded: r2BytesUploaded,
-    r2_bytes_purged: null,
-    r2_bytes_note: r2BytesNote ?? 'r2_bytes_purged not measurable until R2 event notifications wired to AE (B4 scope)',
     r2_chunk_retrieval_success_rate: r2ChunkSuccessRate,
     r2_chunk_successful_chunks: r2ChunkSuccessfulChunks,
     r2_chunk_total_chunks: r2ChunkTotalChunks,
@@ -478,6 +477,7 @@ async function fetchAeMetricsData(env) {
     client_errors_24h: clientErrors24h,
     client_errors_24h_note: clientErrorsNote,
     client_errors_detail: clientErrorsDetail,
+    client_errors_by_context_24h: clientErrorsByContext,
   };
 }
 
