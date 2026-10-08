@@ -126,7 +126,7 @@ MAC input follows the B12-SR encoding rule: `utf8(tag) ‖ 0x00 ‖ fixed-length
 7. Optional: client-error log writes `{uuid}` in place of UUIDs in `path`.
 New secret `KV_MAC_KEY`.
 
-**KV-Fix-1b** (Sonnet, small; Worker + `admin/test-upload.html`, which is mirrored → `ship-frontend.sh`)
+**KV-Fix-1b ✓ 8 Oct 2026** (deploy `d00ae2c4`; Sonnet, small; Worker + `admin/test-upload.html`, which is mirrored → `ship-frontend.sh`)
 B12-SR S2 in full, including the proof-obligation matrix and AE `admin.testcred.issued`. New secret `TEST_CRED_KEY`. After deploy: the 19 old `test_credential:*` keys are inert; let them expire. The Navy Office soak line stays with B12-3.
 
 **KV-Fix-2** (Sonnet, ~1–2 sessions, before B12-3) — §4.2. First task: confirm F6 and read the live `api_client_` record.
