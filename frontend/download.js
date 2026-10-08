@@ -695,12 +695,14 @@ function _makeDlProgress(domRefs, totalBytes, totalChunks, share) {
 // Parts in order, overlapped (Share-Progress-1). The Worker reads and checks a whole
 // part before its first byte, so one part at a time left the bar standing still at
 // every part. The next part is asked for as soon as the one before it starts
-// arriving, so one part is always waiting while others stream; at most DL_IN_FLIGHT
-// are held (128 MiB on the stream path). Part 0 goes first (it records the download
+// arriving, so one part is always waiting while another streams; at most DL_IN_FLIGHT
+// are held (64 MiB on the stream path). Two, not four (Safari-Slow-Link-1): an iPhone
+// on a VPN had four 32 MiB parts cut together, again and again, while one or two at a
+// time arrived; the link, not the count, sets the speed. Part 0 goes first (it records the download
 // start). On a delete-after-download transfer (holdLast) the last part is asked for
 // only once every earlier part has fully arrived: serving it starts the deletion on
 // the Worker (handlers/download.js finishDownload). On a failure the rest stop.
-const DL_IN_FLIGHT = 4;
+const DL_IN_FLIGHT = 2;
 async function _eachPartInOrder(uuid, n, state, prog, use, holdLast) {
   const pending = new Map();
   let next = 0, waiting = 0, arrived = 0;
