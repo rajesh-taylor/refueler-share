@@ -2,12 +2,10 @@
 import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyProofV2 } from './nut00.js';
 import { computeCommitment } from './commitment.js';
-import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS } from './manifest.js';
+import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS, CHARTERED_CAP_BYTES } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 // verifyStripeWebhook, createCheckoutSession — imported by ./handlers/stripe_sub.js
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
-import { createInvoice, getInvoiceStatus } from './lightning.js';
-import { handleLightningCreate, handleLightningStatus, handleLightningWebhook } from './lightning-routes.js';
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
 import { handleExecutionDock } from './handlers/execution_dock.js';
@@ -20,6 +18,7 @@ import { handleNewsEvents } from './handlers/news_events.js';                  /
 import { handleOrphanSweep } from './handlers/orphan_sweep.js';               // Share-6-6a
 import { handlePatchMerkleRoot } from './handlers/patch_merkle_root.js';  // Share-6-6a
 import { handlePurgeTestTransfers } from './handlers/purge_test_transfers.js'; // Share-7-1
+import { cleanStatus } from './status_shape.js';                                 // KV-Fix-1a
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleTestCredential } from './handlers/test_credential.js';                // Share-Admin-1
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
@@ -42,8 +41,7 @@ import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleS
 import {
   UUID_RE, MANIFEST_SIZE_MAX,
   corsHeaders, safeGetManifest, supabaseFetch,
-  json, err, addCors, parseRange,
-} from './utils.js';
+  json, err, addCors, parseRange, requireAdmin } from './utils.js';
 
 import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
@@ -428,20 +426,8 @@ export default {
         return timed('webhook_stripe', () => handleStripeWebhook(request, env));
       }
 
-      if (request.method === 'POST' && path === '/subscription/lightning') {
-        const deps = { verifyTurnstileToken, createInvoice, checkRateLimit, getClientIp, rateLimitResponse, logEvent, corsHeaders };
-        return timed('lightning_create', () => handleLightningCreate(request, env, deps).then(r => addCors(r, request)));
-      }
-
-      if (request.method === 'GET' && path === '/subscription/lightning/status') {
-        const deps = { getInvoiceStatus, checkRateLimit, getClientIp, rateLimitResponse, logEvent, corsHeaders };
-        return timed('lightning_status', () => handleLightningStatus(request, env, deps).then(r => addCors(r, request)));
-      }
-
-      if (request.method === 'POST' && path === '/webhook/lightning') {
-        const deps = { issueBlindSignature, logEvent };
-        return timed('lightning_webhook', () => handleLightningWebhook(request, env, deps));
-      }
+      // KV-Fix-1a: Lightning create / status / webhook routes removed (dormant;
+      // trusted KV `settled` state). B7 rebuilds on LNbits-verified settlement.
 
       if (request.method === 'POST' && path === '/subscription/checkout') {
         return timed('subscription_checkout', () => handleCheckout(request, env).then(r => addCors(r, request)));
@@ -648,18 +634,10 @@ async function handleStatus(request, env) {
     console.error('KV read error:', e);
   }
 
-  if (!current) {
-    current = {
-      state:       'operational',
-      message:     null,
-      maintenance: null,
-      incidents:   [],
-      phoenixd:    null,
-      updated_at:  Math.floor(Date.now() / 1000),
-    };
-  }
-
-  return json(current);
+  // KV-Fix-1a: serve known fields only, each re-checked (KV is untrusted).
+  const status = cleanStatus(current);
+  if (status.updated_at === null) status.updated_at = Math.floor(Date.now() / 1000);
+  return json(status);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -800,10 +778,8 @@ async function checkHostnameHealth(env) {
 // the last cron run's summary. 404 if no cron has run yet.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminHostnameHealth(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let summary;
   try {
@@ -840,8 +816,8 @@ async function handleAdminHostnameHealth(request, env) {
 // The handler hashes rfs_live_... values — admin never needs to compute this manually.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminQuotaProvision(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body;
   try { body = await request.json(); } catch { return err(400, 'Invalid JSON body'); }
@@ -897,8 +873,8 @@ async function handleAdminQuotaProvision(request, env) {
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminQuotaCancel(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body;
   try { body = await request.json(); } catch { return err(400, 'Invalid JSON body'); }
@@ -1209,7 +1185,7 @@ async function handleApiCredentialIssue(request, env) {
     mint_pubkey:      mintPubkey,
     keyset_id:        keysetId,
     dleq,
-    allocation_bytes: 250 * 1024 * 1024 * 1024, // 250 GB API tier cap (SW-Opus-1)
+    allocation_bytes: CHARTERED_CAP_BYTES,        // KV-Fix-1a: the cap initiate enforces until B12-4a (target 250 GB, SW-Opus-1)
     uuid,
     issued_tier:      issuedTier,
     commitment,
@@ -1899,8 +1875,8 @@ async function handleUploadUrls(request, env, uuid) {
 // Body (optional): { key }.  Returns { url, expires, bucket, key }.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminR2PresignTest(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body = {};
   try { body = await request.json(); } catch { /* optional body */ }

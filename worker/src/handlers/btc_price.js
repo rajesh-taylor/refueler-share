@@ -21,6 +21,8 @@
 // serve the last-good value from a no-TTL backstop key if we have one, flagged
 // stale:true, rather than failing the whole card.
 
+import { requireAdmin } from '../utils.js';
+
 const CACHE_KEY   = 'btc:price:gbp';        // TTL'd hot cache
 const BACKSTOP_KEY = 'btc:price:gbp:last';  // no-TTL last-good, for CoinGecko outages
 const CACHE_TTL   = 900;                     // 15 min — top of the 600–900s band
@@ -52,10 +54,8 @@ function err(status, message) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminBtcPrice(request, env) {
   // ── Admin key gate ─────────────────────────────────────────────────────────
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised.');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   // ── Cache hit ──────────────────────────────────────────────────────────────
   try {

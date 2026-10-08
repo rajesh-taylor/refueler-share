@@ -24,16 +24,14 @@
  * }
  */
 
-import { err, json } from '../utils.js';
+import { err, json, requireAdmin } from '../utils.js';
 
 const UUID_PREFIX_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//i;
 
 export async function handlePurgeTestTransfers(request, env) {
   // ── Admin-key auth ──────────────────────────────────────────────────────────
-  const adminKey = request.headers.get('X-Admin-Key') ?? '';
-  if (!adminKey || !env.ADMIN_KEY || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   const url    = new URL(request.url);
   const dryRun = url.searchParams.get('dry_run') !== 'false'; // default true

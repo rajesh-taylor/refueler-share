@@ -15,7 +15,7 @@
  * Admin-key gated (X-Admin-Key header).
  */
 
-import { UUID_RE, json } from '../utils.js';
+import { UUID_RE, json, requireAdmin } from '../utils.js';
 import { reconstructRoot } from '../merkle.js';
 
 const DIGEST_LEN = 32;
@@ -42,10 +42,8 @@ function toB64url(u8) {
 
 export async function handlePatchMerkleRoot(request, env) {
   // Auth
-  const adminKey = request.headers.get('X-Admin-Key') ?? '';
-  if (!adminKey || !env.ADMIN_KEY || adminKey !== env.ADMIN_KEY) {
-    return json({ error: 'forbidden' }, 403);
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body;
   try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400); }

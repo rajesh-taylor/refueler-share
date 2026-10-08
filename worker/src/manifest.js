@@ -25,6 +25,12 @@ export const TIER_CAPS = {
   enterprise: Infinity,
 };
 
+// KV-Fix-1a (Rajesh, 8 Oct 2026): until B12-4a resolves paid tiers, initiate
+// enforces the free cap on EVERY upload, Chartered included. API issue
+// `allocation_bytes` and capabilities `max_file_size_gb` read this — never a
+// second literal. B12-4a changes it in one place.
+export const CHARTERED_CAP_BYTES = TIER_CAPS.free;
+
 export const TIER_EXPIRY_SECONDS = {
   free: 7 * 24 * 60 * 60,           // 7 days, fixed
   creative:   null,                 // user-set: 1 / 7 / 30 days

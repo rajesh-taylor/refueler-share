@@ -176,6 +176,12 @@ export async function handleFinalise(request, env, uuid, ctx) {
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize)  return err(502, 'Transfer manifest exceeds size limit');
   if (!manifest) return err(404, 'Transfer not found');
+  // KV-Fix-1a: finalise runs once. A replayed or planted upload_session must
+  // never re-write the sidecar / merkle_root of a completed transfer.
+  if (manifest.upload_complete === true) {
+    aeLog(env, { endpoint: 'upload_finalise', status: 409, errorMsg: 'already_complete' });
+    return json({ error: 'already_complete' }, 409);
+  }
   const chunkCount = manifest.total_chunks;
   if (!Number.isInteger(chunkCount) || chunkCount < 1) {
     return err(502, 'Manifest is missing a valid chunk count');

@@ -108,8 +108,8 @@ export function buildTombstone(nowSeconds) {
 // ever express paid-vs-free — which is exactly the intended gate.
 //
 // Live wire values (Share-2, 11 Sep 2026): 'free' / 'creative' / 'max'. The
-// two paid keys are 'creative' and 'max'; this set mirrors the paid set in
-// lightning-routes.js (VALID_TIERS). Deferred: 'free'/'creative'/'max' →
+// two paid keys are 'creative' and 'max' (the old lightning-routes.js
+// VALID_TIERS paid set went with KV-Fix-1a). Deferred: 'free'/'creative'/'max' →
 // 'paid_*' migration, after which gate via tiers.js isPaidTier() instead.
 // ---------------------------------------------------------------------------
 const PAID_TIERS = new Set(['creative', 'max']);

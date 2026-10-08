@@ -49,6 +49,7 @@
 
 import { hashOneShot } from '../blake3_wasm.js';
 import { reconstructRoot, TREE_ALGO } from '../merkle.js';
+import { deriveKvMacKey, makeRootVerifiedValue, checkRootVerifiedValue } from '../kvmac.js';
 
 const DIGEST_LEN = 32;
 
@@ -229,7 +230,7 @@ export async function reconstructAndCheckRoot(env, uuid, manifest) {
  *   does not protect against a fully compromised storage layer; (d) the
  *   recipient's plaintext blake3_root check is the terminal integrity guarantee.
  *
- * KV key: `root_verified:{uuid}`  value: '1'  TTL: transfer remaining lifetime
+ * KV key: `root_verified:{uuid}`  value: `{v:1, mac}` (KV-Fix-1a, kvmac.js)  TTL: transfer remaining lifetime
  * (min 60 s to avoid KV rejecting a zero/negative TTL on nearly-expired transfers)
  *
  * @returns {Promise<{ok:true, sidecar:Uint8Array, chunkCount:number}
@@ -262,24 +263,30 @@ export async function readSidecarWithRootCheck(env, uuid, manifest) {
     };
   }
 
-  // Check the KV flag — if already set, root was proven on a prior chunk request.
-  const kvKey = `${ROOT_VERIFIED_PREFIX}${uuid}`;
+  const manifestRoot = b64urlToBytes(manifest.merkle_root);
+  if (!manifestRoot || manifestRoot.length !== DIGEST_LEN) {
+    return { ok: false, code: 'integrity_failed', detail: 'manifest merkle_root malformed' };
+  }
+
+  // Check the KV flag — if present AND its MAC verifies, root was proven on a
+  // prior chunk request. KV-Fix-1a: the flag is MAC'd over uuid ‖ merkle_root
+  // (kvmac.js); a forged, copied, stale or legacy '1' value reads as absent.
+  // No KV_MAC_KEY → macKey null → never trusted, never written (always rebuild).
+  const kvKey  = `${ROOT_VERIFIED_PREFIX}${uuid}`;
+  const macKey = await deriveKvMacKey(env, 'rootv');
   let rootAlreadyVerified = false;
-  try {
-    const flag = await env.STATUS_KV.get(kvKey);
-    rootAlreadyVerified = flag !== null;
-  } catch (e) {
-    // KV read failure: conservative path — treat as unverified, run reconstruction.
-    console.error('root_verified KV read failed, falling back to reconstruction:', e);
+  if (macKey) {
+    try {
+      const flag = await env.STATUS_KV.get(kvKey);
+      rootAlreadyVerified = await checkRootVerifiedValue(macKey, uuid, manifestRoot, flag);
+    } catch (e) {
+      // KV read failure: conservative path — treat as unverified, run reconstruction.
+      console.error('root_verified KV read failed, falling back to reconstruction:', e);
+    }
   }
 
   if (!rootAlreadyVerified) {
-    // First request (or KV read failed): run the full reconstruction.
-    const manifestRoot = b64urlToBytes(manifest.merkle_root);
-    if (!manifestRoot || manifestRoot.length !== DIGEST_LEN) {
-      return { ok: false, code: 'integrity_failed', detail: 'manifest merkle_root malformed' };
-    }
-
+    // First request (or flag absent / unverifiable): run the full reconstruction.
     let rebuilt;
     try {
       rebuilt = reconstructRoot(sidecarToLeaves(sidecar, chunkCount));
@@ -292,18 +299,19 @@ export async function readSidecarWithRootCheck(env, uuid, manifest) {
       return { ok: false, code: 'integrity_failed', detail: 'reconstructed root != manifest root' };
     }
 
-    // Root proven. Write the KV flag so subsequent chunks skip reconstruction.
+    // Root proven. Write the MAC'd flag so subsequent chunks skip reconstruction.
     // TTL = remaining transfer lifetime, floored at 60 s (KV rejects zero/negative).
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const expiryTs   = manifest.expiry_timestamp ?? (nowSeconds + 86400);
-    const ttl        = Math.max(expiryTs - nowSeconds, 60);
-    try {
-      await env.STATUS_KV.put(kvKey, '1', { expirationTtl: ttl });
-    } catch (e) {
-      // Non-fatal: the flag just won't be set. Next chunk re-runs reconstruction.
-      // Logged but never returned as an error — a KV write failure does not make
-      // the transfer corrupt.
-      console.error('root_verified KV write failed (non-fatal):', e);
+    if (macKey) {
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const expiryTs   = manifest.expiry_timestamp ?? (nowSeconds + 86400);
+      const ttl        = Math.max(expiryTs - nowSeconds, 60);
+      try {
+        const value = await makeRootVerifiedValue(macKey, uuid, manifestRoot);
+        if (value) await env.STATUS_KV.put(kvKey, value, { expirationTtl: ttl });
+      } catch (e) {
+        // Non-fatal: the flag just won't be set. Next chunk re-runs reconstruction.
+        console.error('root_verified KV write failed (non-fatal):', e);
+      }
     }
   }
 

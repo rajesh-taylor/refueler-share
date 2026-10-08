@@ -10,7 +10,7 @@ import { buildTombstone }                      from '../manifest_tg.js';
 import { putManifest }                         from '../manifest.js';
 import { verifyDownloadToken }                 from '../nut11.js';
 import { deleteKeys }                          from '../sweep_rules.js';
-import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
+import { UUID_RE, safeGetManifest, json, err, requireAdmin } from '../utils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared destruction sequence (both delete paths).
@@ -113,10 +113,8 @@ export async function handleDeleteTransfer(request, env, uuid) {
 // Clears the dock_index KV entry used by the Execution Dock dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleOwnerDelete(request, env, uuid) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize) return err(502, 'Transfer manifest exceeds size limit');

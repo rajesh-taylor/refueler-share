@@ -24,9 +24,16 @@
  * keys (admin:client_errors_log:{ts}) with list()+get on read, or sample here.
  */
 
+import { requireAdmin } from '../utils.js';
+
 const LOG_KEY           = 'admin:client_errors_log';
 const MAX_ENTRIES       = 500;
 const RETENTION_SECONDS = 90 * 24 * 3600;
+
+// KV-Fix-1a: the log keeps no transfer IDs — a UUID next to a time and status
+// for 90 days links a transfer to its failures. Replaced before truncation.
+const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const scrubUuids = s => s.replace(UUID_ANYWHERE, '{uuid}');
 
 /**
  * Append one server-observed error. Never throws — callers fire-and-forget via
@@ -40,9 +47,9 @@ export async function appendClientError(env, { status, endpoint, path, method, e
     ts:       nowSeconds,
     status:   Number(status) || 0,
     endpoint: typeof endpoint === 'string' ? endpoint : 'unknown',
-    path:     typeof path === 'string' ? path.slice(0, 256) : '',
+    path:     typeof path === 'string' ? scrubUuids(path).slice(0, 256) : '',
     method:   typeof method === 'string' ? method : '',
-    msg:      typeof errorMsg === 'string' && errorMsg ? errorMsg.slice(0, 200) : '',
+    msg:      typeof errorMsg === 'string' && errorMsg ? scrubUuids(errorMsg).slice(0, 200) : '',
   };
 
   try {
@@ -68,12 +75,8 @@ export async function appendClientError(env, { status, endpoint, path, method, e
  * newest-first, plus a small summary the modal can render without recomputing.
  */
 export async function handleClientErrorsLog(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return new Response(JSON.stringify({ error: 'Unauthorised' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let log;
   try {

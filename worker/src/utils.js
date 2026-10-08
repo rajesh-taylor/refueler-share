@@ -159,6 +159,26 @@ export function err(status, message, request = null) {
   return new Response(JSON.stringify({ error: message }), { status, headers });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// requireAdmin(request, env) → Promise<Response | null>   (KV-Fix-1a, B12-SR S2.4)
+//
+// The ONE admin-key check. Returns null when X-Admin-Key matches ADMIN_KEY,
+// else a 401 Response the caller returns as-is. Both sides are SHA-256'd first
+// so the compare is fixed-length (no length leak), then timingSafeEqual.
+// A missing ADMIN_KEY secret fails closed.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function requireAdmin(request, env) {
+  const presented = request.headers.get('X-Admin-Key') ?? '';
+  const expected  = env.ADMIN_KEY ?? '';
+  if (!presented || !expected) return err(401, 'Unauthorised');
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(presented)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b) ? null : err(401, 'Unauthorised');
+}
+
 export function addCors(response, request) {
   const headers    = corsHeaders(request);
   const newHeaders = new Headers(response.headers);

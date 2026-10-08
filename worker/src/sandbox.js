@@ -63,6 +63,7 @@
 'use strict';
 
 import { sha256Hex } from './api_auth.js';
+import { requireAdmin } from './utils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -150,26 +151,7 @@ function generateTestTokens(n) {
   return tokens;
 }
 
-/**
- * requireAdminKey(request, env) → void | throws Response
- *
- * Validates the X-Admin-Key header against the ADMIN_KEY Worker secret.
- * Sandbox activation and reset are admin operations — they create credentials
- * that can issue real upload UUIDs. Only Rajesh (or an AM) runs these.
- */
-function requireAdminKey(request, env) {
-  const presented = request.headers.get('X-Admin-Key') ?? '';
-  const expected  = env.ADMIN_KEY ?? '';
-  if (!presented || !expected) {
-    throw json({ error: 'Admin authentication required' }, 401);
-  }
-  // Constant-time comparison — ADMIN_KEY is short ASCII, so length check first.
-  const a = new TextEncoder().encode(presented.padEnd(128, '\0'));
-  const b = new TextEncoder().encode(expected.padEnd(128, '\0'));
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  if (diff !== 0) throw json({ error: 'Admin authentication required' }, 401);
-}
+// Admin auth for sandbox activate / reset: shared requireAdmin() (KV-Fix-1a).
 
 /**
  * sandboxResponse(data, status, extraHeaders) → Response
@@ -224,7 +206,8 @@ function json(data, status = 200) {
 // two independent sandbox clients.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSandboxActivate(request, env) {
-  try { requireAdminKey(request, env); } catch (r) { return r; }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
@@ -333,7 +316,8 @@ export async function handleSandboxActivate(request, env) {
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleSandboxReset(request, env) {
-  try { requireAdminKey(request, env); } catch (r) { return r; }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }

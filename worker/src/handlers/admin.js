@@ -12,6 +12,9 @@
 // supabaseFetch, json, err are module-local — same implementations as index.js.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { requireAdmin } from '../utils.js';
+import { cleanStatus, isShapeError } from '../status_shape.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Module-local response helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,10 +53,8 @@ async function supabaseFetch(env, method, path, body = null, extraHeaders = {}) 
 // Admin status — POST /admin/status
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminStatus(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   let body;
   try {
@@ -62,20 +63,19 @@ export async function handleAdminStatus(request, env) {
     return err(400, 'Invalid JSON');
   }
 
-  const validStates = ['operational', 'degraded', 'maintenance'];
-  if (body.state !== undefined && !validStates.includes(body.state)) {
-    return err(400, `Invalid state. Must be one of: ${validStates.join(', ')}`);
+  // S71: Navy Office sends lightning_available as 'true'/'false' strings —
+  // collapse to booleans before the shape check; named backends pass through.
+  if (body && (body.lightning_available === 'true' || body.lightning_available === 'false')) {
+    body.lightning_available = body.lightning_available === 'true';
   }
 
-  // S71: validate lightning_available if present
-  const validLightning = ['blink', 'phoenixd', 'true', 'false'];
-  if (body.lightning_available !== undefined && !validLightning.includes(String(body.lightning_available))) {
-    return err(400, `Invalid lightning_available. Must be one of: ${validLightning.join(', ')}`);
-  }
-
-  // PHOENIXD-TOGGLE: validate phoenixd boolean if present
-  if (body.phoenixd !== undefined && typeof body.phoenixd !== 'boolean') {
-    return err(400, 'Invalid phoenixd. Must be true or false (boolean)');
+  // KV-Fix-1a: whitelist the shape. Unknown keys dropped; any bad field → 400.
+  let patch;
+  try {
+    patch = cleanStatus(body, { strict: true });
+  } catch (e) {
+    if (isShapeError(e)) return err(400, e.message);
+    throw e;
   }
 
   let current = null;
@@ -83,25 +83,11 @@ export async function handleAdminStatus(request, env) {
     current = await env.STATUS_KV.get('status:current', { type: 'json' });
   } catch {}
 
-  if (!current) {
-    current = {
-      state:       'operational',
-      message:     null,
-      maintenance: null,
-      incidents:   [],
-      updated_at:  Math.floor(Date.now() / 1000),
-    };
-  }
-
-  const bodyPatch = { ...body };
-  if (bodyPatch.lightning_available !== undefined) {
-    const lv = String(bodyPatch.lightning_available);
-    // Preserve named backends ('phoenixd', 'blink'); collapse 'true'/'false' to boolean
-    bodyPatch.lightning_available = lv === 'true' ? true : lv === 'false' ? false : lv;
-  }
+  // The stored value goes through the same cleaner, so a stray field already
+  // in KV is dropped on the next write rather than carried forward.
   const updated = {
-    ...current,
-    ...bodyPatch,
+    ...cleanStatus(current),
+    ...patch,
     updated_at: Math.floor(Date.now() / 1000),
   };
 
@@ -120,8 +106,8 @@ export async function handleAdminStatus(request, env) {
 // X-Admin-Key protected.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminMetrics(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
   const [data, aeData] = await Promise.all([
     fetchMetricsData(env),
     fetchAeMetricsData(env),
@@ -253,8 +239,8 @@ async function fetchMetricsData(env) {
 // Admin AE metrics — GET /admin/ae-metrics
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminAeMetrics(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
   return json(await fetchAeMetricsData(env));
 }
 
@@ -485,8 +471,8 @@ async function fetchAeMetricsData(env) {
 // Admin snapshot — GET /admin/snapshot
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminSnapshot(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   const [metrics, ae] = await Promise.all([
     fetchMetricsData(env),
@@ -524,8 +510,8 @@ export async function handleAdminSnapshot(request, env) {
 // ── KV monitor — GET /admin/kv-stats ─────────────────────────────────────────
 // Returns key count for STATUS_KV. Reads/writes per day need AE (S82+).
 export async function handleAdminKvStats(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
   try {
     let keyCount = 0, cursor, iters = 0;
     do {

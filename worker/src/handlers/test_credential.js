@@ -40,6 +40,7 @@
 import { issueBlindSignature } from '../nut00.js';
 import { computeCommitment } from '../commitment.js';
 import { TIERS, isCharteredTier } from '../tiers.js';
+import { requireAdmin } from '../utils.js';
 
 // ─── Module-local helpers (mirrors index.js / admin.js) ─────────────────────
 function json(data, status = 200) {
@@ -65,10 +66,8 @@ const API_EXPIRY_WINDOW       = 90 * 24 * 3600;           // chartered commitmen
 // ─── Handler ─────────────────────────────────────────────────────────────────
 export async function handleTestCredential(request, env) {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   // ── Body ──────────────────────────────────────────────────────────────────
   let body;

@@ -37,6 +37,8 @@
  */
 
 // Badge elapsed-time thresholds in seconds, keyed by expiry window in seconds.
+import { requireAdmin } from '../utils.js';
+
 const BADGE_THRESHOLDS = new Map([
   [86400,          null],          // 1 day  — no badge
   [86400 * 7,      86400 * 4],     // 7 days  — badge at day 4
@@ -74,12 +76,8 @@ function computeStatus(entry, nowSeconds) {
 }
 
 export async function handleExecutionDock(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return new Response(JSON.stringify({ error: 'Unauthorised' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   const nowSeconds = Math.floor(Date.now() / 1000);
 

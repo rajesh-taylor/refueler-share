@@ -43,7 +43,7 @@
  * Admin-key auth is checked before any R2 access.
  */
 
-import { err, json } from '../utils.js';
+import { err, json, requireAdmin } from '../utils.js';
 import {
   IN_FLIGHT_CUTOFF_SECONDS, MIN_STALE_HOURS, ACTION_CAP, SWEEP_PROTECTED_UUIDS,
   toSeconds, wrongSizeSegments, isPurgeableExpired,
@@ -61,10 +61,8 @@ const groupSize   = (groups) => groups.reduce((n, g) => n + g.length, 0);
 
 export async function handleOrphanSweep(request, env) {
   // ── Admin-key auth ──────────────────────────────────────────────────────────
-  const adminKey = request.headers.get('X-Admin-Key') ?? '';
-  if (!adminKey || !env.ADMIN_KEY || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   // ── Query params ────────────────────────────────────────────────────────────
   const url        = new URL(request.url);

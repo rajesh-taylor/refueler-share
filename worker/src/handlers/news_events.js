@@ -22,17 +22,14 @@
  *   DELETE /admin/news-events/:id    → remove by id  (id passed in by router)
  */
 
+import { requireAdmin } from '../utils.js';
+
 const NEWS_KEY = 'admin:news_events';
 
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status, headers: { 'Content-Type': 'application/json' },
   });
-}
-
-function isAdmin(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  return !!adminKey && adminKey === env.ADMIN_KEY;
 }
 
 async function readEvents(env) {
@@ -48,7 +45,8 @@ function optCount(v) {
 }
 
 export async function handleNewsEvents(request, env, id) {
-  if (!isAdmin(request, env)) return jsonResponse({ error: 'Unauthorised' }, 401);
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   // ── GET — list, date-ascending ─────────────────────────────────────────────
   if (request.method === 'GET') {

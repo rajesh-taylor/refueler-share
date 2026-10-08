@@ -29,6 +29,7 @@
 //   refueler_check_transfer, refueler_quote
 
 import { requireApiAuth, kvQuotaKey } from '../api_auth.js';
+import { CHARTERED_CAP_BYTES } from '../manifest.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bundle denominations — fixed lots for both rails.
@@ -65,8 +66,8 @@ const FEATURES = {
   upload:              true,
   download:            true,
   permanent_record:    true,   // Tower Hill (TH-series)
-  webhook:             true,   // SW4+
-  receipts:            true,   // SW5+
+  webhook:             false,  // KV-Fix-1a: nothing fires today (KV-Audit F3) — true again at API-Repair-1, after a live test
+  receipts:            false,  // KV-Fix-1a: as above
   mcp_tools:           true,   // SW-MCP-W1 (this session)
   silent_drop_anon:    false,  // SD-block — requires B8 (NUT-11 Mode 2)
   anonymous_rail:      false,  // B7/NB-4 — Lightning node not yet live
@@ -76,7 +77,7 @@ const FEATURES = {
 // Limits
 // ─────────────────────────────────────────────────────────────────────────────
 const LIMITS = {
-  max_file_size_gb: 250,
+  max_file_size_gb: Math.floor(CHARTERED_CAP_BYTES / 1024 ** 3), // KV-Fix-1a: the cap initiate enforces (250 GB returns at B12-4a)
   transfer_expiry_days: {
     citizen:   7,
     sovereign: 90,

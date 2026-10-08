@@ -42,6 +42,7 @@
 // refreshBtcRate() is called from scheduled() as Task 3 (after DLQ + hostname health).
 
 import { BTC_RATE_KV_KEY } from './api_capabilities.js';
+import { requireAdmin } from '../utils.js';
 
 // CoinGecko free tier — no key required for simple/price.
 const COINGECKO_URL =
@@ -120,10 +121,8 @@ async function writeRateRecord(env, gbp_per_btc, set_by, current) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminBtcRatePost(request, env) {
   // ── Admin key gate ────────────────────────────────────────────────────────
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised.');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let body;
@@ -171,10 +170,8 @@ export async function handleAdminBtcRatePost(request, env) {
 // X-Admin-Key gated. Returns current KV entry or { set: false } on cold start.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleAdminBtcRateGet(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised.');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   const current = await readRateRecord(env);
 

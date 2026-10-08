@@ -32,6 +32,8 @@
 // Range → { window: SQL interval, bucketUnit, bucketSeconds, truncated }.
 // bucketSeconds is used to synthesise empty leading buckets client-independently
 // is NOT done here — we return only buckets AE actually has, ascending.
+import { requireAdmin } from '../utils.js';
+
 const RANGES = {
   D: { windowQty: 1,  windowUnit: 'DAY', bucketQty: 1, bucketUnit: 'HOUR', truncated: false },
   W: { windowQty: 7,  windowUnit: 'DAY', bucketQty: 1, bucketUnit: 'DAY',  truncated: false },
@@ -105,10 +107,8 @@ function bucketToUnix(v) {
 // handleGrowthSnapshot — GET /admin/growth-snapshot
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleGrowthSnapshot(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return err(401, 'Unauthorised.');
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   const url = new URL(request.url);
   const rangeKey = (url.searchParams.get('range') || 'M').toUpperCase();

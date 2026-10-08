@@ -19,15 +19,15 @@
  * Budget: R2_BUDGET_GIB ([vars], display only — it authorises nothing).
  */
 
-import { err, json } from '../utils.js';
+import { err, json, requireAdmin } from '../utils.js';
 
 const UUID_PREFIX_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//i;
 const GIB = 1024 ** 3;
 const DEFAULT_BUDGET_GIB = 500;
 
 export async function handleAdminStorage(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key') ?? '';
-  if (!adminKey || !env.ADMIN_KEY || adminKey !== env.ADMIN_KEY) return err(401, 'Unauthorised');
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
   return json(await buildStorageSummary(env, Math.floor(Date.now() / 1000)));
 }
 

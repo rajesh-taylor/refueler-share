@@ -30,6 +30,8 @@
  *   double1 latency_ms · double2 status_code · … · double5 total_bytes (0 since Share-Size-1)
  */
 
+import { requireAdmin } from '../utils.js';
+
 const QUOTA_PREFIX = 'api_quota_';
 
 // tier → internal rail (identity/anonymous). Pre-B7 every paid tier is identity;
@@ -101,12 +103,8 @@ async function activeKeys(env) {
 }
 
 export async function handleApiStats(request, env) {
-  const adminKey = request.headers.get('X-Admin-Key');
-  if (!adminKey || adminKey !== env.ADMIN_KEY) {
-    return new Response(JSON.stringify({ error: 'Unauthorised' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
 
   // ── Requests in the last 30 days, grouped by tier then folded to rail ──────
   const byTier = await queryAE(
