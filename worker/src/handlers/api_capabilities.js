@@ -77,6 +77,12 @@ const FEATURES = {
 // Limits
 // ─────────────────────────────────────────────────────────────────────────────
 const LIMITS = {
+  // MCP-Fix-1: max_transfer_bytes is the field spec §7.1 locked, and the one an
+  // agent can act on without a unit guess. It is the EXACT cap /initiate enforces
+  // — not the 250 GB the spec's illustrative value showed, which must not be
+  // promised before B12-4a (KV-Fix-1a). max_file_size_gb stays for anything
+  // already reading it; the two are the same number in different units.
+  max_transfer_bytes: CHARTERED_CAP_BYTES,
   max_file_size_gb: Math.floor(CHARTERED_CAP_BYTES / 1024 ** 3), // KV-Fix-1a: the cap initiate enforces (250 GB returns at B12-4a)
   transfer_expiry_days: {
     citizen:   7,

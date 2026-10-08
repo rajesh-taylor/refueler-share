@@ -71,7 +71,7 @@ capability-atom, keyset):**
   banner's technical table, and the Worker-contract appendix (§7).
 
 **The credit ↔ sat mapping (internal, load-bearing): `1 credit = 1 sat`.** This is
-why 50,000 credits ≈ 490 GB at rate card v1.0 (100 credits/GB, minus per-transfer
+why 50,000 credits ≈ 490 GiB at rate card v1.0 (100 credits per GiB band, minus per-transfer
 overhead), and why the anonymous rail — which spends sat-denominated Cashu — maps
 1:1 onto "credits" with no fudge. Treasury and rate-card maths use sats; the human
 sees credits; the two are the same integer.
@@ -149,8 +149,15 @@ relationship can afford it. No spend, no upload — the "402-prevention" tool.
 }
 ```
 
-**Cost formula (rate card v1.0, locked):**
-`cost_credits = 10 (transfer) + ceil(size_bytes / 1_000_000_000) × 100 (per GB) [+ 20 if permanent_record]`.
+**Cost formula (rate card v1.0, locked; GB band corrected to GiB at MCP-Fix-1):**
+`cost_credits = 10 (transfer) + ceil(size_bytes / 1_073_741_824) × 100 (per GB band) [+ 20 if permanent_record]`.
+A "GB" band here is **1 GiB = 1024³ bytes**, because that is what the Worker charges:
+`computeTransferCost()` in `worker/src/r2_presign.js` divides by 1024³ and its result
+is what `/initiate` debits from the credit pool. Earlier drafts of this spec said
+decimal 1e9, which made a quote disagree with the invoice — a 1.0 GiB file quoted 210
+credits and was charged 110 (Rajesh, 8 Oct 2026: match what the Worker actually
+charges). If the Worker's `GIB` constant ever changes, this line and
+`refueler-mcp/src/rate-card.js` change with it, in the same session.
 Computed **locally** from the cached capabilities card — no Worker call to price.
 GBP is the **daily reference rate** only (§7.3), always labelled "today's reference
 rate", never live spot. If the reference rate is stale or absent, `cost_gbp_reference`
@@ -619,9 +626,10 @@ and `rate_card_version` (bump on price change).
     "stale": false                            // derived: now - last_updated > tier threshold
   },
   "limits": {
-    "max_transfer_bytes": 250000000000,       // 250 GB (decimal, aligned to the ÷1e9 cost formula) — API-tier per-transfer cap
-    "chunk_bytes": 8388608,                   // 8 MiB recommended chunk size
-    "max_chunk_bytes": 10485760               // 10 MiB server hard cap (S39)
+    "max_transfer_bytes": 4294967296,         // MCP-Fix-1: the cap /initiate ACTUALLY enforces — CHARTERED_CAP_BYTES
+                                              // = TIER_CAPS.free = 4 GiB until B12-4a (KV-Fix-1a). NOT 250 GB.
+    "max_file_size_gb": 4,                    // the same number in GiB; kept for anything already reading it
+    "chunk_bytes": 33554432                   // 32 MiB — EXACT, not a recommendation (see note below)
   }
 }
 ```
@@ -632,8 +640,25 @@ Notes locked:
 - The endpoint exposes **only** the floating `daily_reference_rate`. The **fixed GBP
   invoicing peg (£50k, frozen at rate-card publication)** is a back-office constant,
   **not** on this endpoint — keeping the two GBP numbers from ever being conflated.
-- Corrected from v1: `max_transfer_bytes` is decimal GB (250,000,000,000), matching
-  the cost formula's `÷ 1_000_000_000`. v1 mixed GiB here with decimal-GB pricing.
+- **Corrected at MCP-Fix-1 (8 Oct 2026):** `max_transfer_bytes` is the cap the Worker
+  enforces at `/initiate`, which is `CHARTERED_CAP_BYTES` = `TIER_CAPS.free` = 4 GiB
+  (4,294,967,296) until B12-4a resolves paid tiers — see KV-Fix-1a. The 250 GB figure
+  the earlier draft showed was the *target*, and must never be promised before B12-4a.
+  The Worker had only ever emitted `max_file_size_gb`; it now emits both, from the one
+  constant, so an agent can read bytes without a unit guess.
+- **`chunk_bytes` is 32 MiB and is not negotiable.** `/initiate` returns 400
+  (`chunk_count_mismatch`) unless `X-Total-Chunks === ceil(X-Total-Bytes / 33554432)`,
+  and every full part's presigned URL signs `content-length = 33554432 + 16`. The old
+  8 MiB "recommended" value with a 10 MiB ceiling described the retired Worker-relay
+  chunk path; `max_chunk_bytes` is gone with it.
+- **The Worker-relay chunk PUT (`PUT /upload/:uuid/{NNNN}`) does not exist.** It was
+  retired at Share-6-6b. The upload sequence is `POST /upload/:uuid/initiate` →
+  presigned `PUT` **direct to R2** → `POST /upload/:uuid/urls` for further batches →
+  `POST /upload/:uuid/finalise` with the per-part digests and the ciphertext-chunk
+  Merkle root. The tail part (N−1) is signed once, at `/initiate`, for its exact
+  length; `/urls` never covers it. Finalise is not optional: without it there is no
+  `{uuid}/hashes` sidecar and no `merkle_root`, and every download 409s, because the
+  Worker reconstructs the root before it serves the first byte (Safari-Slow-Link-1).
 
 ### 7.2 Fragment grammar + filename fix (D-1 / O-10 — Option B locked)
 
@@ -651,23 +676,47 @@ filename in the manifest) because:
 4. The "fragment gets longer" cost is negligible — filenames are a few hundred bytes;
    fragments are never sent to a server and have no practical length limit.
 
-**Fragment grammar v1 (locked):** a single opaque, versioned, base64url-encoded JSON
-blob.
+**Fragment grammar v2 (locked Share-Crypto-1 · 7 Oct 2026; adopted by the MCP send
+tool at MCP-Fix-1 · 8 Oct 2026):** a single opaque, versioned, base64url-encoded JSON
+blob. **v2 is the only shape a sender produces.**
 ```
 fragment = base64url( utf8( JSON.stringify({
-  "v": 1,
-  "k": "<base64url of the raw AES-GCM key bytes>",
+  "v": 2,
+  "k": "<base64url of the 32-byte transfer key K>",
   "n": "<real filename, a plain JSON string — JSON handles unicode>",
-  "s": "<base64url of the 16-byte seal_nonce>",  // present ONLY for permanent-record transfers
-  "z": <integer plaintext byte count>            // optional — Share-Size-1, 6 Oct 2026
+  "s": "<base64url of the seal_nonce>",  // present ONLY for permanent-record transfers
+  "z": <integer plaintext byte count>    // REQUIRED in v2
 }) ) )
 ```
-- **`z` (Share-Size-1, 6 Oct 2026):** exact plaintext size, optional, still `v: 1`
-  (parsers ignore unknown keys). The consumer frontend writes it; the receiver
-  trusts it only if `ceil(z / CHUNK_SIZE) == total_chunks`. The Worker stores no
-  size: `/meta` `total_bytes` is null for new transfers and receipts carry
-  `size_bytes: null` (key kept in `refueler.receipt.v1`). The MCP send tool should
-  add `z` at MCP-Fix-1. Opt-in size in receipts for Chartered: Master Context 11d‴.
+Key order is `v, k, n, s?, z`. **v2 has no `i`:** parts are encrypted under a key
+derived from `K` with HKDF-SHA256 and a STREAM counter nonce per part, so there is no
+IV to carry —
+```
+part_key = HKDF-SHA256(K, salt = empty, info = utf8("refueler.share.payload.v2") ‖ 0x00)
+nonce_i  = 0x00 ×7 ‖ BE32(i) ‖ last     (last = 0x01 on part N−1)
+AAD_i    = BE32(i)
+```
+and the date seal stays on `K` itself with its own random IV. Reference
+implementation: `frontend/crypto.js` (`derivePartKey` / `encryptPart` /
+`decryptPart`); known-answer vectors in `worker/test/part-crypto.test.js`. The MCP
+server's twin is `src/crypto.js`, gated on the same vectors in
+`test/part-crypto.test.js` — see the MCP repo's `PARITY.md`.
+- **`z` is required in v2:** the exact plaintext size. The receiver checks
+  `ceil(z / CHUNK_SIZE) == total_chunks` before it asks for anything. The Worker
+  stores no size: `/meta` `total_bytes` is null for new transfers and receipts carry
+  `size_bytes: null` (key kept in `refueler.receipt.v1`). Never claim the size is
+  hidden — `total_chunks` gives it to within 32 MiB, and R2 object sizes give it
+  exactly to anyone with storage access. Opt-in size in receipts for Chartered:
+  Master Context 11d‴.
+- **Strict parse:** a malformed v2 blob throws and is never read as a legacy raw key.
+  v1 (`{ v: 1, k, i, n, s?, z? }`) and v0 raw-key links still *parse and decrypt* for
+  receivers until the removal date in the Master Context backlog, but nothing makes
+  them any more.
+- **`permanent_record` from the MCP server:** refused, not faked. The date seal is a
+  browser-side OTS pipeline (`frontend/timestamp.js`) the server does not implement,
+  so writing `s` without running it would hand the recipient a nonce for a seal that
+  was never made. `refueler_send_file` returns `not_supported` and points at
+  refueler.io/share/.
 - **Send / upload (MCP send tool AND consumer `upload.js`):** build the blob above;
   send `X-File-Name: "encrypted-payload"` (a **constant** placeholder — not random;
   random only adds entropy the Worker would log for no gain) to the Worker. The

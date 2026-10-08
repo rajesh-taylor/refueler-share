@@ -205,13 +205,14 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**Safari-Slow-Link-1 ✓ (8 Oct 2026) — downloads of 3+ parts were failing live (Worker buffered whole parts; 4 in flight passed the 128 MB isolate limit). Worker now verifies each part streaming (`hashStream`, vendored blake3-wasm 2.1.5) then streams a second, etag-pinned R2 read — one path, clean 409 at every size (F-2 closed). Page downloads 2 parts at a time (iPhone on a VPN cut 4 together). Receiver card: `/meta` starts in `share-early.js`, modulepreload, upload code only in upload mode. Live ✓ iPhone 404 MB on Mullvad. Deploy `5312c5fa`; ships `9568045`, `f60bcb2`. Next: **MCP-Fix-1** (week of 12 Oct) → KV-Fix-2 → API-Repair-1.** **KV-Fix-1b ✓ (8 Oct 2026) — MAC'd `X-Test-Credential` (`TEST_CRED_KEY`); deploy `d00ae2c4`.**
+**MCP-Fix-1 ✓ (8 Oct 2026, repo `refueler-mcp`) — `refueler_send_file` rebuilt on the live upload path and on link format v2. The server could not start (SDK undeclared, wrong import names, wrong deps object, no `post`/`put`) and sent to `/upload/{uuid}/{NNNN}`, retired at Share-6-6b; 228 tests passed only because they mocked the client. Now: initiate → presigned PUT direct to R2 → finalise with the ciphertext Merkle root, 32 MiB parts streamed 2 in flight, v2 fragment `{v,k,n,z}`, link `refueler.io/share/?uuid=…#…`, `permanent_record` refused not faked. Part crypto byte-identical to the browser's pinned vectors (`PARITY.md`). Cost band GB → GiB to match what the Worker debits (Rajesh). 242 tests. Live ✓ 40 MiB / 2 parts, sha256 round-tripped identical. Worker: `limits.max_transfer_bytes` added — **not deployed**. npm publish still held. Next: **KV-Fix-2** → API-Repair-1.** **Safari-Slow-Link-1 ✓ (8 Oct 2026) — verify-then-stream download, `DL_IN_FLIGHT` 2, early `/meta`; deploy `5312c5fa`.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
 | KV-Fix-1a ✓ | deploy `318772eb` · refueler.io `8fd9fdb` | Status shape (write 400 / read filter) + page whitelist; `requireAdmin`; finalise once; `root_verified` MAC (`KV_MAC_KEY` secret); Lightning gone; capabilities honest (webhook/receipts false, free cap). `worker/test/kv_fix_1a.test.js` 27. |
 | KV-Fix-1b ✓ | deploy `d00ae2c4` · ship `aa3847d` | B12-SR S2 in full: MAC'd `X-Test-Credential` (`TEST_CRED_KEY`), expiry ceiling applies, `soak: true`, single-use `testcred_used:`; `worker/test/kv_fix_1b.test.js` 32. |
 | Safari-Slow-Link-1 ✓ | deploy `5312c5fa` · ships `9568045`, `f60bcb2` (refueler.io `69a56ef`) | Verify-then-stream download (no part held in the Worker), `DL_IN_FLIGHT` 2, early `/meta` + modulepreload + lazy upload code. `worker/test/slow-link-1.test.js` 12. |
+| MCP-Fix-1 ✓ | `refueler-mcp` (uncommitted at write) · refueler-share: capabilities + spec | MCP send on the direct-to-R2 path, link format v2, 32 MiB parts, 2 in flight, Merkle root at finalise; `@cashu/cashu-ts` 4.11.0 pinned to match Worker + vendor script; GB band → GiB; `max_transfer_bytes` = `CHARTERED_CAP_BYTES`. 242 MCP tests; `btc_rate.test.js` 50. Worker **not deployed**. |
  
 ---
  
@@ -222,7 +223,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
 | 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → Share-Progress-1 ✓ → Share-Folder-Resume-1 ✓ → B12-2 ✓ → **KV-Audit-Opus**. |
-| 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → **KV-Fix-2** (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1** (webhooks/receipts from R2, HMAC'd Chartered initiate) before the first Chartered client. | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
+| 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → **KV-Fix-2** (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1** (webhooks/receipts from R2, HMAC'd Chartered initiate) before the first Chartered client. | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
@@ -280,14 +281,13 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **Decided (Rajesh, 8 Oct):** 1a → 1b → MCP-Fix-1 → KV-Fix-2 → API-Repair-1 · revoked API key ≤ 60 s · live `api_client_` is a test (delete, don't migrate) · Chartered promises the Pro Bono cap until B12-4a (KV-Fix-1a) · **at KV-Fix-2 close: revoke/re-scope every Cloudflare API token with Workers KV Storage:Edit** (`wrangler login` stays).
 - **API webhooks + receipts never fire** (no path writes `dock_index.api_key_hash`); capabilities said they do → KV-Fix-1a ✓ flipped them false; API-Repair-1 repairs and flips back after a live test. Absorbs the Share-Size-1 "acceptance receipt never emitted" item.
 - **`ONBOARDING-RUNBOOK.md` Step 3/4 are wrong** (record the Worker can't authenticate; wrong header) → rewritten in KV-Fix-2 around `POST /admin/api-client`.
-- **Write-once chunks** (item below) → B12-3 with the session-token MAC. **250 GB Chartered claims to correct at MCP-Fix-1** (live cap is `CHARTERED_CAP_BYTES` = free cap until B12-4a): `refueler-mcp-spec-v2.md` §7.1 `max_transfer_bytes: 250000000000` (both copies), `refueler-mcp/test/capabilities.test.js` fixture, MCP README webhook mention. `Share-Brand-Terminology.md` Chartered row at B12-4a.
+- **Write-once chunks** (item below) → B12-3 with the session-token MAC. **250 GB Chartered claims ✓ corrected (MCP-Fix-1, 8 Oct):** `refueler-mcp-spec-v2.md` §7.1 (both copies) and the `capabilities.test.js` fixture now carry `max_transfer_bytes: 4294967296` = `CHARTERED_CAP_BYTES`; the Worker emits that field (needs deploy); the MCP README's receipt/webhook claims are marked not-live until API-Repair-1. **Carried:** `Share-Brand-Terminology.md` Chartered row at B12-4a.
 
 **Added Share-Size-1 (6 Oct 2026):**
 - **`/meta` hard-null** (tiny Worker session, from 13 Oct): `total_bytes: null` for every manifest. First check R2 for any manifest still carrying `total_bytes` with a future expiry (soak/test transfers may outlive 7 days). Then drop the `/meta` fallback in `download.js`.
-- **MCP-Fix-1:** send tool adds `z` to the fragment (consumer grammar, `refueler-mcp-spec-v2.md` §7.2).
 
 **Added Share-Crypto-1 (7 Oct 2026):**
-- **Remove old link format support on or after 12 Jan 2027** (v0/v1 links; small frontend session; brief off-repo). Also MCP-Fix-1 sends link format v2.
+- **Remove old link format support on or after 12 Jan 2027** (v0/v1 links; small frontend session; brief off-repo). The MCP send tool makes only v2 from MCP-Fix-1 ✓, so the removal touches receivers only.
 
 **Added Share-Upload-2 (6 Oct 2026) — receiver page, agreed by Rajesh (order of value); A/B mock iterations first, then a download-side session:**
 1. **"How this worked"** — quiet link under the ledger on the ready card *and* the finished screen, opens three lines: encrypted in the sender's browser before upload · the key was in your link and never sent to Refueler · (DAD only) the stored copy is now deleted. Facts on request, not a tagline (R-4 holds).
