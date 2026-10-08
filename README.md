@@ -168,6 +168,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | Share-Upload-6 | ✅ | Folders picked at the top of "On My iPhone" keep that name; an interrupted upload carries on without re-checking the parts already sent |
 | Share-Upload-7 | ✅ | The internal test page runs only Refueler's own copies of its code, nothing from a third-party site; an unused library is gone from the site |
 | Share-Progress-1 | ✅ | Upload and download bars climb steadily from real byte counts, with a calm figure and time left underneath; a dropped connection says so and retries for about 2 minutes (no wait over 10 s); downloads fetch parts overlapped; an interrupted upload shows one box |
+| Share-Folder-Resume-1 | ✅ | An interrupted folder upload continues: pick the same folder again and the page checks it is unchanged, re-zips it to the same bytes, checks the parts already sent and sends the rest; a changed folder or time zone is refused in plain words |
 | B12 | In progress | Storage quotas, Registered sign-in, billing. Design and security review done. Shipped so far: deletion and sweep fixes; every upload URL signed for its exact chunk size, enforced by storage |
 
 ### Roadmap
@@ -176,8 +177,6 @@ Designs are written down before they are built, and security-sensitive blocks ge
 
 | Session | Scope |
 |---------|-------|
-| Encryption review | Design review of how files are encrypted in the browser (Opus), then the fixes it calls for |
-| Share-Folder-Resume-1 | Interrupted folder uploads carry on where they stopped (pick the same folder again) |
 | MCP-Fix-1 | MCP send tool moved onto the current upload path, credential format and encryption, then the npm package is published |
 | Security foundations | Review of every key-value store use (nothing in it may grant access unless signed by the Worker); a dedicated origin for signed-in pages |
 | B12 (rest) | Storage quotas, Citizen sign-in (single-use email link), billing, then an audit of what was built |
