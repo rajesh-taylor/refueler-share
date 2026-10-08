@@ -8,7 +8,7 @@
 //                queued via ctx.waitUntil; no state changes, no new size field.
 //
 // Driven through worker.fetch with in-memory R2/KV (test/_r2_mock.js) and the
-// Share-Admin-1 test-credential path (no Cashu, no Supabase). No network.
+// KV-Fix-1b test-credential path (MAC'd X-Test-Credential; no Cashu, no Supabase). No network.
 
 import { describe, it, expect } from 'vitest';
 import worker from '../src/index.js';
@@ -17,6 +17,9 @@ import { presignPutObject } from '../src/r2_presign.js';
 import { computeCommitment } from '../src/commitment.js';
 import { CHUNK_SIZE, CHUNK_TAG_BYTES } from '../src/sweep_rules.js';
 import { makeBucket, makeKV, FULL } from './_r2_mock.js';
+import { importTestCredKey, makeTestCredential, TESTCRED_USED_PREFIX } from '../src/testcred.js';
+
+const TC_KEY = 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=';
 
 const UUID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b';
 const KEY  = 'test-commitment-key-b12-1d';
@@ -27,8 +30,9 @@ const ctx  = () => { const p = []; return { waitUntil: x => p.push(x), passThrou
 function env() {
   return {
     BUCKET:    makeBucket(),
-    STATUS_KV: makeKV({ [`test_credential:${UUID}`]: { initiated: false, cap_bytes: 400 * 1024 ** 3 } }),
+    STATUS_KV: makeKV(),
     COMMITMENT_KEY:          KEY,
+    TEST_CRED_KEY:           TC_KEY,
     CF_ACCOUNT_ID:           R2.accountId,
     R2_S3_ACCESS_KEY_ID:     R2.accessKeyId,
     R2_S3_SECRET_ACCESS_KEY: R2.secretAccessKey,
@@ -45,6 +49,7 @@ async function initiate(e, totalBytes, totalChunks = Math.ceil(totalBytes / CHUN
       'X-Total-Bytes':           String(totalBytes),
       'X-Expiry-Timestamp':      String(Math.floor(Date.now() / 1000) + 3600),
       'X-Credential-Commitment': await computeCommitment(KEY, UUID, 'free', FREE_WINDOW),
+      'X-Test-Credential':       await makeTestCredential(await importTestCredKey({ TEST_CRED_KEY: TC_KEY }), UUID, 8000, Math.floor(Date.now() / 1000) + 3600),
     },
   });
   const res = await worker.fetch(req, e, ctx());
@@ -130,7 +135,7 @@ describe('B12-1d — /initiate signs content-length', () => {
     const e = env();
     const { status } = await initiate(e, bytes, chunks);
     expect(status).toBe(400);
-    expect(JSON.parse(e.STATUS_KV._store.get(`test_credential:${UUID}`)).initiated).toBe(false);
+    expect(e.STATUS_KV._store.has(`${TESTCRED_USED_PREFIX}${UUID}`)).toBe(false);
     expect(e.BUCKET._store.has(`${UUID}/manifest.json`)).toBe(false);
   });
 });

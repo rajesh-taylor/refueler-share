@@ -47,6 +47,7 @@ import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
 import { makePresigner, presignPutObject, signSessionToken, computeTransferCost } from './r2_presign.js';
 import { CHUNK_SIZE, CHUNK_TAG_BYTES } from './sweep_rules.js';                // B12-1d: signed PUT sizes
+import { checkTestCredential, TESTCRED_USED_PREFIX } from './testcred.js';    // KV-Fix-1b
 // SW-MCP-W2: monthly credit allocation, lazy reset, overage ceiling, personal_api plan
 import {
   loadQuota, applyQuotaSpend, provisionQuota, cancelQuota,
@@ -556,11 +557,14 @@ export default {
       }
 
       // ── Share-Admin-1: test credential — POST /admin/test-credential ─────────
-      // X-Admin-Key gated. Issues a real blind-signed credential bypassing Turnstile,
-      // Cashu payment, and tier resolution. Stores a KV flag so /initiate skips the
-      // spend ledger and uses the specified cap_bytes. Soak-test only.
+      // X-Admin-Key gated. Issues a blind-signed credential plus a MAC'd
+      // X-Test-Credential (KV-Fix-1b, B12-SR S2) that lets /initiate skip the spend
+      // ledger, capped at cap_chunks. Soak-test only.
       // NEVER add to bin/sync-share.sh.
       if (request.method === 'POST' && path === '/admin/test-credential') {
+        // KV-Fix-1b (S2.4): courtesy throttle — the admin key is the gate.
+        const rl = await checkRateLimit(env, getClientIp(request), 'admin_test_credential', 10, 3600);
+        if (rl.limited) return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         return timed('admin_test_credential', () => handleTestCredential(request, env).then(r => addCors(r, request)));
       }
 
@@ -1526,40 +1530,33 @@ async function handleInitiate(request, env, ctx, uuid) {
     return err(503, 'Upload temporarily unavailable');
   }
 
-  // ── Share-Admin-1: test credential KV bypass ──────────────────────────────
-  // Issued by POST /admin/test-credential. If present with initiated:false, skip
-  // Supabase tier resolution, expiry ceiling check, size cap, Cashu verify, and
-  // the spend INSERT. Marks the flag initiated:true so a second /initiate 409s.
-  let isTestCredential = false;
-  let testCredCapBytes = null;
-  const testCredKvKey  = `test_credential:${uuid}`;
-  try {
-    const testCredRaw = await env.STATUS_KV.get(testCredKvKey, { type: 'json' });
-    if (testCredRaw && testCredRaw.initiated === false) {
-      isTestCredential = true;
-      testCredCapBytes = testCredRaw.cap_bytes;
-      // Mark initiated — a second /initiate will fall through to the normal 409 idempotency check.
-      await env.STATUS_KV.put(
-        testCredKvKey,
-        JSON.stringify({ ...testCredRaw, initiated: true }),
-        // keep whatever TTL is left — we can't read it, so reuse expiresInSeconds from the
-        // credential's expires_at field embedded in the stored record.
-        // Safest: let it expire naturally (no expirationTtl rewrite needed here).
-      );
-      console.log(`handleInitiate: test_credential bypass for uuid=${uuid} cap_bytes=${testCredCapBytes}`);
+  // ── KV-Fix-1b (B12-SR S2): soak-test bypass ──────────────────────────────
+  // Selected ONLY by a MAC'd X-Test-Credential (testcred.js) for this UUID, with
+  // no manifest in R2 (checked above) and the KV single-use flag unset. Anything
+  // else → the normal paid path. Skips Cashu verify, the spend INSERT and the
+  // API pool; NOT the expiry ceiling. Cap = cap_chunks × CHUNK_SIZE.
+  // The old test_credential:{uuid} KV flag is never read (P2).
+  let testCred = null;
+  const testCredUsedKey = `${TESTCRED_USED_PREFIX}${uuid}`;
+  {
+    const tc = await checkTestCredential(env, request.headers.get('X-Test-Credential'), uuid, Math.floor(Date.now() / 1000));
+    if (tc) {
+      try {
+        if ((await env.STATUS_KV.get(testCredUsedKey)) === null) testCred = tc;
+      } catch (e) {
+        console.error('handleInitiate: testcred flag read failed, normal path:', e);
+      }
     }
-  } catch (e) {
-    console.error('handleInitiate: test_credential KV read failed, continuing normally:', e);
-    // Non-fatal — fall through to normal path
   }
+  const isTestCredential = testCred !== null;
 
   // ── Resolved tier — never issued_tier for the cap ─────────────────────────
   // Cred-Fix-1: no request header selects a tier. Every consumer upload is
   // 'free' until B12-4a resolves paid tiers from an authenticated session.
   const resolvedTier = 'free';
-  // For test credentials, use the stored cap_bytes directly; TIER_CAPS is not consulted.
+  // Test credential: cap from the MAC'd token; TIER_CAPS is not consulted.
   const tierCap = isTestCredential
-    ? (testCredCapBytes ?? (250 * 1024 * 1024 * 1024))
+    ? testCred.capChunks * CHUNK_SIZE
     : (TIER_CAPS[resolvedTier] ?? TIER_CAPS.free);
 
   // ── UUID-bound commitment verification (S42c) ──────────────────────────────
@@ -1589,9 +1586,8 @@ async function handleInitiate(request, env, ctx, uuid) {
     logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_in_past' });
     return err(400, 'X-Expiry-Timestamp is in the past');
   }
-  if (!isTestCredential) {
-    // Share-Admin-1: test credentials skip the expiry ceiling — they are admin-issued
-    // with a configurable window up to 24 h. Normal tier ceiling does not apply.
+  // KV-Fix-1b (P2): the ceiling applies to test credentials too.
+  {
     const maxWindow = INITIATE_EXPIRY_MAX[resolvedTier] ?? INITIATE_EXPIRY_MAX.free;
     if (expiryTs > nowSeconds + maxWindow) {
       logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'expiry_exceeds_tier' });
@@ -1606,9 +1602,9 @@ async function handleInitiate(request, env, ctx, uuid) {
   }
 
   // ── Cashu verify + spend ───────────────────────────────────────────────────
-  // Share-Admin-1: test credentials skip both the BDHKE verify and the Supabase
-  // spent_tokens INSERT. The test_credential KV flag (marked initiated:true above)
-  // is the single-use guard. No serial → no Supabase write.
+  // KV-Fix-1b: test credentials skip both the BDHKE verify and the Supabase
+  // spent_tokens INSERT. Single use = no manifest in R2 + testcred_used:{uuid}
+  // (set at the spend point below). No serial → no Supabase write.
   // Credential format v2 only (Cred-Fix-2b): a standard Cashu proof {id, secret, C},
   // verified k·Y == C (serial = hex(Y)). Anything else → 401, nothing spent.
   let serial;
@@ -1679,9 +1675,18 @@ async function handleInitiate(request, env, ctx, uuid) {
   // ── Spend — atomic double-spend guard: INSERT-on-serial (B8 §D-3). ─────────
   // sig → BDHKE done above; this INSERT is the point of no return. 409 conflict
   // = already spent (fire-and-forget log). This is the LAST Supabase write.
-  // Share-Admin-1: test credentials skip the spend INSERT entirely — the KV flag
-  // (initiated:true) is the single-use gate; no serial exists to insert.
-  if (!isTestCredential) {
+  // KV-Fix-1b: a test credential instead sets its single-use flag here (the R2
+  // manifest written below is the durable guard; the flag stops a parallel replay).
+  if (isTestCredential) {
+    try {
+      await env.STATUS_KV.put(testCredUsedKey, '1',
+        { expirationTtl: Math.max(testCred.exp - nowSeconds + 300, 60) });
+    } catch (e) {
+      console.error('handleInitiate: testcred flag write failed:', e);
+      return err(502, 'Session store unavailable');
+    }
+    console.log(`handleInitiate: test credential bypass uuid=${uuid} cap_chunks=${testCred.capChunks}`);
+  } else {
     const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
     if (meltRes.status === 409) {
       supabaseFetch(env, 'POST', '/rest/v1/double_spend_attempts', {
@@ -1722,6 +1727,7 @@ async function handleInitiate(request, env, ctx, uuid) {
   manifest.upload_complete = false;
   manifest.status          = 'uploading';
   manifest.upload_mode     = 'direct-r2'; // Share-6 marker for finalise/download branch
+  if (isTestCredential) manifest.soak = true; // B12-SR S2.5: own Navy Office line (B12-3)
 
   if (destroyAfterDownload) manifest.pending_destruction = false; // armed
   if (availableFromTs !== null)  manifest.available_from_timestamp  = availableFromTs;

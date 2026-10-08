@@ -41,6 +41,7 @@ function makeEnv(overrides = {}) {
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,
     TURNSTILE_SECRET_KEY:    'ts',
     ADMIN_KEY:               'admin-test',
+    TEST_CRED_KEY:           'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=',
     SUPABASE_URL:            'https://sb.test',
     SUPABASE_SERVICE_KEY:    'x',
     BUCKET:                  makeBucket(),
@@ -236,7 +237,7 @@ describe('POST /upload/:uuid/initiate — commitment gate', () => {
     expect(issueRes.status).toBe(200);
     const body = await issueRes.json();
     expect(body.commitment).toBe(await computeCommitment(KEY, body.uuid, 'api', API_WINDOW));
-    const res = await initiate(env, body.uuid, { credential: '{}', commitment: body.commitment, tier: 'api' });
+    const res = await initiate(env, body.uuid, { credential: '{}', commitment: body.commitment, tier: 'api', extra: { 'X-Test-Credential': body.test_credential } });
     expect(res.status).toBe(200);
   });
 });

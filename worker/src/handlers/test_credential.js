@@ -4,33 +4,25 @@
 //
 // POST /admin/test-credential
 //
-// X-Admin-Key gated. Issues a real blind-signed credential that /initiate
-// will accept, but bypasses Turnstile, Cashu payment, and tier resolution.
-// Intended solely for soak testing transfers > 4 GiB (streaming branch) where
-// no production credential can reach VERIFY_INLINE_CHUNK_THRESHOLD = 128.
+// X-Admin-Key gated (requireAdmin), rate-limited in index.js. Issues a real
+// blind-signed credential plus the MAC'd X-Test-Credential header value
+// (KV-Fix-1b · B12-SR S2, src/testcred.js) that lets /initiate skip the Cashu
+// spend for this one UUID, capped at cap_chunks. Soak testing only.
+// Nothing is written to KV here; /initiate sets testcred_used:{uuid} on use.
+// The expiry ceiling still applies at /initiate (free tier, 7 days).
 //
-// After issuing, stores a short-lived KV record:
-//   test_credential:{uuid} → { cap_bytes, initiated: false }
-//   TTL: max(expires_in_seconds, 3600) + 300 s grace
-//
-// handleInitiate reads this record (Share-Admin-1 patch in index.js).
-// If present, it:
-//   - skips the Cashu double-spend check
-//   - uses cap_bytes from the record instead of resolved tier cap
-//   - sets initiated: true so a second /initiate 409s normally
-//
-// Body (all optional — sensible defaults):
+// Body:
 //   {
-//     blinded_message:   string,   // REQUIRED — client BDHKE blinded point
-//     cap_bytes:         number,   // default 268435456000 (250 GiB)
-//     expires_in_seconds: number,  // default 7200 (2 h); max 86400 (24 h)
+//     blinded_message:    string,  // REQUIRED — client BDHKE blinded point
+//     cap_bytes:          number,  // default 250 GiB; rounded up to chunks, ≤ 8,000 chunks
+//     expires_in_seconds: number,  // credential life; default 7200 (2 h); max 86400 (24 h)
 //   }
 //
 // Response (same shape as /credential/issue so the test page can reuse it):
 //   {
 //     signed_point, mint_pubkey, allocation_bytes, uuid,
 //     issued_tier, commitment, expires_at,
-//     test_credential: true,
+//     test_credential: "v1.<uuid>.<cap_chunks>.<exp>.<mac>",  // send as X-Test-Credential
 //   }
 //
 // NEVER add this endpoint to bin/sync-share.sh.
@@ -41,6 +33,8 @@ import { issueBlindSignature } from '../nut00.js';
 import { computeCommitment } from '../commitment.js';
 import { TIERS, isCharteredTier } from '../tiers.js';
 import { requireAdmin } from '../utils.js';
+import { CHUNK_SIZE } from '../sweep_rules.js';
+import { importTestCredKey, makeTestCredential, TESTCRED_MAX_CHUNKS } from '../testcred.js';
 
 // ─── Module-local helpers (mirrors index.js / admin.js) ─────────────────────
 function json(data, status = 200) {
@@ -58,7 +52,7 @@ function err(status, message) {
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const DEFAULT_CAP_BYTES       = 250 * 1024 * 1024 * 1024; // 250 GiB
+const DEFAULT_CAP_BYTES       = 250 * 1024 * 1024 * 1024; // 250 GiB = 8,000 chunks
 const DEFAULT_EXPIRES_SECONDS = 2 * 3600;                 // 2 h
 const MAX_EXPIRES_SECONDS     = 24 * 3600;                // 24 h hard ceiling
 const API_EXPIRY_WINDOW       = 90 * 24 * 3600;           // chartered commitment window (mirrors index.js)
@@ -77,6 +71,10 @@ export async function handleTestCredential(request, env) {
     return err(400, 'Invalid JSON body');
   }
 
+  // No secret → no test credentials (and /initiate never bypasses).
+  const tcKey = await importTestCredKey(env);
+  if (!tcKey) return err(503, 'Test credentials not configured');
+
   const { blinded_message } = body;
   if (!blinded_message) {
     return err(400, 'blinded_message is required');
@@ -85,6 +83,11 @@ export async function handleTestCredential(request, env) {
   const capBytes = typeof body.cap_bytes === 'number' && body.cap_bytes > 0
     ? Math.floor(body.cap_bytes)
     : DEFAULT_CAP_BYTES;
+
+  const capChunks = Math.ceil(capBytes / CHUNK_SIZE);
+  if (capChunks > TESTCRED_MAX_CHUNKS) {
+    return err(400, `cap_bytes exceeds ${TESTCRED_MAX_CHUNKS} chunks`);
+  }
 
   const expiresInSeconds = typeof body.expires_in_seconds === 'number' && body.expires_in_seconds > 0
     ? Math.min(Math.floor(body.expires_in_seconds), MAX_EXPIRES_SECONDS)
@@ -113,44 +116,32 @@ export async function handleTestCredential(request, env) {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const expiresAt  = nowSeconds + expiresInSeconds;
 
-  // ── KV flag — handleInitiate reads this to bypass tier cap + Cashu spend ──
-  // TTL = credential window + 5-minute grace so the flag outlives any in-flight /initiate.
-  const kvKey = `test_credential:${uuid}`;
-  const kvTtl = expiresInSeconds + 300;
-  try {
-    await env.STATUS_KV.put(
-      kvKey,
-      JSON.stringify({ cap_bytes: capBytes, initiated: false, issued_at: nowSeconds }),
-      { expirationTtl: kvTtl },
-    );
-  } catch (e) {
-    console.error('handleTestCredential: KV write failed:', e);
-    return err(502, 'KV write failed — credential not issued');
-  }
+  // ── MAC'd header value — the ONLY thing that selects the /initiate bypass ─
+  const testCredential = await makeTestCredential(tcKey, uuid, capChunks, expiresAt);
 
-  // ── AE event (test runs distinguishable from production) ─────────────────
+  // ── AE event admin.testcred.issued (count only, B12-SR S2.4) ─────────────
   if (env.AE) {
     try {
       env.AE.writeDataPoint({
-        blobs:   ['admin_test_credential', issuedTier, '', ''],
-        doubles: [0, 200, 0, 0, capBytes],
-        indexes: ['admin_test_credential'],
+        blobs:   ['admin.testcred.issued'],
+        doubles: [1],
+        indexes: ['admin.testcred.issued'],
       });
     } catch (e) {
       console.error('handleTestCredential: AE write failed:', e);
     }
   }
 
-  console.log(`handleTestCredential: issued uuid=${uuid} cap_bytes=${capBytes} expires_in=${expiresInSeconds}s`);
+  console.log(`handleTestCredential: issued cap_chunks=${capChunks} expires_in=${expiresInSeconds}s`);
 
   return json({
     signed_point:     signedPoint,
     mint_pubkey:      mintPubkey,
-    allocation_bytes: capBytes,
+    allocation_bytes: capChunks * CHUNK_SIZE,
     uuid,
     issued_tier:      issuedTier,
     commitment,
     expires_at:       expiresAt,
-    test_credential:  true,
+    test_credential:  testCredential,
   });
 }
