@@ -122,9 +122,12 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
   history.replaceState(null, '', location.pathname);
 
   // Fetch metadata
+  // Safari-Slow-Link-1: share-early.js asked already; a failed early ask is asked again.
   let meta = {};
   try {
-    const metaRes = await fetch(`${WORKER_URL}/meta/${uuid}`);
+    const early   = window.__rfsMeta;
+    delete window.__rfsMeta;
+    const metaRes = (early && early.uuid === uuid && await early.res) || await fetch(`${WORKER_URL}/meta/${uuid}`);
     if (metaRes.ok) meta = await metaRes.json();
     else if (metaRes.status === 404 || metaRes.status === 410) { _showLinkInactive(domRefs); return; }
   } catch {

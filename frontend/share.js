@@ -16,7 +16,6 @@
 
 import { WORKER_URL, FREE_EXPIRY, setCalmText }         from './crypto.js';
 import { parseFragment }                                from './fragment.js';
-import { enterUploadMode, checkResumeState }            from './upload.js';
 import { enterDownloadMode }                            from './download.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -367,8 +366,15 @@ const detected = detectMode();
 if (detected) {
   enterDownloadMode(detected, domRefs, state, helpers);   // sets .rx-mode before its first await
 } else {
-  checkResumeState(domRefs, state, helpers).catch(() => {});
-  enterUploadMode(domRefs, state, helpers);
+  // Safari-Slow-Link-1: the upload code loads only here, so a receiver never waits
+  // on it (share-early.js has already started fetching it on the upload page).
+  import('./upload.js').then(({ enterUploadMode, checkResumeState }) => {
+    checkResumeState(domRefs, state, helpers).catch(() => {});
+    enterUploadMode(domRefs, state, helpers);
+  }).catch((e) => {
+    reportError('upload_module', e?.name || 'Error', String(e?.message || '').slice(0, 120));
+    showStopped('Share couldn’t start in this browser. Reload to try again, or use another browser.');
+  });
 }
 // F-23: the mode is known; share-early.js's mark has done its job.
 document.documentElement.classList.remove('rx-pending');

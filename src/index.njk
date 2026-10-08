@@ -9,10 +9,17 @@ wordmarkSection: "Share"
 <html lang="en">
 <head>
 {% set extraHead %}
-<!-- F-23: marks a Share link before the modules load, so the upload screen never flashes -->
+<!-- F-23: marks a Share link before the modules load, so the upload screen never flashes.
+     Safari-Slow-Link-1: also starts /meta (receiver) or preloads the upload modules. -->
 <script src="/share-early.js"></script>
 <link rel="stylesheet" href="/share.css">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+<!-- Safari-Slow-Link-1: every module both pages need, fetched at once rather than one import level at a time -->
+<link rel="modulepreload" href="/share.js">
+<link rel="modulepreload" href="/crypto.js">
+<link rel="modulepreload" href="/fragment.js">
+<link rel="modulepreload" href="/download.js">
+<!-- async, not defer: the modules no longer wait for it (upload.js waits for window.turnstile itself) -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async></script>
 {% endset %}
 {% include "head.njk" %}
 <!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
@@ -363,10 +370,11 @@ function showMaintenanceModal(status) {
 
 {% include "footer.njk" %}
 
-<!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked). Blocking scripts so  -->
-<!-- globals are defined before the module script executes.                        -->
-<script src="/fflate.min.js"></script>
-<script src="/qr-creator.min.js"></script>
+<!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked). defer, not blocking  -->
+<!-- (Safari-Slow-Link-1): deferred scripts run in order before the module script, -->
+<!-- so the globals are still defined before share.js executes.                    -->
+<script src="/fflate.min.js" defer></script>
+<script src="/qr-creator.min.js" defer></script>
 <script type="module" src="/share.js"></script>
 </body>
 </html>
