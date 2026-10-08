@@ -37,6 +37,9 @@ import {
   makeSteadyProgress,
   progressBytesText,
   setProgressWords,
+  zipFolder,
+  zipSize,
+  folderPrint,
 } from './crypto.js';
 
 import {
@@ -62,7 +65,8 @@ import { buildMerkleTree } from './merkle.js';
 // { url, expires } — the size-signed tail URL, issued only at /initiate.
 // Share-Upload-6 added hashes, fileModified. Share-Crypto-1 added scheme: 2 (part
 // key schedule, link format v2) and dropped ivHex; a record without scheme 2 is
-// discarded, never resumed.
+// discarded, never resumed. Share-Folder-Resume-1 added folder { name, files, list,
+// local } (crypto.js folderPrint) on folder uploads; a folder record without it is discarded.
 // ─────────────────────────────────────────────────────────────────────────────
 const IDB_NAME    = 'refueler-share-resume';
 const IDB_STORE   = 'transfers';
@@ -220,103 +224,43 @@ async function readDirectoryEntry(dirEntry, pathPrefix, depth) {
   return results;
 }
 
-// Store-only folder zips (Share-Upload-5): no compression, entries in path order,
-// each file's own modified date — the same folder always zips to the same bytes,
-// the base for folder resume (S-031). Dates go in twice: the zip's own field (local
-// time, 2 s steps) and the extended UTC timestamp (0x5455) most unzip tools restore
-// exactly. Unknown or out-of-range dates (zip fields run 1980–2038) use 1 Jan 1980.
-const ZIP_DATE_MIN = new Date(1980, 0, 1, 12).getTime();
-const ZIP_DATE_MAX = 2 ** 31 * 1000 - 1;
-
-function _zipDate(file) {
-  const t = file.lastModified;
-  return t >= ZIP_DATE_MIN && t <= ZIP_DATE_MAX ? t : ZIP_DATE_MIN;
-}
-
-function _zipUtcStamp(t) {
-  const b = new Uint8Array(5);
-  b[0] = 1;   // flags: modified time only
-  new DataView(b.buffer).setUint32(1, Math.floor(t / 1000), true);
-  return b;
-}
-
-// Exact size of that zip: per file a 30 B local header, 16 B data descriptor,
-// 46 B central entry, a 9 B timestamp in each header and the name twice; 22 B end record.
-function _zipSize(entries) {
-  const enc = new TextEncoder();
-  return entries.reduce((acc, e) => acc + (e.file.size || 0) + 110 + 2 * enc.encode(e.relativePath).length, 22);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Zip streaming (fflate)
+// Zip streaming (fflate) — the zip itself is crypto.js zipFolder (store-only,
+// path order, each file's own date: the same folder zips to the same bytes).
 // ─────────────────────────────────────────────────────────────────────────────
+// Returns the folder's resume print ({ name, files, list, local }), or null when
+// it stopped and has said why.
 async function zipAndSelect(entries, folderName, domRefs, helpers) {
   const { showZipStage, hideZipCard, handleFileSelection, formatBytes, setDropMsg, reportError } = helpers;
   const zipName  = `${folderName}.zip`;
   const totalBytes = entries.reduce((acc, e) => acc + (e.file.size || 0), 0);
-  entries = [...entries].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
 
   // RAM guard (Share-6-spec §7): the zip is held in memory, so refuse BEFORE the
   // read loop. Checked once, on the zip's exact size (files + headers), so the
   // "zip it yourself" copy shows before any zipping starts.
-  const zipBytes = _zipSize(entries);
+  const zipBytes = zipSize(entries);
   if (zipBytes > FOLDER_ZIP_CAP) {
     hideZipCard();
     _resetRows(domRefs); helpers.setView('empty');
     setDropMsg(_folderTooBig(zipBytes, formatBytes));
-    return;
+    return null;
   }
 
   showZipStage('Zipping', 0, `0 B of ${formatBytes(totalBytes)}`);
 
-  const zipChunks = [];
-  let bytesProcessed = 0;
-  let zipError = null;
-
-  const zipBlob = await new Promise((resolve, reject) => {
-    const zipper = new fflate.Zip((err, chunk, final) => {
-      if (err) { zipError = err; reject(err); return; }
-      zipChunks.push(chunk);
-      if (final) resolve(new Blob(zipChunks, { type: 'application/zip' }));
+  let zipBlob = null, print = null;
+  try {
+    print = await folderPrint(entries);
+    zipBlob = await zipFolder(entries, (done) => {
+      showZipStage('Zipping', Math.min(Math.round((done / totalBytes) * 95), 95), `${formatBytes(done)} of ${formatBytes(totalBytes)}`);
     });
-
-    (async () => {
-      try {
-        for (let i = 0; i < entries.length; i++) {
-          if (zipError) break;
-          const { relativePath, file } = entries[i];
-          const buf  = await file.arrayBuffer();
-          const data = new Uint8Array(buf);
-
-          const entry = new fflate.ZipPassThrough(relativePath);
-          const when  = _zipDate(file);
-          entry.mtime = when;
-          entry.extra = { 0x5455: _zipUtcStamp(when) };
-          zipper.add(entry);
-          entry.push(data, true);
-          // eslint-disable-next-line no-unused-expressions
-          buf;
-
-          bytesProcessed += file.size;
-          const pct = Math.min(Math.round((bytesProcessed / totalBytes) * 95), 95);
-          showZipStage('Zipping', pct, `${formatBytes(bytesProcessed)} of ${formatBytes(totalBytes)}`);
-          await new Promise(r => setTimeout(r, 0));
-        }
-        if (!zipError) {
-          showZipStage('Finalising archive', 95, `${formatBytes(totalBytes)} of ${formatBytes(totalBytes)}`);
-          zipper.end();
-        }
-      } catch (e) { reject(e); }
-    })();
-  }).catch(err => {
-    reportError('folder_zip', err.message || 'fflate error', folderName.slice(0, 100));
+  } catch (err) {
+    reportError('folder_zip', err?.message || 'fflate error', folderName.slice(0, 100));
     hideZipCard();
     _resetRows(domRefs); helpers.setView('empty');
     setDropMsg('Zipping the folder didn’t work. Try again, or zip it yourself and send the .zip as a file.');
     return null;
-  });
-
-  if (!zipBlob) return;
+  }
 
   showZipStage('Zipping', 100, `${formatBytes(totalBytes)} of ${formatBytes(totalBytes)}`);
   await new Promise(r => setTimeout(r, 300));
@@ -324,6 +268,7 @@ async function zipAndSelect(entries, folderName, domRefs, helpers) {
 
   const zipFile = new File([zipBlob], zipName, { type: 'application/zip' });
   handleFileSelection(zipFile, entries.length);
+  return { name: folderName, ...print };
 }
 
 // Build list §1: folders over the 2 GB in-memory cap (Share-6-spec §7).
@@ -740,6 +685,7 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   _cancelQueuedStart(state, domRefs);
   state.selectedFile = file;
   state.sourceType   = 'file'; // reset: folder path sets this to 'folder' before upload
+  state.folder       = null;
   fileNameTag.textContent = file.name;
   domRefs.upFileLabel.textContent = folderFiles ? 'Folder' : 'File';
   domRefs.upFileNote.hidden = !folderFiles;
@@ -820,14 +766,34 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
 
   const folderName = directoryEntry.name || 'folder';
   _startZipView(folderName, files.length, domRefs, helpers);
-  await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n) });
-  // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
-  // setting here overwrites that after the zip+selection chain completes.
-  state.sourceType = 'folder';
+  _setFolder(state, await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n) }));
 }
 
 function _folderTooMany(n) {
   return `This folder has ${n.toLocaleString()} files. Folders can have up to ${FOLDER_MAX_FILES.toLocaleString()}. Zip it yourself and send the .zip as a file.`;
+}
+
+// A folder picker's files → the folder's name and its zip entries (paths without the root).
+function _folderEntries(fileList) {
+  const firstPath = fileList[0].webkitRelativePath || fileList[0].name;
+  const rootName  = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
+  // iOS picker: "Open" at the top of On My iPhone reports that root as
+  // "File Provider Storage". Name only — entry paths drop the root, so bytes are unchanged.
+  const folderName = rootName === IOS_LOCAL_ROOT ? 'On My iPhone' : rootName;
+  const entries = fileList.map(f => {
+    const rel      = f.webkitRelativePath || f.name;
+    const stripped = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
+    return { relativePath: sanitisePath(stripped), file: f };
+  }).filter(e => e.relativePath.length > 0);
+  return { folderName, entries };
+}
+
+// Set AFTER zipAndSelect: _handleFileSelection (called inside it) resets to 'file'.
+// print = the folder's resume print, or null when zipping stopped (nothing chosen).
+function _setFolder(state, print) {
+  if (!print) return;
+  state.sourceType = 'folder';
+  state.folder     = print;
 }
 
 async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpts) {
@@ -842,25 +808,12 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
     return;
   }
 
-  const firstPath = fileList[0].webkitRelativePath || fileList[0].name;
-  const rootName  = firstPath.includes('/') ? firstPath.split('/')[0] : 'folder';
-  // iOS picker: "Open" at the top of On My iPhone reports that root as
-  // "File Provider Storage". Name only — entry paths drop the root, so bytes are unchanged.
-  const folderName = rootName === IOS_LOCAL_ROOT ? 'On My iPhone' : rootName;
+  const { folderName, entries } = _folderEntries(fileList);
   _startZipView(folderName, fileList.length, domRefs, helpers);
   showZipStage('Gathering', 0, '');
 
-  const entries = fileList.map(f => {
-    const rel      = f.webkitRelativePath || f.name;
-    const stripped = rel.includes('/') ? rel.slice(rel.indexOf('/') + 1) : rel;
-    return { relativePath: sanitisePath(stripped), file: f };
-  }).filter(e => e.relativePath.length > 0);
-
   // Over 2 GB is refused inside zipAndSelect (before reading), with the folder copy.
-  await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n) });
-  // Part C: set AFTER zipAndSelect — _handleFileSelection (called inside zip) resets to 'file';
-  // setting here overwrites that after the zip+selection chain completes.
-  state.sourceType = 'folder';
+  _setFolder(state, await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n) }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -977,6 +930,12 @@ class UploadStop extends Error {
 const RESUME_HEAD = { eyebrow: 'Interrupted', head: 'An upload didn’t finish.' };
 const NO_RESUME = 'This upload can’t be resumed. Start over to send the file again.';
 const NOT_SAME_FILE = 'That file doesn’t match the unfinished upload. Discard it and start again.';
+// Share-Folder-Resume-1: folder wording says "folder" and names it.
+const FOLDER_ASK = 'Choose the same folder to continue. This page only sees what you choose.';
+const NOT_SAME_FOLDER = 'That folder doesn’t match the unfinished upload. Start over to send it again.';
+const FOLDER_DIFFERENT = (f) => `That’s a different folder. Choose “${f.name}” (${f.files.toLocaleString()} files) to continue.`;
+const FOLDER_CHANGED   = (f) => `“${f.name}” has changed since the upload stopped: files were added, removed or edited. It can’t continue. Discard and send the folder again.`;
+const FOLDER_TIME_ZONE = (f) => `This device’s time zone has changed since the upload stopped, so “${f.name}” can’t continue. Set the time zone back, or discard and start again.`;
 const SCHEME = 2;   // part key schedule + link format v2 (crypto.js, fragment.js)
 
 // fetch, with a dropped connection turned into a "network" stop.
@@ -996,7 +955,7 @@ function _stopText(e, job) {
   switch (e.kind) {
     case 'network': {
       const reached = e.tried ? 'Refueler couldn’t be reached after several tries.' : 'Refueler couldn’t be reached.';
-      return `${reached} Nothing was shared. ${pct > 0 ? `Try again carries on from ${pct}%.` : 'Try again.'}`;
+      return `${reached} Nothing was shared. ${pct > 0 ? `Try again continues from ${pct}%.` : 'Try again.'}`;
     }
     case 'check':      return 'The security check didn’t go through. Try again.';
     case 'refused':    return 'Refueler refused the upload. Try again; if it keeps happening, check the Status page.';
@@ -1013,7 +972,7 @@ function _stopped(e, job, domRefs, state, helpers) {
   }
   if (e.kind === 'gone' || e.kind === 'changed') {
     if (job) clearResumeState(job.uuid, helpers.reportError).catch(() => {});
-    helpers.showStopped(e.kind === 'changed' ? NOT_SAME_FILE : NO_RESUME);
+    helpers.showStopped(e.kind === 'changed' ? (job?.folder ? NOT_SAME_FOLDER : NOT_SAME_FILE) : NO_RESUME);
     return;
   }
   const retry = job
@@ -1172,6 +1131,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
     file, uuid: issuedUuid, keyHex, scheme: SCHEME, totalChunks, expiryTimestamp,
     tier: issuedTier, sessionToken: initData.session_token, tailUrl,
     sealNonceHex, sourceType: state.sourceType || 'file',
+    folder: state.sourceType === 'folder' ? state.folder : null,   // Share-Folder-Resume-1
     sent: 0, hashes: [], urlMap,
     // Streaming BLAKE3 plaintext root, fed after each part arrives (TH-2; paid only, F-10)
     plainHash: wantsPermanentRecord ? blake3CreateHash() : null,
@@ -1193,7 +1153,8 @@ function _recordOf(job) {
     sealNonceHex: job.sealNonceHex || undefined,
     uploadMode: 'direct-r2', sessionToken: job.sessionToken, // Share-6: resume needs these
     tailUrl: job.tailUrl || undefined,                       // B12-1c: /urls cannot re-issue the tail
-    sourceType: job.sourceType,                              // Part C: folder detection for FOLDER-RESUME discard
+    sourceType: job.sourceType,
+    folder: job.folder || undefined,                         // Share-Folder-Resume-1: { name, files, list, local }
     hashes: job.hashes.slice(0, job.sent),                   // Share-Upload-6: sent parts' ciphertext hashes (resume skips re-encrypting)
     fileModified: job.file.lastModified,                     // …trusted only while the chosen file is unchanged
   };
@@ -1414,17 +1375,14 @@ export async function checkResumeState(domRefs, state, helpers) {
     return;
   }
 
-  // ── FOLDER-RESUME auto-discard (Part C) ─────────────────────────────────────
-  // A folder upload is zipped into an in-memory File that never touches disk, so
-  // the file picker cannot re-select it on resume. Discard immediately — a resume
-  // offer here could never succeed. Gate runs BEFORE the expiry check.
-  if (record.sourceType === 'folder') {
+  // ── Folders (Share-Folder-Resume-1) ─────────────────────────────────────────
+  // A folder's zip lives only in memory, so resume re-zips the re-picked folder
+  // and checks it against the print the record kept. A folder record from before
+  // that print existed can't be checked: discard it and say so.
+  if (record.sourceType === 'folder' && !_folderPrintOk(record.folder)) {
     await clearResumeState(record.uuid, helpers.reportError);
-    const { resumeCard, resumeNoticeBtn } = domRefs;
-    if (resumeCard) resumeCard.classList.add('hidden');
-    if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
     if (typeof helpers.setDropMsg === 'function') {
-      helpers.setDropMsg('A folder upload didn’t finish. Folders can’t be resumed, so start again.');
+      helpers.setDropMsg('A folder upload didn’t finish and can’t continue. Send the folder again.');
     }
     return;
   }
@@ -1450,7 +1408,17 @@ export async function checkResumeState(domRefs, state, helpers) {
 
   const sentBytes = Math.min((record.chunkIndex + 1) * CHUNK_SIZE, record.fileSize);
   const pct       = Math.round(sentBytes / record.fileSize * 100);
-  domRefs.resumeFile.textContent = record.fileName;
+  if (record.folder) {
+    // Folder wording: the row, the sentence and the button say "folder" and name it.
+    const label = domRefs.resumeFile.closest('.rx-row')?.querySelector('dt');
+    if (label) label.textContent = 'Folder';
+    domRefs.resumeFile.replaceChildren(record.folder.name, Object.assign(document.createElement('small'),
+      { textContent: `${record.folder.files.toLocaleString()} files` }));
+    if (resumeDetail) resumeDetail.textContent = FOLDER_ASK;
+    if (resumeNoticeBtn) resumeNoticeBtn.textContent = 'Choose folder';
+  } else {
+    domRefs.resumeFile.textContent = record.fileName;
+  }
   domRefs.resumeUploaded.replaceChildren(`${pct}%`, Object.assign(document.createElement('small'),
     { textContent: `${formatBytes(sentBytes)} of ${formatBytes(record.fileSize)}` }));
   if (resumeCard) resumeCard.classList.remove('hidden');
@@ -1465,7 +1433,7 @@ export async function checkResumeState(domRefs, state, helpers) {
   }
 
   if (expired) {
-    if (resumeDetail) resumeDetail.textContent = 'It’s too late to carry on: the upload window has closed. Discard it and start again.';
+    if (resumeDetail) resumeDetail.textContent = 'It’s too late to continue: the upload window has closed. Discard it and start again.';
     if (resumeNoticeBtn) resumeNoticeBtn.classList.add('hidden');
     return;
   }
@@ -1488,46 +1456,18 @@ export async function checkResumeState(domRefs, state, helpers) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function resumeUpload(record, domRefs, state, helpers) {
   if (!record) return;
-  const { resumeCard } = domRefs;
   const { formatBytes, reportError, showStopped } = helpers;
-  // Back to the resume card with a sentence (file picker cancelled, wrong file).
-  const backToCard = (text) => {
-    helpers.setView('empty', RESUME_HEAD);
-    if (resumeCard) resumeCard.classList.remove('hidden');
-    if (domRefs.resumeDetail) domRefs.resumeDetail.textContent = text;
-  };
+  const backToCard = (text) => _backToCard(text, domRefs, helpers);
 
-  // ── Mode gate (6-4a): only direct-R2 records supported ────────────────────
-  // Pre-6-2 records lack uploadMode / sessionToken and cannot finalise.
-  // Discard cleanly rather than taking the legacy relay road.
-  // sessionToken was minted at /initiate and stored in the record — no re-credential needed.
-  if (record.uploadMode !== 'direct-r2' || !record.sessionToken) {
+  // ── Gates: direct-R2 (6-4a), link format v2 (Share-Crypto-1), tail URL (B12-1c) ──
+  if (_resumeBlocked(record)) {
     await clearResumeState(record.uuid, reportError);
     showStopped(NO_RESUME);
     return;
   }
 
-  const totalChunks = record.totalChunks;
-  const resumeFrom  = record.chunkIndex + 1;
-
-  // ── Scheme gate (Share-Crypto-1): link format v2 records only ──────────────
-  // An older record can't finish as a v2 link, and every v2 record keeps one
-  // hash per sent part: the changed-file check below needs them all.
-  const recordHashes = Array.isArray(record.hashes) && record.hashes.length === resumeFrom
-    && record.hashes.every(h => /^[0-9a-f]{64}$/.test(h)) ? record.hashes.slice() : null;
-  if (record.scheme !== SCHEME || !recordHashes) {
-    await clearResumeState(record.uuid, reportError);
-    showStopped(NO_RESUME);
-    return;
-  }
-
-  // B12-1c: the size-signed tail URL is issued once, at /initiate.
-  const tailUrl = record.tailUrl || null;
-  if (tailUrl && resumeFrom < totalChunks && tailUrl.expires * 1000 <= Date.now()) {
-    await clearResumeState(record.uuid, reportError);
-    showStopped(NO_RESUME);
-    return;
-  }
+  // Share-Folder-Resume-1: a folder is re-picked, checked and re-zipped.
+  if (record.folder) { _pickResumeFolder(record, domRefs, state, helpers); return; }
 
   // ── File prompt + validation ───────────────────────────────────────────────
   // We need the original plaintext bytes for the parts still to send, and to
@@ -1539,47 +1479,168 @@ export async function resumeUpload(record, domRefs, state, helpers) {
   try {
     resumeFile = await _promptForResumeFile(record.fileName, record.fileSize, domRefs);
   } catch {
-    backToCard('Choose the same file to carry on. Your browser can’t reopen it by itself.');
+    backToCard('Choose the same file to continue. This page only sees what you choose.');
     return;
   }
 
-  if (!resumeFile) { backToCard('Choose the same file to carry on. Your browser can’t reopen it by itself.'); return; }
+  if (!resumeFile) { backToCard('Choose the same file to continue. This page only sees what you choose.'); return; }
 
   if (resumeFile.name !== record.fileName || resumeFile.size !== record.fileSize) {
-    backToCard(`That’s a different file. Choose “${record.fileName}” (${formatBytes(record.fileSize)}) to carry on.`);
+    backToCard(`That’s a different file. Choose “${record.fileName}” (${formatBytes(record.fileSize)}) to continue.`);
     return;
   }
 
-  if (Math.ceil(resumeFile.size / CHUNK_SIZE) !== totalChunks) {
+  if (Math.ceil(resumeFile.size / CHUNK_SIZE) !== record.totalChunks) {
     backToCard(NOT_SAME_FILE);
-    reportError('resume_chunk_count', `expected ${totalChunks} got ${Math.ceil(resumeFile.size / CHUNK_SIZE)}`, `uuid:${record.uuid.slice(0,8)}`);
+    reportError('resume_chunk_count', `expected ${record.totalChunks} got ${Math.ceil(resumeFile.size / CHUNK_SIZE)}`, `uuid:${record.uuid.slice(0,8)}`);
     return;
   }
 
-  if (resumeCard) resumeCard.classList.add('hidden');
-  helpers.setView('uploading');
-  helpers.setStage('Preparing');
-  helpers.setProgress(0, '');
-
-  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
-
-  const expiryTimestamp = record.expiryTimestamp
-    || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
+  _resumeView(domRefs, helpers);
   // Share-Upload-6: reuse the sent parts' hashes only for the same file, unchanged
   // since (lastModified). Otherwise _carryOn re-encrypts them and checks each one
   // against the record (expectedHashes, Share-Crypto-1): a different file stops
   // there, before any part is sent.
-  const savedHashes = record.fileModified === resumeFile.lastModified ? recordHashes.slice() : [];
+  const recordHashes = _recordHashes(record);
+  await _resumeWith(record, resumeFile, record.fileModified === resumeFile.lastModified ? recordHashes : [], domRefs, state, helpers);
+}
+
+// Why a record can't carry on: true = it can't. Synchronous, so the resume press
+// can still open a picker (Safari user activation).
+function _resumeBlocked(record) {
+  // Pre-6-2 records lack uploadMode / sessionToken and cannot finalise (6-4a).
+  // sessionToken was minted at /initiate and stored in the record — no re-credential needed.
+  if (record.uploadMode !== 'direct-r2' || !record.sessionToken) return true;
+  // An older record can't finish as a v2 link, and every v2 record keeps one
+  // hash per sent part: the changed-file check needs them all.
+  if (record.scheme !== SCHEME || !_recordHashes(record)) return true;
+  // B12-1c: the size-signed tail URL is issued once, at /initiate.
+  const tail = record.tailUrl;
+  return !!(tail && record.chunkIndex + 1 < record.totalChunks && tail.expires * 1000 <= Date.now());
+}
+
+function _recordHashes(record) {
+  const h = record.hashes;
+  return Array.isArray(h) && h.length === record.chunkIndex + 1 && h.every(x => /^[0-9a-f]{64}$/.test(x)) ? h.slice() : null;
+}
+
+function _folderPrintOk(f) {
+  return !!f && typeof f.name === 'string' && Number.isInteger(f.files) && f.files > 0
+    && /^[0-9a-f]{64}$/.test(f.list) && /^[0-9a-f]{64}$/.test(f.local);
+}
+
+// Back to the resume card with a sentence (picker cancelled, wrong file or folder).
+function _backToCard(text, domRefs, helpers) {
+  helpers.setView('empty', RESUME_HEAD);
+  if (domRefs.resumeCard) domRefs.resumeCard.classList.remove('hidden');
+  if (domRefs.resumeDetail) domRefs.resumeDetail.textContent = text;
+}
+
+function _resumeView(domRefs, helpers) {
+  if (domRefs.resumeCard) domRefs.resumeCard.classList.add('hidden');
+  helpers.setView('uploading');
+  helpers.setStage('Preparing');
+  helpers.setProgress(0, '');
+}
+
+// The record's transfer, carried on with this file: deps, then _carryOn.
+async function _resumeWith(record, file, savedHashes, domRefs, state, helpers) {
+  if (!(await _loadDepsOrSay(domRefs, helpers))) return;
+  const expiryTimestamp = record.expiryTimestamp
+    || (Math.floor((record.timestamp || Date.now()) / 1000) + (TIER_EXPIRY_SECONDS[record.tier] || FREE_EXPIRY));
   const job = {
-    file: resumeFile, uuid: record.uuid, keyHex: record.keyHex, scheme: SCHEME, expectedHashes: recordHashes,
-    totalChunks, expiryTimestamp, tier: record.tier || 'free',
-    sessionToken: record.sessionToken, tailUrl,
+    file, uuid: record.uuid, keyHex: record.keyHex, scheme: SCHEME, expectedHashes: _recordHashes(record),
+    totalChunks: record.totalChunks, expiryTimestamp, tier: record.tier || 'free',
+    sessionToken: record.sessionToken, tailUrl: record.tailUrl || null,
     sealNonceHex: record.sealNonceHex || null, sourceType: record.sourceType || 'file',
-    sent: resumeFrom, hashes: savedHashes, urlMap: new Map(), plainHash: null,
+    folder: record.folder || null,
+    sent: record.chunkIndex + 1, hashes: savedHashes.slice(), urlMap: new Map(), plainHash: null,
     // A resumed upload doesn't record the password or delete setting: left out of the ledger.
-    info: { fileName: record.fileName, sizeBytes: record.fileSize, expiryTimestamp },
+    info: { fileName: record.fileName, isFolder: !!record.folder, sizeBytes: record.fileSize, expiryTimestamp },
   };
   await _carryOnOrStop(job, domRefs, state, helpers);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Folder resume (Share-Folder-Resume-1, S-031). The press opens a folder picker
+// (no await before it: Safari). The re-picked folder must match the record's
+// print — name, then the list of paths, sizes and dates, then the dates as the zip
+// writes them (the device's time zone) — before a byte of it is read. Then it is
+// re-zipped to the same bytes, and _carryOn re-encrypts every sent part and checks
+// it against the record before sending the rest (re-encrypting is safe only for
+// identical bytes; a part that differs stops there, nothing sent).
+// ─────────────────────────────────────────────────────────────────────────────
+let resumeFolderInput = null;   // one hidden folder picker, made on the first press
+
+function _pickResumeFolder(record, domRefs, state, helpers) {
+  if (!resumeFolderInput) {
+    resumeFolderInput = Object.assign(document.createElement('input'), { type: 'file', multiple: true, hidden: true });
+    resumeFolderInput.setAttribute('webkitdirectory', '');
+    document.body.appendChild(resumeFolderInput);
+  }
+  // A cancelled picker leaves the card as it is; the button opens it again.
+  resumeFolderInput.onchange = () => {
+    const files = Array.from(resumeFolderInput.files || []);
+    if (files.length) _resumeFolder(record, files, domRefs, state, helpers);
+  };
+  resumeFolderInput.value = '';
+  resumeFolderInput.click();
+}
+
+async function _resumeFolder(record, fileList, domRefs, state, helpers) {
+  const { reportError } = helpers;
+  const want  = record.folder;
+  const short = `uuid:${record.uuid.slice(0, 8)}`;
+  const back  = (text) => _backToCard(text, domRefs, helpers);
+
+  const { folderName, entries } = _folderEntries(fileList);
+  if (folderName !== want.name) { back(FOLDER_DIFFERENT(want)); return; }
+  if (typeof fflate === 'undefined') { back('Folders can’t be zipped in this browser. Discard it and send the folder as a .zip file.'); return; }
+
+  let print;
+  try {
+    print = await folderPrint(entries);
+  } catch (e) {
+    reportError('resume_folder_print', e?.name || 'Error', short);
+    back('This folder couldn’t be read. Try again, or discard it and start again.');
+    return;
+  }
+  if (print.list !== want.list || zipSize(entries) !== record.fileSize) {
+    reportError('resume_folder_changed', `files ${print.files} of ${want.files}`, short);
+    back(FOLDER_CHANGED(want));
+    return;
+  }
+  if (print.local !== want.local) {
+    reportError('resume_folder_tz', 'local dates differ', short);
+    back(FOLDER_TIME_ZONE(want));
+    return;
+  }
+
+  // Same folder: zip it again. The bar stays put; the words say what's happening.
+  _resumeView(domRefs, helpers);
+  const total = entries.reduce((a, e) => a + (e.file.size || 0), 0);
+  const words = (done) => `Zipping the folder again · ${progressBytesText(done, total)}`;
+  helpers.setProgress(0, words(0));
+  let said = Date.now(), zipBlob;
+  try {
+    zipBlob = await zipFolder(entries, (done) => {
+      if (Date.now() - said < 2000) return;   // calm: words every 2 s (Share-Progress-1)
+      said = Date.now();
+      helpers.setProgress(0, words(done));
+    });
+  } catch (e) {
+    reportError('resume_folder_zip', e?.message?.slice(0, 80) || 'fflate error', short);
+    back('Zipping the folder didn’t work. Try again, or discard it and start again.');
+    return;
+  }
+  const zipFile = new File([zipBlob], record.fileName, { type: 'application/zip' });
+  if (zipFile.size !== record.fileSize) {   // can't happen when the print matched; never send on a guess
+    reportError('resume_folder_size', `${zipFile.size} vs ${record.fileSize}`, short);
+    back(FOLDER_CHANGED(want));
+    return;
+  }
+  // A re-zipped folder is a new file in memory: every sent part is re-checked.
+  await _resumeWith(record, zipFile, [], domRefs, state, helpers);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
