@@ -3,9 +3,13 @@
  *
  * SW-MCP-W2. Extracted from handleApiCredentialIssue in index.js.
  *
- * KV key: api_quota_{ sha256hex(rfs_live_key) }  (kvQuotaKey() from api_auth.js)
+ * KV-Fix-2 (9 Oct 2026): the pool lives in Supabase `api_credit_pools`, one row per
+ * org_account_id; the atomic spend is SQL `api_credits_spend` (api_store.js), which
+ * implements applyQuotaSpend() below line for line. applyQuotaSpend stays here as
+ * the pure reference: initiate's pre-check uses it, and quota.test.js pins it.
+ * Nothing here reads or writes KV.
  *
- * Schema:
+ * Schema (columns):
  * {
  *   plan:             "identity_api" | "personal_api",
  *   allocation:       number,   // monthly included credits (50000 | 10000)
@@ -33,22 +37,27 @@
  * Transfers already issued persist to their own expiry_timestamp regardless of
  * account status — policy enforced at the manifest/transfer layer, not here.
  *
+ * Sandbox plan ('sandbox'): hard stop like personal_api, never resets lazily —
+ *   only POST /api/v1/sandbox/reset refills it.
+ *
  * Do-not-retry:
  *   - Never write overage_credits or overage_ceiling for personal_api plan — hard stop only.
  *   - Never roll the period for a cancelled account — return 402 account_cancelled immediately.
- *   - KV is last-write-wins; the race-critical double-spend path remains in Supabase (unchanged).
- *   - Never use Durable Objects / D1 / Queues — KV + ctx.waitUntil only.
+ *   - Never keep a balance in KV (rollback = refill). Change JS and SQL rules together.
+ *   - Never use Durable Objects / D1 / Queues.
  */
 
 // ── Plan constants ─────────────────────────────────────────────────────────────
 
 export const PLAN_IDENTITY_API = 'identity_api';
 export const PLAN_PERSONAL_API = 'personal_api';
+export const PLAN_SANDBOX      = 'sandbox';
 
-const PLAN_DEFAULTS = {
+export const PLAN_DEFAULTS = Object.freeze({
   [PLAN_IDENTITY_API]: { allocation: 50_000 },
   [PLAN_PERSONAL_API]: { allocation: 10_000 },
-};
+  [PLAN_SANDBOX]:      { allocation: 25 },     // SW6 SANDBOX_CREDIT_LIMIT
+});
 
 // Default overage ceiling for identity_api (per-client at onboarding; this is the fallback).
 export const DEFAULT_OVERAGE_CEILING = 50_000;
@@ -76,40 +85,15 @@ export function addOneMonth(unixSecs) {
 // ── Core: load + apply spend ───────────────────────────────────────────────────
 
 /**
- * loadQuota(env, quotaKey) → { record } | { error, status, code }
- *
- * Reads the quota record from KV. Returns { error } shape if the key is absent
- * or unreadable — callers translate to the appropriate HTTP response.
- */
-export async function loadQuota(env, quotaKey) {
-  let record;
-  try {
-    record = await env.STATUS_KV.get(quotaKey, { type: 'json' });
-  } catch (e) {
-    console.error('quota: KV read failed:', e);
-    return { error: 'kv_read_failed', status: 502, code: 'quota_check_unavailable' };
-  }
-
-  if (!record) {
-    // Key absent: the account was provisioned without a quota record (shouldn't
-    // happen in production after onboarding, but must not blow up silently).
-    console.error('quota: record absent for key:', quotaKey);
-    return { error: 'record_absent', status: 402, code: 'quota_not_provisioned' };
-  }
-
-  return { record };
-}
-
-/**
  * applyQuotaSpend(record, cost, nowSecs) → { updated, response402 }
  *
- * Pure function — does not touch KV. Returns:
- *   { updated: <mutated record>, response402: null }  — spend permitted; caller must write updated to KV.
+ * Pure function — touches no store. Returns:
+ *   { updated: <mutated record>, response402: null }  — spend would be permitted.
  *   { updated: null, response402: { code, shortfall_credits?, ... } }  — spend blocked; caller returns 402.
  *
  * Lazy period reset is applied first if now >= period_end AND account is active.
  *
- * @param {object} record   — the raw KV quota record
+ * @param {object} record   — the pool record
  * @param {number} cost     — credits this issuance costs (always 1 for v1 credential/issue)
  * @param {number} nowSecs  — current unix timestamp in seconds
  */
@@ -136,7 +120,7 @@ export function applyQuotaSpend(record, cost, nowSecs) {
 
   // ── Lazy period reset (active accounts only) ───────────────────────────────
   let mutated = { ...record };
-  if (record.status !== 'cancelled' && nowSecs >= record.period_end) {
+  if (record.status !== 'cancelled' && nowSecs >= record.period_end && plan !== PLAN_SANDBOX) {
     mutated = {
       ...mutated,
       remaining:       mutated.allocation,
@@ -147,7 +131,7 @@ export function applyQuotaSpend(record, cost, nowSecs) {
   }
 
   // ── Spend logic ────────────────────────────────────────────────────────────
-  if (plan === PLAN_PERSONAL_API) {
+  if (plan === PLAN_PERSONAL_API || plan === PLAN_SANDBOX) {
     // Hard stop — no overage ever.
     if (mutated.remaining < cost) {
       return {
@@ -198,100 +182,36 @@ export function applyQuotaSpend(record, cost, nowSecs) {
   return { updated: mutated, response402: null };
 }
 
-// ── Admin: provision ───────────────────────────────────────────────────────────
+// ── Admin: provision parameters ────────────────────────────────────────────────
 
 /**
- * provisionQuota(env, quotaKey, opts) → { ok } | { error }
+ * provisionParams(opts, nowSecs) → { plan, allocation, overageCeiling, periodStart, periodEnd } | { error }
  *
- * Writes a fresh quota record to KV. Called at API onboarding (POST /api/v1/admin/quota/provision).
- * Overwrites any existing record — idempotent (re-provision resets the period).
- *
- * @param {object} opts
- *   plan             — "identity_api" | "personal_api"
- *   overage_ceiling  — number (identity_api only; ignored for personal_api)
- *   period_start     — unix secs (defaults to now)
- *   period_end       — unix secs (defaults to now + 1 month)
+ * Pure. Turns the admin provision body into api_pool_provision arguments.
+ * Allocation always comes from PLAN_DEFAULTS (one source); personal_api and
+ * sandbox get overage_ceiling 0 (the SQL also forces it).
  */
-export async function provisionQuota(env, quotaKey, opts) {
+export function provisionParams(opts, nowSecs) {
   const {
     plan            = PLAN_IDENTITY_API,
     overage_ceiling = DEFAULT_OVERAGE_CEILING,
     period_start,
     period_end,
-  } = opts;
-
-  if (!PLAN_DEFAULTS[plan]) {
-    return { error: `unknown_plan: ${plan}` };
+  } = opts ?? {};
+  if (!Object.hasOwn(PLAN_DEFAULTS, plan)) return { error: `unknown_plan: ${plan}` };
+  if (!Number.isSafeInteger(overage_ceiling) || overage_ceiling < 0) return { error: 'bad_overage_ceiling' };
+  const periodStart = period_start ?? nowSecs;
+  const periodEnd   = period_end   ?? addOneMonth(periodStart);
+  if (!Number.isSafeInteger(periodStart) || !Number.isSafeInteger(periodEnd) || periodEnd <= periodStart) {
+    return { error: 'bad_period' };
   }
-
-  const { allocation } = PLAN_DEFAULTS[plan];
-  const nowSecs        = Math.floor(Date.now() / 1000);
-  const ps             = period_start ?? nowSecs;
-  const pe             = period_end   ?? addOneMonth(ps);
-
-  const record = {
+  return {
     plan,
-    allocation,
-    remaining:       allocation,
-    overage_credits: 0,
-    overage_ceiling: plan === PLAN_PERSONAL_API ? 0 : overage_ceiling,
-    period_start:    ps,
-    period_end:      pe,
-    status:          'active',
-    updated_at:      nowSecs,
+    allocation:     PLAN_DEFAULTS[plan].allocation,
+    overageCeiling: plan === PLAN_IDENTITY_API ? overage_ceiling : 0,
+    periodStart,
+    periodEnd,
   };
-
-  try {
-    await env.STATUS_KV.put(quotaKey, JSON.stringify(record));
-    return { ok: true, record };
-  } catch (e) {
-    console.error('quota: provision KV write failed:', e);
-    return { error: 'kv_write_failed' };
-  }
-}
-
-// ── Admin: cancel ──────────────────────────────────────────────────────────────
-
-/**
- * cancelQuota(env, quotaKey, { immediate }) → { ok } | { error }
- *
- * Two flavours (locked spec §7.4):
- *   immediate: false (default) — cancel-at-period-end.
- *     Sets status → "cancelled". Does NOT zero remaining.
- *     Credits continue to work until period_end; no reset after that.
- *   immediate: true — admin-initiated (abuse / refund).
- *     Sets status → "cancelled" AND remaining → 0 at once.
- *     Next credential/issue returns 402 account_cancelled immediately.
- *
- * Already-cancelled accounts: idempotent (no-op, returns ok).
- */
-export async function cancelQuota(env, quotaKey, { immediate = false } = {}) {
-  let record;
-  try {
-    record = await env.STATUS_KV.get(quotaKey, { type: 'json' });
-  } catch (e) {
-    console.error('quota: cancel KV read failed:', e);
-    return { error: 'kv_read_failed' };
-  }
-
-  if (!record) return { error: 'record_absent' };
-  if (record.status === 'cancelled') return { ok: true, already_cancelled: true };
-
-  const nowSecs = Math.floor(Date.now() / 1000);
-  const updated = {
-    ...record,
-    status:     'cancelled',
-    updated_at: nowSecs,
-    ...(immediate ? { remaining: 0 } : {}),
-  };
-
-  try {
-    await env.STATUS_KV.put(quotaKey, JSON.stringify(updated));
-    return { ok: true, record: updated };
-  } catch (e) {
-    console.error('quota: cancel KV write failed:', e);
-    return { error: 'kv_write_failed' };
-  }
 }
 
 // ── Quota summary (for auth/ping response) ─────────────────────────────────────

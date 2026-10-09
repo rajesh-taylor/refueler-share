@@ -9,8 +9,9 @@
  * Auth: requireApiAuth() from api_auth.js (canonical HMAC-SHA256
  * over method + path + timestamp + body_hash, rfs_sign_ signing key).
  *
- * KV lookup (client record): api_client_{sha256hex(rfs_live_)} → { tier, rail, active, created_at }
- * KV lookup (quota record):  api_quota_{sha256hex(rfs_live_)}  → quota schema (quota.js)
+ * Client record: from requireApiAuth (Supabase api_keys, KV-Fix-2). Revoked keys
+ *   fail auth (401) within 60 s; there is no separate "suspended" state.
+ * Pool: Supabase api_credit_pools via api_store.getPool (quota.js schema).
  *
  * Response (200) — identity rail:
  *   {
@@ -35,23 +36,25 @@
  *   }
  *
  * Error responses:
- *   401 — HMAC invalid / timestamp stale / key not found
- *   403 — key exists but active: false (suspended), or wrong tier
- *   502 — KV read failure (quota record — non-fatal; ping still returns ok with quota: null)
+ *   401 — HMAC invalid / timestamp stale / key not found or revoked
+ *   403 — wrong tier
+ *   503 — key store unavailable (auth cannot be decided)
  *   500 — unexpected internal error
  *
  * Do-not-retry:
  *   - Never return tier !== "api" as OK — API-tier-only endpoint.
- *   - Never proxy Supabase on this path — KV only.
+ *   - Never read the client or pool from KV (KV-Fix-2: Supabase is the arbiter).
  *   - Never log rfs_live_ value to AE — log apiKeyHash only.
- *   - Quota KV failure is non-fatal: return ping ok + quota: null rather than 502.
+ *   - Pool read failure is non-fatal: return ping ok without quota fields.
  *     The MCP tool degrades gracefully (shows credits as unknown, does not block a send).
  *
  * SW-MCP-W2: added quota summary fields to the identity-rail response.
  */
 
-import { requireApiAuth, sha256Hex, kvQuotaKey } from './api_auth.js';
-import { loadQuota, quotaSummary }               from './quota.js';
+import { requireApiAuth, sha256Hex } from './api_auth.js';
+import { quotaSummary }              from './quota.js';
+import { getPool }                   from './api_store.js';
+import { isCharteredTier }           from './tiers.js';
 
 /**
  * handleAuthPing
@@ -76,22 +79,8 @@ export async function handleAuthPing(request, env) {
 
   const apiKeyHash = await sha256Hex(apiKey);
 
-  // ── 2. Client record — tier + active gate ──────────────────────────────────
-  let record;
-  try {
-    const raw = await env.STATUS_KV.get(`api_client_${apiKeyHash}`);
-    if (!raw) return jsonError(401, 'key_not_found', 'API key not found.');
-    record = JSON.parse(raw);
-  } catch (e) {
-    return jsonError(500, 'kv_read_failed', 'Could not read key record.');
-  }
-
-  if (!record.active) {
-    logPingEvent(env, apiKeyHash, 'ping_rejected_suspended');
-    return jsonError(403, 'key_suspended', 'This API key has been suspended.');
-  }
-
-  if (record.tier !== 'api') {
+  // ── 2. Tier gate (F8: helper, never a literal) ──────────────────────────
+  if (!isCharteredTier(client.tier)) {
     logPingEvent(env, apiKeyHash, 'ping_rejected_wrong_tier');
     return jsonError(403, 'api_tier_required',
       'The Harbourmaster dashboard requires an API-tier credential.');
@@ -99,17 +88,14 @@ export async function handleAuthPing(request, env) {
 
   // ── 3. Quota summary — identity rail only ──────────────────────────────────
   // Anonymous rail: server is blind to the balance (client-held stack).
-  // Quota KV failure is non-fatal — ping returns ok, quota fields set to null.
+  // Pool read failure is non-fatal — ping returns ok without quota fields.
   let quota = null;
-  if (record.rail === 'identity') {
-    const qKey    = await kvQuotaKey(apiKey);
-    const { record: qRecord, error: qError } = await loadQuota(env, qKey);
-
-    if (qError) {
-      // Non-fatal — log and continue. MCP tool will show credits as unknown.
-      console.error('auth_ping: quota load failed:', qError);
-    } else {
-      quota = quotaSummary(qRecord);
+  if (client.rail === 'identity') {
+    try {
+      const pool = await getPool(env, client.org_account_id);
+      if (pool) quota = quotaSummary(pool);
+    } catch (e) {
+      console.error('auth_ping: pool read failed:', e?.message ?? e);
     }
   }
 
@@ -118,9 +104,9 @@ export async function handleAuthPing(request, env) {
 
   const responseBody = {
     ok:   true,
-    tier: record.tier,   // "api"
-    rail: record.rail,   // "identity" | "anonymous"
-    ...(record.rail === 'identity' && quota !== null ? quota : {}),
+    tier: client.tier,   // "api"
+    rail: client.rail,   // "identity" (anonymous closed until B7)
+    ...(quota !== null ? quota : {}),
   };
 
   return new Response(JSON.stringify(responseBody), {

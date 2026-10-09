@@ -24,7 +24,7 @@
 //       "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)
 //     encoded base58, prefixed rfs_whsec_. Stateless re-derivation at every delivery.
 //   - created_at is the rotation salt — re-registration produces a new whsec automatically.
-//   - KV key for wh_config_ is sha256hex(rfs_live_key) — same derivation as api_client_.
+//   - KV key for wh_config_ is sha256hex(rfs_live_key) — same hash as the api_keys handle.
 //     An attacker who can enumerate KV sees hashes, not keys.
 //   - URL validation rejects: non-HTTPS, localhost, loopback, RFC1918 private ranges,
 //     link-local (169.254.x.x), and unspecified (0.0.0.0).
@@ -131,9 +131,8 @@ export function validateWebhookUrl(raw) {
 // Derives the KV lookup key for the webhook config record.
 // KV key = "wh_config_" + sha256Hex(rfs_live_key)
 //
-// Same hash derivation as kvClientKey() in api_auth.js — so the wh_config_
-// record sits alongside api_client_ and api_quota_ in the same namespace,
-// keyed by the same opaque hash. The raw rfs_live_ key never appears as a KV key.
+// Same hash as the api_keys lookup handle (SHA-256 of the live key). The raw
+// rfs_live_ key never appears as a KV key. MAC + re-validation: API-Repair-1.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function kvWhConfigKey(apiKey) {
   return `wh_config_${await sha256Hex(apiKey)}`;

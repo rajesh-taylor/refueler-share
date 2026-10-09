@@ -3,23 +3,19 @@
 // HMAC-SHA256 API authentication for the Refueler Share API tier.
 //
 // Credential scheme (locked SW-Opus-1):
-//   rfs_live_{32b base58} — identification key (KV lookup handle, semi-public)
-//   rfs_sign_{32b base58} — signing secret (Option C: KV stores SHA-256 hash only)
+//   rfs_live_{32b base58} — identification key (lookup handle, semi-public)
+//   rfs_sign_{32b base58} — signing secret (Option C: only SHA-256 hash stored)
+//   Sandbox: rfs_test_live_ / rfs_test_sign_, rows with sandbox = true.
 //
 // Option C key security invariant:
-//   KV stores SHA-256( rfs_sign_ ) — never the raw secret.
+//   The store holds SHA-256( rfs_sign_ ) — never the raw secret.
 //   The presented rfs_sign_ is hashed at verify-time and compared to the stored hash.
-//   A KV compromise yields hashes, not secrets. Forgery requires preimage of SHA-256.
+//   A store leak yields hashes, not secrets. Forgery requires preimage of SHA-256.
 //   The raw presented value is used as the HMAC key only after hash-comparison passes.
 //
-// KV lookup key hardening (SW2c):
-//   KV key = api_client_{ SHA-256( rfs_live_key ) }  — NOT api_client_{rfs_live_key}
-//   Rationale: the live key appears in the Authorization header on every request and
-//   could surface in Cloudflare dashboard logs, AE events, or console.error paths.
-//   Hashing the lookup key means KV key names never contain a recognisable rfs_live_
-//   string. An attacker who knows the live key can still compute the KV lookup key
-//   (SHA-256 is not a secret), but the key does not leak passively into infrastructure
-//   logs. sha256Hex() is exported so onboarding (SW7) writes the same hashed key.
+// Store (KV-Fix-2 · 9 Oct 2026): Supabase `api_keys`, looked up by SHA-256(live key)
+// via api_store.js (≤ 60 s isolate cache, so revocation bites within 60 s). Nothing
+// here reads KV: a KV writer could forge a client or revive a revoked key (B12-SR X1).
 //
 // Signature construction (locked SW-Opus-1):
 //   HMAC-SHA256( rfs_sign_, canonical_string )
@@ -31,26 +27,16 @@
 // Authorization header format:
 //   Authorization: HMAC-SHA256 key=rfs_live_{...}, sig=hex(...), ts={unix_seconds}
 //
-// KV schema:
-//   api_client_{ sha256hex(rfs_live_key) } → JSON {
-//     sign_key_hash:       hex string  — SHA-256 hash of rfs_sign_ secret
-//     rail:                'identity' | 'anonymous'
-//     tier:                'api'
-//     transfer_ref_prefix: string      — client's attribution prefix
-//     webhook_url:         string | null
-//     active:              boolean
-//   }
-//
-//   api_quota_{ sha256hex(rfs_live_key) } → JSON {   ← identity rail only
-//     remaining: number   — credits remaining in pool
-//     updated_at: number  — unix seconds
-//   }
-//
-//   Anonymous rail has NO api_quota_ KV record. Quota is client-held bearer
-//   Cashu tokens (blind-signed capability atoms). The spent-token ledger
-//   (api_spent_tokens Supabase table) tracks consumption. No server-side balance.
+// Client record returned by requireApiAuth:
+//   { sign_key_hash, org_account_id, rail, sandbox, tier, created_at, expires_at }
+//   tier = TIERS.CHARTERED for production keys, 'sandbox' for sandbox keys.
+//   Credit pools: api_credit_pools (identity rail), via api_store.js. The anonymous
+//   rail has no pool and no row (closed until B7; table CHECK refuses it).
 
 'use strict';
+
+import { TIERS } from './tiers.js';
+import { lookupApiKey, StoreUnavailable } from './api_store.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -63,12 +49,12 @@ const CLOCK_WINDOW_SECONDS = 300; // ±5 minutes
 //
 // SHA-256 one-way hash, returned as lowercase hex.
 // Used for:
-//   - KV lookup key derivation: sha256Hex(rfs_live_key)
+//   - key lookup handle:        sha256Hex(rfs_live_key)
 //   - sign_key_hash storage:    sha256Hex(rfs_sign_key)
 //   - body hash in HMAC canonical string
 //
-// Exported for use at onboarding (SW7) to write KV records under the same
-// hashed key format that lookupApiClient() uses at verify-time.
+// Exported so onboarding (POST /api/v1/admin/api-client) stores the same hash
+// that lookupApiClient() uses at verify-time.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function sha256Hex(input) {
   const bytes = typeof input === 'string'
@@ -84,38 +70,11 @@ export async function sha256Hex(input) {
 // hashSignKey(rawSignKey: string) → Promise<string>
 //
 // SHA-256 one-way commitment of the rfs_sign_ secret.
-// Stored in KV as sign_key_hash. Never reversed.
+// Stored as sign_key_hash. Never reversed.
 // Module-private — callers use generateSignKeyHash() export below.
 // ─────────────────────────────────────────────────────────────────────────────
 async function hashSignKey(rawSignKey) {
   return sha256Hex(rawSignKey);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// kvClientKey(apiKey: string) → Promise<string>
-//
-// Derives the KV lookup key for a given rfs_live_ key.
-// KV key = "api_client_" + sha256Hex(apiKey)
-//
-// Used by lookupApiClient() at verify-time and by SW7 onboarding at write-time.
-// Exported so onboarding tooling can produce the correct key without duplicating
-// the derivation logic.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function kvClientKey(apiKey) {
-  return `api_client_${await sha256Hex(apiKey)}`;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// kvQuotaKey(apiKey: string) → Promise<string>
-//
-// Derives the KV quota key for a given rfs_live_ key.
-// KV key = "api_quota_" + sha256Hex(apiKey)
-//
-// Identity rail only. Anonymous rail has no quota KV record.
-// Exported for onboarding tooling and admin top-up scripts.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function kvQuotaKey(apiKey) {
-  return `api_quota_${await sha256Hex(apiKey)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,43 +177,51 @@ export async function verifyHmacSignature(request, rawBody, presentedSignKey, ts
 // ─────────────────────────────────────────────────────────────────────────────
 // lookupApiClient(env, apiKey) → Promise<client | null>
 //
-// KV fetch on api_client_{ sha256Hex(apiKey) }.
-// The KV key is a hash of the live key — never the raw rfs_live_ string.
-// Returns the parsed client record or null if not found / inactive.
+// Supabase lookup on SHA-256(apiKey) (cached ≤ 60 s). null = unknown, revoked or
+// expired. Throws StoreUnavailable when Supabase cannot answer — never falls
+// back to KV.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function lookupApiClient(env, apiKey) {
-  const key = await kvClientKey(apiKey);
-  let record;
-  try {
-    record = await env.STATUS_KV.get(key, { type: 'json' });
-  } catch (e) {
-    console.error('api_auth: KV client lookup failed:', e);
-    return null;
-  }
-  if (!record) return null;
-  if (record.active === false) return null;
-  return record;
+  const row = await lookupApiKey(env, await sha256Hex(apiKey));
+  if (!row) return null;
+  return {
+    sign_key_hash:  row.sign_key_hash,
+    org_account_id: row.org_account_id,
+    rail:           row.rail,
+    sandbox:        row.sandbox === true,
+    tier:           row.sandbox === true ? 'sandbox' : TIERS.CHARTERED,
+    created_at:     row.created_at ?? null,
+    expires_at:     row.expires_at ?? null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// requireApiAuth(request, rawBody, env) → Promise<{ client, apiKey }>
+// requireApiAuth(request, rawBody, env, { sandbox }) → Promise<{ client, apiKey }>
 //
 // Composes parseHmacCredentials → lookupApiClient → hashSignKey → verifyHmacSignature.
 // Throws a Response on any failure — caller returns the thrown response directly.
 //
-// Returns { client, apiKey } on success.
-//   client.rail  → 'identity' | 'anonymous'  — caller branches on this
-//   client.tier  → 'api'
-//   client.*     → full KV record
+// sandbox: false (default) admits production keys only; true admits sandbox keys
+// only (the /api/v1/sandbox/* routes). Key prefixes and the stored sandbox flag
+// must all agree, or 401 — a sandbox key never reaches a production route.
+//
+// Returns { client, apiKey } on success (client shape: see top of file).
 //
 // Option C flow:
 //   1. Parse Authorization header → { apiKey, sig, ts }
-//   2. KV lookup on hashed key → client record (contains sign_key_hash)
+//   2. Supabase lookup on hashed key (≤ 60 s cache) → client record
 //   3. Hash the presented rfs_sign_ → compare to stored hash (constant-time)
 //   4. If hash matches, use presented rfs_sign_ as HMAC key for signature verify
 //   5. Clock window checked inside verifyHmacSignature
+// Supabase unreachable → 503, never a KV fallback.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function requireApiAuth(request, rawBody, env) {
+function authFail(status, error) {
+  return new Response(JSON.stringify({ error }), {
+    status, headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function requireApiAuth(request, rawBody, env, { sandbox = false } = {}) {
   // ── Step 1: parse header ──────────────────────────────────────────────────
   const creds = parseHmacCredentials(request);
   if (!creds) {
@@ -271,25 +238,30 @@ export async function requireApiAuth(request, rawBody, env) {
   // The sign key travels in X-Api-Sign-Key, NOT in Authorization.
   // Authorization is logged by proxies and dashboards; the sign key must not appear there.
   const presentedSignKey = request.headers.get('X-Api-Sign-Key') ?? '';
-  if (
-    !presentedSignKey.startsWith('rfs_sign_') &&
-    !presentedSignKey.startsWith('rfs_test_sign_')
-  ) {
-    throw new Response(
-      JSON.stringify({ error: 'Missing or invalid X-Api-Sign-Key header' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
-    );
+  const livePrefix = sandbox ? 'rfs_test_live_' : 'rfs_live_';
+  const signPrefix = sandbox ? 'rfs_test_sign_' : 'rfs_sign_';
+  if (!presentedSignKey.startsWith(signPrefix)) {
+    throw authFail(401, 'Missing or invalid X-Api-Sign-Key header');
+  }
+  if (!apiKey.startsWith(livePrefix)) {
+    throw authFail(401, 'Invalid API credentials');
   }
 
-  // ── Step 2: KV lookup (hashed key) ───────────────────────────────────────
-  const client = await lookupApiClient(env, apiKey);
-  if (!client) {
+  // ── Step 2: Supabase lookup (hashed key, ≤ 60 s isolate cache) ───────────
+  let client;
+  try {
+    client = await lookupApiClient(env, apiKey);
+  } catch (e) {
+    if (e instanceof StoreUnavailable) {
+      console.error('api_auth: key store unavailable:', e.message);
+      throw authFail(503, 'Authentication temporarily unavailable — please retry');
+    }
+    throw e;
+  }
+  if (!client || client.sandbox !== sandbox) {
     // Constant-time-ish: artificial delay mirrors hash-compare cost on a hit.
     await new Promise(r => setTimeout(r, 5));
-    throw new Response(
-      JSON.stringify({ error: 'Invalid API credentials' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
-    );
+    throw authFail(401, 'Invalid API credentials');
   }
 
   // ── Step 3: Option C — hash-compare sign key ──────────────────────────────
@@ -342,10 +314,10 @@ export async function requireApiAuth(request, rawBody, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // generateSignKeyHash(rawSignKey) → Promise<string>
 //
-// Exported utility for onboarding (SW7): generate the hash to store in KV.
+// Exported utility for onboarding: the hash stored in api_keys.sign_key_hash.
 // Called once when the keypair is created — the raw rfs_sign_ is shown to the
 // client once, then only this hash is stored server-side.
-// Recovery path: key rotation via POST /api/v1/keys/rotate.
+// Recovery path: admin revoke + new client (POST /api/v1/keys/rotate is specified, not built).
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateSignKeyHash(rawSignKey) {
   return hashSignKey(rawSignKey);

@@ -4,11 +4,10 @@
  *
  * Share-Dash-2. Feeds the Navy Office "API & MCP" card (replaces the CPU-time
  * stub). X-Admin-Key gated. Sources:
- *   · active API keys        — KV, prefix api_quota_  (one record per key)
+ *   · active API keys        — Supabase api_credit_pools (KV-Fix-2), production only
  *   · requests 30d by rail   — AE share_events, GROUP BY tier → folded to rail
  *   · API attach rate        — AE, api-tier finalises ÷ all finalises (30d)
- *   · sandbox → live         — needs the sandbox KV shape (sandbox.js); returns
- *                              null + reason until wired, rather than a guess
+ *   · sandbox → live         — not wired; returns null + reason, never a guess
  *
  * No paying Chartered client exists yet, so active_keys and attach_rate will
  * legitimately read 0 and the rail split will be empty. That is correct, not a
@@ -22,7 +21,7 @@
  *
  * AE query goes through the Analytics Engine SQL API (env.CF_ACCOUNT_ID +
  * env.CF_AE_TOKEN, an Account Analytics Read token). If either is absent the
- * AE-derived blocks come back { ae_available:false } and the KV block still
+ * AE-derived blocks come back { ae_available:false } and the key block still
  * answers — the card degrades one section at a time.
  *
  * AE schema (index.js §Analytics Engine):
@@ -31,8 +30,7 @@
  */
 
 import { requireAdmin } from '../utils.js';
-
-const QUOTA_PREFIX = 'api_quota_';
+import { poolStats } from '../api_store.js';
 
 // tier → internal rail (identity/anonymous). Pre-B7 every paid tier is identity;
 // 'free' is Pro Bono and carries no rail. Matches finalise.js railForTier.
@@ -71,35 +69,23 @@ async function queryAE(env, sql) {
   }
 }
 
-// ── Active API keys (KV, prefix api_quota_) ──────────────────────────────────
-// One record per commercial key. We read each to report active-vs-total and a
-// per-plan breakdown. Volume is tiny (no live clients yet); a full read is fine.
+// ── Active API keys (Supabase api_credit_pools, sandbox excluded) ─────────────
+// One pool per commercial relationship. `kv_available` keeps its name because
+// Navy Office reads it (refueler.io navy-office.js); it now means "key store
+// answered". Rename with the next Navy Office change.
 async function activeKeys(env) {
-  const out = { provisioned: 0, active: 0, by_plan: {}, kv_available: true };
   try {
-    let cursor;
-    const names = [];
-    do {
-      const page = await env.STATUS_KV.list({ prefix: QUOTA_PREFIX, cursor });
-      for (const k of page.keys) names.push(k.name);
-      cursor = page.list_complete ? undefined : page.cursor;
-    } while (cursor);
-
-    out.provisioned = names.length;
-    for (const name of names) {
-      let rec = null;
-      try { rec = await env.STATUS_KV.get(name, { type: 'json' }); } catch { /* skip */ }
-      if (!rec || typeof rec !== 'object') continue;
-      const status = rec.status ?? 'active';
-      const plan   = rec.plan   ?? 'unknown';
-      if (status === 'active') out.active++;
-      out.by_plan[plan] = (out.by_plan[plan] ?? 0) + 1;
-    }
+    const s = await poolStats(env);
+    return {
+      provisioned:  Number(s?.provisioned) || 0,
+      active:       Number(s?.active) || 0,
+      by_plan:      s?.by_plan ?? {},
+      kv_available: true,
+    };
   } catch (e) {
-    console.error('api-stats KV list failed:', e);
-    out.kv_available = false;
+    console.error('api-stats pool stats failed:', e?.message ?? e);
+    return { provisioned: 0, active: 0, by_plan: {}, kv_available: false };
   }
-  return out;
 }
 
 export async function handleApiStats(request, env) {
@@ -161,13 +147,12 @@ export async function handleApiStats(request, env) {
   }
 
   // ── Sandbox → live conversion ──────────────────────────────────────────────
-  // Not yet derivable here: the sandbox activation/conversion signal lives in
-  // sandbox.js's KV records, whose shape this handler must not assume. Returned
-  // as null with a reason so the card shows a pending state, not a wrong number.
+  // Not yet derivable: no conversion signal is recorded. Returned as null with a
+  // reason so the card shows a pending state, not a wrong number.
   const sandboxToLive = {
     available: false,
     rate:      null,
-    reason:    'sandbox KV signal not yet wired (needs sandbox.js record shape)',
+    reason:    'sandbox-to-live signal not recorded yet',
   };
 
   return new Response(JSON.stringify({

@@ -22,7 +22,10 @@ import { cleanStatus } from './status_shape.js';                                
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleTestCredential } from './handlers/test_credential.js';                // Share-Admin-1
 import { handleWlConfig, handleCfChallenge } from './wl_config.js';
-import { requireApiAuth, kvQuotaKey } from './api_auth.js';
+import { requireApiAuth, parseHmacCredentials, sha256Hex } from './api_auth.js';
+// KV-Fix-2: API keys + credit pools in Supabase (never KV)
+import { lookupApiKey, getPool, spendCredits, refundCredits, StoreUnavailable } from './api_store.js';
+import { handleAdminApiClientCreate, handleAdminApiClientRevoke, handleAdminQuotaProvision, handleAdminQuotaCancel } from './handlers/api_admin.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleAdminBtcRatePost, handleAdminBtcRateGet, refreshBtcRate } from './handlers/btc_rate.js';
 import { handleAdminBtcPrice }  from './handlers/btc_price.js';        // Share-B10-1: live display ticker
@@ -36,7 +39,7 @@ import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
 import { handleWebhookStatus }  from './handlers/webhook_status.js';
 import { handleHostnameHealth } from './handlers/hostname_health.js';
 // SW6: sandbox environment
-import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleSandboxSpend, isSandboxRequest, consumeSandboxCredit, lookupSandboxClient } from './sandbox.js';
+import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleSandboxSpend, isSandboxRequest } from './sandbox.js';
 // SW9: shared utilities extracted from index.js
 import {
   UUID_RE, MANIFEST_SIZE_MAX,
@@ -48,11 +51,8 @@ import { TIERS, isCharteredTier } from './tiers.js';
 import { makePresigner, presignPutObject, signSessionToken, computeTransferCost } from './r2_presign.js';
 import { CHUNK_SIZE, CHUNK_TAG_BYTES } from './sweep_rules.js';                // B12-1d: signed PUT sizes
 import { checkTestCredential, TESTCRED_USED_PREFIX } from './testcred.js';    // KV-Fix-1b
-// SW-MCP-W2: monthly credit allocation, lazy reset, overage ceiling, personal_api plan
-import {
-  loadQuota, applyQuotaSpend, provisionQuota, cancelQuota,
-  PLAN_IDENTITY_API, PLAN_PERSONAL_API,
-} from './quota.js';
+// SW-MCP-W2: monthly credit allocation rules (pure; the atomic spend is SQL — KV-Fix-2)
+import { applyQuotaSpend } from './quota.js';
 
 import { handleStripeWebhook, handleCheckout, handleSubscriptionStatus, handlePortal } from './handlers/stripe_sub.js';
 import { fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber } from './handlers/stripe_sub.js';
@@ -157,8 +157,8 @@ export default {
       }
 
       // ── SW2a: API credential issuance — POST /api/v1/credential/issue ─────
-      // HMAC-authenticated. Both rails. No Supabase row on anonymous rail.
-      // Quota tracked in KV only. Rate-limited under credential_issue bucket.
+      // HMAC-authenticated. Identity rail only until B7. Credits spent atomically
+      // in Supabase (KV-Fix-2). Rate-limited under credential_issue bucket.
       if (request.method === 'POST' && path === '/api/v1/credential/issue') {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'credential_issue', 10, 60);
@@ -533,6 +533,13 @@ export default {
       if (request.method === 'POST' && path === '/api/v1/admin/quota/cancel') {
         return timed('admin_quota_cancel', () => handleAdminQuotaCancel(request, env).then(r => addCors(r, request)));
       }
+      // ── KV-Fix-2: API client onboarding + revocation (Supabase) ───────────
+      if (request.method === 'POST' && path === '/api/v1/admin/api-client') {
+        return timed('admin_api_client_create', () => handleAdminApiClientCreate(request, env).then(r => addCors(r, request)));
+      }
+      if (request.method === 'POST' && path === '/api/v1/admin/api-client/revoke') {
+        return timed('admin_api_client_revoke', () => handleAdminApiClientRevoke(request, env).then(r => addCors(r, request)));
+      }
 
       // ── Share-6-6a: orphan-object audit — GET /admin/orphan-sweep ───────────
       // Admin-key gated, dry-run only. Pages all R2 objects, groups by UUID,
@@ -800,118 +807,7 @@ async function handleAdminHostnameHealth(request, env) {
   return json(summary);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SW-MCP-W2: Admin quota provisioning — POST /api/v1/admin/quota/provision
-//
-// X-Admin-Key gated. Writes the initial api_quota_{hash} KV record for a new
-// API client at onboarding. Idempotent — re-provisioning resets the period and
-// remaining balance to allocation (use with care on live accounts).
-//
-// Body:
-//   {
-//     live_key:        "rfs_live_..." | sha256_hex,  // identify the client
-//     plan:            "identity_api" | "personal_api",
-//     overage_ceiling: number,   // identity_api only; ignored for personal_api
-//     period_start:    number,   // optional unix secs; defaults to now
-//     period_end:      number,   // optional unix secs; defaults to period_start + 1 month
-//   }
-//
-// live_key may be the raw rfs_live_... value or a pre-hashed sha256 hex string.
-// The handler hashes rfs_live_... values — admin never needs to compute this manually.
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleAdminQuotaProvision(request, env) {
-  const denied = await requireAdmin(request, env);
-  if (denied) return denied;
-
-  let body;
-  try { body = await request.json(); } catch { return err(400, 'Invalid JSON body'); }
-
-  const { live_key, plan, overage_ceiling, period_start, period_end } = body;
-  if (!live_key) return err(400, 'live_key is required');
-  if (!plan)     return err(400, 'plan is required (identity_api | personal_api)');
-
-  // Hash the live key if it looks like a raw rfs_live_... value.
-  let keyHash;
-  try {
-    if (live_key.startsWith('rfs_live_') || live_key.startsWith('rfs_test_')) {
-      const bytes = new TextEncoder().encode(live_key);
-      const hash  = await crypto.subtle.digest('SHA-256', bytes);
-      keyHash = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-    } else {
-      // Assume pre-hashed hex (64 chars).
-      if (!/^[0-9a-f]{64}$/.test(live_key)) return err(400, 'live_key must be rfs_live_... or 64-char sha256 hex');
-      keyHash = live_key;
-    }
-  } catch (e) {
-    console.error('handleAdminQuotaProvision: key hashing failed:', e);
-    return err(500, 'Key hash computation failed');
-  }
-
-  const quotaKey = `api_quota_${keyHash}`;
-  const result   = await provisionQuota(env, quotaKey, {
-    plan,
-    overage_ceiling: overage_ceiling ?? undefined,
-    period_start:    period_start    ?? undefined,
-    period_end:      period_end      ?? undefined,
-  });
-
-  if (result.error) {
-    console.error('handleAdminQuotaProvision: provision failed:', result.error);
-    return err(500, `Quota provision failed: ${result.error}`);
-  }
-
-  return json({ ok: true, quota_key: quotaKey, record: result.record });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SW-MCP-W2: Admin quota cancel — POST /api/v1/admin/quota/cancel
-//
-// X-Admin-Key gated. Two flavours (§7.4):
-//   immediate: false (default) — cancel-at-period-end. Credits valid until period_end.
-//   immediate: true  — admin-initiated. Zeroes remaining immediately.
-//
-// Body:
-//   {
-//     live_key:  "rfs_live_..." | sha256_hex,
-//     immediate: boolean,   // optional, default false
-//   }
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleAdminQuotaCancel(request, env) {
-  const denied = await requireAdmin(request, env);
-  if (denied) return denied;
-
-  let body;
-  try { body = await request.json(); } catch { return err(400, 'Invalid JSON body'); }
-
-  const { live_key, immediate = false } = body;
-  if (!live_key) return err(400, 'live_key is required');
-
-  let keyHash;
-  try {
-    if (live_key.startsWith('rfs_live_') || live_key.startsWith('rfs_test_')) {
-      const bytes = new TextEncoder().encode(live_key);
-      const hash  = await crypto.subtle.digest('SHA-256', bytes);
-      keyHash = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-    } else {
-      if (!/^[0-9a-f]{64}$/.test(live_key)) return err(400, 'live_key must be rfs_live_... or 64-char sha256 hex');
-      keyHash = live_key;
-    }
-  } catch (e) {
-    console.error('handleAdminQuotaCancel: key hashing failed:', e);
-    return err(500, 'Key hash computation failed');
-  }
-
-  const quotaKey = `api_quota_${keyHash}`;
-  const result   = await cancelQuota(env, quotaKey, { immediate: Boolean(immediate) });
-
-  if (result.error) {
-    if (result.error === 'record_absent') return err(404, 'No quota record found for this key');
-    console.error('handleAdminQuotaCancel: cancel failed:', result.error);
-    return err(500, `Quota cancel failed: ${result.error}`);
-  }
-
-  return json({ ok: true, already_cancelled: result.already_cancelled ?? false, record: result.record ?? null });
-}
+// SW-MCP-W2 admin quota provision/cancel moved to handlers/api_admin.js (KV-Fix-2).
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client error reporting — POST /log/error (S36b)
@@ -958,26 +854,22 @@ async function handleLogError(request, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // API credential issuance — POST /api/v1/credential/issue  (SW2a/SW2c/SW-MCP-W2)
 //
-// HMAC-authenticated API-tier endpoint. Both rails.
+// HMAC-authenticated API-tier endpoint. Identity rail only until B7.
 //
-// Identity rail (SW-MCP-W2):
-//   - Quota tracked in KV under: api_quota_{ sha256(rfs_live_key) }
-//   - Full schema: plan, allocation, remaining, overage_credits, overage_ceiling,
-//     period_start, period_end, status, updated_at.
-//   - Lazy period reset: if now >= period_end, rolls to next billing anniversary
-//     before applying this spend. Unused credits expire — no rollover.
-//   - identity_api plan: metered overage past allocation up to overage_ceiling.
-//     402 overage_ceiling only when the ceiling is breached.
-//   - personal_api plan: hard stop at allocation. 402 quota_exhausted, no overage.
-//   - Cancelled accounts: 402 account_cancelled (immediate if remaining=0,
-//     else at period_end).
-//   - Supabase row created at onboarding (SW7) — never here.
+// Identity rail (SW-MCP-W2; store KV-Fix-2):
+//   - Pool: Supabase api_credit_pools, one row per org_account_id (api_store.js).
+//   - The spend is one atomic SQL call (api_credits_spend: row lock, so two issues
+//     at once cannot overspend), awaited BEFORE the blind signature. If signing
+//     then fails, the credit is refunded (api_credits_refund).
+//   - Rules exactly applyQuotaSpend() (quota.js): lazy period reset, identity_api
+//     metered overage to overage_ceiling, personal_api hard stop, cancelled 402.
+//   - Supabase unreachable → 503. Never a KV fallback.
 //
-// Anonymous rail (SW2c):
-//   - NO KV quota record. NO Supabase row. Ever.
-//   - Client presents X-Cashu-Token: one blind-signed capability-atom token.
-//   - Worker verifies against API keyset, double-spend-checks, marks spent.
-//   - The "balance" is the client's local stack. Server is blind to it.
+// Sandbox (rfs_test_live_): refused outright (403 sandbox_issue_unavailable).
+//   Issuing would sign on the production mint key, i.e. hand out a real upload
+//   credential (KV-Audit F6). Returns when a sandbox mint key exists.
+//
+// Anonymous rail: closed (503) until B7 — no row, no pool, ever.
 //
 // Request body:
 //   { blinded_message, transfer_ref? }
@@ -985,16 +877,25 @@ async function handleLogError(request, env) {
 //
 // Response:
 //   { signed_point, mint_pubkey, allocation_bytes, uuid, issued_tier,
-//     commitment, expires_at, quota_remaining, period_end? }
-//   quota_remaining: number (identity rail) | null (anonymous rail)
-//   period_end:      unix secs (identity rail) | undefined (anonymous rail)
+//     commitment, expires_at, quota_remaining, period_end }
 //
 // Auth headers required:
 //   Authorization:  HMAC-SHA256 key=rfs_live_{...}, sig={hex}, ts={unix}
 //   X-Api-Sign-Key: rfs_sign_{...}
-//   X-Cashu-Token:  <capability-atom token>  — anonymous rail only
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleApiCredentialIssue(request, env) {
+  // ── Sandbox keys: refused before anything else (F6) ───────────────────────
+  if (isSandboxRequest(parseHmacCredentials(request)?.apiKey)) {
+    return new Response(
+      JSON.stringify({
+        error:   'Sandbox credential issuance is not available — sandbox keys cannot mint upload credentials.',
+        code:    'sandbox_issue_unavailable',
+        sandbox: true,
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json', 'X-Refueler-Sandbox': 'true' } }
+    );
+  }
+
   // ── Read body (needed for HMAC body-hash verification) ────────────────────
   let rawBody;
   let body;
@@ -1006,16 +907,14 @@ async function handleApiCredentialIssue(request, env) {
   }
 
   // ── HMAC auth ──────────────────────────────────────────────────────────────
-  let client, apiKey;
+  let client;
   try {
-    ({ client, apiKey } = await requireApiAuth(request, rawBody, env));
+    ({ client } = await requireApiAuth(request, rawBody, env));
   } catch (authErr) {
     if (authErr instanceof Response) return authErr;
     console.error('api_credential_issue: unexpected auth error:', authErr);
     return err(500, 'Authentication error');
   }
-
-  const rail = client.rail ?? 'identity';
 
   // Fail closed before any quota or token spend if the commitment key is absent.
   if (!env.COMMITMENT_KEY) {
@@ -1024,113 +923,14 @@ async function handleApiCredentialIssue(request, env) {
   }
 
   // ── Validate body ──────────────────────────────────────────────────────────
-  const { blinded_message, transfer_ref } = body;
+  const { blinded_message, transfer_ref } = body ?? {};
   if (!blinded_message) return err(400, 'Missing blinded_message');
 
   const safeTransferRef = transfer_ref
     ? String(transfer_ref).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
     : null;
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Rail-specific quota gate
-  // ───────────────────────────────────────────────────────────────────────────
-
-  let quotaRemaining = null; // number (identity) | null (anonymous)
-  let quotaPeriodEnd = undefined; // unix secs (identity) | undefined (anonymous)
-
-  // ── SW6: Sandbox routing ───────────────────────────────────────────────────
-  // rfs_test_ keys route to sandbox quota — never the production pool.
-  // Identity-rail sandbox: consume one test credit, skip production quota gate.
-  // Anonymous-rail sandbox: falls through to X-Cashu-Token check.
-  if (isSandboxRequest(apiKey)) {
-    if (rail === 'identity') {
-      const sandboxCredit = await consumeSandboxCredit(env, apiKey);
-      if (!sandboxCredit.ok) {
-        const reason = sandboxCredit.reason;
-        if (reason === 'exhausted' || reason === 'no_quota_record') {
-          return new Response(
-            JSON.stringify({
-              error:     'Sandbox test credit limit reached. Call POST /api/v1/sandbox/reset.',
-              code:      'sandbox_quota_exhausted',
-              remaining: 0,
-              sandbox:   true,
-            }),
-            { status: 402, headers: { 'Content-Type': 'application/json', 'X-Refueler-Sandbox': 'true' } }
-          );
-        }
-        return new Response(
-          JSON.stringify({ error: 'Sandbox quota check failed', sandbox: true }),
-          { status: 500, headers: { 'Content-Type': 'application/json', 'X-Refueler-Sandbox': 'true' } }
-        );
-      }
-      quotaRemaining = sandboxCredit.remaining;
-    }
-    // Anonymous-rail sandbox: fall through to X-Cashu-Token block below.
-
-  } else if (rail === 'identity') {
-    // ── Identity rail: full W2 quota gate ────────────────────────────────────
-    const quotaKey = await kvQuotaKey(apiKey);
-
-    // Load quota record.
-    const { record: quotaRecord, error: loadErr } = await loadQuota(env, quotaKey);
-    if (loadErr) {
-      if (loadErr === 'kv_read_failed') {
-        return err(502, 'Quota check unavailable — please retry');
-      }
-      // record_absent: account provisioned without a quota record.
-      logEvent(env, { endpoint: 'api_credential_issue', tier: TIERS.CHARTERED, status: 402, errorMsg: 'quota_not_provisioned' });
-      return new Response(
-        JSON.stringify({ error: 'No quota record found — contact support', code: 'quota_not_provisioned' }),
-        { status: 402, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Apply spend (includes lazy reset and all plan-specific logic).
-    const CREDENTIAL_COST = 1; // 1 credit per issuance in v1
-    const nowSecs = Math.floor(Date.now() / 1000);
-    const { updated, response402 } = applyQuotaSpend(quotaRecord, CREDENTIAL_COST, nowSecs);
-
-    if (response402) {
-      // Spend blocked — return the appropriate 402.
-      logEvent(env, {
-        endpoint: 'api_credential_issue',
-        tier:     TIERS.CHARTERED,
-        status:   402,
-        errorMsg: response402.code,
-      });
-
-      // Build the payment_required envelope (MCP spec §2.5).
-      return new Response(
-        JSON.stringify({
-          error:             'payment_required',
-          code:              response402.code,
-          rail:              'identity',
-          remaining_credits: response402.remaining_credits ?? 0,
-          shortfall_credits: response402.shortfall_credits ?? CREDENTIAL_COST,
-          ...(response402.overage_credits !== undefined
-            ? { overage_credits: response402.overage_credits, overage_ceiling: response402.overage_ceiling }
-            : {}),
-          payment: {
-            method:        'out_of_band_v1',
-            instructions:  'Request a credit top-up (or wait for your monthly reset) from your Refueler account.',
-            dashboard_url: 'https://refueler.io/share/',
-            offer:         null,
-          },
-        }),
-        { status: 402, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Spend permitted — write updated record back to KV (fire-and-forget).
-    // KV is last-write-wins; the race-critical path (double-spend) is in Supabase.
-    env.STATUS_KV.put(quotaKey, JSON.stringify(updated)).catch(e =>
-      console.error('api_credential_issue: KV quota write-back failed:', e)
-    );
-
-    quotaRemaining = updated.remaining;
-    quotaPeriodEnd = updated.period_end;
-
-  } else {
+  if (client.rail !== 'identity') {
     // ── Anonymous rail: closed until B7 ──────────────────────────────────────
     // Capability-atom tokens will use credential format v2 (standard Cashu
     // proof verification against the API keyset) when the anonymous rail is
@@ -1145,15 +945,40 @@ async function handleApiCredentialIssue(request, env) {
     );
   }
 
+  // ── Identity rail: atomic credit spend (Supabase) ─────────────────────────
+  const CREDENTIAL_COST = 1; // 1 credit per issuance in v1
+  const org = client.org_account_id;
+  let spend;
+  try {
+    spend = await spendCredits(env, org, CREDENTIAL_COST);
+  } catch (e) {
+    if (!(e instanceof StoreUnavailable)) throw e;
+    console.error('api_credential_issue: credit spend unavailable:', e.message);
+    return err(503, 'Quota check unavailable — please retry');
+  }
+
+  if (!spend?.ok) {
+    const code = spend?.code ?? 'quota_not_provisioned';
+    logEvent(env, { endpoint: 'api_credential_issue', tier: TIERS.CHARTERED, status: 402, errorMsg: code });
+    if (code === 'quota_not_provisioned') {
+      return new Response(
+        JSON.stringify({ error: 'No quota record found — contact support', code }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    return paymentRequired402(spend, CREDENTIAL_COST);
+  }
+
+  const quotaRemaining = spend.record.remaining;
+  const quotaPeriodEnd = spend.record.period_end;
+
   // ───────────────────────────────────────────────────────────────────────────
   // Issue credential — same mint path as consumer
   // ───────────────────────────────────────────────────────────────────────────
   const API_EXPIRY_WINDOW = 90 * 24 * 3600;
   const uuid              = crypto.randomUUID();
   const issuedTier        = TIERS.CHARTERED;
-  const mintKey           = rail === 'anonymous'
-    ? env.MINT_API_PRIVATE_KEY
-    : env.MINT_PRIVATE_KEY;
+  const mintKey           = env.MINT_PRIVATE_KEY; // identity rail (anonymous closed until B7)
 
   const commitment = await computeCommitment(env.COMMITMENT_KEY, uuid, issuedTier, API_EXPIRY_WINDOW);
 
@@ -1162,6 +987,9 @@ async function handleApiCredentialIssue(request, env) {
     ({ signedPoint, mintPubkey, keysetId, dleq } = await issueBlindSignature(blinded_message, mintKey));
   } catch (e) {
     console.error('api_credential_issue: blind sig error:', e);
+    // KV-Fix-2: nothing was issued, so give the credit back.
+    try { await refundCredits(env, org, CREDENTIAL_COST); }
+    catch (re) { console.error('api_credential_issue: credit refund failed:', org, re?.message ?? re); }
     return err(500, 'Credential issuance failed');
   }
 
@@ -1194,8 +1022,8 @@ async function handleApiCredentialIssue(request, env) {
     issued_tier:      issuedTier,
     commitment,
     expires_at:       expiresAt,
-    quota_remaining:  quotaRemaining,             // number (identity) | null (anonymous)
-    ...(quotaPeriodEnd !== undefined ? { period_end: quotaPeriodEnd } : {}),
+    quota_remaining:  quotaRemaining,
+    period_end:       quotaPeriodEnd,
   });
 }
 
@@ -1616,33 +1444,42 @@ async function handleInitiate(request, env, ctx, uuid) {
     }
   }
 
-  // ── API-tier credit-pool debit — COMPUTE and refuse (402) BEFORE the spend. ─
-  // Sandbox (rfs_test_) keys never touch the production pool. Write-back happens
-  // AFTER the atomic spend commits, so a double-spend (409) never debits credits.
-  // Share-Admin-1: test credentials also skip the quota gate — there is no live_key.
-  let quotaKey = null;
-  let quotaUpdated = null;
+  // ── API-tier credit-pool pre-check — refuse (402) BEFORE the Cashu spend. ──
+  // KV-Fix-2: the pool is Supabase. This read + applyQuotaSpend is advisory (saves
+  // burning a credential on an obviously empty pool); the binding debit is the
+  // atomic api_credits_spend AFTER the spend INSERT commits, below. Sandbox keys
+  // never touch a production pool; test credentials have no live key.
+  // The pool is still chosen by the plain X-Api-Live-Key header (P3) — HMAC'd
+  // Chartered initiate lands in API-Repair-1.
+  let apiOrg = null;
+  let apiCost = 0;
   const isApiTier = !isTestCredential && isCharteredTier(issuedTier) && !!apiLiveKey && !isSandboxRequest(apiLiveKey);
   if (isApiTier) {
-    const cost = computeTransferCost(totalBytes);
-    quotaKey = await kvQuotaKey(apiLiveKey);
-    const { record, error: loadErr } = await loadQuota(env, quotaKey);
-    if (loadErr === 'kv_read_failed') {
-      return err(502, 'Quota check unavailable — please retry');
+    apiCost = computeTransferCost(totalBytes);
+    let pool;
+    try {
+      const keyRow = apiLiveKey.startsWith('rfs_live_')
+        ? await lookupApiKey(env, await sha256Hex(apiLiveKey))
+        : null;
+      apiOrg = keyRow && !keyRow.sandbox ? keyRow.org_account_id : null;
+      pool   = apiOrg ? await getPool(env, apiOrg) : null;
+    } catch (e) {
+      if (!(e instanceof StoreUnavailable)) throw e;
+      console.error('upload_initiate: quota store unavailable:', e.message);
+      return err(503, 'Quota check unavailable — please retry');
     }
-    if (loadErr) {
+    if (!pool) {
       logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 402, errorMsg: 'quota_not_provisioned' });
       return new Response(
         JSON.stringify({ error: 'No quota record found — contact support', code: 'quota_not_provisioned' }),
         { status: 402, headers: { 'Content-Type': 'application/json' } }
       );
     }
-    const { updated, response402 } = applyQuotaSpend(record, cost, nowSeconds);
+    const { response402 } = applyQuotaSpend(pool, apiCost, nowSeconds);
     if (response402) {
       logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 402, errorMsg: response402.code });
-      return paymentRequired402(response402, cost);
+      return paymentRequired402(response402, apiCost);
     }
-    quotaUpdated = updated;
   }
 
   // ── Tidal / destroy-after-download (migrated from chunk-0) ─────────────────
@@ -1703,11 +1540,30 @@ async function handleInitiate(request, env, ctx, uuid) {
     }
   }
 
-  // ── Credit write-back — only after the spend commits (fire-and-forget KV) ──
-  if (isApiTier && quotaKey && quotaUpdated) {
-    env.STATUS_KV.put(quotaKey, JSON.stringify(quotaUpdated)).catch(e =>
-      console.error('initiate: KV quota write-back failed:', e)
-    );
+  // ── Credit debit — atomic, awaited, only after the spend commits (KV-Fix-2) ─
+  // A double-spend (409) above never reaches here, so it never debits credits.
+  // If the pool refuses now (a concurrent spend won the race) or Supabase fails,
+  // the spent_tokens row is deleted so the credential is not burnt, and we refuse.
+  if (isApiTier) {
+    let debit = null;
+    let debitErr = null;
+    try {
+      debit = await spendCredits(env, apiOrg, apiCost);
+    } catch (e) {
+      if (!(e instanceof StoreUnavailable)) throw e;
+      debitErr = e;
+    }
+    if (!debit?.ok) {
+      const un = await supabaseFetch(env, 'DELETE', `/rest/v1/spent_tokens?serial=eq.${encodeURIComponent(serial)}`)
+        .catch(e => ({ ok: false, statusText: String(e) }));
+      if (!un.ok) console.error('initiate: credential un-spend failed:', serial, un.status ?? un.statusText);
+      if (debitErr) {
+        console.error('upload_initiate: credit debit unavailable:', debitErr.message);
+        return err(503, 'Quota check unavailable — please retry');
+      }
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 402, errorMsg: debit?.code ?? 'debit_refused' });
+      return paymentRequired402(debit ?? { code: 'quota_not_provisioned' }, apiCost);
+    }
   }
 
   // ── Manifest: upload_complete:false, chunks_received:[], filename constant ──

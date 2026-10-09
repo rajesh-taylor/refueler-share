@@ -20,7 +20,10 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 // ─────────────────────────────────────────────────────────────────────────────
 vi.mock('../src/api_auth.js', () => ({
   requireApiAuth: vi.fn(),
-  kvQuotaKey:     vi.fn(async (key) => `api_quota_${key}`),
+}));
+// KV-Fix-2: the pool is read from Supabase via api_store.getPool.
+vi.mock('../src/api_store.js', () => ({
+  getPool: vi.fn(async () => null),
 }));
 
 import {
@@ -37,7 +40,8 @@ import {
   refreshBtcRate,
 } from '../src/handlers/btc_rate.js';
 
-import { requireApiAuth, kvQuotaKey } from '../src/api_auth.js';
+import { requireApiAuth } from '../src/api_auth.js';
+import { getPool } from '../src/api_store.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KV mock factory
@@ -109,7 +113,7 @@ describe('api_capabilities — constants', () => {
 describe('handleApiCapabilities — cap.v1 response shape', () => {
   beforeEach(() => {
     requireApiAuth.mockResolvedValue({
-      client: { rail: 'identity' },
+      client: { rail: 'identity', org_account_id: 'org-test' },
       apiKey: 'rfs_live_testkey',
     });
   });
@@ -230,18 +234,20 @@ describe('handleApiCapabilities — cap.v1 response shape', () => {
     expect(body.daily_reference_rate.previous.gbp_per_btc).toBe(62000);
   });
 
-  test('quota.model is "kv_pool" on identity rail with no KV record', async () => {
+  test('quota.model is "server_pool" on identity rail with no pool', async () => {
     const { body } = await callCapabilities(makeEnv());
-    expect(body.quota.model).toBe('kv_pool');
+    expect(body.quota.model).toBe('server_pool');
     expect(body.quota.remaining).toBeNull();
   });
 
-  test('quota.remaining is populated from KV when record exists', async () => {
-    // kvQuotaKey(rfs_live_testkey) → api_quota_rfs_live_testkey
+  test('quota.remaining is populated from the pool when it exists — never from KV', async () => {
+    getPool.mockResolvedValueOnce({ remaining: 49500, updated_at: 1725926400 });
+    // A planted KV balance must be ignored (KV-Fix-2).
     const env = makeEnv({
-      'api_quota_rfs_live_testkey': JSON.stringify({ remaining: 49500, updated_at: 1725926400 }),
+      'api_quota_rfs_live_testkey': JSON.stringify({ remaining: 999999, updated_at: 1 }),
     });
     const { body } = await callCapabilities(env);
+    expect(getPool).toHaveBeenCalledWith(env, 'org-test');
     expect(body.quota.remaining).toBe(49500);
     expect(body.quota.updated_at).toBe(1725926400);
   });

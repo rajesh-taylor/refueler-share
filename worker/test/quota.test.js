@@ -2,7 +2,9 @@
  * quota.test.js — unit tests for worker/src/quota.js
  *
  * SW-MCP-W2. Tests: lazy reset, overage metering, ceiling 402, personal_api hard
- * stop, account_cancelled paths, addOneMonth edge cases, provisionQuota, cancelQuota.
+ * stop, account_cancelled paths, addOneMonth edge cases, provisionParams, sandbox plan.
+ * KV-Fix-2: the store-backed provision/cancel moved to SQL (api_pool_provision /
+ * api_pool_cancel); those rules are tested in the migration's SQL checks.
  *
  * Run: npx vitest run worker/test/quota.test.js
  */
@@ -11,11 +13,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   addOneMonth,
   applyQuotaSpend,
-  provisionQuota,
-  cancelQuota,
+  provisionParams,
   quotaSummary,
   PLAN_IDENTITY_API,
   PLAN_PERSONAL_API,
+  PLAN_SANDBOX,
   DEFAULT_OVERAGE_CEILING,
 } from '../src/quota.js';
 
@@ -303,122 +305,60 @@ describe('applyQuotaSpend — cancellation', () => {
   });
 });
 
-// ── provisionQuota ─────────────────────────────────────────────────────────────
+// ── Sandbox plan (KV-Fix-2) ────────────────────────────────────────────────────
 
-describe('provisionQuota', () => {
-  function makeEnv() {
-    const store = {};
-    return {
-      STATUS_KV: {
-        put: vi.fn(async (key, val) => { store[key] = val; }),
-        get: vi.fn(async (key, opts) => {
-          const v = store[key];
-          return v ? (opts?.type === 'json' ? JSON.parse(v) : v) : null;
-        }),
-      },
-      _store: store,
-    };
-  }
-
-  it('writes identity_api record with correct allocation', async () => {
-    const env = makeEnv();
-    const result = await provisionQuota(env, 'api_quota_test', { plan: PLAN_IDENTITY_API });
-    expect(result.ok).toBe(true);
-    expect(result.record.plan).toBe(PLAN_IDENTITY_API);
-    expect(result.record.allocation).toBe(50_000);
-    expect(result.record.remaining).toBe(50_000);
-    expect(result.record.status).toBe('active');
-    expect(env.STATUS_KV.put).toHaveBeenCalledOnce();
+describe('applyQuotaSpend — sandbox plan', () => {
+  const now = 1_800_000_000;
+  const rec = (o = {}) => ({
+    plan: PLAN_SANDBOX, allocation: 25, remaining: 1, overage_credits: 0, overage_ceiling: 0,
+    period_start: now - 2000, period_end: now - 10, status: 'active', updated_at: now - 2000, ...o,
   });
 
-  it('writes personal_api record with correct allocation and zero overage ceiling', async () => {
-    const env = makeEnv();
-    const result = await provisionQuota(env, 'api_quota_test', { plan: PLAN_PERSONAL_API });
-    expect(result.ok).toBe(true);
-    expect(result.record.allocation).toBe(10_000);
-    expect(result.record.overage_ceiling).toBe(0);
+  it('never resets lazily, even after period_end', () => {
+    const { updated } = applyQuotaSpend(rec(), 1, now);
+    expect(updated.remaining).toBe(0);
+    expect(updated.period_end).toBe(now - 10);
   });
 
-  it('applies custom overage_ceiling for identity_api', async () => {
-    const env = makeEnv();
-    const result = await provisionQuota(env, 'api_quota_test', {
-      plan:            PLAN_IDENTITY_API,
-      overage_ceiling: 25_000,
-    });
-    expect(result.record.overage_ceiling).toBe(25_000);
-  });
-
-  it('returns error on unknown plan', async () => {
-    const env = makeEnv();
-    const result = await provisionQuota(env, 'api_quota_test', { plan: 'enterprise' });
-    expect(result.error).toMatch(/unknown_plan/);
-  });
-
-  it('sets period_end one month after period_start when not provided', async () => {
-    const env = makeEnv();
-    const now = Math.floor(Date.now() / 1000);
-    const result = await provisionQuota(env, 'api_quota_test', { plan: PLAN_IDENTITY_API });
-    const expectedEnd = addOneMonth(result.record.period_start);
-    expect(result.record.period_end).toBe(expectedEnd);
-  });
-
-  it('respects custom period_start and period_end', async () => {
-    const env = makeEnv();
-    const ps = 1750000000;
-    const pe = 1752678400;
-    const result = await provisionQuota(env, 'api_quota_test', {
-      plan:         PLAN_IDENTITY_API,
-      period_start: ps,
-      period_end:   pe,
-    });
-    expect(result.record.period_start).toBe(ps);
-    expect(result.record.period_end).toBe(pe);
+  it('hard stop at zero — no overage', () => {
+    const { updated, response402 } = applyQuotaSpend(rec({ remaining: 0 }), 1, now);
+    expect(updated).toBeNull();
+    expect(response402.code).toBe('quota_exhausted');
   });
 });
 
-// ── cancelQuota ────────────────────────────────────────────────────────────────
+// ── provisionParams ────────────────────────────────────────────────────────────
 
-describe('cancelQuota', () => {
-  function makeEnvWithRecord(record) {
-    let stored = JSON.stringify(record);
-    return {
-      STATUS_KV: {
-        put: vi.fn(async (_k, v) => { stored = v; }),
-        get: vi.fn(async (_k, opts) => opts?.type === 'json' ? JSON.parse(stored) : stored),
-      },
-    };
-  }
+describe('provisionParams', () => {
+  const now = 1_750_000_000;
 
-  it('cancel-at-period-end: sets status to cancelled, does NOT zero remaining', async () => {
-    const env = makeEnvWithRecord(makeIdentityRecord({ remaining: 5000 }));
-    const result = await cancelQuota(env, 'api_quota_test', { immediate: false });
-    expect(result.ok).toBe(true);
-    expect(result.record.status).toBe('cancelled');
-    expect(result.record.remaining).toBe(5000);
+  it('identity_api: allocation from the plan, default ceiling, one-month period', () => {
+    const p = provisionParams({ plan: PLAN_IDENTITY_API }, now);
+    expect(p).toEqual({
+      plan: PLAN_IDENTITY_API, allocation: 50_000, overageCeiling: DEFAULT_OVERAGE_CEILING,
+      periodStart: now, periodEnd: addOneMonth(now),
+    });
   });
 
-  it('immediate cancel: sets status to cancelled AND zeros remaining', async () => {
-    const env = makeEnvWithRecord(makeIdentityRecord({ remaining: 5000 }));
-    const result = await cancelQuota(env, 'api_quota_test', { immediate: true });
-    expect(result.ok).toBe(true);
-    expect(result.record.status).toBe('cancelled');
-    expect(result.record.remaining).toBe(0);
+  it('personal_api: allocation 10 000, ceiling forced to 0', () => {
+    const p = provisionParams({ plan: PLAN_PERSONAL_API, overage_ceiling: 999 }, now);
+    expect(p.allocation).toBe(10_000);
+    expect(p.overageCeiling).toBe(0);
   });
 
-  it('returns error on absent record', async () => {
-    const env = {
-      STATUS_KV: { get: vi.fn(async () => null), put: vi.fn() },
-    };
-    const result = await cancelQuota(env, 'api_quota_test');
-    expect(result.error).toBe('record_absent');
+  it('custom ceiling and period are kept', () => {
+    const p = provisionParams({ plan: PLAN_IDENTITY_API, overage_ceiling: 25_000, period_start: 1750000000, period_end: 1752678400 }, now);
+    expect(p.overageCeiling).toBe(25_000);
+    expect(p.periodStart).toBe(1750000000);
+    expect(p.periodEnd).toBe(1752678400);
   });
 
-  it('is idempotent on already-cancelled record', async () => {
-    const env = makeEnvWithRecord(makeIdentityRecord({ status: 'cancelled', remaining: 0 }));
-    const result = await cancelQuota(env, 'api_quota_test');
-    expect(result.ok).toBe(true);
-    expect(result.already_cancelled).toBe(true);
-    expect(env.STATUS_KV.put).not.toHaveBeenCalled();
+  it('refuses unknown plans, inherited names, bad ceilings and inverted periods', () => {
+    expect(provisionParams({ plan: 'enterprise' }, now).error).toMatch(/unknown_plan/);
+    expect(provisionParams({ plan: 'toString' }, now).error).toMatch(/unknown_plan/);
+    expect(provisionParams({ plan: PLAN_IDENTITY_API, overage_ceiling: -1 }, now).error).toBe('bad_overage_ceiling');
+    expect(provisionParams({ plan: PLAN_IDENTITY_API, overage_ceiling: 1.5 }, now).error).toBe('bad_overage_ceiling');
+    expect(provisionParams({ plan: PLAN_IDENTITY_API, period_start: now, period_end: now }, now).error).toBe('bad_period');
   });
 });
 

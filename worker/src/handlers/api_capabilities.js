@@ -28,7 +28,8 @@
 //   refueler_capabilities, refueler_send_file,
 //   refueler_check_transfer, refueler_quote
 
-import { requireApiAuth, kvQuotaKey } from '../api_auth.js';
+import { requireApiAuth } from '../api_auth.js';
+import { getPool } from '../api_store.js';
 import { CHARTERED_CAP_BYTES } from '../manifest.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,9 +130,9 @@ function err(status, message, code) {
 // HMAC-authenticated. Both rails.
 //
 // Identity rail:
-//   quota.remaining  — live from KV (null if no record yet)
+//   quota.remaining  — live from the Supabase pool (null if no pool / unreadable)
 //   quota.updated_at — unix seconds of last top-up / decrement
-//   quota.model      — 'kv_pool'
+//   quota.model      — 'server_pool' (was 'kv_pool' before KV-Fix-2)
 //
 // Anonymous rail:
 //   quota.remaining  — null (server holds no balance)
@@ -143,9 +144,9 @@ function err(status, message, code) {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleApiCapabilities(request, env) {
   // ── HMAC auth ─────────────────────────────────────────────────────────────
-  let client, apiKey;
+  let client;
   try {
-    ({ client, apiKey } = await requireApiAuth(request, new ArrayBuffer(0), env));
+    ({ client } = await requireApiAuth(request, new ArrayBuffer(0), env));
   } catch (authErr) {
     if (authErr instanceof Response) return authErr;
     console.error('api_capabilities: unexpected auth error:', authErr);
@@ -180,16 +181,15 @@ export async function handleApiCapabilities(request, env) {
   let quota;
 
   if (rail === 'identity') {
-    const qKey = await kvQuotaKey(apiKey);
     let quotaRecord = null;
     try {
-      quotaRecord = await env.STATUS_KV.get(qKey, { type: 'json' });
+      quotaRecord = await getPool(env, client.org_account_id);
     } catch (e) {
-      console.error('api_capabilities: KV quota read failed:', e);
+      console.error('api_capabilities: pool read failed:', e?.message ?? e);
     }
 
     quota = {
-      model:      'kv_pool',
+      model:      'server_pool',
       remaining:  quotaRecord?.remaining  ?? null,
       updated_at: quotaRecord?.updated_at ?? null,
       note: quotaRecord
