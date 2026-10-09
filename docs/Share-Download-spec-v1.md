@@ -177,6 +177,7 @@ Acceptable because deletion only begins once the file has fully arrived (§5, D-
 **The gap:** consumer uploads are capped at Pro Bono's 4 GB until B12-4a, and `test-upload.html` / `soak-headless.mjs` upload unencrypted random bytes with no share link. No real 100 GiB browser download can be tested today.
 
 **Proposal: `soak-headless.mjs --encrypt` (Share-Soak-4):**
+> **Built Share-Soak-4 (9 Oct 2026), with changes:** link format **v2** (derived part key, counter nonce + last flag — no IV), plaintext from SHAKE256 (seed in the link filename), admin key from env. `--dad` / `--passphrase` deferred to DL-W1 / DL-Soak. See `worker/scripts/soak-*.mjs` headers.
 - Encrypt exactly as `frontend/upload.js` does: AES-256-GCM, session key + IV, AAD = 4-byte big-endian chunk index, stored object = plaintext chunk + 16 B tag. `X-Total-Bytes` = **plaintext** size. Finalise hashes and the Merkle root cover the **ciphertext** (two-roots rule).
 - **Deterministic plaintext:** chunk *i* = keystream from a seed (e.g. BLAKE3 XOF of `seed ‖ i`). Nothing is stored, and the downloaded file can be checked byte for byte by regenerating it. Log the plaintext BLAKE3 of the whole file too.
 - **Emits a real v1 share link** (`?uuid=…#<fragment>`, same grammar as `upload.js`/`fragment.js`, with IV and filename), written to a `0600` file on the Mac, **never to the log**.
@@ -213,7 +214,7 @@ Paid cards go live after **B12-4a** (auth) and **B12-6** (billing). Download wor
 
 | Session | Model | Scope | Repo | Slot / prerequisite |
 |---|---|---|---|---|
-| **Share-Soak-4** | Sonnet | `soak-headless --encrypt` + link output; `soak-download --decrypt`; commit `soak-download.mjs` | refueler-share | Week 1 post-Berlin, after B12-1b (test-credential path) |
+| **Share-Soak-4 ✓** | Sonnet | `soak-headless --encrypt` + link output; `soak-download --decrypt`; commit `soak-download.mjs` | refueler-share | Week 1 post-Berlin, after B12-1b (test-credential path) |
 | **Share-DL-Spike** | Sonnet | Scratch page (not shipped): SW stream in Safari macOS/iOS + Firefox (S-1, S-2); Chrome `close()` timing + `keepExistingData` on APFS/exFAT externals (S-3). 5 GiB, then 100 GiB | scratch + refueler-share | After Soak-4 |
 | **Share-DL-W1** | Sonnet | Worker: D-DAD-2 (tail trigger on verified stream close, both paths), tests incl. mismatch-on-tail keeps the transfer | refueler-share (Worker deploy) | After B12-1b; before B12-3 touches `delete_transfer.js` |
 | **Share-DL-1** | Sonnet | Frontend: ordered parallel fetch + tail-last, exact-length check (F-2), 6-attempt budget + pause-and-wait (F-3), error classes, wake lock, SW download for Safari/Firefox, blob cap | refueler-share → `ship-frontend.sh` | After the spike; week 2–3, parallel to B12-4a |
