@@ -138,9 +138,9 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 | Surface | Who | Notes |
 |---------|-----|-------|
 | Navy Office | Superadmin (Rajesh) | Full ops dashboard — all transfers, all orgs, all metrics |
-| Chambers | Citizen / Sovereign | Account page — Harbourmaster layout, Chartered sections visible but locked/greyed |
-| Custom House | Chartered API/MCP | Reserved — additive on upgrade, not a move |
-| Harbourmaster | Chartered org admin | Full org dashboard — aggregate storage, org transfers, quota management |
+| Chambers | Citizen / Sovereign | Account page — full layout, Custom House sections visible but locked/greyed |
+| Custom House | Chartered (org admin + API/MCP) | Full org dashboard — aggregate storage, org transfers, quota; API keys, webhooks. Additive on upgrade, not a move |
+| Harbourmaster | Silent Drop Quay owner | Locke sign-in only (B8/SD). Not a Chartered surface (X3 · 9 Oct 2026) |
  
 ---
  
@@ -158,8 +158,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Quota per org vs used, active transfer count per org, tier breakdown, nudge signals
 - Separate panel — do not conflate with Growth Signal (acquisition vs operational health)
 - Growth Signal remains as-is
-**Harbourmaster (Chartered org admin — future build):**
-- Named "Capacity" in Harbourmaster sidebar
+**Custom House (Chartered org admin — future build):**
+- Named "Capacity" in Custom House sidebar
 - Aggregate storage used vs quota (org-scoped only — no per-user detail, no UUIDs)
 - Active transfer count, quota CTA when approaching limit
 - No per-transfer size, no tier breakdown (all Chartered), no user identification
@@ -168,15 +168,15 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - Token + link only — the privacy model requires no persistent state
 - Path to account: Citizen (Stripe + email)
 **Citizen / Sovereign — Chambers (account page):**
-- Full Harbourmaster layout
+- Full Custom House layout
 - Chartered-only sections (org management, team, Capacity) visible but locked/greyed
 - Single build, progressive unlock model — seamless upgrade path to Chartered
 - Individual users see their own per-transfer file size (it's their file)
 - No Collected at, no Download count, no Rail visibility
-**Chartered — full Harbourmaster, everything unlocked.**
+**Chartered — full Custom House, everything unlocked.**
 
-**⚠️ Naming collision (B12-SR X3, unresolved 🟡):** "Harbourmaster" means three things — BRIDGE: internal live-transfer view inside Navy Office; B8/Silent Drop: the Quay owner who logs in with a Locke; B12: the Chartered org-admin surface. **Auth follows the rail, never the surface name:** Registered principals → magic link (B12-SR S6); Bearer principals → Locke (B8 §4). Resolve naming before B12-5.
-**Bearer-rail Chartered (B12-SR X2):** follows Sovereign — no quota row, no `org_dock`, device-held Harbourmaster. Inherits every Bearer feature.
+**Naming (B12-SR X3 ✓ resolved 9 Oct 2026):** Harbourmaster = Silent Drop Quay owner (Locke) only; Navy Office live-transfer view = Execution Dock; Chartered org admin = Custom House. **Auth follows the rail, never the surface name:** Registered principals → magic link (B12-SR S6); Bearer principals → Locke (B8 §4).
+**Bearer-rail Chartered (B12-SR X2):** follows Sovereign — no quota row, no `org_dock`, device-held Custom House. Inherits every Bearer feature.
  
 **UUID as identifier — privacy principle:**
 - Superadmin (Navy Office) can see UUIDs but must not relay them to org admins to identify users
@@ -184,7 +184,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - If an org needs more storage: contact superadmin → increase org quota. No per-user identification.
 **Storage & Billing / Capacity scoping:**
 - Requires dedicated Opus session(s) before build
-- Harbourmaster / local admin build parked — not in current roadmap block
+- Custom House org admin build parked — not in current roadmap block
 ---
  
 ## Known broken / do not retry
@@ -231,7 +231,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → KV-Fix-2 ✓ (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1 ✓** (webhooks/receipts from R2, HMAC'd Chartered initiate). | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
-| 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
+| 11d | B12-5 Custom House org admin | ❌ | When a Chartered client is in sight. |
 | 11d′ | **Pricing-v2-Opus** (1–2 sessions) → plans-page rewrite | ❌ | Rate card v2: holding time + per-32 MiB billing, GBP↔credits, credit blocks, Pro Bono × agents, personal agent key vs `Sovereign ⊅ API`. Plans rewrite after B12-4a from `docs/drafts/` (draft B). Agents/MCP first. Log: Share-MCP-Chat-1. |
 | 11d″ | **Padding-Opus** (design + planning, no build slot yet) | ❌ | Size padding (e.g. Padmé buckets) so R2 sees a size band, not an exact size. Open: everyone-light vs paid-stronger (paid-only padding marks the sender as a customer), storage cost, interaction with per-32 MiB API billing. Also scope a Wormhole-style short-code mode (PAKE) as a possible paid feature — async storage makes short codes harder than in Wormhole. Raised Share-B12-1b. |
 | 11d‴ | **Receipt size opt-in** (only if a Chartered client asks) | ❌ | Share-Size-1 (6 Oct 2026) stops storing the exact size; receipt `size_bytes` is `null`. If a Chartered client asks for it: per-transfer opt-in, **off by default**, identity rail only, size written only into that transfer's signed receipt — never the manifest or `/meta`, never the anonymous rail. Note the receipt sits in KV 7 days, so opting in re-stores the size there. Agreed by Rajesh, Share-Size-1. Not built. |
@@ -257,7 +257,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 **Open — slot into the named session:**
 - **S-004** Retune `VERIFY_INLINE_CHUNK_THRESHOLD` (128) after the large-download work → Share-DL track.
 - **S-095** Question: move ciphertext verification off the download hot path (verify at finalise + background sweep) if WASM isn't enough → Share-DL / B9 build.
-- **S-019** Spec a client self-serve transfer status check (own transfer, own token) for "my transfer isn't downloading" → with B12-4b Chambers / B12-5 Harbourmaster.
+- **S-019** Spec a client self-serve transfer status check (own transfer, own token) for "my transfer isn't downloading" → with B12-4b Chambers / B12-5 Custom House.
 - **S-025** Whitepaper "honest scope": the operator never sees the real filename (Worker gets `encrypted-payload`; name lives in the fragment) → `docs/WHITEPAPER-OUTLINE.md` at B9-4.
 - **S-030** refueler.io `command-centre` still uses `localStorage` `rfTheme`, not the `rs-theme` cookie → low, any refueler.io tidy.
 - **S-041** Speed benchmark (1/4/10/25/50 GB; fibre / broadband / 4G / rural) against WeTransfer, Smash, SwissTransfer → after the Share-DL track; possible Notes article.
@@ -321,7 +321,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 
 **Resolved on import (repo wins):**
 - **S-065** Lodge/Collect register stays for internal/whitepaper use; UI copy uses plain words (R-3 "Download", "lodged" dropped).
-- **S-142** Harbourmaster = Chartered client surface at reduced resolution (B12 spec), never in the public menu. BRIDGE v9.6 "Navy Office view" wording is stale → next BRIDGE bump.
+- **S-142** Custom House = Chartered client surface at reduced resolution (B12 spec), never in the public menu. BRIDGE wording fixed v10.0 (X3).
  
 ---
  

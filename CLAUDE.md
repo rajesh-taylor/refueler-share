@@ -175,11 +175,12 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 - **Deletion latch = R2 conditional put** (`onlyIf etagMatches`) on the manifest. All five deletion paths (DAD, owner-delete, strike-off, grace sweep, orphan sweep) call the same release with the same args; tombstones are identical and strip `qref_ct`.
 - **No raw `quota_ref` at rest in R2 or KV.** Manifests carry sealed `qref_ct`; `org_dock` is one sealed KV entry per transfer under `SHARE_SEAL_KEY_<kid>` (per-dock HKDF subkey, AAD binds org + entry + kid).
 - **Lodgement refs:** `LR-` + 6 Crockford chars is display only; every action uses the 128-bit handle.
+- **Names (X3 · 9 Oct 2026):** Harbourmaster = Silent Drop Quay owner (Locke sign-in) only; Chartered org admin = Custom House; Navy Office live-transfer view = Execution Dock.
 - **Auth follows rail, not surface name.** Registered → magic link (15-min, single-use, fragment + click) + `__Host-rfs_session` cookie + CSRF + exact-origin credentialed CORS. Bearer → Locke (B8). No magic link ever reaches a Bearer principal. The `localhost` CORS echo is never combined with `Allow-Credentials`.
 - **Bearer-rail Chartered follows Sovereign (X2):** no Supabase row, no `org_dock`, no `qref_ct`.
 - **Sovereign ledger never leaves the user's control.** Refueler never stores a Chambers blob. Portability = Deed + user-held backup file, or QR pairing with a 6-digit check code (ephemeral secp256k1 ECDH via `@noble/secp256k1` — no new curve lib). Domain tags `refueler.share.chambers.*` — never shared with the refueler.io merchant implementation of the same protocol.
 - **Chambers + lodge page move to a dedicated origin with strict CSP (X5)** before the Sovereign ledger ships.
-- **Harbourmaster aggregates:** daily 5 % bands of quota; no hourly GiB; no "<3" floor; dates day-granular. Chartered 402 bodies return the band too.
+- **Custom House aggregates:** daily 5 % bands of quota; no hourly GiB; no "<3" floor; dates day-granular. Chartered 402 bodies return the band too.
 - **Encoding rule for every HMAC/HKDF input:** `utf8(tag) ‖ 0x00 ‖ fixed-length binary fields`; UUID 16 raw bytes; `quota_ref` 32 raw bytes; big-endian integers; variable-length field last. BLAKE3 unkeyed for high-entropy secrets, BLAKE3 keyed for low-entropy identifiers.
 
 ---
@@ -210,7 +211,7 @@ Session count is a guide not a constraint — split early, never overload. Plann
 
 Locked block sequence (updated Share-B12-SR · 24 Sep 2026):
 `B12-1 ✓ → [Berlin 30 Sep–3 Oct; back Sun 4 Oct; small ad hoc sessions only until then] → B12-1b → B12-2 → KV-Audit-Opus + fixes · X3 naming · X5 app origin → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
-B12-5 (Harbourmaster) slots in when a Chartered client is in sight.
+B12-5 (Custom House org admin) slots in when a Chartered client is in sight.
 
 ---
 

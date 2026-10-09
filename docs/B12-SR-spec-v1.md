@@ -31,7 +31,7 @@ The invariant has been applied to confidentiality ("no raw secrets in KV"). It m
 **X2. Chartered can be Bearer-rail. B12 assumes it can't.** ⚠️
 Brand-Opus-1: Chartered = "Registered **or** Bearer". B12 §1.2/§1.4/§3.5/§4.6 give every Chartered org a Supabase quota row, an `org_dock`, and a magic-link admin email. For a Bearer-rail Chartered org that is a Supabase row on the anonymous-rail API credential path — a locked DO NOT. Fix: **§0.1 extends to Bearer-rail Chartered.** No `quota_accounts` row, no `org_dock`, no `quota_ref` in manifests; the meter is its credit balance plus per-transfer cap plus expiry. Its Harbourmaster, when built, is device-held (like Sovereign Chambers) and any server state it later needs is gated by the B8 Locke. B12-3/B12-5 build **Registered-rail Chartered only**. Moot until `rails_available` includes Bearer, but must not be built into a corner.
 
-**X3. "Harbourmaster" is triple-booked.** ⚠️ (security lock 🔒 · naming 🟡)
+**X3. "Harbourmaster" is triple-booked.** ⚠️ (security lock 🔒 · naming ✓ resolved 9 Oct 2026: Harbourmaster = Silent Drop Quay owner (Locke) only; Navy Office view = Execution Dock; Chartered org admin = Custom House. Below, "Harbourmaster" in B12 context reads as Custom House.)
 BRIDGE: the internal live-transfer view inside Navy Office. B8 / Silent Drop: the Quay owner who logs in with a Locke. B12: the Chartered org-admin surface. B8 locks "Harbourmaster login = Locke challenge-response, no email"; B12 §4.6 gives the Chartered org admin a magic link. Both are right for *their* principal, which is the point: **authentication follows the rail, never the surface name.** Registered principals → magic link (S6). Bearer principals → Locke (B8 §4). A magic link is never offered to a Bearer principal. Naming clean-up (BRIDGE lines ~225/864) is a 🟡 docs task for Rajesh — but a Sonnet session reading "Harbourmaster login" in B8 while building B12-5 will wire the wrong thing, so resolve before B12-5.
 
 **X4. `dock_index:{uuid}` stores `size_bytes` today.** ⚠️
@@ -201,7 +201,7 @@ B12 gives Citizens a server-side transfer list but no index. Use the same constr
 
 ---
 
-## S5. Harbourmaster aggregate differencing (§3.3)
+## S5. Custom House aggregate differencing (§3.3)
 
 **Finding ⚠️** Hourly whole-GiB rounding is a size meter for any org lodging a few transfers a day: watch the figure, read the list, subtract. The list already shows every lodgement (so the "<3" floor hides nothing it doesn't already show — theatre, and honest claims only). The org being data controller under the DPA doesn't change Refueler's own locked rule: no per-transfer size on this surface.
 
@@ -219,7 +219,7 @@ B12 gives Citizens a server-side transfer list but no index. Use the same constr
 
 ---
 
-## S6. Registered-rail auth — Chambers & Harbourmaster (§4.6, §5.2)
+## S6. Registered-rail auth — Chambers & Custom House (§4.6, §5.2)
 
 **Scope** 🔒: Citizens and **Registered-rail** Chartered org admins. Bearer principals (Sovereign, Bearer-rail Chartered, Silent Drop Quay owners) never receive a magic link (X2, X3).
 
@@ -432,7 +432,7 @@ Entitlements from `resolved_tier` per request; account dock for Citizen list; lo
 ### B12-4c — Sovereign ledger + portability
 S7 in full. **First task:** pure functions + pinned vectors (Deed→`backup_pub` with the BIP-39 all-`abandon`…`art` test mnemonic; ECIES round-trip; SAS code) reproduced in two implementations before any UI.
 
-### B12-5 — Harbourmaster
+### B12-5 — Custom House org admin
 `org_dock` per S3(b)/S4; list via one `list` call with metadata; strike-off by handle inside the session's `dock_id`; bands per S5; `seal.decrypt_fail` in Navy Office. Resolve X3 naming first.
 
 ### B12-6 — billing
@@ -459,7 +459,7 @@ S7 in full. **First task:** pure functions + pinned vectors (Deed→`backup_pub`
 
 ## E. Rajesh's 🟡 list
 1. App origin hostname (X5).
-2. "Harbourmaster" naming clean-up across BRIDGE/B8 (X3).
+2. ~~"Harbourmaster" naming clean-up across BRIDGE/B8 (X3).~~ ✓ 9 Oct 2026 (Custom House / Execution Dock / Harbourmaster = Quay owner).
 3. Band width for small Chartered quotas (S5).
 4. Max concurrent reservations per org (S1.11).
 5. Magic-link rate-limit numbers and session cap (S6).

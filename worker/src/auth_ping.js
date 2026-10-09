@@ -2,7 +2,7 @@
  * auth_ping.js — GET /api/v1/auth/ping
  *
  * Lightweight HMAC-authenticated liveness/identity check used by the
- * Harbourmaster client dashboard on login. Returns the rail + tier + quota
+ * Custom House client dashboard on login. Returns the rail + tier + quota
  * summary for the presenting API key so the dashboard and MCP tools can
  * gate features and warn before pool exhaustion.
  *
@@ -83,7 +83,7 @@ export async function handleAuthPing(request, env) {
   if (!isCharteredTier(client.tier)) {
     logPingEvent(env, apiKeyHash, 'ping_rejected_wrong_tier');
     return jsonError(403, 'api_tier_required',
-      'The Harbourmaster dashboard requires an API-tier credential.');
+      'The Custom House dashboard requires an API-tier credential.');
   }
 
   // ── 3. Quota summary — identity rail only ──────────────────────────────────

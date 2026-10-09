@@ -407,8 +407,8 @@ a separate channel. Acceptance receipt immediately; collection receipt on downlo
 **Fully buildable on v1.**
 
 **Status lookup (gap identified 25 Sep 2026 — not yet speced).** A solo Chartered
-credential has no team, no quay allocation, nothing to administer — a Harbourmaster-
-style dashboard is the wrong shape for it. What it needs is a single scoped tool:
+credential has no team, no quay allocation, nothing to administer — a Custom House
+org-admin dashboard is the wrong shape for it. What it needs is a single scoped tool:
 
 `check_transfer_status(transfer_ref)` → { status: active | collected | expired | purged,
 expiry_timestamp }

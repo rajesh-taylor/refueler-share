@@ -18,10 +18,10 @@ Master Context: "same price and feature set; the rail is a privacy choice." So �
 Parity is **today's** state, not a promise: Bearer-only features are expected later (the Bearer layer enables things the Registered layer can't). Build nothing that assumes permanent parity. 🔒
 
 **0.3 The DAD path must clear the org transfer index.** 🔒
-Today `dock_index` is not cleared on consumer DAD (ages out on TTL). Tolerable for Navy Office; **fatal for Harbourmaster**, where a DAD'd transfer lingering as Active/Expired while a manually-deleted one vanishes *is* a DAD label by another name. Harbourmaster's index is cleared on every sender/consumer deletion path. See §3.4 and §6.
+Today `dock_index` is not cleared on consumer DAD (ages out on TTL). Tolerable for Navy Office; **fatal for Custom House**, where a DAD'd transfer lingering as Active/Expired while a manually-deleted one vanishes *is* a DAD label by another name. Custom House's index is cleared on every sender/consumer deletion path. See §3.4 and §6.
 
 **0.4 Chambers has no authentication yet.** 🛡
-Neither Chambers nor Harbourmaster can ship without a sign-in model for the Registered rail. This is first-time security design, not wiring. Scoped in §4.6, flagged for its own review.
+Neither Chambers nor Custom House can ship without a sign-in model for the Registered rail. This is first-time security design, not wiring. Scoped in §4.6, flagged for its own review.
 Sovereign has **no sign-in at all** — nothing of theirs lives on the server. What they need is **portability** of the device-held ledger, designed in §4.2 and reviewed as S7. 🔒
 
 ---
@@ -84,7 +84,7 @@ Why Supabase RPC, not KV or Durable Objects: KV has no compare-and-set (race = o
 ### 1.8 Credit-back on deletion 🔒
 Every deletion path releases `manifest.total_chunks` against `quota_ref`, **exactly once**, gated on the transition that writes the tombstone:
 - DAD (consumer, via `finishDownload`)
-- Owner delete / Harbourmaster strike-off
+- Owner delete / Custom House strike-off
 - Grace sweep / orphan sweep purge (§6)
 
 The existing `consumed:true` guard write is the once-only latch: credit-back fires only on the call that sets it. KV isn't atomic, so a double-fire is theoretically possible → **nightly reconcile at 03:00** (same cron) recomputes `used_chunks` per `quota_ref` from live manifests and `reserved_chunks` from unexpired reservation rows, and overwrites. Drift can therefore exist for < 24 h and only in the user's favour or ours by a transfer's width. 🟡 Reconcile cost (R2 list + manifest reads) fine at current scale; revisit at ~100k live transfers.
@@ -116,7 +116,7 @@ No per-transfer size. No UUIDs. No Citizen rows. 🔒
 
 ### 2.2 Anonymised but actionable 🔒
 - **Org handle** = `ORG-` + first 4 bytes (hex, uppercase) of `HMAC(QUOTA_REF_KEY, "handle" ‖ quota_ref)`. Stable, meaningless, shoulder-surf-safe.
-- Harbourmaster shows the org its own handle ("Quote ORG-7F3A when contacting us"). The *org* supplies the link between name and handle; Navy Office never displays names. Rajesh already knows Chartered clients by contract — the point is the panel itself stays screenshot-safe.
+- Custom House shows the org its own handle ("Quote ORG-7F3A when contacting us"). The *org* supplies the link between name and handle; Navy Office never displays names. Rajesh already knows Chartered clients by contract — the point is the panel itself stays screenshot-safe.
 - The only action in the Chartered table is **Adjust quota** (writes `limit_chunks`). No "contact", no "nudge", no drill-down to transfers. 🔒
 
 ### 2.3 Capacity pressure indicator 🟡
@@ -130,14 +130,14 @@ No per-transfer size. No UUIDs. No Citizen rows. 🔒
 - Surfaces as a single weekly number in Storage & Billing. "Storage is cycling" signal. Build: future session (not blocking B12 build order).
 
 ### 2.5 Execution Dock (Navy Office placeholder) 🔒
-Stays in Navy Office until Harbourmaster ships, gains the PURGED status (§6), then is **removed** from Navy Office in the Harbourmaster build session.
+Stays in Navy Office until Custom House org admin ships, gains the PURGED status (§6), then is **removed** from Navy Office in the B12-5 build session.
 
 ---
 
-## 3. Harbourmaster (org admin surface)
+## 3. Custom House — org admin (was "Harbourmaster" until X3, 9 Oct 2026)
 
 ### 3.1 Shape 🔒
-Harbourmaster is the Chartered-unlocked section set **inside the single Chambers build** (§4.1), not a separate app. The name labels the sidebar group an org admin sees. Custom House (API keys, webhooks, credit usage) remains reserved and additive.
+Custom House is the Chartered-unlocked section set **inside the single Chambers build** (§4.1), not a separate app. The name labels the sidebar group an org admin sees. Its API sections (API keys, webhooks, credit usage) are additive. "Harbourmaster" now means only the Silent Drop Quay owner (Locke sign-in) — never this surface.
 
 ### 3.2 What an org admin sees 🔒
 - Org handle, contract quota, held (aggregate), live-transfer count, credit balance, renewal date.
@@ -163,7 +163,7 @@ Harbourmaster is the Chartered-unlocked section set **inside the single Chambers
 | Collected / download count | ❌ | Read-receipt = surveillance |
 | DAD flag | ❌ | Absence is the signal |
 
-Action: **Strike off** (owner-delete). Client sends the lodgement ref; server resolves ref → UUID inside that org's index only. UUIDs never leave the Worker in Harbourmaster responses. 🔒
+Action: **Strike off** (owner-delete). Client sends the lodgement ref; server resolves ref → UUID inside that org's index only. UUIDs never leave the Worker in Custom House responses. 🔒
 
 ### 3.5 Org index 🔒
 - New KV key `org_dock:{quota_ref}` (separate from global `dock_index`). Entry: `{ lodge_ref, uuid, lodged_at, expires_at, purged_at? }`. **No `size_bytes`, no `rail`.**
@@ -172,7 +172,7 @@ Action: **Strike off** (owner-delete). Client sends the lodgement ref; server re
 
 ### 3.6 Execution Dock migration path 🔒
 1. Now: Navy Office Execution Dock + PURGED status (B12-1).
-2. Harbourmaster build: `org_dock` index populated going forward; list reads it.
+2. Custom House (B12-5) build: `org_dock` index populated going forward; list reads it.
 3. Same session: Execution Dock removed from Navy Office; Navy Office keeps aggregates only.
 4. Pre-existing transfers age out naturally — no backfill.
 
@@ -232,7 +232,7 @@ Provisional shape for the review, not for build:
 ## 5. Billing integration
 
 ### 5.1 What each surface shows 🔒
-| | Chambers — Citizen | Chambers — Sovereign | Harbourmaster — Chartered |
+| | Chambers — Citizen | Chambers — Sovereign | Custom House — Chartered |
 |---|---|---|---|
 | Plan | Citizen · monthly/3-month/yearly | Sovereign · credential validity | Chartered · contract |
 | Status / renewal | From `subscribers` | From local credential | Renewal date (Supabase, superadmin-set) |
@@ -278,7 +278,7 @@ Any sweep (grace sweep or orphan sweep, `dry_run=false`) that deletes an expired
 Expires column retains the original expiry date after purge. Confirmed. Purged entries display for a short window 🟡 (7 days) then age out on TTL.
 
 ### 6.5 Required change to current behaviour 🔒
-DAD (`finishDownload` destruction sequence) gains step 7: remove `dock_index:{uuid}` (and, once it exists, the `org_dock` entry). Owner-delete already removes it. This makes Navy Office consistent with the Harbourmaster invariant today rather than leaving a trap for later.
+DAD (`finishDownload` destruction sequence) gains step 7: remove `dock_index:{uuid}` (and, once it exists, the `org_dock` entry). Owner-delete already removes it. This makes Navy Office consistent with the Custom House invariant today rather than leaving a trap for later.
 
 ---
 
@@ -300,11 +300,11 @@ DAD (`finishDownload` destruction sequence) gains step 7: remove `dock_index:{uu
 13. Navy Office Storage & Billing: fleet occupancy, capacity-pressure counts, Chartered table by `ORG-xxxx` handle, Citizen histogram, Sovereign aggregate, self-cleared + purged weekly counts. Only action: Adjust quota.
 14. "17 need a nudge" badge removed; replaced by capacity-pressure line.
 15. `cargo.cleared` AE event, identical payload from DAD and owner-delete.
-16. Harbourmaster = Chartered section set inside the single Chambers build at `/share/chambers/`.
-17. Harbourmaster list: lodgement ref (HMAC, not UUID), lodged, expires, status. No size, sender, rail, collection, DAD.
+16. Custom House = Chartered section set inside the single Chambers build at `/share/chambers/`.
+17. Custom House list: lodgement ref (HMAC, not UUID), lodged, expires, status. No size, sender, rail, collection, DAD.
 18. Strike-off by lodgement ref, resolved server-side within the org's index; UUIDs never returned.
 19. New KV `org_dock:{quota_ref}`; no size/rail; removed on DAD + owner-delete; marked on purge.
-20. Execution Dock leaves Navy Office in the Harbourmaster build session. No backfill.
+20. Execution Dock leaves Navy Office in the Custom House (B12-5) build session. No backfill.
 21. Chambers renders from Worker `entitlements` derived from `resolved_tier`; display names render-time only.
 22. Citizen/Sovereign feature parity; Citizen state server-side, Sovereign state device-only (IndexedDB).
 23. Locked Chartered clusters show placeholder content only; Worker returns no org data to non-entitled callers.
@@ -327,7 +327,7 @@ DAD (`finishDownload` destruction sequence) gains step 7: remove `dock_index:{uu
 - P3. ~~Thresholds~~ → resolved: per-org settings, defaults 80/95 (§3.3).
 - P4. HTTP 402 for `quota_exceeded`.
 - P5. Purged display window (7 days).
-- P6. Harbourmaster rounding (hourly snapshot, whole GiB, "<3" floor).
+- P6. Custom House rounding (hourly snapshot, whole GiB, "<3" floor).
 - P7. Sovereign local-ledger export/import (future).
 - ~~P1, P8~~ resolved v1.1 (see Locked 31–33).
 - P9. Pricing for Sovereign → Personal API/MCP (Bearer), incl. £24/mo cannibalisation arithmetic — separate scoping session, then Opus.
@@ -337,8 +337,8 @@ DAD (`finishDownload` destruction sequence) gains step 7: remove `dock_index:{uu
 - S2. Test-credential quota bypass reachable only via ADMIN_KEY path.
 - S3. `quota_ref` in manifest (R2 linkage) + **encrypted `org_dock` UUID** lead proposal (§3.5): key handling, nonce, AAD, rotation.
 - S4. Lodgement-ref derivation and per-org key handling (cross-org unlinkability).
-- S5. Harbourmaster aggregate differencing (residual size inference).
-- S6. Chambers/Harbourmaster auth: magic link, session cookie, CSRF, `/billing/portal` endpoint.
+- S5. Custom House aggregate differencing (residual size inference).
+- S6. Chambers/Custom House auth: magic link, session cookie, CSRF, `/billing/portal` endpoint.
 - S7. Sovereign portability: Deed-derived ledger key, QR pairing protocol (key exchange, blob format, replay, what the QR reveals if photographed).
 - **S1–S7 → one Opus session, Share-B12-SR** (prompt: `Share-B12-SR-prompt.md`). Billing portal work may split to a further Opus session if SR runs long.
 
@@ -350,7 +350,7 @@ DAD (`finishDownload` destruction sequence) gains step 7: remove `dock_index:{uu
 | B12-SR | Security review S1–S7 | Opus | — | 🟡 if time |
 | B12-3 | Supabase quota tables + RPC; initiate/urls/finalise enforcement; deletion credit-back; reconcile cron | Sonnet | SR, P2 | ❌ post-Berlin |
 | B12-4 | Chambers shell + entitlements + locked clusters + Sovereign local ledger + portability | Sonnet | SR | ❌ |
-| B12-5 | Harbourmaster: `org_dock`, list, strike-off, capacity; Execution Dock removed from Navy Office | Sonnet | B12-3, B12-4 | ❌ |
+| B12-5 | Custom House org admin: `org_dock`, list, strike-off, capacity; Execution Dock removed from Navy Office | Sonnet | B12-3, B12-4 | ❌ |
 | B12-6 | Billing: portal endpoint, plans CTA wiring, `/upgrade` 301 | Sonnet | SR | ❌ |
 | — | DESIGN-TOKENS.md colour update (#1A1917 / #E8E2D8) | Sonnet | — | ✅ trivial |
 | Pricing-scope → Pricing-Opus | Sovereign → Personal Bearer API/MCP pricing (P9) | Sonnet scoping, then Opus | — | ❌ after build block |

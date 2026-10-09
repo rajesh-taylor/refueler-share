@@ -1,5 +1,5 @@
 /**
- * execution_dock.js — Harbourmaster sent-transfers view
+ * execution_dock.js — Execution Dock: Navy Office sent-transfers view
  * worker/src/handlers/execution_dock.js
  *
  * GET /admin/execution-dock
