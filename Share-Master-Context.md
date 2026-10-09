@@ -29,6 +29,8 @@ Project: `tihgvdokeofnjxjkenmm`
 | `spent_tokens` | `serial TEXT PK`, `melted_at TIMESTAMPTZ` | RLS deny-all |
 | `subscribers` | `stripe_customer_id TEXT PK`, `email`, `tier`, `status`, `current_period_end`, `cancelled_at` | RLS deny-all · index on email |
 | `double_spend_attempts` | `id BIGSERIAL PK`, `serial`, `uuid`, `attempted_at` | RLS deny-all · fire-and-forget on 409 |
+| `api_keys` | `key_hash BYTEA PK` (SHA-256 live key), `sign_key_hash`, `org_account_id`, `rail`, `sandbox`, `active`, `grace_until`, `expires_at`, `label` | KV-Fix-2 · RLS deny-all, no grants · functions only (`api_key_*`) |
+| `api_credit_pools` | `org_account_id UUID PK`, `plan`, `allocation`, `remaining`, `overage_*`, `period_*` (unix secs), `status` | KV-Fix-2 · atomic `api_credits_spend` / `_refund` · SQL in `supabase/migrations/` |
  
 Count pattern: `Prefer: count=exact` + `Range: 0-0` → parse total from `Content-Range: 0-0/TOTAL`.
 
@@ -189,7 +191,8 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
  
 See `CLAUDE.md` §Known broken for the full authoritative list. Key items not duplicated in CLAUDE.md:
  
-- DO NOT write quota write-back synchronously — fire-and-forget KV put *(retires at KV-Fix-2: the Supabase spend RPC is the write and is awaited)*
+- DO NOT keep an API key, client record or credit balance in KV, and DO NOT fall back to KV when Supabase is down (503). *(KV-Fix-2; the old "fire-and-forget KV quota write-back" rule is retired — `api_credits_spend` is awaited.)*
+- DO NOT change `applyQuotaSpend` (`quota.js`) without the same change to SQL `api_credits_spend` — they are one rule in two places.
 - DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset
 - DO NOT use `blake3` npm package — `@noble/hashes/blake3.js` only
 - DO NOT import `@noble/hashes/blake3` without `.js` extension
@@ -205,14 +208,15 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**MCP-Fix-1 ✓ (8 Oct 2026, repo `refueler-mcp`) — `refueler_send_file` rebuilt on the live upload path and on link format v2. The server could not start (SDK undeclared, wrong import names, wrong deps object, no `post`/`put`) and sent to `/upload/{uuid}/{NNNN}`, retired at Share-6-6b; 228 tests passed only because they mocked the client. Now: initiate → presigned PUT direct to R2 → finalise with the ciphertext Merkle root, 32 MiB parts streamed 2 in flight, v2 fragment `{v,k,n,z}`, link `refueler.io/share/?uuid=…#…`, `permanent_record` refused not faked. Part crypto byte-identical to the browser's pinned vectors (`PARITY.md`). Cost band GB → GiB to match what the Worker debits (Rajesh). 242 tests. Live ✓ 40 MiB / 2 parts, sha256 round-tripped identical. Worker: `limits.max_transfer_bytes` added — **not deployed, by decision** (Rajesh, 8 Oct: no consumer, no paying customers; deploy when a test or a client needs it). npm publish still held. Next: **KV-Fix-2** → API-Repair-1.** **Safari-Slow-Link-1 ✓ (8 Oct 2026) — verify-then-stream download, `DL_IN_FLIGHT` 2, early `/meta`; deploy `5312c5fa`.**
+**KV-Fix-2 ✓ (9 Oct 2026) — API keys and credit pools in Supabase (`api_keys`, `api_credit_pools`, atomic `api_credits_spend`); `requireApiAuth` reads Supabase only (≤ 60 s cache, 503 when down); admin `POST /api/v1/admin/api-client` (+ `/revoke`) replaces the KV runbook step; sandbox on the same tables, sandbox credential issue refused; old KV records deleted. Deploy `a47404a6` (also carries MCP-Fix-1's `max_transfer_bytes`). Live ✓ Mullvad on: issue, 402 after cancel, revoked key refused in 5 s. Next: **API-Repair-1** (before the first Chartered client). No Cloudflare API token carries KV write (Rajesh deleted the two Workers/Agent tokens).** **MCP-Fix-1 ✓ (8 Oct 2026, repo `refueler-mcp`)** — MCP send on the direct-to-R2 path and link format v2; 245 tests; npm publish still held.
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
 | KV-Fix-1a ✓ | deploy `318772eb` · refueler.io `8fd9fdb` | Status shape (write 400 / read filter) + page whitelist; `requireAdmin`; finalise once; `root_verified` MAC (`KV_MAC_KEY` secret); Lightning gone; capabilities honest (webhook/receipts false, free cap). `worker/test/kv_fix_1a.test.js` 27. |
 | KV-Fix-1b ✓ | deploy `d00ae2c4` · ship `aa3847d` | B12-SR S2 in full: MAC'd `X-Test-Credential` (`TEST_CRED_KEY`), expiry ceiling applies, `soak: true`, single-use `testcred_used:`; `worker/test/kv_fix_1b.test.js` 32. |
 | Safari-Slow-Link-1 ✓ | deploy `5312c5fa` · ships `9568045`, `f60bcb2` (refueler.io `69a56ef`) | Verify-then-stream download (no part held in the Worker), `DL_IN_FLIGHT` 2, early `/meta` + modulepreload + lazy upload code. `worker/test/slow-link-1.test.js` 12. |
-| MCP-Fix-1 ✓ | `refueler-mcp` (uncommitted at write) · refueler-share: capabilities + spec | MCP send on the direct-to-R2 path, link format v2, 32 MiB parts, 2 in flight, Merkle root at finalise; `@cashu/cashu-ts` 4.11.0 pinned to match Worker + vendor script; GB band → GiB; `max_transfer_bytes` = `CHARTERED_CAP_BYTES`. 242 MCP tests; `btc_rate.test.js` 50. Worker **not deployed**. |
+| MCP-Fix-1 ✓ | `refueler-mcp` · refueler-share: capabilities + spec | MCP send on the direct-to-R2 path, link format v2, 32 MiB parts, 2 in flight, Merkle root at finalise; `@cashu/cashu-ts` 4.11.0 pinned to match Worker + vendor script; GB band → GiB; `max_transfer_bytes` = `CHARTERED_CAP_BYTES` (deployed with KV-Fix-2). 245 MCP tests. |
+| KV-Fix-2 ✓ | deploy `a47404a6` | API keys + credit pools → Supabase (migration in `supabase/migrations/`), atomic spend, 60 s revocation, admin api-client routes, sandbox refused at issue, KV API/sandbox keys deleted, runbook v1.1. `worker/test/kv_fix_2.test.js` 25. |
  
 ---
  
@@ -223,7 +227,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
 | 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → Share-Progress-1 ✓ → Share-Folder-Resume-1 ✓ → B12-2 ✓ → **KV-Audit-Opus**. |
-| 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → **KV-Fix-2** (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1** (webhooks/receipts from R2, HMAC'd Chartered initiate) before the first Chartered client. | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
+| 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → KV-Fix-2 ✓ (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1** (webhooks/receipts from R2, HMAC'd Chartered initiate) before the first Chartered client. | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
