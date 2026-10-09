@@ -129,7 +129,7 @@ New secret `KV_MAC_KEY`.
 **KV-Fix-1b ✓ 8 Oct 2026** (deploy `d00ae2c4`; Sonnet, small; Worker + `admin/test-upload.html`, which is mirrored → `ship-frontend.sh`)
 B12-SR S2 in full, including the proof-obligation matrix and AE `admin.testcred.issued`. New secret `TEST_CRED_KEY`. After deploy: the 19 old `test_credential:*` keys are inert; let them expire. The Navy Office soak line stays with B12-3.
 
-**KV-Fix-2** (Sonnet, ~1–2 sessions, before B12-3) — §4.2. First task: confirm F6 and read the live `api_client_` record.
+**KV-Fix-2 ✓ 9 Oct 2026** (deploy `a47404a6`) — §4.2 as designed. Supabase `api_keys` + `api_credit_pools`, atomic `api_credits_spend`; `requireApiAuth` reads Supabase (≤ 60 s isolate cache, 503 when down, no KV fallback); admin `POST /api/v1/admin/api-client` (+ `/revoke`); sandbox on the same tables (`sandbox = true`), sandbox credential issue refused outright (F6 confirmed: unreachable, and would have signed on the production mint key); F5 runbook rewritten; F8 fixed. KV: the 1 `api_client_` test record and 11 `sandbox_*` keys deleted. Function names differ from the sketch above: `api_credits_spend` / `api_credits_refund`. `worker/test/kv_fix_2.test.js` 25.
 
 **API-Repair-1** (Sonnet, before the first Chartered client; after KV-Fix-2 and B12-3's sealing code, since `cref_ct` reuses it) — §4.3.
 

@@ -339,7 +339,7 @@ human receipt, authorship, or truth.
 ### 3.1 The two rails, restated for agents
 
 - **Identity rail** — a server-held recovering credit pool keyed to the HMAC
-  credentials (`api_quota_{sha256(rfs_live_key)}` in KV). Monthly allocation, hard
+  credentials (Supabase `api_credit_pools`, one row per org — KV-Fix-2). Monthly allocation, hard
   reset, metered overage (identity-API) or hard stop (Personal API). Recoverable,
   invoiceable, auditable. **The demoable rail today.**
 - **Anonymous rail** — a **client-held stack of blind-signed capability-atom
@@ -783,7 +783,7 @@ a rate.
 
 ### 7.4 Monthly credit allocation + reset (O-9 — locked)
 
-**Key:** `api_quota_{sha256(rfs_live_key)}` in `STATUS_KV`.
+**Store:** Supabase `api_credit_pools`, one row per `org_account_id` (moved from KV `api_quota_*` at KV-Fix-2, 9 Oct 2026); spent only by the atomic `api_credits_spend` function. Same fields:
 
 **Value:**
 ```
