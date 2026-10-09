@@ -1,7 +1,7 @@
 /**
  * part-crypto.test.js — part key schedule and link format v2 (Share-Crypto-1)
  *
- * Imports the browser's own modules (frontend/crypto.js, frontend/fragment.js):
+ * Imports the browser's own modules (frontend/crypto.js, config.js, fragment.js):
  * WebCrypto here is the same API the page calls.
  *
  *   part_key = HKDF-SHA256(K, salt = empty, info = utf8("refueler.share.payload.v2") ‖ 0x00)
@@ -12,8 +12,9 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  derivePartKey, partNonce, partAad, encryptPart, decryptPart, decryptPartV1, CHUNK_SIZE,
+  derivePartKey, partNonce, partAad, encryptPart, decryptPart, decryptPartV1,
 } from '../../frontend/crypto.js';
+import { CHUNK_SIZE } from '../../frontend/config.js';
 import { assembleFragment, parseFragment } from '../../frontend/fragment.js';
 
 const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');

@@ -1,10 +1,10 @@
 /**
  * progress-helpers.test.js — time left, speed and retry waits (Share-Progress-1)
  *
- * Imports the browser's own frontend/crypto.js, as part-crypto.test.js does.
+ * Imports the browser's own frontend/progress.js, as part-crypto.test.js does.
  */
 import { describe, it, expect } from 'vitest';
-import { RETRY_DELAYS_MS, timeLeftText, makeRateMeter, progressBytesText } from '../../frontend/crypto.js';
+import { RETRY_DELAYS_MS, timeLeftText, makeRateMeter, progressBytesText } from '../../frontend/progress.js';
 
 describe('RETRY_DELAYS_MS', () => {
   it('never waits more than 10 s, about 2 min in all', () => {

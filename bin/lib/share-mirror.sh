@@ -9,7 +9,7 @@
 # ── What gets mirrored ────────────────────────────────────────────────────────
 # Every top-level frontend/*.js and *.css MUST appear in exactly one of the lists below.
 # An unlisted file is a hard failure (this is the merkle.js / Share-6-3d trap, now closed).
-SM_JS="share.js share-early.js crypto.js upload.js download.js timestamp.js refueler-badge.js fragment.js merkle.js"
+SM_JS="share.js share-early.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js timestamp.js refueler-badge.js fragment.js merkle.js"
 SM_CSS="share.css share-tokens.css status.css"
 SM_VENDOR="fflate.min.js qr-creator.min.js noble-blake3.js cashu-crypto.js"
 SM_CANARY="mirror-canary.txt"             # pipeline canary — edit freely to prove a deploy, never app code

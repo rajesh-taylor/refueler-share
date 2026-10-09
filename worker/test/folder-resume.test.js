@@ -1,7 +1,7 @@
 /**
  * folder-resume.test.js — store-only folder zips and the folder resume print (Share-Folder-Resume-1)
  *
- * Imports the browser's own frontend/crypto.js and the vendored fflate the page loads,
+ * Imports the browser's own frontend/zip.js and the vendored fflate the page loads,
  * so the zip under test is the real one. What resume relies on:
  *   - the same folder zips to the same bytes, in any read order;
  *   - zipSize() is the exact size;
@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as fflateModule from '../../frontend/fflate.min.js';
 import {
   zipFolder, zipSize, zipDate, zipDosTime, folderPrint, sortZipEntries,
-} from '../../frontend/crypto.js';
+} from '../../frontend/zip.js';
 
 const utf8 = (s) => new TextEncoder().encode(s);
 const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
