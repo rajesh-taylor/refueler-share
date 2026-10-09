@@ -223,6 +223,10 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 ---
  
 ## Roadmap
+
+**Session order (Rajesh, 9 Oct 2026 — no client in sight, so slotted where the work is cheapest; this list wins over the table order below):**
+1. Share-Soak-4 → 2. Share-DL-Spike (when a day is free) → 3. B12-3 → 4. B12-4a → 5. X5 dedicated app origin → 6. B12-4b → 7. B12-6 → 8. **B12-5 Custom House org admin** (before the audit, so B12-Audit covers the whole block) → 9. B12-Audit → 10. **Navy-Office-Design-Opus → -1** (after B12-5 removes Execution Dock from Navy Office) + Tidy / internal review → 11. DL-W1 → DL-1 / DL-2 → **Share-Receiver-3** (copy designed once, on the new download path) → DL-3 → DL-Soak → 12. Pricing-v2-Opus → plans page → 13. B8-Opus → B8 → 14. Hetzner → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 → B10+.
+Trade-off noted: the DL track stays after B12. If Safari large downloads must come sooner, step 11 moves ahead of step 3 (B12 sign-in and paid cards land later).
  
 | Order | Block / Session | Hetzner? | Notes |
 |---|---|---|---|
@@ -232,7 +236,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → KV-Fix-2 ✓ (API keys + credits → Supabase; precondition of B12-3) · X3 naming ✓ (9 Oct) · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1 ✓** (webhooks/receipts from R2, HMAC'd Chartered initiate). | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
-| 11d | B12-5 Custom House org admin | ❌ | When a Chartered client is in sight. |
+| 11d | B12-5 Custom House org admin | ❌ | Slotted after B12-6, before B12-Audit (9 Oct 2026); no client needed. |
 | 11d′ | **Pricing-v2-Opus** (1–2 sessions) → plans-page rewrite | ❌ | Rate card v2: holding time + per-32 MiB billing, GBP↔credits, credit blocks, Pro Bono × agents, personal agent key vs `Sovereign ⊅ API`. Plans rewrite after B12-4a from `docs/drafts/` (draft B). Agents/MCP first. Log: Share-MCP-Chat-1. |
 | 11d″ | **Padding-Opus** (design + planning, no build slot yet) | ❌ | Size padding (e.g. Padmé buckets) so R2 sees a size band, not an exact size. Open: everyone-light vs paid-stronger (paid-only padding marks the sender as a customer), storage cost, interaction with per-32 MiB API billing. Also scope a Wormhole-style short-code mode (PAKE) as a possible paid feature — async storage makes short codes harder than in Wormhole. Raised Share-B12-1b. |
 | 11d‴ | **Receipt size opt-in** (only if a Chartered client asks) | ❌ | Share-Size-1 (6 Oct 2026) stops storing the exact size; receipt `size_bytes` is `null`. If a Chartered client asks for it: per-transfer opt-in, **off by default**, identity rail only, size written only into that transfer's signed receipt — never the manifest or `/meta`, never the anonymous rail. Note the receipt sits in KV 7 days, so opting in re-stores the size there. Agreed by Rajesh, Share-Size-1. Not built. |
