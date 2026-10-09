@@ -42,6 +42,8 @@
 import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
 import { putManifest } from '../manifest.js';
 import { wrongSizeSegments, DELETE_BATCH } from '../sweep_rules.js';
+import { hasCref } from '../seal.js';
+import { issueReceipt } from '../receipts.js';
 
 // base64url → Uint8Array. Returns null on any non-base64url input or decode
 // failure; the caller enforces the exact 32-byte length. Strict base64url
@@ -297,6 +299,14 @@ export async function handleFinalise(request, env, uuid, ctx) {
     }
   } catch (e) {
     console.error('Execution Dock enrich failed:', e); // non-fatal
+  }
+
+  // ── 7. cargo.accepted (Share-6 spec §3③.4; API-Repair-1) ──────────────────
+  // Chartered transfers only (sealed client in the manifest). Notification,
+  // never control flow: finalise has already succeeded.
+  if (hasCref(manifest)) {
+    ctx?.waitUntil?.(issueReceipt(env, uuid, manifest, 'acceptance',
+      { accepted_at: Math.floor(Date.now() / 1000) }));
   }
 
   return json({ ok: true, merkle_root: merkleRoot });

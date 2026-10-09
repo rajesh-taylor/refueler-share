@@ -488,6 +488,8 @@ Identity-API £99/mo flat; Professional £249 defined-not-built. Invoicing: acce
 ### SW4-Opus (8 Sep 2026) — Webhook signing key architecture
 Option B chosen: `rfs_whsec_ = HMAC-SHA256(WEBHOOK_SIGNING_MASTER_KEY, "refueler.webhook.v1\n" + rfs_live_key + "\n" + created_at)`. Re-derived statelessly at every delivery and retry — never stored. `whsec_hash` removed from `wh_config_` KV. Dead-letter key `wh_dlq_{delivery_id}`, TTL 7d, payload unsigned, re-signed at retry. Outbound header: `X-Refueler-Signature: t={unix_secs},v1={hmac_hex}`. SIGN_DOMAIN_TAG: `refueler.webhook.v1.sign`. SW5-Opus gate cleared 9 Sep 2026. Full derivation construction and dead-letter schema: `CLAUDE.md` §locked decisions and `share-sessions.md` §SW do-not-retry. **BRIDGE v8.8.**
 
+> **Superseded for Share at API-Repair-1 (9 Oct 2026):** whsec v2 = HKDF-SHA256(ikm = utf8(master), info = utf8("refueler.share.whsec.v2") ‖ 0x00 ‖ org16 ‖ BE64(created_at)) — keyed by `org_account_id`, not the live key. Envelope `X-Refueler-Signature: t=…,v0=hex(HMAC(utf8(rfs_whsec_), "v0:" + t + ":" + body))` for webhooks **and** receipts. Receipts `refueler.receipt.v2`: `org_account_id` replaces `live_key`, signed with the same whsec (the v1 receipt key never matched the one clients held). DLQ MAC'd, retry re-checks R2. Per-product master key rule unchanged.
+
 ### Share-MCP-Opus-2 (10 Sep 2026) — MCP spec v2
 Full decisions in `refueler-mcp-spec-v2.md`. Cross-product items: (1) "credits" is the universal user-facing unit across all products — "sats", "ecash", "tokens" banned from all client copy. (2) `refueler_capabilities` / `refueler_quote` / `refueler_balance` London-register atom descriptors remain open — allocate at a naming session before B9 whitepaper. (3) MCP server = npm package, Apache 2.0, operator installs in own infrastructure — invariant. (4) Citizen/Sovereign Teams UI-only confirmed (formerly "Sovereign Teams" — renamed Share-Brand-Opus-1); firms wanting MCP take a separate Chartered credential relationship. **BRIDGE v9.1.**
 
@@ -517,6 +519,8 @@ Examples: `refueler.receipt.v1` (Share receipts) · `refueler.webhook.v1` (Share
 **Rule: no shared `WEBHOOK_SIGNING_MASTER_KEY` across products.** Each product Worker holds its own master. One product's key compromise cannot forge another product's signatures. Same discipline as the OTS relay — same stateless pattern, deployed per-product.
 
 ### Receipt signing construction
+
+> v1 below is historical; Share ships v2 (see the SW4-Opus note above).
 
 ```
 receipt_sig = HMAC-SHA256(

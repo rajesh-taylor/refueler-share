@@ -1,518 +1,374 @@
 // worker/src/webhook_delivery.js
 //
-// SW4a — Webhook delivery engine.
-// SW4b — Dead-letter retry (retryDeadLetterQueue, called from scheduled cron).
+// Webhook routing, signing, delivery and dead-letter retry.
+// SW4a/SW4b, rebuilt at API-Repair-1 (9 Oct 2026; design: docs/KV-Audit-v1.md §4.3).
 //
-// Exports:
-//   deliverWebhook(env, ctx, apiKeyHash, event)
-//     → Schedules delivery via ctx.waitUntil. Use from top-level request handlers.
+// ── Who gets an event ────────────────────────────────────────────────────────
+//   R2 manifest cref_ct (sealed org_account_id, seal.js) → org → wh_config_{orgtag}.
+//   The manifest is the ground truth; nothing in KV says which client owns a
+//   transfer. Callers pass the manifest they already hold (read before any
+//   tombstone is written). No cref_ct → consumer transfer → no event.
 //
-//   deliverWebhookInline(env, apiKeyHash, event) → Promise<void>
-//     → Awaitable delivery for callers already inside ctx.waitUntil (e.g.
-//       confirm_transfer). Cannot nest waitUntil; call this directly instead.
+// ── KV records (B12-SR X1: KV is compromised for write) ─────────────────────
+//   wh_config_{orgtag} → { v:1, url, created_at, active, deleted_at, mac }
+//     mac = HMAC(K_whcfg, utf8(WHCFG_TAG) ‖ 0x00 ‖ orgtag16 ‖ BE64(created_at)
+//                ‖ active(1 B) ‖ BE64(deleted_at) ‖ utf8(url))
+//   wh_dlq_{orgtag}_{rand16hex} → { v:1, org, event, uuid, attempt_at, mac }
+//     mac = HMAC(K_whdlq, utf8(WHDLQ_TAG) ‖ 0x00 ‖ orgtag16 ‖ rand16 ‖ org16
+//                ‖ uuid16 ‖ BE64(attempt_at) ‖ utf8(event))
+//   orgtag = orgTag(env, org) (kvmac.js): keyed, so no raw org id in a key name.
+//   Unverifiable values read as absent. The URL is re-validated at every send.
+//   A DLQ retry also re-checks the event against R2 (or the MAC'd receipt) and
+//   drops anything R2 does not confirm, so a genuine old entry can't be replayed
+//   into a different claim. Residual: a KV reader sees org ↔ uuid for failed
+//   deliveries for up to 7 days.
 //
-//   findApiKeyHashForUuid(env, uuid) → Promise<string|null>
-//     → Reads dock_index:{uuid} KV. Returns api_key_hash for API-tier transfers,
-//       null for consumer transfers (no webhook to fire).
+// ── Signing (no live clients before v2, so no compatibility shim) ───────────
+//   rfs_whsec_ = base58( HKDF-SHA256(ikm = utf8(WEBHOOK_SIGNING_MASTER_KEY), salt = empty,
+//                        info = utf8("refueler.share.whsec.v2") ‖ 0x00 ‖ org16 ‖ BE64(created_at)) )
+//   Derived, never stored; re-registration (new created_at) rotates it.
+//   Envelope: body = JSON {event, uuid, t, …}; header
+//     X-Refueler-Signature: t=<unix>,v0=hex(HMAC(utf8(rfs_whsec_), "v0:" + t + ":" + body))
+//   Receipts (receipts.js) are signed with the same rfs_whsec_ string.
 //
-//   deriveWhsecFromHash(masterKey, apiKeyHash, createdAt) → Promise<string>
-//     → Re-exported for webhook_reg.js (SW4a): registration switches from
-//       raw apiKey to apiKeyHash as the HMAC message component so that
-//       registration and delivery share identical key material.
-//
-//   retryDeadLetterQueue(env) → Promise<{ retried, succeeded, failed }>
-//     → SW4b: lists all wh_dlq_* KV keys, retries each via _deliver with a
-//       fresh timestamp, deletes the KV entry on success. Called from the
-//       Worker's scheduled() handler (daily cron). Never re-uses original t.
-//
-// ── Signing model ─────────────────────────────────────────────────────────────
-//
-//   At registration (webhook_reg.js POST), the Worker has the raw rfs_live_ key
-//   (apiKey) available. SW4 originally derived whsec from apiKey directly.
-//
-//   At delivery, the Worker only has sha256hex(apiKey) — the KV lookup key.
-//   To make registration and delivery consistent without storing the raw key,
-//   SW4a switches both to derive from apiKeyHash:
-//
-//     signingKeyBytes = HMAC-SHA256(
-//       WEBHOOK_SIGNING_MASTER_KEY,
-//       "refueler.webhook.v1.sign\n" + apiKeyHash + "\n" + created_at
-//     )
-//     rfs_whsec_ = "rfs_whsec_" + base58(signingKeyBytes)
-//
-//   SIGN_DOMAIN_TAG = 'refueler.webhook.v1.sign'   (updated from 'refueler.webhook.v1')
-//
-//   This is a breaking change only for clients registered before SW4a. No live
-//   API clients exist pre-launch — acceptable. webhook_reg.js is updated in
-//   the same commit (SW4a patch section at bottom of this file).
-//
-// ── Payload format ────────────────────────────────────────────────────────────
-//
-//   POST to client URL, Content-Type: application/json
-//   Body: { "event": "<type>", "uuid": "<uuid>", "t": <unix_seconds> }
-//
-//   Signature:
-//     X-Refueler-Signature: t=<unix>,v0=<hex>
-//   where hex = HMAC-SHA256(signingKeyBytes, "v0:" + t + ":" + bodyString)
-//
-//   Clients reconstruct the same HMAC and compare to v0. The t value must
-//   be within ±300s of the client's clock for replay protection — clients
-//   enforce this; the Worker does not (delivery is best-effort).
-//
-// ── Dead-letter KV schema ─────────────────────────────────────────────────────
-//
-//   Key:   wh_dlq_{apiKeyHash}_{uuid}_{attemptTs}
-//   Value: { event, uuid, api_key_hash, attempt_at, status_code, error }
-//   TTL:   7 days (604,800 s)
-//
-//   SW4b (daily cron) reads all wh_dlq_ keys and retries with a fresh
-//   timestamp — DO NOT re-sign retries with the original t value.
-//
-// ── AE schema ─────────────────────────────────────────────────────────────────
-//
-//   endpoint index: 'webhook_delivery'
-//   blob1: event type  blob2: 'success'|'fail'  blob3: status or error class
-//   double1: latency_ms  double2: HTTP status code (0 on network error)
+// Webhooks are notification, never control flow: nothing here throws to callers.
 
-'use strict';
+import {
+  deriveKvMacKey, macFields, checkMacFields, orgTag, hex16, be64, uuidToBytes,
+  bytesToB64url, concat,
+} from './kvmac.js';
+import { validateWebhookUrl } from './webhook_url.js';
+import { openCref, hasCref } from './seal.js';
+import { safeGetManifest } from './utils.js';
+import { getReceipt } from './receipt_store.js';
 
-import { sha256Hex } from './api_auth.js';
+export const WHCFG_TAG = 'refueler.share.kvmac.whcfg.v1';
+export const WHDLQ_TAG = 'refueler.share.kvmac.whdlq.v1';
+const WHSEC_INFO = 'refueler.share.whsec.v2';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+export const EVENTS = Object.freeze({
+  CONFIRMED:  'transfer.confirmed',
+  TIMESTAMP:  'transfer.timestamp_submitted',
+  ACCEPTED:   'cargo.accepted',
+  DISCHARGED: 'cargo.discharged',
+});
+const RECEIPT_TYPE = { 'cargo.accepted': 'acceptance', 'cargo.discharged': 'collection' };
 
-// Domain tag for signing key derivation — updated from 'refueler.webhook.v1'
-// in SW4a to use apiKeyHash as the HMAC input. Bumping the tag ensures any
-// previously derived whsec (SW4 pre-patch) is invalidated automatically.
-const SIGN_DOMAIN_TAG = 'refueler.webhook.v1.sign';
-
-// Dead-letter TTL: 7 days.
-const DLQ_TTL = 7 * 24 * 3600; // 604,800 s
-
-// Delivery fetch timeout: 10 seconds.
-const DELIVERY_TIMEOUT_MS = 10_000;
-
-// Base58 alphabet — Bitcoin alphabet, no 0/O/I/l.
+const WH_CONFIG_ACTIVE_TTL   = 2 * 365 * 24 * 3600;
+const WH_CONFIG_INACTIVE_TTL = 7 * 24 * 3600;
+const DLQ_TTL                = 7 * 24 * 3600;
+const DELIVERY_TIMEOUT_MS    = 10_000;
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const enc = new TextEncoder();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// findApiKeyHashForUuid(env, uuid) → Promise<string|null>
-//
-// Reads dock_index:{uuid} from KV. Returns api_key_hash if set (API-tier
-// transfer), null if absent (consumer transfer — no webhook to fire).
+// Routing
 // ─────────────────────────────────────────────────────────────────────────────
-export async function findApiKeyHashForUuid(env, uuid) {
-  try {
-    const record = await env.STATUS_KV.get(`dock_index:${uuid}`, { type: 'json' });
-    return record?.api_key_hash ?? null;
-  } catch (e) {
-    console.error('webhook_delivery: dock_index KV read failed:', e);
+
+/** clientForManifest(env, uuid, manifest) → { org, transferRef } | null */
+export async function clientForManifest(env, uuid, manifest) {
+  if (!hasCref(manifest)) return null;
+  const client = await openCref(env, uuid, manifest.cref_ct);
+  if (!client) console.error('webhook_delivery: cref_ct did not open for', uuid);
+  return client;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wh_config_ (MAC'd)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function whConfigKey(env, org) {
+  const tag = await orgTag(env, org);
+  return tag ? `wh_config_${tag}` : null;
+}
+
+function cfgParts(tag, rec) {
+  const t = hex16(tag);
+  if (!t || typeof rec.url !== 'string') return null;
+  return [t, be64(rec.created_at), new Uint8Array([rec.active === true ? 1 : 0]),
+          be64(rec.deleted_at ?? 0), enc.encode(rec.url)];
+}
+
+/** writeWhConfig(env, org, { url, created_at, active, deleted_at? }) → boolean. Throws on KV failure. */
+export async function writeWhConfig(env, org, rec) {
+  const tag = await orgTag(env, org);
+  const p = tag ? cfgParts(tag, rec) : null;
+  const mac = await macFields(p ? await deriveKvMacKey(env, 'whcfg') : null, WHCFG_TAG, ...(p ?? []));
+  if (!mac) return false;
+  const value = {
+    v: 1, url: rec.url, created_at: rec.created_at, active: rec.active === true,
+    deleted_at: rec.deleted_at ?? null, mac: bytesToB64url(mac),
+  };
+  await env.STATUS_KV.put(`wh_config_${tag}`, JSON.stringify(value), {
+    expirationTtl: value.active ? WH_CONFIG_ACTIVE_TTL : WH_CONFIG_INACTIVE_TTL,
+  });
+  return true;
+}
+
+/**
+ * readWhConfig(env, org) → { url, created_at, active, deleted_at } | null
+ * null = absent or unverifiable. Throws on KV failure (callers decide).
+ */
+export async function readWhConfig(env, org) {
+  const tag = await orgTag(env, org);
+  if (!tag) return null;
+  const rec = await env.STATUS_KV.get(`wh_config_${tag}`, { type: 'json' });
+  if (!rec || rec.v !== 1 || !Number.isInteger(rec.created_at)) return null;
+  const p = cfgParts(tag, rec);
+  const key = p ? await deriveKvMacKey(env, 'whcfg') : null;
+  if (!key || !(await checkMacFields(key, WHCFG_TAG, rec.mac, ...p))) return null;
+  return { url: rec.url, created_at: rec.created_at, active: rec.active === true, deleted_at: rec.deleted_at ?? null };
+}
+
+/** Active, verified, URL still valid — or null. Never throws. */
+async function deliverableConfig(env, org) {
+  let cfg;
+  try { cfg = await readWhConfig(env, org); } catch (e) {
+    console.error('webhook_delivery: wh_config read failed:', e);
     return null;
+  }
+  if (!cfg || !cfg.active) return null;
+  if (!validateWebhookUrl(cfg.url).ok) {
+    console.error('webhook_delivery: stored URL fails validation; not sending');
+    return null;
+  }
+  return cfg;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Signing
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** deriveWhsec(env, org, createdAt) → 'rfs_whsec_…' (throws if the master key is unset). */
+export async function deriveWhsec(env, org, createdAt) {
+  const master = env.WEBHOOK_SIGNING_MASTER_KEY;
+  const o = uuidToBytes(org);
+  if (!master || !o) throw new Error('whsec derivation: master key or org missing');
+  const ikm  = await crypto.subtle.importKey('raw', enc.encode(master), 'HKDF', false, ['deriveBits']);
+  const info = concat(enc.encode(WHSEC_INFO), new Uint8Array([0]), o, be64(createdAt));
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info }, ikm, 256,
+  );
+  return `rfs_whsec_${toBase58(new Uint8Array(bits))}`;
+}
+
+export async function hmacHex(keyString, message) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(keyString),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return Array.from(new Uint8Array(sig), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delivery
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** POST one signed envelope. → true on 2xx. Redirects are not followed. */
+async function post(env, cfg, org, fields) {
+  const t0 = Date.now();
+  let whsec;
+  try { whsec = await deriveWhsec(env, org, cfg.created_at); } catch (e) {
+    console.error('webhook_delivery: whsec derivation failed:', e);
+    aeLog(env, fields.event, 'fail', 'signing_key_error', 0, 0);
+    return false;
+  }
+  const t = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify({ ...fields, t });
+  const sig = await hmacHex(whsec, `v0:${t}:${body}`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
+  try {
+    const res = await fetch(cfg.url, {
+      method:   'POST',
+      redirect: 'manual',
+      headers: {
+        'Content-Type':         'application/json',
+        'X-Refueler-Signature': `t=${t},v0=${sig}`,
+        'X-Refueler-Event':     fields.event,
+        'User-Agent':           'Refueler-Webhook/2.0',
+      },
+      body,
+      signal: controller.signal,
+    });
+    const ok = res.status >= 200 && res.status < 300;
+    aeLog(env, fields.event, ok ? 'success' : 'fail', String(res.status), res.status, Date.now() - t0);
+    if (!ok) console.warn(`webhook_delivery: ${fields.event} → HTTP ${res.status}`); // never the URL
+    return ok;
+  } catch (e) {
+    const cls = e?.name === 'AbortError' ? 'timeout' : 'network_error';
+    aeLog(env, fields.event, 'fail', cls, 0, Date.now() - t0);
+    console.warn(`webhook_delivery: ${fields.event} → ${cls}: ${e?.message ?? e}`);
+    return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// deliverWebhook(env, ctx, apiKeyHash, event) → void
-//
-// Schedules delivery inside ctx.waitUntil. Returns immediately.
-// Use from top-level request handlers where ctx is available.
-//
-// Parameters:
-//   env         — Worker env
-//   ctx         — Worker execution context
-//   apiKeyHash  — sha256hex(rfs_live_key) from findApiKeyHashForUuid
-//   event       — { type: string, uuid: string }
-//                 type: 'transfer.confirmed' | 'transfer.timestamp_submitted'
-// ─────────────────────────────────────────────────────────────────────────────
-export function deliverWebhook(env, ctx, apiKeyHash, event) {
-  if (!apiKeyHash) return;
-  ctx.waitUntil(deliverWebhookInline(env, apiKeyHash, event));
+/**
+ * sendEvent(env, org, { event, uuid, ...extra }) → Promise<boolean>
+ * No registration → false, nothing queued. Failed send → dead-lettered.
+ * Never throws.
+ */
+export async function sendEvent(env, org, fields) {
+  try {
+    const cfg = await deliverableConfig(env, org);
+    if (!cfg) return false;
+    if (await post(env, cfg, org, fields)) return true;
+    await deadLetter(env, org, fields.event, fields.uuid);
+    return false;
+  } catch (e) {
+    console.error('webhook_delivery: sendEvent failed:', e);
+    return false;
+  }
+}
+
+/**
+ * notifyTransfer(env, uuid, manifest, event) → Promise<void>
+ * For transfer.* events. manifest = the one the caller read (pre-tombstone).
+ */
+export async function notifyTransfer(env, uuid, manifest, event) {
+  const client = await clientForManifest(env, uuid, manifest);
+  if (client) await sendEvent(env, client.org, { event, uuid });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// deliverWebhookInline(env, apiKeyHash, event) → Promise<void>
-//
-// Awaitable delivery. Use when already inside ctx.waitUntil (cannot nest).
-// Callers should catch — this never throws, but wrapping in try/catch at the
-// call site prevents a silent swallow if _deliver ever gains a throw path.
+// Dead-letter queue (MAC'd)
 // ─────────────────────────────────────────────────────────────────────────────
-export async function deliverWebhookInline(env, apiKeyHash, event) {
-  if (!apiKeyHash) return;
-  await _deliver(env, apiKeyHash, event);
+
+function dlqParts(tag, rand, rec) {
+  const t = hex16(tag), r = hex16(rand), o = uuidToBytes(rec.org), u = uuidToBytes(rec.uuid);
+  if (!t || !r || !o || !u || typeof rec.event !== 'string') return null;
+  return [t, r, o, u, be64(rec.attempt_at), enc.encode(rec.event)];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// deriveWhsecFromHash(masterKey, apiKeyHash, createdAt) → Promise<string>
-//
-// Public export for webhook_reg.js (SW4a patch).
-// Registration switches from raw apiKey to apiKeyHash as HMAC input.
-// Returns rfs_whsec_ prefixed base58 string — shown once at registration.
-// ─────────────────────────────────────────────────────────────────────────────
-export async function deriveWhsecFromHash(masterKey, apiKeyHash, createdAt) {
-  const bytes = await _deriveSigningKeyBytes(masterKey, apiKeyHash, createdAt);
-  return `rfs_whsec_${_toBase58(bytes)}`;
+async function deadLetter(env, org, event, uuid) {
+  const tag = await orgTag(env, org);
+  const rand = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+  const rec = { org, event, uuid, attempt_at: Math.floor(Date.now() / 1000) };
+  const p = tag ? dlqParts(tag, rand, rec) : null;
+  const mac = await macFields(p ? await deriveKvMacKey(env, 'whdlq') : null, WHDLQ_TAG, ...(p ?? []));
+  if (!mac) return;
+  try {
+    await env.STATUS_KV.put(`wh_dlq_${tag}_${rand}`,
+      JSON.stringify({ v: 1, ...rec, mac: bytesToB64url(mac) }), { expirationTtl: DLQ_TTL });
+  } catch (e) {
+    console.error('webhook_delivery: DLQ write failed:', e);
+  }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// retryDeadLetterQueue(env) → Promise<{ retried, succeeded, failed }>
-//
-// SW4b — Daily cron retry of dead-letter items.
-//
-// Lists all wh_dlq_* KV keys (prefix scan, up to 1000 per page; KV list()
-// paginates automatically). For each entry:
-//   1. Parse the stored value to recover { event, uuid, api_key_hash }.
-//   2. Re-deliver via _deliver() with a fresh timestamp (NEVER the original t).
-//   3. On success (2xx from client endpoint): delete the KV key.
-//   4. On failure: leave in place — 7-day TTL handles natural expiry.
-//
-// Returns a summary object for AE logging in the scheduled handler.
-//
-// Design constraints (from SW4b do-not-retry rules):
-//   - DO NOT pass the original attemptTs to _deliver — _deliver builds its own t.
-//   - DO NOT delete on network error — leave for the next cron run.
-//   - DO NOT use ctx.waitUntil here — this is called from inside scheduled(),
-//     which itself runs to completion. Direct await is correct.
-// ─────────────────────────────────────────────────────────────────────────────
+const DLQ_KEY_RE = /^wh_dlq_([0-9a-f]{32})_([0-9a-f]{32})$/;
+
+/** Verified DLQ entry for a KV key name, or null. */
+async function readDlqEntry(env, name) {
+  const m = name.match(DLQ_KEY_RE);
+  if (!m) return null;
+  const rec = await env.STATUS_KV.get(name, { type: 'json' });
+  if (!rec || rec.v !== 1) return null;
+  const p = dlqParts(m[1], m[2], rec);
+  const key = p ? await deriveKvMacKey(env, 'whdlq') : null;
+  if (!key || !(await checkMacFields(key, WHDLQ_TAG, rec.mac, ...p))) return null;
+  if ((await orgTag(env, rec.org)) !== m[1]) return null;
+  return { tag: m[1], org: rec.org, event: rec.event, uuid: rec.uuid };
+}
+
+/**
+ * Re-derive the event from stored state. → fields to send, or null to drop.
+ *   transfer.confirmed            R2 manifest is a consumed tombstone
+ *   transfer.timestamp_submitted  live manifest, timestamp_state set, cref → same org
+ *   cargo.*                       MAC'd receipt record owned by the same org
+ */
+async function confirmEvent(env, entry) {
+  const { org, event, uuid } = entry;
+  const type = RECEIPT_TYPE[event];
+  if (type) {
+    const r = await getReceipt(env, uuid, type, entry.tag);
+    return r ? { event, uuid, receipt: r.receipt, sig: r.sig } : null;
+  }
+  const { manifest } = await safeGetManifest(env.BUCKET, uuid, env);
+  if (!manifest) return null;
+  if (event === EVENTS.CONFIRMED) {
+    return manifest.consumed === true ? { event, uuid } : null;
+  }
+  if (event === EVENTS.TIMESTAMP) {
+    if (manifest.consumed === true || !manifest.timestamp_state || manifest.timestamp_state === 'none') return null;
+    const client = await clientForManifest(env, uuid, manifest);
+    return client?.org === org ? { event, uuid } : null;
+  }
+  return null;
+}
+
+/**
+ * retryDeadLetterQueue(env) → { retried, succeeded, failed, dropped }
+ * Daily cron. Fresh t on every attempt. Entries that fail the MAC or that
+ * stored state no longer confirms are deleted; failed sends stay until TTL.
+ */
 export async function retryDeadLetterQueue(env) {
-  let retried   = 0;
-  let succeeded = 0;
-  let failed    = 0;
-
+  let retried = 0, succeeded = 0, failed = 0, dropped = 0;
   let cursor;
   do {
-    let listResult;
+    let list;
     try {
-      listResult = await env.STATUS_KV.list({ prefix: 'wh_dlq_', cursor, limit: 1000 });
+      list = await env.STATUS_KV.list({ prefix: 'wh_dlq_', cursor, limit: 1000 });
     } catch (e) {
       console.error('webhook_delivery/dlq: KV list failed:', e);
       break;
     }
-
-    for (const key of listResult.keys) {
+    for (const { name } of list.keys) {
       retried++;
-      let record;
-
-      // ── Read the DLQ entry ─────────────────────────────────────────────────
+      let fields = null, entry = null;
       try {
-        record = await env.STATUS_KV.get(key.name, { type: 'json' });
+        entry = await readDlqEntry(env, name);
+        fields = entry ? await confirmEvent(env, entry) : null;
       } catch (e) {
-        console.error(`webhook_delivery/dlq: KV get failed for ${key.name}:`, e);
+        console.error('webhook_delivery/dlq: read failed, leaving entry:', e);
         failed++;
         continue;
       }
-
-      if (!record || !record.api_key_hash || !record.event || !record.uuid) {
-        // Malformed entry — delete it; it can never be retried successfully.
-        console.error(`webhook_delivery/dlq: malformed entry, deleting ${key.name}`);
-        try { await env.STATUS_KV.delete(key.name); } catch (_) {}
-        failed++;
+      const cfg = fields ? await deliverableConfig(env, entry.org) : null;
+      if (!cfg) {
+        dropped++;
+        try { await env.STATUS_KV.delete(name); } catch { /* TTL clears it */ }
         continue;
       }
-
-      // ── Re-deliver with fresh timestamp ────────────────────────────────────
-      // _deliver() builds its own `t = Math.floor(Date.now() / 1000)` internally.
-      // We reconstruct the event object from the stored record fields.
-      const event = { type: record.event, uuid: record.uuid };
-      let deliverySucceeded = false;
-
-      try {
-        deliverySucceeded = await _deliverForCron(env, record.api_key_hash, event);
-      } catch (e) {
-        console.error(`webhook_delivery/dlq: retry error for ${key.name}:`, e);
-      }
-
-      if (deliverySucceeded) {
+      if (await post(env, cfg, entry.org, fields)) {
         succeeded++;
-        try {
-          await env.STATUS_KV.delete(key.name);
-        } catch (e) {
-          console.error(`webhook_delivery/dlq: KV delete failed for ${key.name}:`, e);
-        }
+        try { await env.STATUS_KV.delete(name); } catch { /* TTL clears it */ }
       } else {
         failed++;
-        // Leave in KV — 7-day TTL handles expiry naturally.
       }
     }
-
-    cursor = listResult.list_complete ? undefined : listResult.cursor;
+    cursor = list.list_complete ? undefined : list.cursor;
   } while (cursor);
 
-  // AE log — one summary point per cron run.
   if (env.AE) {
     try {
       env.AE.writeDataPoint({
         blobs:   ['webhook_dlq_cron', 'cron', retried > 0 ? 'ran' : 'idle', ''],
-        doubles: [retried, succeeded, failed, 0, 0],
+        doubles: [retried, succeeded, failed, dropped, 0],
         indexes: ['webhook_dlq_cron'],
       });
     } catch (e) {
       console.error('webhook_delivery/dlq: AE log failed:', e);
     }
   }
+  console.log(`webhook_delivery/dlq: retried=${retried} succeeded=${succeeded} failed=${failed} dropped=${dropped}`);
+  return { retried, succeeded, failed, dropped };
+}
 
-  console.log(`webhook_delivery/dlq: retried=${retried} succeeded=${succeeded} failed=${failed}`);
-  return { retried, succeeded, failed };
+/** DLQ depth for one client (display only; capped at one KV list page). */
+export async function dlqDepth(env, org) {
+  const tag = await orgTag(env, org);
+  if (!tag) return 0;
+  const listed = await env.STATUS_KV.list({ prefix: `wh_dlq_${tag}_` });
+  return listed.keys.length;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _deliverForCron → Promise<boolean>
-//
-// Thin wrapper around _deliver that captures delivery success/failure as a
-// boolean return value for the cron caller, rather than relying on AE logging
-// (which is fire-and-forget). _deliver itself still logs to AE.
-//
-// Returns true if the client endpoint responded 2xx, false on any failure.
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-async function _deliverForCron(env, apiKeyHash, event) {
-  // We need to intercept the outcome of _deliver, which currently returns void
-  // and signals success/failure only via AE. Rather than mutating _deliver's
-  // signature (it is used by the live request path), we read the wh_config_
-  // ourselves, call the underlying fetch logic, and return the boolean.
-  // This duplicates the config lookup but keeps _deliver's contract clean.
 
-  const configKey = `wh_config_${apiKeyHash}`;
-  let config;
-  try {
-    config = await env.STATUS_KV.get(configKey, { type: 'json' });
-  } catch (e) {
-    console.error('webhook_delivery/dlq: wh_config KV read failed:', e);
-    return false;
-  }
-
-  // Client deregistered or config missing — nothing to retry.
-  if (!config || config.active !== true) {
-    return true; // Treat as "resolved" — remove from DLQ, endpoint no longer registered.
-  }
-
-  const { url, created_at } = config;
-
-  const t       = Math.floor(Date.now() / 1000);
-  const payload = JSON.stringify({ event: event.type, uuid: event.uuid, t });
-
-  let signingKeyBytes;
-  try {
-    signingKeyBytes = await _deriveSigningKeyBytes(
-      env.WEBHOOK_SIGNING_MASTER_KEY,
-      apiKeyHash,
-      created_at,
-    );
-  } catch (e) {
-    console.error('webhook_delivery/dlq: signing key derivation failed:', e);
-    return false;
-  }
-
-  let sigHex;
-  try {
-    sigHex = await _signPayload(signingKeyBytes, t, payload);
-  } catch (e) {
-    console.error('webhook_delivery/dlq: payload signing failed:', e);
-    return false;
-  }
-
-  const signatureHeader = `t=${t},v0=${sigHex}`;
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
-
-    let fetchRes;
-    try {
-      fetchRes = await fetch(url, {
-        method:  'POST',
-        headers: {
-          'Content-Type':         'application/json',
-          'X-Refueler-Signature': signatureHeader,
-          'User-Agent':           'Refueler-Webhook/1.0',
-        },
-        body:   payload,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    const ok = fetchRes.status >= 200 && fetchRes.status < 300;
-    _aeLog(env, event.type, ok ? 'success' : 'fail', String(fetchRes.status), fetchRes.status, 0);
-    return ok;
-  } catch (e) {
-    const errorClass = e?.name === 'AbortError' ? 'timeout' : 'network_error';
-    _aeLog(env, event.type, 'fail', errorClass, 0, 0);
-    return false;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _deliver — core async delivery logic (private)
-// ─────────────────────────────────────────────────────────────────────────────
-async function _deliver(env, apiKeyHash, event) {
-  const t0 = Date.now();
-
-  // ── 1. Read wh_config_ ────────────────────────────────────────────────────
-  const configKey = `wh_config_${apiKeyHash}`;
-  let config;
-  try {
-    config = await env.STATUS_KV.get(configKey, { type: 'json' });
-  } catch (e) {
-    console.error('webhook_delivery: KV read failed:', e);
-    _aeLog(env, event.type, 'fail', 'kv_read_error', 0, Date.now() - t0);
-    return;
-  }
-
-  // No registration or deregistered — silent skip, not an error.
-  if (!config || config.active !== true) {
-    return;
-  }
-
-  const { url, created_at } = config;
-
-  // ── 2. Build payload ──────────────────────────────────────────────────────
-  const t       = Math.floor(Date.now() / 1000);
-  const payload = JSON.stringify({ event: event.type, uuid: event.uuid, t });
-
-  // ── 3. Derive signing key bytes ───────────────────────────────────────────
-  let signingKeyBytes;
-  try {
-    signingKeyBytes = await _deriveSigningKeyBytes(
-      env.WEBHOOK_SIGNING_MASTER_KEY,
-      apiKeyHash,
-      created_at,
-    );
-  } catch (e) {
-    console.error('webhook_delivery: signing key derivation failed:', e);
-    _aeLog(env, event.type, 'fail', 'signing_key_error', 0, Date.now() - t0);
-    return;
-  }
-
-  // ── 4. Sign payload ───────────────────────────────────────────────────────
-  // HMAC-SHA256(signingKeyBytes, "v0:" + t + ":" + payload) → hex
-  let sigHex;
-  try {
-    sigHex = await _signPayload(signingKeyBytes, t, payload);
-  } catch (e) {
-    console.error('webhook_delivery: payload signing failed:', e);
-    _aeLog(env, event.type, 'fail', 'sign_error', 0, Date.now() - t0);
-    return;
-  }
-
-  const signatureHeader = `t=${t},v0=${sigHex}`;
-
-  // ── 5. POST to client URL ─────────────────────────────────────────────────
-  let statusCode = 0;
-  let deliveryOk = false;
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
-
-    let fetchRes;
-    try {
-      fetchRes = await fetch(url, {
-        method:  'POST',
-        headers: {
-          'Content-Type':         'application/json',
-          'X-Refueler-Signature': signatureHeader,
-          'User-Agent':           'Refueler-Webhook/1.0',
-        },
-        body:   payload,
-        signal: controller.signal,
-      });
-      statusCode = fetchRes.status;
-      deliveryOk = fetchRes.status >= 200 && fetchRes.status < 300;
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch (e) {
-    const errorClass = e?.name === 'AbortError' ? 'timeout' : 'network_error';
-    console.error('webhook_delivery: fetch failed:', e);
-    _aeLog(env, event.type, 'fail', errorClass, 0, Date.now() - t0);
-    await _deadLetter(env, apiKeyHash, event, t, statusCode, errorClass);
-    return;
-  }
-
-  const latency = Date.now() - t0;
-
-  if (deliveryOk) {
-    _aeLog(env, event.type, 'success', String(statusCode), statusCode, latency);
-    return;
-  }
-
-  // Non-2xx — dead-letter.
-  _aeLog(env, event.type, 'fail', String(statusCode), statusCode, latency);
-  await _deadLetter(env, apiKeyHash, event, t, statusCode, `http_${statusCode}`);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _deriveSigningKeyBytes — raw 32-byte HMAC output
-//
-// HMAC-SHA256(masterKey, SIGN_DOMAIN_TAG + "\n" + apiKeyHash + "\n" + createdAt)
-// Returns Uint8Array. Used both for whsec derivation (base58 output) and for
-// payload signing (raw bytes as HMAC key).
-// ─────────────────────────────────────────────────────────────────────────────
-async function _deriveSigningKeyBytes(masterKey, apiKeyHash, createdAt) {
-  const enc = new TextEncoder();
-
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(masterKey),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  const message   = `${SIGN_DOMAIN_TAG}\n${apiKeyHash}\n${createdAt}`;
-  const sigBuffer = await crypto.subtle.sign('HMAC', keyMaterial, enc.encode(message));
-  return new Uint8Array(sigBuffer);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _signPayload — HMAC-SHA256(signingKeyBytes, "v0:" + t + ":" + body) → hex
-// ─────────────────────────────────────────────────────────────────────────────
-async function _signPayload(signingKeyBytes, t, body) {
-  const enc = new TextEncoder();
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    signingKeyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  const message   = `v0:${t}:${body}`;
-  const sigBuffer = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-  return Array.from(new Uint8Array(sigBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _deadLetter — write failed delivery to KV DLQ (7-day TTL)
-//
-// Key: wh_dlq_{apiKeyHash}_{uuid}_{attemptTs}
-// SW4b cron reads and retries with a fresh timestamp (never the original t).
-// ─────────────────────────────────────────────────────────────────────────────
-async function _deadLetter(env, apiKeyHash, event, attemptTs, statusCode, errorClass) {
-  const key   = `wh_dlq_${apiKeyHash}_${event.uuid}_${attemptTs}`;
-  const value = {
-    event:        event.type,
-    uuid:         event.uuid,
-    api_key_hash: apiKeyHash,
-    attempt_at:   attemptTs,
-    status_code:  statusCode,
-    error:        errorClass,
-  };
-  try {
-    await env.STATUS_KV.put(key, JSON.stringify(value), { expirationTtl: DLQ_TTL });
-  } catch (e) {
-    console.error('webhook_delivery: DLQ write failed:', e);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _aeLog — fire-and-forget AE datapoint
-// ─────────────────────────────────────────────────────────────────────────────
-function _aeLog(env, eventType, outcome, statusOrError, statusCode, latencyMs) {
+function aeLog(env, eventType, outcome, statusOrError, statusCode, latencyMs) {
   if (!env.AE) return;
   try {
     env.AE.writeDataPoint({
@@ -525,17 +381,9 @@ function _aeLog(env, eventType, outcome, statusOrError, statusCode, latencyMs) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// _toBase58 — standard base58 (Bitcoin alphabet, no checksum)
-// Duplicated from webhook_reg.js to keep this module self-contained.
-// ─────────────────────────────────────────────────────────────────────────────
-function _toBase58(bytes) {
-  let leadingZeroes = 0;
-  for (const b of bytes) {
-    if (b !== 0) break;
-    leadingZeroes++;
-  }
-
+function toBase58(bytes) {
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
   const digits = [0];
   for (const byte of bytes) {
     let carry = byte;
@@ -544,12 +392,7 @@ function _toBase58(bytes) {
       digits[i] = carry % 58;
       carry = Math.floor(carry / 58);
     }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
+    while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
   }
-
-  return '1'.repeat(leadingZeroes) +
-    digits.reverse().map(d => BASE58_ALPHABET[d]).join('');
+  return '1'.repeat(zeros) + digits.reverse().map(d => BASE58_ALPHABET[d]).join('');
 }

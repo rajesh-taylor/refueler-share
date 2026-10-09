@@ -37,6 +37,9 @@ PRICE_CREATIVE_MONTHLY_GBP = "12"
 PRICE_CREATIVE_YEARLY_GBP  = "144"
 PRICE_MAX_MONTHLY_GBP      = "24"
 PRICE_MAX_YEARLY_GBP       = "288"
+# Sealing key generation (B12-SR S3): secret SHARE_SEAL_KEY_<n>, n = this value.
+# Rotate by adding SHARE_SEAL_KEY_2 and flipping this to "2" (src/seal.js).
+SHARE_SEAL_CURRENT         = "1"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)

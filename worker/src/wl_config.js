@@ -13,11 +13,16 @@ const WL_CONFIGS = {
       permanent_record: true,
       silent_drop:      false,
       mcp_tools:        true,
-      webhooks:         true,
+      webhooks:         true,  // API-Repair-1: live-tested 9 Oct 2026
       sandbox:          true,
     },
   },
 };
+
+/** Every white-label hostname (hostname-health cron). */
+export function wlHostnames() {
+  return Object.values(WL_CONFIGS).map(c => c.hostname);
+}
 
 export function getWlConfig(host) {
   if (!host) return null;

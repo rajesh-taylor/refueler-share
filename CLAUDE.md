@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.11 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-Crypto-1 · 7 Oct 2026
+> **Version:** 2.12 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** API-Repair-1 · 9 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -170,6 +170,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 
 - **KV is compromised for write, not just read (X1).** Nothing in KV may authorise access, lift a limit, or select a privileged branch unless MAC'd under a Worker secret. Auth sessions and magic-link tokens live in Supabase, never KV.
   - **KV-Audit-Opus (8 Oct 2026, `docs/KV-Audit-v1.md`):** ask three questions of any KV value — forge, roll back, delete. Forge → MAC under a `KV_MAC_KEY` HKDF subkey (`refueler.share.kvmac.<purpose>.v1`), KV key name inside the MAC. Roll back or delete matters → Supabase (or R2 `etagMatches`). A KV rate counter is a courtesy throttle, never a security gate. KV-sourced text is untrusted wherever it renders. API keys + credit pools live in Supabase (KV-Fix-2 ✓ 9 Oct): `requireApiAuth` reads `api_keys` (≤ 60 s isolate cache = revocation bound), Supabase down → 503, never a KV fallback; sandbox keys pass only `/api/v1/sandbox/*` and are refused at credential issue.
+- **API client routing (API-Repair-1 · 9 Oct 2026):** the manifest carries `cref_ct` = org_account_id + transfer_ref sealed under `SHARE_SEAL_KEY_<kid>` (`worker/src/seal.js`, the shared seal helper B12-3 reuses for `qref_ct`); never a raw key, org or ref. Chartered initiate is HMAC-only (`requireApiAuth`); the pool is the signer's. Webhooks, receipts and DLQ route manifest → org → `wh_config_{orgtag}`, every KV record MAC'd with its key name inside; URL re-validated per send. Receipts v2 are signed with the client's `rfs_whsec_` and pulled owner-only. Live checks use `bin/lib/wh-sink.mjs` (named tunnel `wh-sink.refueler.io`).
 - **Presigned PUTs sign `content-length`** (full chunks `CHUNK_SIZE + 16`; tail URL minted at initiate only, so tail length is never stored). Session token, URL expiry and quota reservation share one clock: `UPLOAD_WINDOW = 6 days`.
 - **Deletion latch = R2 conditional put** (`onlyIf etagMatches`) on the manifest. All five deletion paths (DAD, owner-delete, strike-off, grace sweep, orphan sweep) call the same release with the same args; tombstones are identical and strip `qref_ct`.
 - **No raw `quota_ref` at rest in R2 or KV.** Manifests carry sealed `qref_ct`; `org_dock` is one sealed KV entry per transfer under `SHARE_SEAL_KEY_<kid>` (per-dock HKDF subkey, AAD binds org + entry + kid).

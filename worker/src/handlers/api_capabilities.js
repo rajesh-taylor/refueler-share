@@ -67,8 +67,8 @@ const FEATURES = {
   upload:              true,
   download:            true,
   permanent_record:    true,   // Tower Hill (TH-series)
-  webhook:             false,  // KV-Fix-1a: nothing fires today (KV-Audit F3) — true again at API-Repair-1, after a live test
-  receipts:            false,  // KV-Fix-1a: as above
+  webhook:             true,   // API-Repair-1: live-tested 9 Oct 2026 (bin/api-repair-1-live-check.mjs)
+  receipts:            true,   // API-Repair-1: as above; receipts need a registered webhook
   mcp_tools:           true,   // SW-MCP-W1 (this session)
   silent_drop_anon:    false,  // SD-block — requires B8 (NUT-11 Mode 2)
   anonymous_rail:      false,  // B7/NB-4 — Lightning node not yet live

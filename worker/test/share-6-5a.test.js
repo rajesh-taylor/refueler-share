@@ -238,7 +238,7 @@ describe('6-5a §pins', () => {
 // AE capture. They assert the full handler contract end-to-end.
 describe.skip('download handler — Worker harness (6-5a)', () => {
   it('verified N=1: GET /download/{uuid}/0000 → 200, body served, X-Integrity: ciphertext-storage-verified');
-  it('verified N=4: all four chunks serve 200 in order; last chunk emits cargo.discharged only if api_live_key');
+  it('verified N=4: all four chunks serve 200 in order; last chunk emits cargo.discharged only if the manifest has cref_ct');
   it('verified N=128: golden reconstruct-and-serve across all 128 chunk GETs');
   it('sidecar length-mismatch: GET → 409 {"error":"integrity_failed"}, no chunk body served');
   it('root-mismatch (manifest root ≠ reconstructed): GET → 409 {"error":"integrity_failed"}');

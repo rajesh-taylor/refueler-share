@@ -20,15 +20,15 @@
  *   410                                   — already consumed (idempotent)
  *
  * SW4a: fires 'transfer.confirmed' webhook for API-tier transfers inside the
- * existing ctx.waitUntil block. Consumer transfers (no api_key_hash in
- * dock_index) are silently skipped. deliverWebhookInline is used (not
- * deliverWebhook) because we are already inside waitUntil — cannot nest.
+ * existing ctx.waitUntil block. Consumer transfers (no cref_ct in the
+ * manifest) are silently skipped. notifyTransfer is awaited inline because
+ * we are already inside waitUntil — cannot nest.
  */
 
 import { getManifest, putManifest }                          from '../manifest.js';
 import { buildTombstone }                                    from '../manifest_tg.js';
 import { verifyDownloadToken }                               from '../nut11.js';
-import { findApiKeyHashForUuid, deliverWebhookInline }       from '../webhook_delivery.js';
+import { notifyTransfer, EVENTS }                            from '../webhook_delivery.js';
 
 const MANIFEST_SIZE_MAX = 64 * 1024;
 
@@ -134,23 +134,11 @@ export async function handleConfirmTransfer(request, env, ctx, uuid) {
         console.error('confirm: dock_index collected update failed:', e);
       }
 
-      // ── Step 5: Webhook — 'transfer.confirmed' (SW4a) ────────────────────
-      // API-tier transfers only. findApiKeyHashForUuid returns null for
-      // consumer transfers; deliverWebhookInline is a no-op on null.
-      // We use deliverWebhookInline (not deliverWebhook) because we are
-      // already inside waitUntil — nested waitUntil is not permitted.
-      // Webhook failure never affects deletion outcome.
-      try {
-        const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
-        if (apiKeyHash) {
-          await deliverWebhookInline(env, apiKeyHash, {
-            type: 'transfer.confirmed',
-            uuid,
-          });
-        }
-      } catch (e) {
-        console.error('confirm: webhook delivery error:', e);
-      }
+      // ── Step 5: Webhook — 'transfer.confirmed' ───────────────────────────
+      // Routed from the manifest read above (cref_ct, pre-tombstone); consumer
+      // transfers have none and are skipped. Inline: already inside waitUntil.
+      // Webhook failure never affects deletion outcome. (API-Repair-1)
+      await notifyTransfer(env, uuid, manifest, EVENTS.CONFIRMED);
 
       // ── AE log ────────────────────────────────────────────────────────────
       if (env.AE) {

@@ -11,7 +11,8 @@
 //
 // Any failure (secret missing, bad JSON, wrong MAC) reads as ABSENT — never an
 // error that reveals the branch. Missing secret → nothing is written or trusted.
-// WebCrypto only; known-answer vector in test/kv_fix_1a.test.js.
+// WebCrypto only; known-answer vectors in test/kv_fix_1a.test.js (rootv) and
+// test/api_repair_1.test.js (orgtag, whcfg, whdlq, rcpt).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const enc = new TextEncoder();
@@ -19,27 +20,27 @@ const MIN_SECRET_BYTES = 32;
 
 export const ROOTV_TAG = 'refueler.share.kvmac.rootv.v1';
 
-function concat(...parts) {
+export function concat(...parts) {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let o = 0;
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
 
-function b64ToBytes(b64) {
+export function b64ToBytes(b64) {
   try {
     const bin = atob(b64.trim());
     return Uint8Array.from(bin, c => c.charCodeAt(0));
   } catch { return null; }
 }
 
-function bytesToB64url(bytes) {
+export function bytesToB64url(bytes) {
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function b64urlToBytes(s) {
+export function b64urlToBytes(s) {
   if (typeof s !== 'string' || !/^[A-Za-z0-9_-]*$/.test(s)) return null;
   return b64ToBytes(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
 }
@@ -93,4 +94,55 @@ export async function checkRootVerifiedValue(key, uuid, root, stored) {
   const expected  = await rootvMac(key, uuid, root);
   if (!presented || !expected || presented.length !== expected.length) return false;
   return crypto.subtle.timingSafeEqual(presented, expected);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API-Repair-1 (9 Oct 2026): generic field MACs, and the org tag used in KV key
+// names so no raw org_account_id sits in a KV key.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 8-byte big-endian unsigned integer (unix seconds etc). */
+export function be64(n) {
+  const out = new Uint8Array(8);
+  new DataView(out.buffer).setBigUint64(0, BigInt(Math.max(0, Math.floor(Number(n) || 0))));
+  return out;
+}
+
+/**
+ * macFields(key, tag, ...parts) → Uint8Array(32) | null
+ * HMAC(K_p, utf8(tag) ‖ 0x00 ‖ parts…). Callers put fixed-length fields first
+ * and at most one variable-length field last (B12-SR encoding rule).
+ */
+export async function macFields(key, tag, ...parts) {
+  if (!key || parts.some(p => !(p instanceof Uint8Array))) return null;
+  const msg = concat(enc.encode(tag), new Uint8Array([0]), ...parts);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
+}
+
+/** checkMacFields(key, tag, presentedB64url, ...parts) → boolean (constant time). */
+export async function checkMacFields(key, tag, presented, ...parts) {
+  const got = b64urlToBytes(presented);
+  const exp = await macFields(key, tag, ...parts);
+  if (!got || !exp || got.length !== exp.length) return false;
+  return crypto.subtle.timingSafeEqual(got, exp);
+}
+
+export const ORGTAG_TAG = 'refueler.share.kvmac.orgtag.v1';
+
+/**
+ * orgTag(env, org) → 32 hex chars (16 bytes) | null
+ * Keyed, one-way: a KV reader sees the tag, never the org_account_id, and can't
+ * join it to Supabase without KV_MAC_KEY.
+ */
+export async function orgTag(env, org) {
+  const u = uuidToBytes(org);
+  const key = u ? await deriveKvMacKey(env, 'orgtag') : null;
+  const mac = await macFields(key, ORGTAG_TAG, u ?? new Uint8Array(0));
+  return mac ? Array.from(mac.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('') : null;
+}
+
+/** 32 hex chars → 16 bytes, or null. */
+export function hex16(h) {
+  if (typeof h !== 'string' || !/^[0-9a-f]{32}$/.test(h)) return null;
+  return Uint8Array.from(h.match(/../g), x => parseInt(x, 16));
 }

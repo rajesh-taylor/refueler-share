@@ -77,8 +77,9 @@ import { UUID_RE, safeGetManifest, json, err, parseRange } from '../utils.js';
 import { putManifest, isDownloadBlocked, requiresPassphrase } from '../manifest.js';
 import { verifyDownloadToken } from '../nut11.js';
 import { checkTransferStatus, flipPendingDestruction } from '../manifest_tg.js';
-import { emitReceipt } from '../receipts.js';
-import { findApiKeyHashForUuid } from '../webhook_delivery.js';
+import { issueReceipt } from '../receipts.js';
+import { hasCref } from '../seal.js';
+import { notifyTransfer, EVENTS } from '../webhook_delivery.js';
 import { destroyTransfer } from './delete_transfer.js';
 import {
   isVerifiedPath,
@@ -291,8 +292,12 @@ export function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dl
     // blocked (consumed:true) and a later delete or sweep resumes it.
     // Replaces the Share-B11-1 inline sequence, which deleted chunks one at a
     // time and never awaited its tombstone/sidecar/seal/dock writes.
+    // API-Repair-1: transfer.confirmed fires here once destruction is done —
+    // /confirm finds the transfer already consumed since DAD-2. manifest is the
+    // pre-tombstone copy, so its cref_ct still names the client.
     ctx.waitUntil(
       destroyTransfer(env, uuid, manifest, Math.floor(Date.now() / 1000), 'DAD')
+        .then(r => r?.destroyed && notifyTransfer(env, uuid, manifest, EVENTS.CONFIRMED))
         .catch(e => console.error('DAD: destruction failed:', e))
     );
   }
@@ -300,39 +305,24 @@ export function finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dl
   // ── SW5: emit cargo.discharged receipt ────────────────────────────────────
   // Fires independently of DAD — destruction does not suppress the receipt.
   const isLastChunk = manifest.total_chunks > 0 && chunkIndex === manifest.total_chunks - 1;
-  if (isLastChunk && manifest.api_live_key) {
+  if (isLastChunk && hasCref(manifest)) {
     ctx.waitUntil(
       (async () => {
         try {
           const guardKey  = `receipt_discharged_guard:${uuid}`;
           let alreadyFired = false;
           try {
-            const existing = await env.STATUS_KV.get(guardKey);
-            alreadyFired   = existing !== null;
+            alreadyFired = (await env.STATUS_KV.get(guardKey)) !== null;
           } catch (e) {
             console.error('SW5 discharge guard KV read failed:', e);
           }
-
           if (!alreadyFired) {
             env.STATUS_KV.put(guardKey, '1', { expirationTtl: 7 * 24 * 3600 }).catch(e =>
               console.error('SW5 discharge guard KV write failed:', e)
             );
-
-            const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
-            if (apiKeyHash) {
-              emitReceipt(env, ctx, {
-                receipt_type: 'collection',
-                event:        'cargo.discharged',
-                live_key:     manifest.api_live_key,
-                uuid,
-                transfer_ref: manifest.api_transfer_ref ?? null,
-                size_bytes:   null,   // Share-Size-1: size not stored; key kept for the receipt schema
-                chunk_count:  manifest.total_chunks ?? 0,
-                issued_at:    Math.floor(Date.now() / 1000),
-                collected_at: Math.floor(Date.now() / 1000),
-                apiKeyHash,
-              });
-            }
+            // manifest is the copy read before any DAD tombstone (API-Repair-1).
+            await issueReceipt(env, uuid, manifest, 'collection',
+              { collected_at: Math.floor(Date.now() / 1000) });
           }
         } catch (e) {
           console.error('SW5 cargo.discharged emit error:', e);

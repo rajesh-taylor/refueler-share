@@ -15,28 +15,31 @@
 //     requireApiAuth to its original (unmocked) implementation and poisons
 //     all subsequent tests. Use targeted dateNowSpy.mockRestore() instead.
 //
-// Test count: 50
+// Test count: 42
 
 import { describe, it, expect, vi } from 'vitest';
 import {
   validateWebhookUrl,
-  kvWhConfigKey,
   handleWebhookRegister,
 } from '../src/webhook_reg.js';
-import { requireApiAuth }      from '../src/api_auth.js';
-import { deriveWhsecFromHash } from '../src/webhook_delivery.js';
+import { requireApiAuth }           from '../src/api_auth.js';
+import { whConfigKey, deriveWhsec } from '../src/webhook_delivery.js';
+
+// API-Repair-1: wh_config_ is keyed by the client's org (keyed tag) and MAC'd;
+// the real webhook_delivery.js is used (no mock), with KV_MAC_KEY in the env.
+const ORG = '3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b0c';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock api_auth.js
 //
 // requireApiAuth is a vi.fn() defined inside the factory so it is a proper
 // Vitest spy with .mockResolvedValue / .mockResolvedValueOnce support.
-// sha256Hex is the real implementation — kvWhConfigKey depends on it and tests
+// sha256Hex is the real implementation (other modules import it) and tests
 // compare the KV key derived in the test against the key written by the handler.
 // ─────────────────────────────────────────────────────────────────────────────
 vi.mock('../src/api_auth.js', () => {
   const _requireApiAuth = vi.fn().mockResolvedValue({
-    client: { tier: 'api', id: 'test-client-001' },
+    client: { tier: 'api', org_account_id: '3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b0c' },
     apiKey: 'rfs_live_TestKeyForWebhookRegTests1234567890Ab',
   });
 
@@ -56,50 +59,6 @@ vi.mock('../src/api_auth.js', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock webhook_delivery.js
-//
-// deriveWhsecFromHash is the real HMAC-SHA256 + base58 derivation, defined
-// inside the factory so it is not in the TDZ when the factory runs.
-// ─────────────────────────────────────────────────────────────────────────────
-vi.mock('../src/webhook_delivery.js', () => {
-  const SIGN_DOMAIN_TAG = 'refueler.webhook.v1.sign';
-  const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-
-  async function _deriveWhsecFromHash(masterKey, apiKeyHash, createdAt) {
-    const enc         = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw', enc.encode(masterKey),
-      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
-    );
-    const message   = `${SIGN_DOMAIN_TAG}\n${apiKeyHash}\n${createdAt}`;
-    const sigBuffer = await crypto.subtle.sign('HMAC', keyMaterial, enc.encode(message));
-    const bytes     = new Uint8Array(sigBuffer);
-
-    let leadingZeroes = 0;
-    for (const b of bytes) { if (b !== 0) break; leadingZeroes++; }
-    const digits = [0];
-    for (const byte of bytes) {
-      let carry = byte;
-      for (let i = 0; i < digits.length; i++) {
-        carry += digits[i] << 8;
-        digits[i] = carry % 58;
-        carry = Math.floor(carry / 58);
-      }
-      while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
-    }
-    const b58 = '1'.repeat(leadingZeroes) + digits.reverse().map(d => BASE58_ALPHABET[d]).join('');
-    return `rfs_whsec_${b58}`;
-  }
-
-  return {
-    deriveWhsecFromHash:   _deriveWhsecFromHash,
-    findApiKeyHashForUuid: vi.fn(async () => null),
-    deliverWebhookInline:  vi.fn(async () => {}),
-    retryDeadLetterQueue:  vi.fn(async () => {}),
-  };
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -109,6 +68,7 @@ function makeEnv(overrides = {}) {
   const store = new Map();
   return {
     WEBHOOK_SIGNING_MASTER_KEY: 'test-master-key-at-least-32-chars-long!!',
+    KV_MAC_KEY:                 'ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=',
     STATUS_KV: {
       get:    async (k, opts) => {
         const raw = store.get(k);
@@ -235,24 +195,21 @@ describe('validateWebhookUrl', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// kvWhConfigKey
+// whConfigKey (org tag — no raw org id in the KV key)
 // ─────────────────────────────────────────────────────────────────────────────
-describe('kvWhConfigKey', () => {
-  it('returns a string starting with wh_config_', async () => {
-    const k = await kvWhConfigKey('rfs_live_SomeKey');
-    expect(k).toMatch(/^wh_config_/);
+describe('whConfigKey', () => {
+  it('is wh_config_ + 32 hex chars, deterministic, and never contains the org id', async () => {
+    const env = makeEnv();
+    const k1 = await whConfigKey(env, ORG);
+    expect(k1).toMatch(/^wh_config_[0-9a-f]{32}$/);
+    expect(await whConfigKey(env, ORG)).toBe(k1);
+    expect(k1).not.toContain(ORG.replace(/-/g, '').slice(0, 8));
   });
 
-  it('returns a deterministic key for the same input', async () => {
-    const k1 = await kvWhConfigKey('rfs_live_SameKey');
-    const k2 = await kvWhConfigKey('rfs_live_SameKey');
-    expect(k1).toBe(k2);
-  });
-
-  it('returns different keys for different inputs', async () => {
-    const k1 = await kvWhConfigKey('rfs_live_KeyA');
-    const k2 = await kvWhConfigKey('rfs_live_KeyB');
-    expect(k1).not.toBe(k2);
+  it('differs per org, and is null without KV_MAC_KEY', async () => {
+    const env = makeEnv();
+    expect(await whConfigKey(env, '00000000-0000-4000-8000-000000000001')).not.toBe(await whConfigKey(env, ORG));
+    expect(await whConfigKey(makeEnv({ KV_MAC_KEY: undefined }), ORG)).toBeNull();
   });
 });
 
@@ -287,26 +244,27 @@ describe('handleWebhookRegister POST', () => {
     const b2 = await r2.json();
 
     expect(b1.whsec).toBe(b2.whsec);
+    expect(b1.whsec).toBe(await deriveWhsec(env, ORG, Math.floor(FIXED_TIME / 1000)));
     dateNowSpy.mockRestore();
   });
 
   it('KV record has no whsec_hash field', async () => {
     const env       = makeEnv();
     await handleWebhookRegister(makePostRequest({ url: 'https://hooks.example.com/refueler' }), env);
-    const configKey = await kvWhConfigKey(TEST_API_KEY);
+    const configKey = await whConfigKey(env, ORG);
     const record    = JSON.parse(env.STATUS_KV._store.get(configKey));
     expect(record).not.toHaveProperty('whsec_hash');
   });
 
-  it('KV record has url, created_at, active fields', async () => {
+  it('KV record has url, created_at, active, deleted_at (+ v, mac) — nothing else', async () => {
     const env       = makeEnv();
     await handleWebhookRegister(makePostRequest({ url: 'https://hooks.example.com/refueler' }), env);
-    const configKey = await kvWhConfigKey(TEST_API_KEY);
+    const configKey = await whConfigKey(env, ORG);
     const record    = JSON.parse(env.STATUS_KV._store.get(configKey));
     expect(record).toHaveProperty('url');
     expect(record).toHaveProperty('created_at');
     expect(record).toHaveProperty('active', true);
-    expect(Object.keys(record)).toHaveLength(3);
+    expect(Object.keys(record).sort()).toEqual(['active', 'created_at', 'deleted_at', 'mac', 'url', 'v']);
   });
 
   it('returns 400 on invalid URL', async () => {
@@ -336,7 +294,7 @@ describe('handleWebhookRegister POST', () => {
 
   it('returns 403 when tier is not api', async () => {
     requireApiAuth.mockResolvedValueOnce({
-      client: { tier: 'max', id: 'test-max' },
+      client: { tier: 'max', org_account_id: ORG },
       apiKey: TEST_API_KEY,
     });
     const resp = await handleWebhookRegister(makePostRequest({ url: 'https://hooks.example.com/refueler' }), makeEnv());
@@ -360,18 +318,18 @@ describe('handleWebhookRegister DELETE', () => {
     const env = makeEnv();
     await handleWebhookRegister(makePostRequest({ url: 'https://hooks.example.com/refueler' }), env);
     await handleWebhookRegister(makeDeleteRequest(), env);
-    const tombstone = JSON.parse(env.STATUS_KV._store.get(await kvWhConfigKey(TEST_API_KEY)));
+    const tombstone = JSON.parse(env.STATUS_KV._store.get(await whConfigKey(env, ORG)));
     expect(tombstone).not.toHaveProperty('whsec_hash');
     expect(tombstone.active).toBe(false);
     expect(tombstone).toHaveProperty('deleted_at');
   });
 
-  it('tombstone has url, created_at, active, deleted_at — nothing else', async () => {
+  it('tombstone has url, created_at, active, deleted_at (+ v, mac) — nothing else', async () => {
     const env = makeEnv();
     await handleWebhookRegister(makePostRequest({ url: 'https://hooks.example.com/refueler' }), env);
     await handleWebhookRegister(makeDeleteRequest(), env);
-    const tombstone = JSON.parse(env.STATUS_KV._store.get(await kvWhConfigKey(TEST_API_KEY)));
-    expect(Object.keys(tombstone).sort()).toEqual(['active', 'created_at', 'deleted_at', 'url']);
+    const tombstone = JSON.parse(env.STATUS_KV._store.get(await whConfigKey(env, ORG)));
+    expect(Object.keys(tombstone).sort()).toEqual(['active', 'created_at', 'deleted_at', 'mac', 'url', 'v']);
   });
 
   it('returns 200 { deregistered: false } when nothing is registered (idempotent)', async () => {

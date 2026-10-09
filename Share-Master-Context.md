@@ -123,7 +123,7 @@ Events: `checkout.session.completed`, `customer.subscription.updated`, `customer
 - `wl_config.js` is the host-lookup module — add new client hostnames to `WL_CONFIGS` there.
 **HMAC auth (SW block):**
 - Three credentials: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, API tier only).
-- HMAC-SHA256 over `method + path + timestamp + body_hash`. SIGN_DOMAIN_TAG = `refueler.webhook.v1.sign` — never revert.
+- HMAC-SHA256 over `method + path + timestamp + body_hash`. Webhook whsec: v2 since API-Repair-1 — HKDF over org + `created_at`, tag `refueler.share.whsec.v2` (the v1 `refueler.webhook.v1.sign` construction is retired; no live clients had it).
 - Test credentials use `rfs_test_` prefix — never `rfs_live_` or `rfs_sign_` in test files.
 - Rotation: `POST /api/v1/keys/rotate` (24h grace). One keypair per commercial relationship.
 **D-1 filename fix (Option B, locked SW-MCP-4):**
@@ -193,6 +193,8 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 - DO NOT keep an API key, client record or credit balance in KV, and DO NOT fall back to KV when Supabase is down (503). *(KV-Fix-2; the old "fire-and-forget KV quota write-back" rule is retired — `api_credits_spend` is awaited.)*
 - DO NOT change `applyQuotaSpend` (`quota.js`) without the same change to SQL `api_credits_spend` — they are one rule in two places.
+- DO NOT route a webhook, receipt or DLQ retry from KV, a header or `dock_index` — the client comes from the manifest's sealed `cref_ct` (or the MAC'd receipt record after a DAD tombstone). DO NOT re-add `X-Api-Live-Key`. *(API-Repair-1)*
+- DO NOT test webhooks through a `trycloudflare.com` quick tunnel from this Mac — Mullvad blocks port 7844 and the edge answers 530. Use `bin/lib/wh-sink.mjs` (named tunnel, `--protocol http2`, `cloudflared` excluded in Mullvad split tunnelling). *(API-Repair-1)*
 - DO NOT reset a cancelled account on lazy period rollover — cancellation gate runs before reset
 - DO NOT use `blake3` npm package — `@noble/hashes/blake3.js` only
 - DO NOT import `@noble/hashes/blake3` without `.js` extension
@@ -208,15 +210,14 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
  
 ## Current state
  
-**KV-Fix-2 ✓ (9 Oct 2026) — API keys and credit pools in Supabase (`api_keys`, `api_credit_pools`, atomic `api_credits_spend`); `requireApiAuth` reads Supabase only (≤ 60 s cache, 503 when down); admin `POST /api/v1/admin/api-client` (+ `/revoke`) replaces the KV runbook step; sandbox on the same tables, sandbox credential issue refused; old KV records deleted. Deploy `a47404a6` (also carries MCP-Fix-1's `max_transfer_bytes`). Live ✓ Mullvad on: issue, 402 after cancel, revoked key refused in 5 s. Next: **API-Repair-1** (before the first Chartered client). No Cloudflare API token carries KV write (Rajesh deleted the two Workers/Agent tokens).** **MCP-Fix-1 ✓ (8 Oct 2026, repo `refueler-mcp`)** — MCP send on the direct-to-R2 path and link format v2; 245 tests; npm publish still held.
+**API-Repair-1 ✓ (9 Oct 2026) — webhooks and receipts work, routed from the R2 manifest (sealed `cref_ct` → org → MAC'd `wh_config_{orgtag}`), never KV; Chartered initiate HMAC-only (P3/F2 closed); receipts v2 owner-only (F4); DLQ MAC'd + R2 re-check (P4); URL re-validated per send (P5). Deploys `48476e56` → `8aa38636` → `1d7a9e2a` (capabilities `webhook`/`receipts` true after the live test). Live ✓ Mullvad on via `bin/api-repair-1-live-check.mjs` + named tunnel `wh-sink.refueler.io`. New secret `SHARE_SEAL_KEY_1`. Next: **X3 naming + Share-JS-Split-2 (one session) → Share-Soak-4 (→ Share-DL-Spike if a day is free) → B12-3 → B12-4a.**
  
 | Block | Commit | Summary |
 |-------|--------|---------| 
-| KV-Fix-1a ✓ | deploy `318772eb` · refueler.io `8fd9fdb` | Status shape (write 400 / read filter) + page whitelist; `requireAdmin`; finalise once; `root_verified` MAC (`KV_MAC_KEY` secret); Lightning gone; capabilities honest (webhook/receipts false, free cap). `worker/test/kv_fix_1a.test.js` 27. |
-| KV-Fix-1b ✓ | deploy `d00ae2c4` · ship `aa3847d` | B12-SR S2 in full: MAC'd `X-Test-Credential` (`TEST_CRED_KEY`), expiry ceiling applies, `soak: true`, single-use `testcred_used:`; `worker/test/kv_fix_1b.test.js` 32. |
 | Safari-Slow-Link-1 ✓ | deploy `5312c5fa` · ships `9568045`, `f60bcb2` (refueler.io `69a56ef`) | Verify-then-stream download (no part held in the Worker), `DL_IN_FLIGHT` 2, early `/meta` + modulepreload + lazy upload code. `worker/test/slow-link-1.test.js` 12. |
 | MCP-Fix-1 ✓ | `refueler-mcp` · refueler-share: capabilities + spec | MCP send on the direct-to-R2 path, link format v2, 32 MiB parts, 2 in flight, Merkle root at finalise; `@cashu/cashu-ts` 4.11.0 pinned to match Worker + vendor script; GB band → GiB; `max_transfer_bytes` = `CHARTERED_CAP_BYTES` (deployed with KV-Fix-2). 245 MCP tests. |
 | KV-Fix-2 ✓ | deploy `a47404a6` | API keys + credit pools → Supabase (migration in `supabase/migrations/`), atomic spend, 60 s revocation, admin api-client routes, sandbox refused at issue, KV API/sandbox keys deleted, runbook v1.1. `worker/test/kv_fix_2.test.js` 25. |
+| API-Repair-1 ✓ | deploys `48476e56`, `8aa38636`, `1d7a9e2a` · `refueler-mcp` (initiate signed) | `seal.js` (shared seal helper, KAT) + `cref_ct`; HMAC'd Chartered initiate (admin soak credentials keep their bypass); webhook/DLQ/receipt routing by org, all MAC'd; receipts v2 signed with the client's whsec; `cargo.accepted` at finalise, `transfer.confirmed` after DAD; hostname cron from `WL_CONFIGS`. `worker/test/api_repair_1.test.js` 32; 730 Worker tests per file. |
  
 ---
  
@@ -227,7 +228,7 @@ See `CLAUDE.md` §Known broken for the full authoritative list. Key items not du
 | 1–10 | B1–SW block ✓ | ❌ | Complete. |
 | 11 | SW-MCP block ✓ | ❌ | Complete. SW-MCP-7 anonymous tail gates on B7. |
 | 11a | **B12 post-Berlin start** — B12-1c (S1.1 build), Share-Size-1, B12-2 (B12-1 ✓, B12-1b ✓ gate) | ❌ | B12-1c ✓ (frontend) → B12-1d ✓ (Worker) → Cred-Fix-2a ✓ → Cred-Fix-2b ✓ → Share-Size-1 ✓ → Share-Upload-2 ✓ (B1) → Share-Upload-3 ✓ (B2 1–4) → Share-Upload-4 ✓ (F-11 + Try again) → Share-Upload-5 ✓ (zip, Cloudflare) → Share-Upload-6 ✓ → Share-Crypto-Opus-1 ✓ → Share-Crypto-1 ✓ → Share-Upload-7 ✓ → Share-Progress-1 ✓ → Share-Folder-Resume-1 ✓ → B12-2 ✓ → **KV-Audit-Opus**. |
-| 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → KV-Fix-2 ✓ (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1** (webhooks/receipts from R2, HMAC'd Chartered initiate) before the first Chartered client. | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
+| 11b | **Security foundations** — KV-Audit-Opus ✓ → KV-Fix-1a ✓ → KV-Fix-1b ✓ (S2 test credential) → MCP-Fix-1 ✓ → KV-Fix-2 ✓ (API keys + credits → Supabase; precondition of B12-3) · X3 naming · X5 dedicated app origin. B8 Locke-set MAC → B8-Opus. **API-Repair-1 ✓** (webhooks/receipts from R2, HMAC'd Chartered initiate). | ❌ | `docs/KV-Audit-v1.md` §5. Before B8 build. |
 | 11c | **B12 Registered rail** — B12-3 quota · B12-4a auth · B12-4b Chambers · B12-6 billing (+ UPGRADE-CSS / legacy `/upgrade.html`; CAP-WARNING-LINK ✓ Cleanup-1, DAD-ERROR-TEXT ✓ DAD-1) · B12-Audit (Opus) | ❌ | ~3 weeks post-Berlin incl. 11b. |
 | 11c′ | **Large-download track** — Soak-4 → DL-Spike → DL-W1 → DL-1 / DL-2 → DL-3 (shared with MCP `refueler_fetch`) → DL-Soak | ❌ | First block after the Now list (Rajesh, 5 Oct; README "Next" #1). Safari/Firefox streaming download, no whole-file RAM copy. Spec `docs/Share-Download-spec-v1.md`. DL-Soak green before paid cards open (D-7). Ahead of B8. |
 | 11d | B12-5 Harbourmaster | ❌ | When a Chartered client is in sight. |
@@ -283,7 +284,8 @@ Swept against the repo on import; only items not already done or recorded elsewh
 
 **Added KV-Audit-Opus (8 Oct 2026)** — full list `docs/KV-Audit-v1.md` §3, §6:
 - **Decided (Rajesh, 8 Oct):** 1a → 1b → MCP-Fix-1 → KV-Fix-2 → API-Repair-1 · revoked API key ≤ 60 s · live `api_client_` is a test (delete, don't migrate) · Chartered promises the Pro Bono cap until B12-4a (KV-Fix-1a) · **at KV-Fix-2 close: revoke/re-scope every Cloudflare API token with Workers KV Storage:Edit** (`wrangler login` stays).
-- **API webhooks + receipts never fire** (no path writes `dock_index.api_key_hash`); capabilities said they do → KV-Fix-1a ✓ flipped them false; API-Repair-1 repairs and flips back after a live test. Absorbs the Share-Size-1 "acceptance receipt never emitted" item.
+- **API webhooks + receipts ✓ fixed (API-Repair-1, 9 Oct)** — live-tested, capabilities true again. Carried: `transfer.timestamp_submitted` is unit-tested only (timestamp route refuses tier `free`, which every initiate resolves to until B12-4a — retest then); `/api/v1/keys/rotate` would change the key hash only, not the org-keyed webhook config (good).
+- **Tidy for the external-audit prep:** `worker/tests/unit/` is an old dir vitest never runs; 15 dead imports in `worker/src/index.js`; `index.js` ~1,780 lines (router vs handlers split).
 - **`ONBOARDING-RUNBOOK.md` Step 3/4 are wrong** (record the Worker can't authenticate; wrong header) → rewritten in KV-Fix-2 around `POST /admin/api-client`.
 - **Write-once chunks** (item below) → B12-3 with the session-token MAC. **250 GB Chartered claims ✓ corrected (MCP-Fix-1, 8 Oct):** `refueler-mcp-spec-v2.md` §7.1 (both copies) and the `capabilities.test.js` fixture now carry `max_transfer_bytes: 4294967296` = `CHARTERED_CAP_BYTES`; the Worker emits that field (needs deploy); the MCP README's receipt/webhook claims are marked not-live until API-Repair-1. **Carried:** `Share-Brand-Terminology.md` Chartered row at B12-4a.
 
@@ -345,7 +347,7 @@ Swept against the repo on import; only items not already done or recorded elsewh
 - **SW-Opus-1:** Four-tier model. Rail model. Model B credit pool. API v1/v2/forward-commitment. MCP v1 tools. Sandbox. BRIDGE v8.3.
 - **SW-Opus-2:** Rate card v1.0 (10/transfer, 100/GB, 20/permanent-record). 1 credit = 1 sat. Credit blocks 10k/50k/200k/custom. £99/mo identity-API. BRIDGE v8.4.
 - **SW-Opus-3:** DPA mandatory by default. Four-surface disclosure wording. GDPR framing. BRIDGE v8.5.
-- **SW4-Opus:** Webhook signing: Option B (stateless HMAC). `whsec_hash` removed. SIGN_DOMAIN_TAG = `refueler.webhook.v1.sign`. BRIDGE v8.8.
+- **SW4-Opus:** Webhook signing: Option B (stateless, derived, never stored). `whsec_hash` removed. BRIDGE v8.8. (Derivation v2 at API-Repair-1: org-keyed HKDF.)
 - **Share-MCP-Opus-2:** Capabilities endpoint locked (§7.1). Daily reference-rate KV locked. Monthly allocation + lazy reset locked. Personal API (£49/mo, 10k credits, `personal_api`, hard stop). D-1 filename fix: Option B, fragment grammar v1. Terminology: "credits" everywhere user-facing.
 - **B9-Opus:** Merkle/MMR/SMT/ZK design locked. Full spec: `merkle-spec-v1.md`. Two-roots distinction permanent. RFC 6962 unbalanced BLAKE3 tree. Sidecar `{uuid}/hashes`. MLRO flag on due-diligence proof framing. BRIDGE v9.4.
 - **B8-Opus:** NUT-11 Mode 2 (Locke) design locked. Full spec: `B8-spec-v1.md`. Deed→Locke HKDF derivation (scalar reject-sampled); Schnorr BIP-340 x-only verify; check order sig→BDHKE→double-spend; Locke KV challenge-response (SD3 primitive); `hashSecret()` unchanged/independent; CDK stays 0.17.2; builds direct in refueler-share (ecash-lab Mode 2 flag retired). BRIDGE v9.5.

@@ -8,8 +8,8 @@ import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 
 // Isolate the units under test from heavy siblings (WASM, crypto, receipts).
 vi.mock('../src/nut11.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
-vi.mock('../src/receipts.js',                  () => ({ emitReceipt: vi.fn() }));
-vi.mock('../src/webhook_delivery.js',          () => ({ findApiKeyHashForUuid: vi.fn() }));
+vi.mock('../src/receipts.js',                  () => ({ issueReceipt: vi.fn() }));
+vi.mock('../src/webhook_delivery.js',          () => ({ notifyTransfer: vi.fn(async () => {}), EVENTS: { CONFIRMED: 'transfer.confirmed' } }));
 vi.mock('../src/handlers/download_verify.js',  () => ({ isVerifiedPath: vi.fn(), readSidecarWithRootCheck: vi.fn(), verifyChunkStream: vi.fn() }));
 // DAD flips on the last chunk of an armed transfer — pin that predicate so this
 // test exercises the destruction SEQUENCE, not manifest_tg's internals.
@@ -31,6 +31,7 @@ vi.mock('../src/utils.js', async (importOriginal) => {
 });
 
 import { finishDownload }                             from '../src/handlers/download.js';
+import { notifyTransfer }                             from '../src/webhook_delivery.js';
 import { handleDeleteTransfer, handleOwnerDelete }    from '../src/handlers/delete_transfer.js';
 import { handleFinalise }                             from '../src/handlers/finalise.js';
 import { handleExecutionDock }                        from '../src/handlers/execution_dock.js';
@@ -119,9 +120,21 @@ describe('DAD — shared destroyTransfer (Share-DAD-2)', () => {
   it('a failed batch leaves the transfer blocked and resumable, never tombstoned', async () => {
     const bucket = bigArmed(3);
     bucket.delete = async () => { throw new Error('R2 down'); };
+    notifyTransfer.mockClear();
     const { manifest } = await run(bucket);
     expect(manifest.consumed).toBe(true);        // downloads stay blocked
     expect(manifest.total_chunks).toBe(3);       // in-progress, so owner/bearer delete resumes it
+    expect(notifyTransfer).not.toHaveBeenCalled(); // not destroyed yet → no transfer.confirmed
+  });
+
+  it('transfer.confirmed is sent once destruction completes, from the pre-tombstone manifest (API-Repair-1)', async () => {
+    notifyTransfer.mockClear();
+    await run(bigArmed(3));
+    expect(notifyTransfer).toHaveBeenCalledTimes(1);
+    const [, uuid, m, event] = notifyTransfer.mock.calls[0];
+    expect(uuid).toBe(UUID);
+    expect(m.total_chunks).toBe(3);               // the copy read before the tombstone
+    expect(event).toBe('transfer.confirmed');
   });
 });
 

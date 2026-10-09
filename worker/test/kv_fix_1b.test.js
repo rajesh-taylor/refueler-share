@@ -2,8 +2,9 @@
 // KV-Fix-1b — B12-SR S2 test credential: MAC'd X-Test-Credential under TEST_CRED_KEY.
 //
 //   • known-answer vector (computed independently, Python hmac)
-//   • the S2 proof-obligation matrix: every case → normal path (401 'Invalid credential'
-//     for the junk Cashu credential), no manifest, no flag; only a fresh, valid,
+//   • the S2 proof-obligation matrix: every case → normal path (401: 'Invalid credential'
+//     for the junk Cashu credential, or the HMAC refusal for an unsigned Chartered
+//     initiate since API-Repair-1), no manifest, no flag; only a fresh, valid,
 //     unexpired, matching token reaches the bypass
 //   • the bypass obeys the expiry ceiling (P2) and its own chunk cap; manifest soak:true
 //   • /admin/test-credential: requireAdmin, 503 without the secret, cap ≤ 8,000 chunks,
@@ -81,10 +82,12 @@ async function initiate(env, { uuid = UUID, header, tier = 'api', bytes = CHUNK_
 
 const manifestOf = (env, uuid = UUID) => env.BUCKET._store.get(`${uuid}/manifest.json`);
 
-// Normal path for a junk Cashu credential = 401, nothing written, no Supabase.
+// Normal path = 401, nothing written, no Supabase. For tier 'api' that 401 is the
+// HMAC refusal (API-Repair-1: an unsigned Chartered initiate never reaches Cashu).
 function expectNormalPath(env, res, calls, uuid = UUID) {
   expect(res.status).toBe(401);
-  expect(res.body.error).toBe('Invalid credential');
+  expect(['Invalid credential', expect.stringMatching(/^Missing or malformed Authorization header/)])
+    .toContainEqual(res.body.error);
   expect(manifestOf(env, uuid)).toBeUndefined();
   expect(env.STATUS_KV._store.has(`${TESTCRED_USED_PREFIX}${uuid}`)).toBe(false);
   expect(calls).toEqual([]);
@@ -130,7 +133,10 @@ describe('S2 proof-obligation matrix — all → normal path', () => {
   it('wrong MAC (one character flipped)', async () => {
     const calls = noNetwork(); const env = makeEnv();
     const t = await token();
-    const header = t.slice(0, -1) + (t.endsWith('A') ? 'B' : 'A');
+    // Flip a character 10 from the end: the last base64url char of a 32-byte MAC
+    // carries 2 padding bits, so flipping it can decode to the same MAC (flaky).
+    const i = t.length - 10;
+    const header = t.slice(0, i) + (t[i] === 'A' ? 'B' : 'A') + t.slice(i + 1);
     expectNormalPath(env, await initiate(env, { header }), calls);
   });
 

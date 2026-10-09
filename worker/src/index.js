@@ -21,19 +21,20 @@ import { handlePurgeTestTransfers } from './handlers/purge_test_transfers.js'; /
 import { cleanStatus } from './status_shape.js';                                 // KV-Fix-1a
 import { handleAdminStatus, handleAdminMetrics, handleAdminAeMetrics, handleAdminSnapshot, handleAdminKvStats } from './handlers/admin.js';
 import { handleTestCredential } from './handlers/test_credential.js';                // Share-Admin-1
-import { handleWlConfig, handleCfChallenge } from './wl_config.js';
-import { requireApiAuth, parseHmacCredentials, sha256Hex } from './api_auth.js';
+import { handleWlConfig, handleCfChallenge, wlHostnames } from './wl_config.js';
+import { requireApiAuth, parseHmacCredentials } from './api_auth.js';
 // KV-Fix-2: API keys + credit pools in Supabase (never KV)
-import { lookupApiKey, getPool, spendCredits, refundCredits, StoreUnavailable } from './api_store.js';
+import { getPool, spendCredits, refundCredits, StoreUnavailable } from './api_store.js';
 import { handleAdminApiClientCreate, handleAdminApiClientRevoke, handleAdminQuotaProvision, handleAdminQuotaCancel } from './handlers/api_admin.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleAdminBtcRatePost, handleAdminBtcRateGet, refreshBtcRate } from './handlers/btc_rate.js';
 import { handleAdminBtcPrice }  from './handlers/btc_price.js';        // Share-B10-1: live display ticker
 import { handleGrowthSnapshot } from './handlers/growth_snapshot.js';  // Share-B10-1: growth chart lines
 import { handleWebhookRegister }        from './webhook_reg.js';
-import { deliverWebhookInline, retryDeadLetterQueue } from './webhook_delivery.js';
+import { retryDeadLetterQueue } from './webhook_delivery.js';
+import { sealCref } from './seal.js';                                          // API-Repair-1
 // SW5: acceptance + collection receipts
-import { buildSignedReceipt, handleApiReceipt } from './receipts.js';
+import { handleApiReceipt } from './receipts.js';
 import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
 // SW5b: webhook status + hostname health cards
 import { handleWebhookStatus }  from './handlers/webhook_status.js';
@@ -191,7 +192,8 @@ export default {
       }
 
       // ── SW5: Receipt pull — GET /api/v1/receipt/:uuid/:type ───────────────
-      // HMAC-authenticated. Returns stored { receipt, sig } from KV.
+      // HMAC-authenticated; 404 unless the caller owns the receipt (F4,
+      // API-Repair-1). Returns the stored { receipt, sig } from KV.
       // type: 'acceptance' | 'collection'
       // 7-day TTL — client can pull keepsake receipt at any time within TTL.
       // No re-computation: stored receipt is the canonical artefact.
@@ -205,13 +207,14 @@ export default {
         }
         return timed('api_receipt', async () => {
           // HMAC auth — reuse requireApiAuth (reads rawBody; GET has no body)
+          let client;
           try {
-            await requireApiAuth(request, new ArrayBuffer(0), env);
+            ({ client } = await requireApiAuth(request, new ArrayBuffer(0), env));
           } catch (authErr) {
             if (authErr instanceof Response) return addCors(authErr, request);
             return addCors(err(500, 'Authentication error'), request);
           }
-          const response = await handleApiReceipt(request, env, receiptMatch[1], receiptMatch[2]);
+          const response = await handleApiReceipt(env, client, receiptMatch[1], receiptMatch[2]);
           return addCors(response, request);
         });
       }
@@ -599,9 +602,8 @@ export default {
   //   Deletes on 2xx; non-2xx entries remain until 7-day TTL expires.
   //
   // Task 2 (SW8): hostname health checks.
-  //   Iterates all wh_config_* KV entries. For each active record that carries a
-  //   `hostname` field (written at SW7 onboarding), makes a HEAD request to
-  //   https://{hostname}/ with a 10s timeout. Logs one `hostname_health` AE
+  //   HEADs every WL_CONFIGS hostname (wl_config.js; code, not KV)
+  //   with a 10s timeout. Logs one `hostname_health` AE
   //   event per hostname. Persists a summary to STATUS_KV as
   //   `hostname_health:latest` (24h TTL) for the dashboard pull endpoint.
   //
@@ -654,112 +656,55 @@ async function handleStatus(request, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SW8: Hostname health check cron task
 //
-// Called from scheduled() at 03:00 UTC daily.
-// Iterates all wh_config_* KV keys via list(). For each active record that has
-// a `hostname` field (set at SW7 onboarding under wh_config_{apiKeyHash}),
-// fires a HEAD request to https://{hostname}/ with a 10-second abort timeout.
+// Called from scheduled() at 03:00 UTC daily. HEADs https://{hostname}/ for
+// every white-label hostname in WL_CONFIGS (wl_config.js — code, not KV), with
+// a 10-second timeout. API-Repair-1: it used to read a `hostname` field from
+// wh_config_ KV records that nothing ever wrote; KV must not choose where the
+// Worker sends requests (B12-SR X1).
 //
-// AE event per hostname:
-//   blob1 = 'hostname_health'
-//   blob2 = hostname (e.g. 'share.acmecorp.com')
-//   blob3 = status string: 'ok' | 'error' | 'timeout'
-//   blob4 = HTTP status code as string, or '' on network error
-//   double1 = latency_ms (0 on timeout/error)
-//   double2 = http_status (0 on network error)
-//
-// AE writes are fire-and-forget (never awaited). Summary is persisted to
-// STATUS_KV as `hostname_health:latest` (24h TTL) for the dashboard.
-//
-// Limits: max 100 wh_config_ keys per run to avoid CPU overruns. Checks run
-// sequentially — parallel fanout would burst edge network from a single cron.
+// AE event per hostname: blob1 'hostname_health', blob2 hostname, blob3
+// 'ok' | 'error' | 'timeout', blob4 HTTP status; double1 latency_ms,
+// double2 http_status. Summary → STATUS_KV `hostname_health:latest` (24h TTL).
 // ─────────────────────────────────────────────────────────────────────────────
 async function checkHostnameHealth(env) {
-  const HOSTNAME_HEALTH_MAX = 100;
-  const REQUEST_TIMEOUT_MS  = 10_000;
-
-  let cursor;
+  const REQUEST_TIMEOUT_MS = 10_000;
   const results = [];
 
-  // Page through all wh_config_ keys (KV list returns max 1000 per call).
-  outer: do {
-    let listResult;
+  for (const hostname of wlHostnames()) {
+    const t0 = Date.now();
+    let httpStatus = 0;
+    let statusStr  = 'error';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      listResult = await env.STATUS_KV.list({ prefix: 'wh_config_', cursor });
-    } catch (e) {
-      console.error('hostname_health: KV list failed:', e);
-      break;
+      const res = await fetch(`https://${hostname}/`, {
+        method:  'HEAD',
+        headers: { 'User-Agent': 'refueler-share-healthcheck/1.0' },
+        signal:  controller.signal,
+      });
+      httpStatus = res.status;
+      statusStr  = res.ok ? 'ok' : 'error';
+    } catch (fetchErr) {
+      statusStr = fetchErr?.name === 'AbortError' ? 'timeout' : 'error';
+    } finally {
+      clearTimeout(timer);
     }
+    const latencyMs = Date.now() - t0;
 
-    for (const key of listResult.keys) {
-      if (results.length >= HOSTNAME_HEALTH_MAX) break outer;
-
-      let record;
+    if (env.AE) {
       try {
-        record = await env.STATUS_KV.get(key.name, { type: 'json' });
-      } catch (e) {
-        console.error(`hostname_health: KV get failed for ${key.name}:`, e);
-        continue;
+        env.AE.writeDataPoint({
+          blobs:   ['hostname_health', hostname, statusStr, httpStatus ? String(httpStatus) : ''],
+          doubles: [latencyMs, httpStatus, 0, 0, 0],
+          indexes: ['hostname_health'],
+        });
+      } catch (aeErr) {
+        console.error('hostname_health: AE write failed:', aeErr);
       }
-
-      // Only check active records that have a hostname field (set at SW7).
-      if (!record || record.active !== true || !record.hostname) continue;
-
-      const { hostname } = record;
-      const url = `https://${hostname}/`;
-      const t0  = Date.now();
-      let httpStatus = 0;
-      let statusStr  = 'error';
-      let latencyMs  = 0;
-
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-        let res;
-        try {
-          res = await fetch(url, {
-            method:  'HEAD',
-            headers: { 'User-Agent': 'refueler-share-healthcheck/1.0' },
-            signal:  controller.signal,
-          });
-          latencyMs  = Date.now() - t0;
-          httpStatus = res.status;
-          statusStr  = res.ok ? 'ok' : 'error';
-        } catch (fetchErr) {
-          latencyMs = Date.now() - t0;
-          if (fetchErr.name === 'AbortError') {
-            statusStr = 'timeout';
-          } else {
-            statusStr = 'error';
-          }
-        } finally {
-          clearTimeout(timer);
-        }
-      } catch (outerErr) {
-        latencyMs = Date.now() - t0;
-        statusStr = 'error';
-        console.error(`hostname_health: unexpected error for ${hostname}:`, outerErr);
-      }
-
-      // AE log — fire-and-forget, never await.
-      if (env.AE) {
-        try {
-          env.AE.writeDataPoint({
-            blobs:   ['hostname_health', hostname, statusStr, httpStatus ? String(httpStatus) : ''],
-            doubles: [latencyMs, httpStatus, 0, 0, 0],
-            indexes: ['hostname_health'],
-          });
-        } catch (aeErr) {
-          console.error('hostname_health: AE write failed:', aeErr);
-        }
-      }
-
-      results.push({ hostname, status: statusStr, http_status: httpStatus, latency_ms: latencyMs });
-      console.log(`hostname_health: ${hostname} → ${statusStr} (${httpStatus}) ${latencyMs}ms`);
     }
-
-    cursor = listResult.list_complete ? undefined : listResult.cursor;
-  } while (cursor);
+    results.push({ hostname, status: statusStr, http_status: httpStatus, latency_ms: latencyMs });
+    console.log(`hostname_health: ${hostname} → ${statusStr} (${httpStatus}) ${latencyMs}ms`);
+  }
 
   // Persist summary for dashboard pull.
   const summary = {
@@ -1332,7 +1277,6 @@ async function handleInitiate(request, env, ctx, uuid) {
   const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
   const commitment  = request.headers.get('X-Credential-Commitment') ?? '';
   const issuedTier  = (request.headers.get('X-Issued-Tier') ?? 'free').trim().toLowerCase();
-  const apiLiveKey  = request.headers.get('X-Api-Live-Key') ?? null;
   const rawTransferRef = request.headers.get('X-Transfer-Ref') ?? null;
   const apiTransferRef = rawTransferRef
     ? String(rawTransferRef).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 128)
@@ -1378,6 +1322,33 @@ async function handleInitiate(request, env, ctx, uuid) {
   }
   const isTestCredential = testCred !== null;
 
+  // ── API-Repair-1 (P3): a Chartered-tier credential needs an HMAC-signed initiate ─
+  // The client — and so the pool debited and the sealed owner in the manifest —
+  // comes from requireApiAuth only; no header names it. Production keys only.
+  // Refused before anything is consumed. X-Api-Live-Key is no longer read.
+  // Exception: an admin soak credential (MAC'd X-Test-Credential, checked above;
+  // issued at the Chartered tier) has no client — no auth, no debit, no cref_ct.
+  let apiOrg  = null;
+  let crefCt  = null;
+  const isChartered = isCharteredTier(issuedTier);
+  if (isChartered && !isTestCredential) {
+    let client;
+    try {
+      ({ client } = await requireApiAuth(request, await request.arrayBuffer(), env));
+    } catch (authErr) {
+      if (!(authErr instanceof Response)) throw authErr;
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: authErr.status, errorMsg: 'chartered_auth_failed' });
+      return authErr;
+    }
+    apiOrg = client.org_account_id;
+    crefCt = await sealCref(env, uuid, apiOrg, apiTransferRef);
+    if (!crefCt) {
+      console.error('upload_initiate: SHARE_SEAL_KEY unavailable — refusing Chartered initiate');
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 503, errorMsg: 'seal_key_missing' });
+      return err(503, 'Upload temporarily unavailable');
+    }
+  }
+
   // ── Resolved tier — never issued_tier for the cap ─────────────────────────
   // Cred-Fix-1: no request header selects a tier. Every consumer upload is
   // 'free' until B12-4a resolves paid tiers from an authenticated session.
@@ -1389,7 +1360,7 @@ async function handleInitiate(request, env, ctx, uuid) {
 
   // ── UUID-bound commitment verification (S42c) ──────────────────────────────
   let expectedCommitment;
-  if (isCharteredTier(issuedTier)) {
+  if (isChartered) {
     const API_EXPIRY_WINDOW = 90 * 24 * 3600;
     expectedCommitment = await computeCommitment(env.COMMITMENT_KEY, uuid, TIERS.CHARTERED, API_EXPIRY_WINDOW);
   } else {
@@ -1447,22 +1418,15 @@ async function handleInitiate(request, env, ctx, uuid) {
   // ── API-tier credit-pool pre-check — refuse (402) BEFORE the Cashu spend. ──
   // KV-Fix-2: the pool is Supabase. This read + applyQuotaSpend is advisory (saves
   // burning a credential on an obviously empty pool); the binding debit is the
-  // atomic api_credits_spend AFTER the spend INSERT commits, below. Sandbox keys
-  // never touch a production pool; test credentials have no live key.
-  // The pool is still chosen by the plain X-Api-Live-Key header (P3) — HMAC'd
-  // Chartered initiate lands in API-Repair-1.
-  let apiOrg = null;
+  // atomic api_credits_spend AFTER the spend INSERT commits, below. The pool is
+  // the authenticated org's (API-Repair-1). Test credentials never debit.
   let apiCost = 0;
-  const isApiTier = !isTestCredential && isCharteredTier(issuedTier) && !!apiLiveKey && !isSandboxRequest(apiLiveKey);
+  const isApiTier = !isTestCredential && isChartered;
   if (isApiTier) {
     apiCost = computeTransferCost(totalBytes);
     let pool;
     try {
-      const keyRow = apiLiveKey.startsWith('rfs_live_')
-        ? await lookupApiKey(env, await sha256Hex(apiLiveKey))
-        : null;
-      apiOrg = keyRow && !keyRow.sandbox ? keyRow.org_account_id : null;
-      pool   = apiOrg ? await getPool(env, apiOrg) : null;
+      pool = await getPool(env, apiOrg);
     } catch (e) {
       if (!(e instanceof StoreUnavailable)) throw e;
       console.error('upload_initiate: quota store unavailable:', e.message);
@@ -1589,11 +1553,9 @@ async function handleInitiate(request, env, ctx, uuid) {
   if (availableFromTs !== null)  manifest.available_from_timestamp  = availableFromTs;
   if (availableUntilTs !== null) manifest.available_until_timestamp = availableUntilTs;
 
-  if (isCharteredTier(issuedTier) && apiLiveKey) {
-    manifest.api_live_key    = apiLiveKey;
-    manifest.api_accepted_at = nowSeconds;
-    if (apiTransferRef) manifest.api_transfer_ref = apiTransferRef;
-  }
+  // API-Repair-1 (F2): the client is sealed, never stored raw. cref_ct holds
+  // org_account_id + transfer_ref; buildTombstone drops it on every deletion path.
+  if (crefCt) manifest.cref_ct = crefCt;
 
   await putManifest(env.BUCKET, uuid, manifest);
 

@@ -85,8 +85,10 @@ this step, delete it.
 
 ## Step 4 — Register webhook endpoint (API tier only)
 
-**Not live until API-Repair-1:** registration works, but events are not delivered yet
-(capabilities reports `webhook: false`). Do not promise webhooks to a client before then.
+**Live since API-Repair-1 (9 Oct 2026):** `cargo.accepted` (finalise), `cargo.discharged`
+(last part downloaded), `transfer.confirmed` (destroy-after-download done). Each POST carries
+`X-Refueler-Signature: t=…,v0=hex(HMAC(rfs_whsec_, "v0:" + t + ":" + body))`; the client
+must check it. Receipts exist only while a webhook is registered.
 
 Client must provide an HTTPS webhook URL (no localhost, no private IP ranges). The
 request is HMAC-signed like every API call: `Authorization: HMAC-SHA256 key={live_key},
@@ -119,8 +121,8 @@ Provide client with `refueler-smoke.txt` (repo root). Client uploads via their
 integration. AM verifies:
 
 Check with a signed `GET /api/v1/auth/ping` (Step 4 signing): expect `200`, `rail: "identity"`
-and `remaining_credits` one lower per credential issued. Receipts (`/api/v1/receipt/…`)
-are not live until API-Repair-1.
+and `remaining_credits` one lower per credential issued. With a webhook registered, the
+smoke-test transfer's acceptance receipt is at a signed `GET /api/v1/receipt/{uuid}/acceptance`.
 
 Client then deletes the smoke test file via owner-delete endpoint.
 **[ANON]** Confirm token burned correctly. Confirm 402 fires on exhaustion with a

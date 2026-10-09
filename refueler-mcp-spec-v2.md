@@ -247,7 +247,7 @@ fragment is never transmitted to the Worker (§7.2 fragment grammar).
    **`X-File-Name: "encrypted-payload"` (constant placeholder — real name is in the
    fragment, see D-1/§7.2)**, `X-Blake3-Root`; per-chunk `X-Blake3-Chunk-Hash`;
    optional `X-P2SH-Secret-Hash` (from `passphrase`, see §4.B), `X-Destroy-After-Download`,
-   `X-Available-From`, `X-Available-Until`; API-tier `X-Api-Live-Key` + `X-Transfer-Ref`.
+   `X-Available-From`, `X-Available-Until`; API-tier `X-Transfer-Ref`. API-tier initiate is HMAC-signed (`Authorization` + `X-Api-Sign-Key`); the Worker takes the client from the signature only (Worker API-Repair-1, 9 Oct 2026).
 6. Manifest auto-written by the Worker after the final chunk. No separate manifest PUT.
 7. Assemble `share_url` locally: base URL + `#` + fragment (§7.2: AES key + real
    filename + `seal_nonce` if permanent record). Return.
@@ -476,9 +476,10 @@ direct comparison (different pages, different buyers).
 
 The fully-supported v1 path. Agent holds HMAC creds + a funded pool. Send via
 `refueler_send_file`; issuance decrements the allocation (then meters into overage for
-identity-API). Chunk upload carries `X-Api-Live-Key` + `X-Transfer-Ref`. The client's
-registered webhook fires `cargo.accepted` at manifest-write and `cargo.discharged` at
-collection, each signed `X-Refueler-Signature: t=…,v1=…`. Webhooks are **notification,
+identity-API). Initiate is HMAC-signed and carries `X-Transfer-Ref` (sealed in the
+manifest with the client id). The client's registered webhook fires `cargo.accepted` at
+finalise and `cargo.discharged` at collection, each in a `X-Refueler-Signature: t=…,v0=…`
+envelope under the client's `rfs_whsec_`, with a receipt signed by the same key. Webhooks are **notification,
 never control flow** — the transfer completes whether or not the endpoint is up; the
 DLQ retries daily. `refueler_check_transfer` is the pull fallback. **Fully buildable
 on v1.**
@@ -704,7 +705,7 @@ server's twin is `src/crypto.js`, gated on the same vectors in
 - **`z` is required in v2:** the exact plaintext size. The receiver checks
   `ceil(z / CHUNK_SIZE) == total_chunks` before it asks for anything. The Worker
   stores no size: `/meta` `total_bytes` is null for new transfers and receipts carry
-  `size_bytes: null` (key kept in `refueler.receipt.v1`). Never claim the size is
+  `size_bytes: null` (key kept in the receipt schema, v2 since API-Repair-1). Never claim the size is
   hidden — `total_chunks` gives it to within 32 MiB, and R2 object sizes give it
   exactly to anyone with storage access. Opt-in size in receipts for Chartered:
   Master Context 11d‴.

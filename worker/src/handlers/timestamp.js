@@ -12,7 +12,7 @@ import {
   isTimestampEligible,
 } from '../manifest_tg.js';
 import { putManifest }                         from '../manifest.js';
-import { findApiKeyHashForUuid, deliverWebhookInline } from '../webhook_delivery.js';
+import { notifyTransfer, EVENTS } from '../webhook_delivery.js';
 import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,21 +64,8 @@ export async function handleTimestampSubmit(request, env, ctx) {
   const patch = buildTimestampPendingPatch(nowSeconds);
   await putManifest(env.BUCKET, uuid, { ...manifest, ...patch });
 
-  ctx.waitUntil(
-    (async () => {
-      try {
-        const apiKeyHash = await findApiKeyHashForUuid(env, uuid);
-        if (apiKeyHash) {
-          await deliverWebhookInline(env, apiKeyHash, {
-            type: 'transfer.timestamp_submitted',
-            uuid,
-          });
-        }
-      } catch (e) {
-        console.error('timestamp_submit: webhook delivery error:', e);
-      }
-    })()
-  );
+  // transfer.timestamp_submitted — routed from the manifest's cref_ct (API-Repair-1).
+  ctx.waitUntil(notifyTransfer(env, uuid, manifest, EVENTS.TIMESTAMP));
 
   return json({ ok: true, timestamp_state: 'pending' });
 }

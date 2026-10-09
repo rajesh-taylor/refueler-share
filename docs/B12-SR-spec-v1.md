@@ -152,7 +152,7 @@ No header · malformed · wrong MAC · expired · valid token for another UUID �
 **Why raw isn't acceptable even on an identity rail.** The test is person ↔ transfer *they did not choose to reveal*. A Citizen chose to be known to Refueler — not to their recipients. Every recipient holds one UUID (it's in the link). With an R2 dump, raw `quota_ref` turns one UUID into the sender's full lodgement history: count, dates, chunk sizes. That's a link the sender never chose, handed to someone who isn't Refueler.
 
 **Decision** 🔒
-- Manifests carry `qref_ct`, not `quota_ref`: `{ v:1, k:<kid>, n:<b64url 12B>, c:<b64url ct‖tag> }`, AES-256-GCM under `K = HKDF-SHA256(ikm = SHARE_SEAL_KEY_<kid>, salt = "refueler.share.seal.v1", info = "manifest.qref")`, AAD = `"refueler.share.manifest.qref.v1" ‖ 0x00 ‖ uuid16 ‖ kid`. Fresh random nonce per write.
+- Manifests carry `qref_ct`, not `quota_ref`: `{ v:1, k:<kid>, n:<b64url 12B>, c:<b64url ct‖tag> }`, AES-256-GCM under `K = HKDF-SHA256(ikm = SHARE_SEAL_KEY_<kid>, salt = "refueler.share.seal.v1", info = utf8("refueler.share.qref.v1") ‖ 0x00)` *(amended API-Repair-1, 9 Oct 2026: was `"manifest.qref"`; now the global encryption-rule form. Build with `worker/src/seal.js`, which already seals `cref_ct` with tag `refueler.share.cref.v1`.)*, AAD = `"refueler.share.manifest.qref.v1" ‖ 0x00 ‖ uuid16 ‖ kid`. Fresh random nonce per write.
 - Credit-back and reconcile decrypt it (one decrypt per deletion; reconcile reads every manifest anyway).
 - **Tombstones strip `qref_ct`** on every deletion path, identically (keeps §6.3's "same shape" and minimises what outlives the transfer).
 - Exposure now: R2 alone → nothing about accounts. R2 + Worker secrets → full link (accepted: that's Refueler, and the rail says so).
