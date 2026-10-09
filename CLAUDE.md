@@ -109,7 +109,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 **API feature gates (locked SW-Opus-1 · 7 Sep 2026):**
 - **v1 (ships in SW block):** capability discovery (`GET /api/v1/capabilities`), OTS-confirmation webhook, acceptance receipts + collection receipts. "Proof of delivery" retired — unprovable, never claim it.
 - **v2 (each with explicit gate):** Silent Drop provisioning via API (gate: SD-block shipped); agent-to-agent transfers (gate: SD provisioning live); verifiable agent identity NUT-11 Mode 2 (gate: B8, `bind_pubkey` reserved in voucher now); batch credential issuance (gate: Pass API Q4); composable receipts (v1 if free off credit-token work, else v2).
-- **Forward commitments (document, do not build):** policy-encoded transfers via Nutroot three-product flow (gates: Nutroot PR #421 + B8 + Pass + B12). BOLT12/MCP inline payment: B9+, phoenixd-native.
+- **Forward commitments (document, do not build):** policy-encoded transfers via Nutroot three-product flow (gates: Nutroot PR #421 ✓ merged 10 Sep 2026 — read the merged text at B8 planning — + B8 + Pass + B12). BOLT12/MCP inline payment: B9+, phoenixd-native.
 - **MCP v1 tools:** `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote`. Full contracts in `refueler-mcp-spec-v2.md`. Each ships the day its backing product is live.
 - **MCP architectural constraint (invariant):** MCP server runs in the agent's trust domain, handles ciphertext only. Never a Refueler-hosted plaintext endpoint.
 - **Sandbox:** credential-limited, no time cap. Model-B test-credits, both rails walkable with `rfs_test_` prefix. Non-anonymous by design — "do not send real cargo to the sandbox" stated plainly.
