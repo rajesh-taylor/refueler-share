@@ -14,7 +14,8 @@
 // #uuid=X&key=Y&iv=Z links — handled transparently.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { WORKER_URL, FREE_EXPIRY, setCalmText }         from './crypto.js';
+import { WORKER_URL, FREE_EXPIRY }                     from './config.js';
+import { setCalmText }                                 from './progress.js';
 import { parseFragment }                                from './fragment.js';
 import { enterDownloadMode }                            from './download.js';
 

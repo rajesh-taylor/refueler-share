@@ -18,7 +18,14 @@ wordmarkSection: "Share"
 <link rel="modulepreload" href="/crypto.js">
 <link rel="modulepreload" href="/fragment.js">
 <link rel="modulepreload" href="/download.js">
-<!-- async, not defer: the modules no longer wait for it (upload.js waits for window.turnstile itself) -->
+<link rel="modulepreload" href="/config.js">
+<link rel="modulepreload" href="/progress.js">
+<link rel="modulepreload" href="/download-fetch.js">
+<link rel="modulepreload" href="/download-save.js">
+<link rel="modulepreload" href="/download-sheets.js">
+<link rel="modulepreload" href="/download-time.js">
+<link rel="modulepreload" href="/download-notes.js">
+<!-- async, not defer: the modules no longer wait for it (upload-turnstile.js waits for window.turnstile itself) -->
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async></script>
 {% endset %}
 {% include "head.njk" %}
@@ -203,7 +210,7 @@ function showMaintenanceModal(status) {
           <div class="rx-row up-not-zipping">
             <dt>Size</dt>
             <dd><span id="file-size-tag" class="up-dim">—</span>
-              <!-- R-12: "4 GB" is FREE_CAP in frontend/crypto.js -->
+              <!-- R-12: "4 GB" is FREE_CAP in frontend/config.js -->
               <small class="hidden" id="cap-warning">Free transfers go up to 4 GB. Paid plans for larger files aren’t open yet. <a class="up-link" href="/share/plans/">See plans</a></small></dd>
           </div>
           <div class="rx-row up-not-over">
@@ -228,7 +235,7 @@ function showMaintenanceModal(status) {
             </dd>
           </div>
         </dl>
-        <!-- R-12: "Free up to 4 GB" is FREE_CAP in frontend/crypto.js -->
+        <!-- R-12: "Free up to 4 GB" is FREE_CAP in frontend/config.js -->
         <p class="up-facts"><span>No account or email needed ·</span> <span>Encrypted in your browser · Free up to 4 GB</span></p>
       </div>
 
@@ -351,7 +358,7 @@ function showMaintenanceModal(status) {
         <div class="rx-row"><dt>Size</dt><dd id="rx-done-size">—</dd></div>
       </dl>
       <p class="rx-once" id="rx-done-deleted" hidden>Transfer permanently deleted from Refueler's servers.</p>
-      <!-- R-12: "free up to 4 GB" is FREE_CAP in frontend/crypto.js. If the free
+      <!-- R-12: "free up to 4 GB" is FREE_CAP in frontend/config.js. If the free
            limit ever drops below 4 GB, change both send lines (here and on the
            dead-link notice, below) and the upload page's "Free up to 4 GB" (drop zone). -->
       <p class="rx-send-wrap" id="dl-signoff"><a class="rx-send" href="/share/"><span>Send your own file, free up to 4 GB →</span></a></p>
