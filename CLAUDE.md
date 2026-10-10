@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.13 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Article-Rewrite-1 · 10 Oct 2026
+> **Version:** 2.14 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Served-Code-Opus · 10 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -71,6 +71,8 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
 - **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
 - **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
+- **Own origin + served-code integrity (Served-Code-Opus · 10 Oct 2026).** Share moves to `share.refueler.io` with its own Pages project and no mirror into refueler.io (X5 = Block A, Master Context row 16a). **Until X5-2 ships, the deploy surfaces and frontend checklist below stand unchanged.** Every key-handling product gets its own origin; no master app. WEBCAT/app = Block B (V2). Never claim "verified"; the Verify page explains how to check, it never "proves".
+- **No OHTTP — Nostr relays for private requests and notifications (Served-Code-Opus · 10 Oct 2026).** Third-party relays only, never our own; one key per job (per transfer / per Quay, never a personal npub); sender notification key random, never derived from the link key; notification never control flow. Copy says "collected" — never "delivered", "opened" or "proof of delivery". Rules + features: Master Context row 19.
 
 **Tier model (locked SW-Opus-1 · 7 Sep 2026):**
 - **Three tiers: Citizen / Sovereign / API.** Business and Enterprise demolished entirely.
@@ -189,6 +191,8 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
+
+**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 → B12-4a → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → Hetzner/NB → B7 → SD-block + Block B → B9.
 
 **TH-block ✓ complete (6 Sep 2026):**
 - TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped

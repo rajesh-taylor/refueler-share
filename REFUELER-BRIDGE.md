@@ -1,6 +1,6 @@
 # REFUELER-BRIDGE.md — Refueler cross-project context
-> **Version:** 10.0 | **Created:** 28 July 2026 | **Updated:** X3 naming · 2026-10-09
-> Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), and `numo-fork/` (root).
+> **Version:** 10.1 | **Created:** 28 July 2026 | **Updated:** Served-Code-Opus · 2026-10-10
+> Lives in `refueler-share/` (root), `refueler-io/docs/`, `refueler-legend/` (root), `refueler-pass/` (root), `refueler-mint/` (root) and `numo-fork/` (root). All six copies identical; Share's copy is edited first.
 > This file is the handshake between Projects — not a substitute for repo-specific context files.
 > Higher MasterContext version number always wins on divergence.
 
@@ -156,6 +156,7 @@ manual sed patches to `refueler.io/src/share/index.njk` — the script owns that
 | **Share-B12 · 24 Sep 2026** | refueler-share · refueler-io | **Storage, quota, surfaces & billing designed.** Quota = occupancy (32 MiB chunks) vs credits = throughput. Chartered section set inside one Chambers build (named Harbourmaster then; Custom House since X3 · 9 Oct 2026). Stripe Customer Portal is the only invoice surface. `docs/B12-spec-v1.1.md`. |
 | **Share-B12-SR · 24 Sep 2026** | all repos (X1, X3, S7 are cross-product) | **Security review of B12.** KV is write-compromised too — nothing in KV may authorise without a Worker-secret MAC (X1, ecosystem-wide). "Harbourmaster" triple-booked — auth follows the rail (X3). Deed + QR ledger portability locked (S7) — same protocol as refueler.io merchants, separate domain tags. `B12-SR-spec-v1.md` (refueler-share root). **BRIDGE v9.8** (v9.7 was recorded at B10-2 in Master Context only). |
 | **Refueler-Home-1/2 · 27 Sep 2026** | refueler-io | **Pre-Berlin homepage live (`33b4429`, cache fix `330b3d8`).** Headline "Privacy infrastructure." (Source Serif 4 Light, replaces Cormorant Garamond) with "London" overline. Single Share MCP code box, Carbon in both themes, labelled In build. Four products with status: Share (Web live · MCP in build), Legend (in build), Pass (coming), Merchants (coming). Quips and "Your transaction is nobody else's business" retired. Homepage copy rule: only claim what's live; no competitor names; no "no logs" claim for Legend. Rotating four-product box deferred to post-Berlin redesign, only once two or more products have real code. `home.css` link is versioned (`?v=home-2`) because browsers cache CSS for 4 hours; automatic build-time CSS versioning queued for after Berlin. Order: Share front page next, then homepage redesign. BRIDGE v9.9. |
+| **Served-Code-Opus · 10 Oct 2026** | all repos | **Served-code integrity, origins and Nostr transport.** Share → own origin `share.refueler.io` (X5, Block A). One origin per key-handling product; no master app. Release discipline module (reproducible build, manifest, GitHub release, Verify page, watchdog). OHTTP dropped → Nostr relays. See §Served-code integrity, origins and Nostr transport. BRIDGE v10.1. |
 
 ---
 
@@ -445,7 +446,7 @@ Defaults teach the mental model (permanent intake + disposable per-case Quays) w
 KV authorised pubkey set is the one compulsion surface: Refueler holds it, could be compelled to modify it, cannot impersonate a Harbourmaster. State explicitly in Share Raven and in whitepaper §threat model. Not in product copy.
 
 ### Notification at SD launch
-Polling (professional users) + Business webhook (`cargo.accepted` / `cargo.discharged`, `rfs_whsec_` signed, receipt schema per SW5-Opus). SimpleX stub card in Harbourmaster dashboard, greyed, "available at B9." SimpleX arrives at B9 (Instance C).
+Polling (professional users) + Business webhook (`cargo.accepted` / `cargo.discharged`, `rfs_whsec_` signed, receipt schema per SW5-Opus). SimpleX stub card in Harbourmaster dashboard, greyed, "available at B9." SimpleX arrives at B9 (Instance C). **Served-Code-Opus (10 Oct 2026):** Nostr push to a per-Quay key could replace both polling and SimpleX — decide at SD-Opus (§Served-code integrity, origins and Nostr transport).
 
 ### Payment-layer threat model (confirmed S88)
 
@@ -908,6 +909,26 @@ Four surfaces, four names, each a real Pool-of-London institution:
 - **Encoding convention (all new HMAC/HKDF inputs, all products):** `utf8(tag) ‖ 0x00 ‖ fixed-length binary fields`, variable-length field last, big-endian integers. BLAKE3 unkeyed for high-entropy secrets; BLAKE3 keyed for low-entropy identifiers (emails, IPs).
 
 **BRIDGE v9.8.**
+
+---
+
+## Served-code integrity, origins and Nostr transport — locked Served-Code-Opus · 10 Oct 2026 (cross-product)
+
+**Source:** refueler-share `docs/research/served-code-and-ohttp-2026-10.md`; decisions in Share-Master-Context rows 16a + 19. Applies to every repo whose browser or app code touches keys, ecash or payment destinations.
+
+1. **What counts as key-handling.** Not only custody. Any browser code that holds keys or ecash, **or decides where money goes**, gets Share's level of care. Merchant terminal (`refueler-io/src/merchant/`): the Lightning-address change flow — altered JS could show one address and submit another, redirecting a merchant's takings although Refueler never holds a sat; the 21-sat confirmation stays as the out-of-band check. Same for on-chain address display, Pass ecash, any Refill web surface.
+2. **One origin per key-handling product; no master app.** Share → `share.refueler.io` (Share X5 / Block A, own Pages project, no mirror). Terminal, Pass (web) and any key-holding Legend surface follow the same pattern when they ship. A hub, if wanted, is a thin launcher only (e.g. `app.refueler.io`). Leave headroom under WEBCAT's 5-subdomains-per-site cap.
+3. **Cloudflare hygiene on every key-handling host:** `Cache-Control: no-transform`; Rocket Loader, Email Obfuscation and Web Analytics auto-inject off (auto-inject covers every subdomain in the zone by default); no challenge rules; one CSP string; no inline JS; `! Link` in Pages `_headers` if WEBCAT is ever used.
+4. **Fragment safety:** never pass a URL carrying a key in its fragment through a cross-origin server redirect.
+5. **Third-party widgets** (CAPTCHA, payment) only on key-free pages or in sandboxed cross-origin iframes talking by `postMessage` with origin checks.
+6. **Release discipline module:** reproducible build → WEBCAT-format SHA-256 manifest → hashes on the GitHub release → generated Verify page → public watchdog Action. Share builds it first (Share-Release-1); other products copy it. Sigsum signing on hardware keys later (Share-Release-2), **separate signer keys per product**. Never claim "verified" before WEBCAT beta or WAICT in a stable browser.
+7. **Android release hygiene** (Relay and Refill are native already): publish each app's certificate SHA-256; offline keystore + backup, one key per app; work towards reproducible builds, then Obtainium + AppVerifier, Zapstore (`zapstore.yaml`, NIP-C1) and F-Droid. Share's V2 app (Block B) reuses this; Relay already proves the Android build path on the Pixel 9a.
+8. **Private transport = Nostr relays, not OHTTP** (OHTTP dropped entirely, no fallback). Gift-wrapped NIP-44/NIP-59 events through **third-party relays only, several at once — never a relay we run** (we would see who listens). One key per job, per transfer / per Quay / per order, never a personal npub as the address; NIP-42 off for these events; notification never control flow; small random delays on non-urgent events; relay `wss://` hosts listed in CSP `connect-src`.
+9. **Nostr feature candidates for the suite:** Pass tickets delivered to an npub; Cashu-over-Nostr payments (NUT-18 transport, NIP-60/61 nutzaps) for Refill; a terminal "customer arriving" channel. Noted for those repos; designed there, not here.
+10. **Watch items:** WEBCAT wallet-verification library (EF grant) for Pass / Refill wallets; WAICT browser support.
+11. **NutPub:** no action (hackathon test only).
+
+**BRIDGE v10.1.**
 
 ---
 

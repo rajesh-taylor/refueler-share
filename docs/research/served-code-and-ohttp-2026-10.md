@@ -2,6 +2,8 @@
 
 Compiled 2026-10-10. Revision 2: re-checked against primary sources with full network access. Research only.
 
+> **Decided at Served-Code-Opus (10 Oct 2026)** — see Share-Master-Context rows 16a + 19 and BRIDGE v10.1. In short: own origin `share.refueler.io` now (Block A); WEBCAT, Sigsum and the Android app deferred to V2 (Block B); **OHTTP dropped — Nostr relays instead**; SRI-only dropped. The recommendations below are the research as written, not the decisions.
+
 **Confidence key:**
 - **H**: primary source read in full.
 - **M**: primary source read only in part, or the claim combines primary facts.
