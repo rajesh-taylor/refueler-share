@@ -1,7 +1,7 @@
 # Share-Download-spec-v1.md — large downloads (100–250 GB) for paid tiers
 
 > **Session:** Share-Download-Opus · 27 Sep 2026 · Opus · design only, no Worker or frontend code
-> **Status:** **Decisions D-1…D-9 approved by Rajesh, 27 Sep 2026 (all as recommended; D-2 clarified — see §9).** Spike S-1/S-2/S-3 results may still reopen §2.2.
+> **Status:** **Decisions D-1…D-9 approved by Rajesh, 27 Sep 2026 (all as recommended; D-2 clarified — see §9).** **Spike run 10 Oct 2026 (§12): D-1 stands — SW streaming download byte-exact in Safari macOS (100 GiB), Firefox, iOS Safari (5 GiB); D-8 may relax.** Pixel/Vanadium and iOS screen-lock still to run.
 > Load alongside `CLAUDE.md`, `docs/Share-6-spec-v1.md` (upload + B9-3 download verify), `merkle-spec-v1.md` §3, `docs/B12-SR-spec-v1.md` (X1 KV rule).
 > **Scope:** the recipient side of a 100 GiB (Citizen/Sovereign) or 250 GiB (Chartered) transfer: browser save path, resume, destroy-after-download (DAD) interaction, pre-download guidance, the collector (CLI / MCP `refueler_fetch`), and the soak harness needed to test it for real.
 
@@ -203,7 +203,7 @@ Acceptable because deletion only begins once the file has fully arrived (§5, D-
 | D-5 | Collector = MCP `refueler_fetch` + `refueler-collect` CLI in one package | **Yes.** Link via prompt/stdin, never argv |
 | D-6 | Size at which the collector is offered | **20 GiB** (offered, not forced; on the capability message and help pages, not the card, per §6) |
 | D-7 | Paid cards stay "Coming Soon" until Share-DL-Soak is green | **Yes**, a launch gate alongside B12-4a / B12-6 |
-| D-8 | iOS/iPadOS above 4 GiB | "Open this link on a computer" until S-2 says otherwise |
+| D-8 | iOS/iPadOS above 4 GiB | "Open this link on a computer" until S-2 says otherwise. **S-2 (10 Oct): 5 GiB saved byte-exact on iOS Safari, screen on → relax to "keep Safari open and the screen on" at DL-2, after the screen-lock run (§12).** |
 | D-9 | Fragment carries the chunk count (or plaintext root) so a recipient detects a truncated transfer (§0 last row) | **Raise at the fragment-grammar owner (SW-MCP-4 lineage)**, not decided here |
 
 ---
@@ -237,6 +237,36 @@ Buffer: 1 (`Share-DL-1b`, cross-browser fallout). No Opus needed after this sess
 - DO NOT add Worker/KV state for download resume. Resume is client-held.
 - DO NOT treat a mid-body cut or a short body on the verified path as a retryable network error. It is an integrity failure.
 - DO NOT promise a browser download "resumes". It pauses and waits while the tab is open; only the collector resumes.
+- DO NOT checkpoint FSAA downloads with `createWritable({ keepExistingData: true })`: 3 ms on APFS (clone) but 66 s per 5 GiB on exFAT (full copy, 2× space). Measured DL-Spike.
+- DO NOT tell Firefox users "Always ask where to save" lets them pick a drive for our download: Firefox 157 asked open/save only and wrote to its default folder. They change the default download folder instead.
+
+---
+
+## 12. Spike results — Share-DL-Spike (10 Oct 2026)
+
+**Verdict: D-1 stands.** A same-origin service worker that fetches, checks and decrypts the parts itself and streams them to the browser's download manager (`Content-Length = z`, hidden-iframe navigation, ping before navigate, fetch event held open with `waitUntil`) worked in every browser tried, byte-exact every time. Spike code: `dev/dl-spike/` (scratch, never shipped; `serve.mjs` serves `frontend/crypto.js`/`config.js`/`fragment.js` as-is, so the decrypt is the browser's own `decryptPart`). Mullvad on throughout. Mac: macOS 26.6.2.
+
+| Run | Browser | Size · target | Time · speed | Retries | Check | Memory |
+|---|---|---|---|---|---|---|
+| S-1 | Safari 26.6.2 macOS, SW | **100 GiB** `fcf80898` · USB APFS SSD | 1 h 37 m 55 s · 17.4 MiB/s | 0 | SHA-256 `43690d70…48f3` = uploader ✓; `X-Integrity` ×3,200 | largest WebKit process peaked 2.2 GiB once (first 10 GiB), then 0.5–1.3 GiB to the end — does not grow with size |
+| S-2 | Firefox 157 macOS, SW (module SW accepted) | 5 GiB `dbd4cc74` · internal (Downloads) | 5 m 58 s · 14.3 MiB/s | 0 | SHA-256 `eba6b7bf…2e8f` ✓ | peak process 977 MiB |
+| S-2 stall | Firefox 157, SW, **180 s pause** before part 3 | 5 GiB · internal | 7 m 41 s incl. pause | 0 | ✓ | — |
+| S-2 iOS | Safari 26.6.2 iOS (iPhone 13 mini), SW, screen on, via relay tunnel through the Mac | 5 GiB · Files → Downloads | 28 m 43 s · 3.0 MiB/s (Mac's upload was the limit) | 3 (part 117, network) | AirDropped back, SHA-256 ✓ | — |
+| S-3 | Chrome 154 FSAA | 5 GiB · USB APFS SSD | 5 m 06 s · 16.7 MiB/s; `close()` 16.7 s | 0 | ✓ | — |
+| S-3 | Chrome 154 FSAA | 5 GiB · exFAT disk image on the SSD | 16 m 07 s · 5.3 MiB/s (image overhead, not representative); `close()` 17.2 s | 0 | ✓ | — |
+| S-3b | `keepExistingData` re-open on the finished 5 GiB | APFS / exFAT | open 3 ms / **66 s**; close 16.7 s / 17.2 s | — | file unchanged ✓ | — |
+
+**Findings for DL-1 / DL-2 / Receiver-3:**
+- Safari (macOS and iOS) and Firefox show the real size and time left from `Content-Length`. Firefox's open/save dialog shows "BIN file (5.0 GB)".
+- Safari macOS asks where to save when "Ask for each download" is set. Firefox 157 with "Always ask where to save files" ticked asked open/save only, then wrote to Downloads — the drive is chosen by changing Firefox's default folder (help copy, §2.2).
+- The file is complete when the page says done: Safari had no finishing delay at 100 GiB.
+- Chrome `close()` ≈ 17 s per 5 GiB (≈ 5–6 min at 100 GiB, extrapolated) — the "Finishing — your browser is checking the file" state is needed.
+- Chrome on exFAT creates a **0-byte file under the real name** at once beside the `.crswap`; on APFS nothing appears until the rename. Copy must not let a 0-byte file read as a failed download.
+- A 3-minute stall did not kill the Firefox download — pause-and-wait (§4.1) is viable at that length on Firefox. Not yet tried on Safari.
+- **D-8 can relax:** iOS saved 5 GiB (> 4 GiB) correctly with Safari in front and the screen on. Proposed wording at DL-2: "Keep Safari open and the screen on until it finishes", instead of "open on a computer". Pending the screen-lock run.
+- Retry-message display in the spike page repeats the last retry per part (spike quirk, not a download fault).
+
+**Not yet run:** Pixel 9a Vanadium (GrapheneOS) · iPhone screen-lock mid-download · 100 GiB on Firefox and Chrome · Safari stall · Android Chrome. Next week (Rajesh), same `dev/dl-spike` page + `--relay` tunnel.
 
 ---
 
