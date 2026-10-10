@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DL spike</title>
+<style>
+  body { font: 15px/1.45 -apple-system, system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; background: #E8E2D8; color: #1d1b18; }
+  button { font: inherit; padding: .45rem .9rem; margin: .25rem .4rem .25rem 0; }
+  #status { font: 600 1.05rem/1.4 ui-monospace, monospace; margin: 1rem 0; }
+  pre { background: #f6f2ea; padding: .75rem; font-size: 12.5px; white-space: pre-wrap; max-height: 24rem; overflow: auto; }
+  .note { color: #5a544b; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Share-DL-Spike</h1>
+<p class="note">Scratch page (dev/dl-spike), never shipped. The link is read from a file into this tab's memory only — not stored, not logged. The service worker holds the key for one download and zeroes it after deriving the part key.</p>
+
+<p><label>Link file — <code>~/.refueler-soak/&lt;uuid&gt;.link</code> (⌘⇧. shows hidden folders):<br>
+<input type="file" id="linkFile"></label></p>
+<div id="info" class="note"></div>
+
+<p><label><input type="checkbox" id="stall"> Stall test: pause 180 s before part 3</label></p>
+<p>
+  <button id="swBtn" disabled>Download via service worker</button>
+  <button id="fsaaBtn" disabled>Save via FSAA (Chrome)</button>
+  <button id="keepBtn" disabled>S-3: re-open with keepExistingData</button>
+  <button id="forgetBtn" disabled>Forget link</button>
+</p>
+<div id="status"></div>
+<pre id="out"></pre>
+
+<script type="module">
+import { parseFragment } from '/assets/fragment.js';
+import { WORKER_URL } from '/assets/config.js';
+import { derivePartKey } from '/assets/crypto.js';
+import { partReader, newStats, partCount } from '/assets/parts.js';
+
+const $ = id => document.getElementById(id);
+const GiB = 1024 ** 3, MiB = 1024 ** 2;
+let link = null;         // { uuid, keyBytes, name, z, n } — memory only
+let lastHandle = null;   // FSAA file handle, for the keepExistingData test
+let wake = null;
+
+const show = s => { $('out').textContent = `${new Date().toTimeString().slice(0, 8)}  ${s}\n` + $('out').textContent.slice(0, 30000); };
+const status = s => { $('status').textContent = s; };
+// Explicit fields only — never the link or key.
+const log = (ev, data = {}) => fetch('/log', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ev, uuid8: link ? link.uuid.slice(0, 8) : null, ...data }),
+}).catch(() => {});
+const buttons = on => {
+  $('swBtn').disabled   = !on || !('serviceWorker' in navigator);
+  $('fsaaBtn').disabled = !on || typeof showSaveFilePicker !== 'function';
+  $('forgetBtn').disabled = !on;
+};
+const rate = (bytes, ms) => `${(bytes / MiB / (ms / 1000)).toFixed(1)} MiB/s`;
+const hms = ms => new Date(ms).toISOString().slice(11, 19);
+const integ = st => Object.entries(st.integrity).map(([k, v]) => `${k}×${v}`).join(' ');
+const lockScreen = async () => { try { wake = await navigator.wakeLock?.request('screen'); } catch { wake = null; } };
+const unlockScreen = () => { try { wake?.release(); } catch {} wake = null; };
+
+show(`page ready · ${navigator.userAgent}`);
+show(`serviceWorker: ${'serviceWorker' in navigator} · showSaveFilePicker: ${typeof showSaveFilePicker === 'function'} · wakeLock: ${'wakeLock' in navigator}`);
+
+// ── Link: file → memory ─────────────────────────────────────────────────────
+$('linkFile').onchange = async () => {
+  const f = $('linkFile').files[0];
+  if (!f) return;
+  const text = (await f.text()).trim();
+  $('linkFile').value = '';
+  let u, frag;
+  try { u = new URL(text); frag = parseFragment(u.hash.slice(1)); }
+  catch (e) { show(`✗ not a share link: ${e.message}`); return; }
+  if (frag.v !== 2) { show('✗ link format v2 only'); return; }
+  const uuid = u.searchParams.get('uuid') || '';
+  if (!/^[0-9a-f-]{36}$/i.test(uuid)) { show('✗ no uuid in the link'); return; }
+  let meta;
+  try {
+    const r = await fetch(`${WORKER_URL}/meta/${uuid}`, { cache: 'no-store' });
+    if (!r.ok) { show(`✗ /meta → HTTP ${r.status}`); return; }
+    meta = await r.json();
+  } catch (e) { show(`✗ /meta: ${e.message}`); return; }
+  const n = partCount(frag.sizeBytes);
+  if (n !== meta.total_chunks) { show(`✗ ceil(z / CHUNK_SIZE) = ${n} ≠ total_chunks ${meta.total_chunks} — refused before any part request`); return; }
+  if (meta.passphrase_protected) { show('✗ password-protected transfers are out of scope for the spike'); return; }
+  if (meta.pending_destruction) { show('✗ delete-after-download is armed — not for the spike'); return; }
+  link = { uuid, keyBytes: frag.keyBytes, name: frag.filename, z: frag.sizeBytes, n };
+  $('info').textContent = `${uuid.slice(0, 8)}… · ${frag.filename} · ${frag.sizeBytes.toLocaleString()} B (${(frag.sizeBytes / GiB).toFixed(2)} GiB) · ${n} parts · expires ${new Date(meta.expiry_timestamp * 1000).toUTCString()}`;
+  show(`link loaded (memory only): ${n} parts, z checks out against /meta`);
+  log('link-loaded', { z: link.z, n, ua: navigator.userAgent });
+  buttons(true);
+};
+
+$('forgetBtn').onclick = () => {
+  if (link) link.keyBytes.fill(0);
+  link = null; lastHandle = null;
+  $('info').textContent = ''; buttons(false); $('keepBtn').disabled = true;
+  show('link forgotten');
+};
+
+// ── Service worker ──────────────────────────────────────────────────────────
+async function swWorker() {
+  let reg;
+  try {
+    reg = await navigator.serviceWorker.register('/assets/sw.js', { type: 'module', scope: '/assets/dl/' });
+  } catch (e) {
+    show(`module service worker refused (${e.message}) — trying the classic build`);
+    reg = await navigator.serviceWorker.register('/assets/sw-classic.js', { scope: '/assets/dl/' });
+  }
+  const w = reg.installing || reg.waiting || reg.active;
+  if (w.state === 'activated') return w;
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error('service worker did not activate in 15 s')), 15000);
+    w.addEventListener('statechange', () => {
+      if (w.state === 'activated') { clearTimeout(t); res(w); }
+      if (w.state === 'redundant') { clearTimeout(t); rej(new Error('service worker became redundant')); }
+    });
+  });
+}
+
+function ask(worker, msg, ms = 3000) {
+  return new Promise((res, rej) => {
+    const ch = new MessageChannel();
+    const t = setTimeout(() => rej(new Error(`no answer to ${msg.type} in ${ms / 1000} s`)), ms);
+    ch.port1.onmessage = e => { clearTimeout(t); ch.port1.close(); res(e.data); };
+    worker.postMessage(msg, [ch.port2]);
+  });
+}
+
+$('swBtn').onclick = async () => {
+  buttons(false);
+  const stall = $('stall').checked;
+  let keepTimer = null, watch = null, started = false, lastMsg = Date.now(), t0 = Date.now();
+  const stop = () => { clearInterval(keepTimer); clearInterval(watch); unlockScreen(); buttons(!!link); };
+  try {
+    const worker = await swWorker();
+    const pong = await ask(worker, { type: 'ping' });
+    show(`service worker (${pong.kind}) answered the ping`);
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    const ch = new MessageChannel();
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('job not accepted in 3 s')), 3000);
+      ch.port1.onmessage = e => {
+        clearTimeout(t);
+        e.data.type === 'job-ok' ? res() : rej(new Error('job refused'));
+      };
+      worker.postMessage({ type: 'job', id, uuid: link.uuid, keyBytes: link.keyBytes.slice(), name: link.name,
+                           z: link.z, n: link.n, stallAt: stall ? 2 : null, stallSec: stall ? 180 : 0 }, [ch.port2]);
+    });
+    const z = link.z;
+    ch.port1.onmessage = e => {
+      const m = e.data; lastMsg = Date.now();
+      if (m.type === 'started') { started = true; t0 = Date.now(); show(`streaming started (${m.kind} SW)`); log('sw-started', { kind: m.kind }); }
+      else if (m.type === 'part') {
+        status(`${m.i}/${m.n} parts · ${(m.bytes / GiB).toFixed(2)} / ${(z / GiB).toFixed(2)} GiB · ${rate(m.bytes, m.ms)} · ${hms(m.ms)} · retries ${m.stats.retries} · ${integ(m.stats)}`);
+        if (m.i === 1 || m.i % 8 === 0 || m.i === m.n) log('sw-part', { i: m.i, n: m.n, bytes: m.bytes, ms: m.ms, stats: m.stats });
+        if (m.stats.lastRetry && m.stats.retries) show(`retry #${m.stats.retries}: ${m.stats.lastRetry}`);
+      }
+      else if (m.type === 'stall') { show(`stalling ${m.s} s before part ${m.i + 1} (test)`); log('sw-stall', { i: m.i, s: m.s }); }
+      else if (m.type === 'done') {
+        show(`✓ all ${link?.n} parts decrypted and handed over: ${(m.bytes / GiB).toFixed(2)} GiB in ${hms(m.ms)} (${rate(m.bytes, m.ms)}) · ${integ(m.stats)}. Wait for the browser to finish writing, then check SHA-256.`);
+        log('sw-done', { bytes: m.bytes, ms: m.ms, stats: m.stats }); stop();
+      }
+      else if (m.type === 'error' || m.type === 'cancelled') {
+        show(`✗ ${m.type} at part ${m.i}: ${m.msg || m.reason}`); log(`sw-${m.type}`, { i: m.i, msg: m.msg || m.reason, stats: m.stats }); stop();
+      }
+    };
+    keepTimer = setInterval(() => { try { worker.postMessage({ type: 'keepalive' }); } catch {} }, 10000);
+    watch = setInterval(() => {
+      const quiet = Date.now() - lastMsg;
+      if (quiet > 200000) { show(`⚠ no word from the service worker for ${Math.round(quiet / 1000)} s`); log('sw-silent', { s: Math.round(quiet / 1000) }); lastMsg = Date.now(); }
+    }, 20000);
+    await lockScreen();
+    const ifr = document.createElement('iframe');
+    ifr.hidden = true;
+    ifr.onload = () => {
+      try { if (ifr.contentDocument?.title === 'not-intercepted') { show('✗ the navigation reached the server, not the service worker'); log('sw-not-intercepted'); } } catch {}
+    };
+    ifr.src = `/assets/dl/${id}`;
+    document.body.append(ifr);
+    log('sw-navigate', { kind: pong.kind, z, n: link.n, stall });
+    setTimeout(() => { if (!started) { show('✗ service worker did not pick up the download in 10 s'); log('sw-no-start'); } }, 10000);
+  } catch (e) {
+    show(`✗ ${e.message}`); log('sw-fail', { msg: e.message }); stop();
+  }
+};
+
+// ── Chrome FSAA (S-3) ───────────────────────────────────────────────────────
+$('fsaaBtn').onclick = async () => {
+  buttons(false);
+  let w;
+  try {
+    const handle = await showSaveFilePicker({ suggestedName: link.name });
+    w = await handle.createWritable();
+    const job = { uuid: link.uuid, z: link.z, n: link.n, cancelled: false };
+    const stats = newStats();
+    const read = partReader(job, await derivePartKey(link.keyBytes, ['decrypt']), stats);
+    await lockScreen();
+    const t0 = performance.now();
+    let bytes = 0;
+    log('fsaa-start', { z: link.z, n: link.n });
+    for (let i = 0; i < job.n; i++) {
+      const p = await read(i);
+      await w.write(p);
+      bytes += p.byteLength;
+      const ms = performance.now() - t0;
+      status(`${i + 1}/${job.n} parts · ${(bytes / GiB).toFixed(2)} GiB · ${rate(bytes, ms)} · ${hms(ms)} · retries ${stats.retries}`);
+      if ((i + 1) % 8 === 0 || i === job.n - 1) log('fsaa-part', { i: i + 1, bytes, ms: Math.round(ms), stats });
+    }
+    const writeMs = performance.now() - t0;
+    show(`all parts written in ${hms(writeMs)} (${rate(bytes, writeMs)}); close() — Chrome checks the file, then renames .crswap…`);
+    const tc = performance.now();
+    await w.close();
+    const closeMs = Math.round(performance.now() - tc);
+    show(`✓ close() took ${(closeMs / 1000).toFixed(1)} s · ${integ(stats)}`);
+    log('fsaa-done', { bytes, writeMs: Math.round(writeMs), closeMs, stats });
+    lastHandle = handle;
+    $('keepBtn').disabled = false;
+  } catch (e) {
+    try { await w?.abort(); } catch {}
+    show(`✗ ${e.message}`); log('fsaa-fail', { msg: e.message });
+  } finally { unlockScreen(); buttons(!!link); }
+};
+
+$('keepBtn').onclick = async () => {
+  $('keepBtn').disabled = true;
+  try {
+    show('createWritable({ keepExistingData: true }) — copies the file into a new .crswap…');
+    const t = performance.now();
+    const w = await lastHandle.createWritable({ keepExistingData: true });
+    const openMs = Math.round(performance.now() - t);
+    show(`opened in ${(openMs / 1000).toFixed(1)} s; close() unchanged…`);
+    const t2 = performance.now();
+    await w.close();
+    const closeMs = Math.round(performance.now() - t2);
+    show(`✓ keepExistingData: open ${(openMs / 1000).toFixed(1)} s, close ${(closeMs / 1000).toFixed(1)} s`);
+    log('keep-existing', { openMs, closeMs });
+  } catch (e) { show(`✗ ${e.message}`); log('keep-existing-fail', { msg: e.message }); }
+  $('keepBtn').disabled = false;
+};
+</script>
+</body>
+</html>
