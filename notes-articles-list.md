@@ -1,5 +1,5 @@
 # notes-articles-list.md — refueler.io /notes/ pipeline
-> **Version:** 1.4 | **Created:** AP-1 · 29 July 2026 | **Updated:** MCP-Fix-1 · 8 Oct 2026 (article 16)
+> **Version:** 1.5 | **Created:** AP-1 · 29 July 2026 | **Updated:** Article-Rewrite-1 · 10 Oct 2026 (article 1 rewrite; articles 17, 18)
 > Editorial planning document. Lives in `refueler-share/` alongside CLAUDE.md and TESTING.md.
 > Load when in an editorial planning or article build session. Not by default.
 > Publishing platform: `refueler.io/notes/` (main domain, not share subdomain).
@@ -35,8 +35,8 @@ the articles are context, not a campaign.
 
 ---
 
-## Article 1 — What a subpoena gets from seven file transfer services
-**Status:** Live — iteration now open (hold cleared week of 5 Aug 2026)
+## Article 1 — What a court order gets from your file transfer service (was "What a subpoena gets…")
+**Status:** Live. **Rewritten Article-Rewrite-1 (10 Oct 2026):** ten services, one grouped tick/cross table (key / account / open source / self-host / post-quantum / IP not logged), Proton 2021 + 2024 cases, ownership (WeTransfer clause 6.3), full Share data inventory incl. password weakness and served-JS risk. Calm tone (see memory `editorial-tone-calm`). Facts dated 10 Oct 2026 — re-check before any future edit. The iteration notes below are superseded.
 **Audience:** Lawyers, journalists, accountants
 **Product dependency:** None
 **SEO targets:** "file transfer privacy", "secure file transfer lawyers", "file transfer subpoena"
@@ -234,13 +234,22 @@ the articles are context, not a campaign.
 **Note:** Security people at btc++ (Oct 2026) reacted to the `.ots` use for file-transfer logging more than to anything else, which is the signal: the piece is about **Bitcoin-anchored existence proof applied to a transfer**, not "we use OpenTimestamps". Honest scope, stated early and not buried: it proves the bytes existed on or before a block date. **Not authorship. Not truth. Not delivery.** Three things to separate, because almost everyone conflates them: existence proof (SHA-256 / OTS, client-side, never touches the Worker) · ciphertext storage integrity (the Worker's Merkle check — "the encrypted object served equals the encrypted object stored") · end-to-end file integrity (the recipient's plaintext check, which Refueler never performs and must never claim). Let a table do that separation. The forward half — MMR roots anchored through the Share OTS relay as a transparency log, never a "smart contract" — gets a short closing section marked as direction. **Also the natural home for the unilateral-exit honesty:** the seal proves the bytes existed; it does not hand anyone the bytes if Refueler vanishes. That earns the self-hostable node a mention rather than a boast.
 **Voice check:** one punchy line maximum, no performative opening, let the tables persuade.
 
+## Article 17 — Why your transfer should have a password (and how ours works)
+**Status:** Idea — added Article-Rewrite-1 · 10 Oct 2026. **Write after Password-Opus ships** (roadmap 16b).
+**Audience:** senders; linked quietly from the password toggle on the upload page ("Why?") and pinned next to article 1 on /notes/.
+**Note:** Short and plain. A password only helps if it travels by a different route from the link. What the fix changes: the password is stretched on your device (Argon2id) and becomes part of the key, so link + password are both needed and our server never sees it. Say what it was before (unsalted SHA-256 gate) without drama. Optional generated four-word password; on/off default is Rajesh's call.
+
+## Article 18 — What "audited" means: certificates, pen tests and code audits
+**Status:** Idea — added Article-Rewrite-1 · 10 Oct 2026. Write when Share's own external audit is scoped (`external-audit-plan` memory), so we can describe the process honestly.
+**Note:** Split from article 1, where an "audited" column misled. Three different things: certifications (ISO 27001, PCI DSS — processes and controls), penetration tests (the running service), code and cryptography audits (does the design do what it claims). Examples found 10 Oct: WeTransfer Trust Center lists ISO 27001 (Tempo Audits), PCI DSS SAQ A and a gated pen-test report; Smash's help page cites Synacktiv; Tresorit cites EY (2019), ETH Zurich study (2024), a 2025 pen test; Proton Drive Securitum (2022, mobile); OnionShare Radically Open Security (2021). Friendly to peers — describe, don't grade.
+
 ---
 
 ## Full pipeline at a glance
 
 | # | Title (short) | Publish order | Dependency | Outreach hook |
 |---|--------------|---------------|------------|---------------|
-| 1 | Subpoena table | 1st | None | Legal journalists. Susie forward. |
+| 1 | Court-order table (rewritten 10 Oct) | 1st | None | Legal journalists. Susie forward. |
 | 2 | Client files / inbox | 2nd | None | BHODL feedback. Susie journalist angle. |
 | 3 | Metadata value | 3rd | None | LinkedIn — widest reach |
 | 4 | Blind vs secure server | 4th | None | btc++ Berlin warm-up |
@@ -255,6 +264,8 @@ the articles are context, not a campaign.
 | 13 | Witness evidence transmission | After article 7 | Susie conversation first | Legal/human rights orgs |
 | 14 | Block explorer metadata leak | Post-B9 | refueler-multi-core live | Bitcoin-native professionals |
 | 15 | GrapheneOS, no loosening | Anytime (after a 100 MB Pixel test) | None | GrapheneOS forum / Matrix, privacy Android |
+| 17 | Why a password | After Password-Opus build | Roadmap 16b | Upload-page "Why?" link |
+| 18 | What "audited" means | When our audit is scoped | External audit plan | Security engineers, buyers |
 
 ---
 

@@ -6,6 +6,8 @@
 > **Dependency:** None. Publish any time.
 > **Length:** ~600 words. Short. Sharp. One argument.
 
+> **⚠ Corrected 10 Oct 2026 (Article-Rewrite-1):** Bending Spoons does **not** own Smash — no source found; Smash is SMASH & CO, Lyon (fromsmash.com/privacy). The "two acquisitions" spine below is wrong; don't publish it. What holds: WeTransfer (Bending Spoons, July 2024) and Smash both name **AWS** in their own disclosures — WeTransfer sub-processor list "Version: April 2026" (AWS, EU/US, cloud infrastructure; also lists Bending Spoons affiliates, Anthropic, OpenAI); Smash privacy policy Art. 5 + 9 (dated 28 Jun 2021). Neither names S3/CloudFront — say "AWS". Meetup: Bending Spoons completed 24 Jan 2024; AWS still unverified — drop. Portfolio since: Vimeo (2025), AOL (Jan 2026), Eventbrite (Mar 2026); Nasdaq listing 1 Jul 2026; Airtable + Miro announced, pending. Folded into the subpoena rewrite as one "ownership changes the terms" paragraph.
+
 ---
 
 ## The argument in full (from session — use verbatim as draft spine)

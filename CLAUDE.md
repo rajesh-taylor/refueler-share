@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.12 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** API-Repair-1 · 9 Oct 2026
+> **Version:** 2.13 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Article-Rewrite-1 · 10 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -63,7 +63,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
 - **Upload credential = credential format v2, a standard Cashu proof `{id, amount: 1, secret, C}` (Cred-Fix-2 · 5 Oct 2026).** Worker `verifyProofV2` (`worker/src/nut00.js`): `Y = hash_to_curve(utf8(secret))`, `k·Y == C`, serial `hex(Y)`; anything else 401, nothing spent. Browser and Worker both use `@cashu/cashu-ts` (exact pin) — the browser via vendored `frontend/cashu-crypto.js`, rebuilt only by `bin/vendor-cashu.sh`. Upgrade both pins together. No hand-rolled curve maths. Browser checks the NUT-12 DLEQ proof; key not pinned until the anonymous rail. Note: `docs/Cred-verification-note-v1.md`.
 - Pricing/unit economics are never published in this repo (stripped CC-64).
-- Apache 2.0 licence — patent grant clause protects the novel BLAKE3 + Cashu combination.
+- Apache 2.0 licence — contributors grant a patent licence, and publishing the design puts the BLAKE3 + Cashu combination on the public record (prior art). Never claim the licence "protects" or "patents" the combination (matches README; decided Article-Rewrite-1 · 10 Oct 2026).
 - DO NOT edit inline CSS/JS in `src/index.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
 - **Sovereign storage cap: 100 GB. Locked TH-Opus-1.**
@@ -294,13 +294,13 @@ This is not optional.
 **`share-sessions.md`:**
 - Sessions more than two blocks old: convert full narrative entries to compact one-row table format
   (session number · commit · one-line summary). Do-not-retry blocks are permanent — never trim.
-- Target: under 500 lines at all times.
+- Target: ≤ 550 lines (10 % over the old 500 is fine; up to +20 % only to keep something load-bearing). Each close: last ~4 sessions in full, older ones one row each.
 
 **`Share-Master-Context.md`:**
 - §Current state table: drop rows older than two blocks. Block summaries in §Roadmap carry the history.
 - §Known broken / do not retry: remove entries that duplicate `CLAUDE.md` locked decisions.
 - §B-n snag list: remove fully resolved items. Carried items only.
-- Target: under 350 lines at all times.
+- Target: ≤ 385 lines (same rule: +10 %, +20 % only for load-bearing items).
 
 **Applies to:** SW-MCP-8 (next B-close) · then B8, B9, B10, B11, B12 close sessions.
 Also apply at any session where either file exceeds its target line count mid-block.
