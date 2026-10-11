@@ -1,0 +1,9 @@
+{
+  "name": "relay-check",
+  "private": true,
+  "description": "Nostr relay behaviour test (Research-Review-3). Run before any notice ships.",
+  "type": "module",
+  "dependencies": {
+    "nostr-tools": "2.25.2"
+  }
+}

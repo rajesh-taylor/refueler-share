@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.16 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Research-Review-2 · 11 Oct 2026
+> **Version:** 2.17 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Research-Review-3 · 11 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -74,7 +74,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
 - **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
 - **Own origin + served-code integrity (Served-Code-Opus · 10 Oct 2026).** Share moves to `share.refueler.io` with its own Pages project and no mirror into refueler.io (X5 = Block A, Master Context row 16a). **Until X5-2 ships, the deploy surfaces and frontend checklist below stand unchanged.** Every key-handling product gets its own origin; no master app. WEBCAT/app = Block B (V2). Never claim "verified"; the Verify page explains how to check, it never "proves".
-- **No OHTTP — Nostr relays for private requests and notifications (Served-Code-Opus · 10 Oct 2026).** Third-party relays only, never our own; one key per job (per transfer / per Quay, never a personal npub); sender notification key random, never derived from the link key; notification never control flow. Copy says "collected" — never "delivered", "opened" or "proof of delivery". Rules + features: Master Context row 19.
+- **No OHTTP — Nostr relays for private requests and notifications (Served-Code-Opus · 10 Oct 2026).** Third-party relays only, never our own; one key per job (per transfer / per Quay, never a personal npub); sender notification key random, never derived from the link key; notification never control flow; relay login (NIP-42) only ever with a per-job key, never an identity key (Research-Review-3 · 11 Oct 2026). Copy says "collected" — never "delivered", "opened" or "proof of delivery"; a notice "expires", never "deleted" (relays ignored NIP-09/NIP-62 in the live test). Rules + features: Master Context row 19.
 
 **Tier model (locked SW-Opus-1 · 7 Sep 2026):**
 - **Three tiers: Citizen / Sovereign / API.** Business and Enterprise demolished entirely.
