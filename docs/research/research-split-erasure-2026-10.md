@@ -2,6 +2,12 @@
 
 As of **11 October 2026**. This is research for a later design session, not a design. Nothing here is legal advice.
 
+> **Reviewed — Research-Review-1 · 11 Oct 2026 (outcomes in Share-Master-Context rows 16b / 19 / 20 / 23).**
+> - **Confirmed at source:** Privy 0.0.3→0.0.4 diff; noble audit excludes `blake3`; NIP-40 quotes; no splitting NIP; Bellare–Rogaway + Bastion abstracts; Tahoe GC off by default; Hetzner OS Ceph / 64 KB minimum / versioning + object lock; R2 delete "irreversible"; `reed-solomon-simd` 3.1.0; MinIO archived.
+> - **Corrected:** Storj monthly minimum is **$5**, not $50 (Q2 table).
+> - **Does not match Share:** the deletion latch is an R2 conditional put on the manifest, not D1 (D1 is banned) — Q4's Time Travel caveat does not apply. Our manifest is Worker-written, not encrypted under the user key (Q5). Per-piece hashes must be **BLAKE3**, not SHA-256 (SHA-256 is locked to OTS). merkle-spec §1 leaves are the *stored* bytes, so "Merkle unchanged" needs option (a) (logical-chunk root + piece hashes in a sidecar v2).
+> - **Not re-verified:** Hetzner Storage Box snapshots, Hetzner prices, Cure53 PDF contents, Zellic audit.
+
 **Legend**
 - ✅ **verified**: I read it this session in a primary source (paper, spec, official docs, vendor pricing page, the library's own published source or registry entry). Where I could only read a search-engine extract of the primary page, I say so.
 - 🟡 **secondary**: forum post, blog, press, aggregator. Probably right, not proven.
