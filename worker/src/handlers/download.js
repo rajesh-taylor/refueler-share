@@ -74,13 +74,14 @@
  */
 
 import { UUID_RE, safeGetManifest, json, err, parseRange } from '../utils.js';
-import { putManifest, isDownloadBlocked, requiresPassphrase } from '../manifest.js';
+import { isDownloadBlocked, requiresPassphrase } from '../manifest.js';
 import { verifyDownloadToken } from '../nut11.js';
 import { checkTransferStatus, flipPendingDestruction } from '../manifest_tg.js';
 import { issueReceipt } from '../receipts.js';
 import { hasCref } from '../seal.js';
 import { notifyTransfer, EVENTS } from '../webhook_delivery.js';
 import { destroyTransfer } from './delete_transfer.js';
+import { updateManifest } from '../latch.js';
 import {
   isVerifiedPath,
   readSidecarWithRootCheck,
@@ -159,8 +160,13 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
   }
 
   if (chunkIndex === 0 && !manifest.download_initiated_at) {
-    manifest.download_initiated_at = Math.floor(Date.now() / 1000);
-    await putManifest(env.BUCKET, uuid, manifest);
+    // B12-3: conditional write (latch.js) — a stale copy must never overwrite a
+    // concurrent consumed:true. Declined when consumed or already stamped.
+    const at = Math.floor(Date.now() / 1000);
+    const r = await updateManifest(env.BUCKET, uuid, (m) =>
+      (m.consumed === true || m.download_initiated_at) ? null : { ...m, download_initiated_at: at });
+    if (r.status === 'written') manifest.download_initiated_at = at;
+    else if (r.status === 'gone' || r.before?.consumed === true) return err(410, 'Transfer expired');
   }
 
   // ── Share-6-5a: verified vs legacy fork ────────────────────────────────────

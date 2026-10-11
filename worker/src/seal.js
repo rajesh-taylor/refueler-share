@@ -19,7 +19,10 @@
 // Users today:
 //   cref_ct — the Chartered client (org_account_id) + its transfer_ref, in the
 //             R2 manifest. Stripped by buildTombstone (it keeps two fields only).
-// B12-3 adds qref_ct with purpose 'refueler.share.qref.v1'.
+//   qref_ct — B12-3: the quota account (quota_ref) + the upload session hash, so
+//             the deletion latch winner can release exactly what was held.
+//             Registered/Chartered only, never Bearer (X2). Stripped by
+//             buildTombstone like cref_ct.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { concat, b64ToBytes, bytesToB64url, b64urlToBytes, uuidToBytes } from './kvmac.js';
@@ -32,6 +35,8 @@ const KID_RE = /^[1-9][0-9]{0,2}$/;
 
 export const CREF_TAG     = 'refueler.share.cref.v1';
 export const CREF_AAD_TAG = 'refueler.share.manifest.cref.v1';
+export const QREF_TAG     = 'refueler.share.qref.v1';           // B12-SR S3(a), amended API-Repair-1
+export const QREF_AAD_TAG = 'refueler.share.manifest.qref.v1';
 const TRANSFER_REF_MAX = 128;
 
 async function sealKey(env, kid, purpose) {
@@ -102,6 +107,32 @@ export async function openCref(env, uuid, sealed) {
   let transferRef = null;
   try { transferRef = pt.length > 16 ? dec.decode(pt.slice(16)) : null; } catch { return null; }
   return { org, transferRef };
+}
+
+// ── qref_ct: plaintext = quota_ref (32 B) ‖ session_hash (32 B) — fixed length ─
+
+const hexToBytes = (h, n) => (typeof h === 'string' && new RegExp(`^[0-9a-f]{${n * 2}}$`).test(h))
+  ? Uint8Array.from(h.match(/../g), x => parseInt(x, 16)) : null;
+const bytesToHex = (b) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+
+/** sealQref(env, uuid, quotaRefHex, sessionHashHex) → sealed object | null */
+export async function sealQref(env, uuid, quotaRefHex, sessionHashHex, _nonce) {
+  const q = hexToBytes(quotaRefHex, 32);
+  const s = hexToBytes(sessionHashHex, 32);
+  if (!q || !s) return null;
+  return seal(env, { purpose: QREF_TAG, aadTag: QREF_AAD_TAG, uuid, plaintext: concat(q, s) }, _nonce);
+}
+
+/** openQref(env, uuid, sealed) → { quotaRef, sessionHash } (hex) | null */
+export async function openQref(env, uuid, sealed) {
+  const pt = await open(env, { purpose: QREF_TAG, aadTag: QREF_AAD_TAG, uuid, sealed });
+  if (!pt || pt.length !== 64) return null;
+  return { quotaRef: bytesToHex(pt.slice(0, 32)), sessionHash: bytesToHex(pt.slice(32)) };
+}
+
+/** True when a manifest carries a sealed quota account (no decrypt). */
+export function hasQref(manifest) {
+  return !!manifest && typeof manifest.qref_ct === 'object' && manifest.qref_ct !== null;
 }
 
 /** True when a manifest says a Chartered client owns the transfer (no decrypt). */

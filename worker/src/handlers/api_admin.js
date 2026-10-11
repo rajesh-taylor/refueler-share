@@ -23,6 +23,7 @@ import { provisionParams } from '../quota.js';
 import {
   createApiKey, revokeApiKey, apiKeyOrg, provisionPool, cancelPool, StoreUnavailable,
 } from '../api_store.js';
+import { quotaRefFor, provisionQuota, getQuota, DEFAULT_ORG_LIMIT_CHUNKS, DEFAULT_MAX_IN_FLIGHT } from '../quota_store.js';
 
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
@@ -90,13 +91,17 @@ export async function handleAdminApiClientCreate(request, env) {
   if (body.label !== undefined && (typeof body.label !== 'string' || body.label.length > 64)) {
     return err(400, 'label must be a string of at most 64 characters');
   }
+  const limits = storageLimits(body);
+  if (limits.error) return err(400, limits.error);
+  if (!env.QUOTA_REF_KEY) return err(503, 'QUOTA_REF_KEY not configured');
 
   return guarded(async () => {
     const org     = crypto.randomUUID();
     const liveKey = `rfs_live_${randomBase58(32)}`;
     const signKey = `rfs_sign_${randomBase58(32)}`;
-    // Pool first: a pool without a key authorises nothing.
+    // Pool and storage quota first: neither authorises anything without a key.
     const pool = await provisionPool(env, org, params);
+    const storage_quota = await provisionQuota(env, await quotaRefFor(env, org), limits);
     await createApiKey(env, {
       keyHash: await sha256Hex(liveKey), signKeyHash: await sha256Hex(signKey),
       org, rail: 'identity', sandbox: false, label: body.label ?? null,
@@ -107,6 +112,7 @@ export async function handleAdminApiClientCreate(request, env) {
       org_account_id: org,
       rail:           'identity',
       pool,
+      storage_quota,
       note:           'Keys are shown once. Only their SHA-256 hashes are stored.',
     }, 201);
   });
@@ -160,5 +166,49 @@ export async function handleAdminQuotaCancel(request, env) {
     const result = await cancelPool(env, org, Boolean(body.immediate));
     if (!result?.ok) return err(404, 'No quota record found for this key');
     return json({ ok: true, already_cancelled: result.already_cancelled ?? false, record: result.record ?? null });
+  });
+}
+
+// ── B12-3: storage quota (occupancy, 32 MiB chunks) per org ──────────────────
+// Separate meter from the credit pool. Defaults: 8,000 chunks (250 GiB held at
+// once) and 20 uploads in flight (Rajesh, 11 Oct 2026); both asked at onboarding.
+function storageLimits(body) {
+  const limitChunks = body.limit_chunks ?? DEFAULT_ORG_LIMIT_CHUNKS;
+  const maxInFlight = body.max_in_flight ?? DEFAULT_MAX_IN_FLIGHT;
+  if (!Number.isSafeInteger(limitChunks) || limitChunks < 0 || limitChunks > 1_000_000) {
+    return { error: 'limit_chunks must be an integer 0…1,000,000' };
+  }
+  if (!Number.isSafeInteger(maxInFlight) || maxInFlight < 1 || maxInFlight > 1000) {
+    return { error: 'max_in_flight must be an integer 1…1000' };
+  }
+  return { kind: 'chartered', limitChunks, maxInFlight };
+}
+
+// POST /api/v1/admin/storage-quota { live_key, limit_chunks?, max_in_flight? }
+// No limits in the body → read only. Lowering a limit below usage blocks new
+// initiates only; nothing live is deleted early (B12 §1.9).
+export async function handleAdminStorageQuota(request, env) {
+  const denied = await requireAdmin(request, env);
+  if (denied) return denied;
+  const body = await readBody(request);
+  if (!body) return err(400, 'Invalid JSON body');
+  if (!body.live_key) return err(400, 'live_key is required');
+  if (!env.QUOTA_REF_KEY) return err(503, 'QUOTA_REF_KEY not configured');
+  const write = body.limit_chunks !== undefined || body.max_in_flight !== undefined;
+  const limits = write ? storageLimits(body) : null;
+  if (limits?.error) return err(400, limits.error);
+
+  return guarded(async () => {
+    const { org, resp } = await productionOrg(env, body.live_key);
+    if (resp) return resp;
+    const q = await quotaRefFor(env, org);
+    const current = await getQuota(env, q);
+    if (!write) return current ? json({ ok: true, org_account_id: org, storage_quota: current }) : err(404, 'No storage quota for this key');
+    const merged = {
+      kind:        'chartered',
+      limitChunks: body.limit_chunks  ?? current?.limit_chunks  ?? DEFAULT_ORG_LIMIT_CHUNKS,
+      maxInFlight: body.max_in_flight ?? current?.max_in_flight ?? DEFAULT_MAX_IN_FLIGHT,
+    };
+    return json({ ok: true, org_account_id: org, storage_quota: await provisionQuota(env, q, merged) });
   });
 }

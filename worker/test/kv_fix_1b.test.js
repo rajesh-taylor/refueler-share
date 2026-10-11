@@ -44,6 +44,7 @@ function makeEnv(overrides = {}) {
   const ae = [];
   return {
     COMMITMENT_KEY:          KEY,
+    UPLOAD_SESSION_KEY: 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=',
     TEST_CRED_KEY:           TC_KEY,
     ADMIN_KEY,
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,

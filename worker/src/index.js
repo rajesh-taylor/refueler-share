@@ -2,7 +2,7 @@
 import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyProofV2 } from './nut00.js';
 import { computeCommitment } from './commitment.js';
-import { putManifest, createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS, CHARTERED_CAP_BYTES } from './manifest.js';
+import { createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS, CHARTERED_CAP_BYTES } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
 // verifyStripeWebhook, createCheckoutSession — imported by ./handlers/stripe_sub.js
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
@@ -25,14 +25,18 @@ import { handleWlConfig, handleCfChallenge, wlHostnames } from './wl_config.js';
 import { requireApiAuth, parseHmacCredentials } from './api_auth.js';
 // KV-Fix-2: API keys + credit pools in Supabase (never KV)
 import { getPool, spendCredits, refundCredits, StoreUnavailable } from './api_store.js';
-import { handleAdminApiClientCreate, handleAdminApiClientRevoke, handleAdminQuotaProvision, handleAdminQuotaCancel } from './handlers/api_admin.js';
+import { handleAdminApiClientCreate, handleAdminApiClientRevoke, handleAdminQuotaProvision, handleAdminQuotaCancel, handleAdminStorageQuota } from './handlers/api_admin.js';
 import { handleApiCapabilities }      from './handlers/api_capabilities.js';
 import { handleAdminBtcRatePost, handleAdminBtcRateGet, refreshBtcRate } from './handlers/btc_rate.js';
 import { handleAdminBtcPrice }  from './handlers/btc_price.js';        // Share-B10-1: live display ticker
 import { handleGrowthSnapshot } from './handlers/growth_snapshot.js';  // Share-B10-1: growth chart lines
 import { handleWebhookRegister }        from './webhook_reg.js';
 import { retryDeadLetterQueue } from './webhook_delivery.js';
-import { sealCref } from './seal.js';                                          // API-Repair-1
+import { sealCref, sealQref } from './seal.js';                                // API-Repair-1, B12-3
+import { quotaRefFor, reserveQuota, releaseQuota, quotaBand } from './quota_store.js'; // B12-3
+import { putManifestIfAbsent } from './latch.js';                               // B12-3: X6
+import { makeSessionToken, verifySessionToken, sessionHash, sessionExpiry, hasUploadSessionKey, MAX_TRANSFER_CHUNKS } from './upload_session.js'; // B12-3
+import { handleQuotaReconcile, runQuotaReconcile } from './handlers/quota_reconcile.js';                    // B12-3
 // SW5: acceptance + collection receipts
 import { handleApiReceipt } from './receipts.js';
 import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
@@ -49,7 +53,7 @@ import {
 
 import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
-import { makePresigner, presignPutObject, signSessionToken, computeTransferCost } from './r2_presign.js';
+import { makePresigner, presignPutObject, signSessionToken, computeTransferCost, PRESIGN_EXPIRY } from './r2_presign.js';
 import { CHUNK_SIZE, CHUNK_TAG_BYTES } from './sweep_rules.js';                // B12-1d: signed PUT sizes
 import { checkTestCredential, TESTCRED_USED_PREFIX } from './testcred.js';    // KV-Fix-1b
 // SW-MCP-W2: monthly credit allocation rules (pure; the atomic spend is SQL — KV-Fix-2)
@@ -533,6 +537,13 @@ export default {
       if (request.method === 'POST' && path === '/api/v1/admin/quota/provision') {
         return timed('admin_quota_provision', () => handleAdminQuotaProvision(request, env).then(r => addCors(r, request)));
       }
+      // ── B12-3: storage quota reconcile on demand (the cron runs it at 03:00) ─
+      if (request.method === 'POST' && path === '/admin/quota-reconcile') {
+        return timed('admin_quota_reconcile', () => handleQuotaReconcile(request, env).then(r => addCors(r, request)));
+      }
+      if (request.method === 'POST' && path === '/api/v1/admin/storage-quota') {
+        return timed('admin_storage_quota', () => handleAdminStorageQuota(request, env).then(r => addCors(r, request)));
+      }
       if (request.method === 'POST' && path === '/api/v1/admin/quota/cancel') {
         return timed('admin_quota_cancel', () => handleAdminQuotaCancel(request, env).then(r => addCors(r, request)));
       }
@@ -630,6 +641,13 @@ export default {
         await refreshBtcRate(env);
       } catch (e) {
         console.error('scheduled/btc_rate: unhandled error:', e);
+      }
+
+      // Task 4 — storage quota reconcile (B12-3, SR S1.9)
+      try {
+        await runQuotaReconcile(env);
+      } catch (e) {
+        console.error('scheduled/quota_reconcile: unhandled error:', e);
       }
     }
   },
@@ -1270,10 +1288,22 @@ async function handleInitiate(request, env, ctx, uuid) {
   }
 
   // ── Headers (migrated from chunk-0; no body, no per-chunk hash) ────────────
+  // B12-3 (SR S1.4): whole positive safe integers only — "12abc", "1e9", "-1",
+  // "0x10" and anything past 2^53 are refused, never parsed into something else.
+  const strictInt = (h) => {
+    const v = request.headers.get(h);
+    if (v === null || !/^[1-9][0-9]{0,15}$/.test(v)) return 0;
+    const n = Number(v);
+    return Number.isSafeInteger(n) ? n : NaN;
+  };
   const credential  = request.headers.get('X-Cashu-Credential');
-  const totalChunks = parseInt(request.headers.get('X-Total-Chunks') ?? '0', 10);
-  const totalBytes  = parseInt(request.headers.get('X-Total-Bytes')  ?? '0', 10);
-  const expiryTs    = parseInt(request.headers.get('X-Expiry-Timestamp') ?? '0', 10);
+  const totalChunks = strictInt('X-Total-Chunks');
+  const totalBytes  = strictInt('X-Total-Bytes');
+  const expiryTs    = strictInt('X-Expiry-Timestamp');
+  if ([totalChunks, totalBytes, expiryTs].some(Number.isNaN)) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 400, errorMsg: 'unsafe_integer' });
+    return err(400, 'Size and expiry headers must be whole numbers');
+  }
   const p2shHash    = request.headers.get('X-P2SH-Secret-Hash') ?? null;
   const commitment  = request.headers.get('X-Credential-Commitment') ?? '';
   const issuedTier  = (request.headers.get('X-Issued-Tier') ?? 'free').trim().toLowerCase();
@@ -1291,6 +1321,11 @@ async function handleInitiate(request, env, ctx, uuid) {
     logEvent(env, { endpoint: 'upload_initiate', status: 400, errorMsg: 'chunk_count_mismatch' });
     return err(400, 'X-Total-Chunks does not match X-Total-Bytes');
   }
+  // B12-3 (SR S1.6): one ceiling everywhere — 8,000 chunks (250 GiB).
+  if (totalChunks > MAX_TRANSFER_CHUNKS) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 400, errorMsg: 'total_chunks_exceeded' });
+    return err(400, `X-Total-Chunks exceeds maximum of ${MAX_TRANSFER_CHUNKS}`);
+  }
   if (!commitment) {
     logEvent(env, { endpoint: 'upload_initiate', status: 401, errorMsg: 'credential_commitment_missing' });
     return err(401, 'Missing credential commitment');
@@ -1299,6 +1334,12 @@ async function handleInitiate(request, env, ctx, uuid) {
   if (!env.COMMITMENT_KEY) {
     console.error('upload_initiate: COMMITMENT_KEY not configured');
     logEvent(env, { endpoint: 'upload_initiate', status: 503, errorMsg: 'commitment_key_missing' });
+    return err(503, 'Upload temporarily unavailable');
+  }
+  // B12-3: the session token is MAC'd — no key, no upload (before anything is consumed).
+  if (!(await hasUploadSessionKey(env))) {
+    console.error('upload_initiate: UPLOAD_SESSION_KEY not configured');
+    logEvent(env, { endpoint: 'upload_initiate', status: 503, errorMsg: 'session_key_missing' });
     return err(503, 'Upload temporarily unavailable');
   }
 
@@ -1330,6 +1371,7 @@ async function handleInitiate(request, env, ctx, uuid) {
   // issued at the Chartered tier) has no client — no auth, no debit, no cref_ct.
   let apiOrg  = null;
   let crefCt  = null;
+  let quotaRef = null;   // B12-3: Registered-rail quota account (hex), server-derived only
   const isChartered = isCharteredTier(issuedTier);
   if (isChartered && !isTestCredential) {
     let client;
@@ -1347,7 +1389,16 @@ async function handleInitiate(request, env, ctx, uuid) {
       logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 503, errorMsg: 'seal_key_missing' });
       return err(503, 'Upload temporarily unavailable');
     }
+    // B12-3 (SR S1.4): the quota account comes from the authenticated org only.
+    quotaRef = await quotaRefFor(env, apiOrg);
+    if (!quotaRef) {
+      console.error('upload_initiate: QUOTA_REF_KEY unavailable — refusing Chartered initiate');
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: 503, errorMsg: 'quota_key_missing' });
+      return err(503, 'Upload temporarily unavailable');
+    }
   }
+  // Citizen (no principal until B12-4a), Pro Bono and soak: quotaRef stays null —
+  // no reservation, no qref_ct. Bearer-rail principals never get one (X2).
 
   // ── Resolved tier — never issued_tier for the cap ─────────────────────────
   // Cred-Fix-1: no request header selects a tier. Every consumer upload is
@@ -1370,13 +1421,6 @@ async function handleInitiate(request, env, ctx, uuid) {
   if (!ctEqual(commitment, expectedCommitment)) {
     logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 401, errorMsg: 'credential_uuid_mismatch' });
     return err(401, 'Credential commitment mismatch');
-  }
-
-  // ── Total chunks advisory ceiling (§1/§2) ──────────────────────────────────
-  const TOTAL_CHUNKS_MAX = 10_000;
-  if (totalChunks > TOTAL_CHUNKS_MAX) {
-    logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 400, errorMsg: 'total_chunks_exceeded' });
-    return err(400, `X-Total-Chunks exceeds maximum of ${TOTAL_CHUNKS_MAX}`);
   }
 
   // ── Expiry tier validation ─────────────────────────────────────────────────
@@ -1473,6 +1517,54 @@ async function handleInitiate(request, env, ctx, uuid) {
     return err(400, tidalInvariantError);
   }
 
+  // ── Upload session (B12-3, SR S1.2/S1.3) — minted before the reservation, ──
+  // which is keyed by its hash. One clock: session, reservation and every URL
+  // end at sessionExp = min(now + UPLOAD_WINDOW, transfer expiry).
+  const sessionExp   = sessionExpiry(nowSeconds, expiryTs);
+  const sessionToken = await makeSessionToken(env, uuid, totalChunks, sessionExp);
+  if (!sessionToken) return err(503, 'Upload temporarily unavailable');
+  const sessHash = await sessionHash(sessionToken);
+
+  // ── Reserve quota (B12-3, SR S1.5/S1.6): after every local check, BEFORE ──
+  // the spend — a reservation is reversible, a spend isn't. Registered-rail
+  // Chartered only (quotaRef set above). Every failure below releases it.
+  let qrefCt = null;
+  let reserved = false;
+  const cancelReservation = async (why) => {
+    if (!reserved) return;
+    reserved = false;
+    try { await releaseQuota(env, quotaRef, sessHash, totalChunks, false); }
+    catch (e) { console.error(`upload_initiate: reservation release failed (${why}); expires at session end:`, e?.message ?? e); }
+  };
+  if (quotaRef) {
+    qrefCt = await sealQref(env, uuid, quotaRef, sessHash);
+    if (!qrefCt) {
+      console.error('upload_initiate: SHARE_SEAL_KEY unavailable — refusing quota-bound initiate');
+      return err(503, 'Upload temporarily unavailable');
+    }
+    let rsv;
+    try {
+      rsv = await reserveQuota(env, quotaRef, sessHash, totalChunks, sessionExp);
+    } catch (e) {
+      if (!(e instanceof StoreUnavailable)) throw e;
+      console.error('upload_initiate: quota store unavailable:', e.message);
+      return err(503, 'Quota check unavailable — please retry');
+    }
+    if (!rsv?.ok) {
+      const code = rsv?.code ?? 'quota_exceeded';
+      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: code === 'too_many_in_flight' ? 429 : 402, errorMsg: code });
+      if (code === 'too_many_in_flight') {
+        return json({ error: 'Too many uploads in progress for this account', code }, 429);
+      }
+      if (code === 'quota_not_provisioned') {
+        return json({ error: 'No storage quota found — contact support', code }, 402);
+      }
+      // Chartered 402: the held share as a 5 % band, never exact figures (SR S5).
+      return json({ error: 'Storage quota full — wait for transfers to be collected or expire', code: 'quota_exceeded', band: quotaBand(rsv ?? {}) }, 402);
+    }
+    reserved = true;
+  }
+
   // ── Spend — atomic double-spend guard: INSERT-on-serial (B8 §D-3). ─────────
   // sig → BDHKE done above; this INSERT is the point of no return. 409 conflict
   // = already spent (fire-and-forget log). This is the LAST Supabase write.
@@ -1496,10 +1588,12 @@ async function handleInitiate(request, env, ctx, uuid) {
         if (!r.ok) r.text().then(t => console.error('double_spend_attempts write failed:', t));
       }).catch(e => console.error('double_spend_attempts fetch error:', e));
       logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: 409, errorMsg: 'credential_double_spend' });
+      await cancelReservation('double_spend');
       return err(409, 'Credential already spent');
     }
     if (!meltRes.ok) {
       console.error('spend INSERT failed:', serial, await meltRes.text());
+      await cancelReservation('ledger_unavailable');
       return err(502, 'Ledger unavailable');
     }
   }
@@ -1521,6 +1615,7 @@ async function handleInitiate(request, env, ctx, uuid) {
       const un = await supabaseFetch(env, 'DELETE', `/rest/v1/spent_tokens?serial=eq.${encodeURIComponent(serial)}`)
         .catch(e => ({ ok: false, statusText: String(e) }));
       if (!un.ok) console.error('initiate: credential un-spend failed:', serial, un.status ?? un.statusText);
+      await cancelReservation('debit_refused');
       if (debitErr) {
         console.error('upload_initiate: credit debit unavailable:', debitErr.message);
         return err(503, 'Quota check unavailable — please retry');
@@ -1556,8 +1651,18 @@ async function handleInitiate(request, env, ctx, uuid) {
   // API-Repair-1 (F2): the client is sealed, never stored raw. cref_ct holds
   // org_account_id + transfer_ref; buildTombstone drops it on every deletion path.
   if (crefCt) manifest.cref_ct = crefCt;
+  // B12-3 (SR S3(a)): the quota account + session hash, sealed — never raw.
+  if (qrefCt) manifest.qref_ct = qrefCt;
 
-  await putManifest(env.BUCKET, uuid, manifest);
+  // X6 (B12-SR): create-if-absent. The early existence check above saves a
+  // spend in the common case; this conditional put closes the race (two
+  // initiates on one UUID: exactly one creates, proven on real R2 at B12-3).
+  // The credential is spent either way — it was spent on a UUID that was taken.
+  if (!(await putManifestIfAbsent(env.BUCKET, uuid, manifest))) {
+    logEvent(env, { endpoint: 'upload_initiate', status: 409, errorMsg: 'already_initiated_race' });
+    await cancelReservation('manifest_exists');
+    return err(409, 'Transfer already initiated');
+  }
 
   // ── Execution Dock KV entry (TG-4) ─────────────────────────────────────────
   const dockTtl = (expiryTs - nowSeconds) + 48 * 3600 + 3600;
@@ -1577,25 +1682,14 @@ async function handleInitiate(request, env, ctx, uuid) {
   // validates completeness — so it is NOT emitted here. (In the legacy chunk-0
   // path it fired at manifest-write; that path is unchanged.)
 
-  // ── Upload-session token (32 opaque random bytes, KV-TTL to expiry) ──────────────
-  // Severs the gratuitous HMAC binding to WEBHOOK_SIGNING_MASTER_KEY (Share-6-4a).
-  // KV storage, TTL, and both ctEqual verifiers (handleUploadUrls, finalise.js)
-  // are UNCHANGED — they compare the stored value byte-for-byte. Backward-compatible:
-  // HMAC-shaped tokens already in KV still verify; only newly-minted tokens change shape.
-  const _rndBytes   = crypto.getRandomValues(new Uint8Array(32));
-  const sessionToken = btoa(String.fromCharCode(..._rndBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const sessionTtl   = Math.max(expiryTs - nowSeconds, 3600);
-  try {
-    await env.STATUS_KV.put(`upload_session:${uuid}`, sessionToken, { expirationTtl: sessionTtl });
-  } catch (e) {
-    console.error('upload_session KV write failed:', e);
-    return err(502, 'Session store unavailable');
-  }
+  // Upload session: MAC'd token minted above (B12-3). No KV record — the bound
+  // lives in the MAC and "spent"/"deleted" live in the R2 manifest.
 
   // ── First batch of presigned PutObject URLs (§6) ───────────────────────────
   let presign;
   try {
-    presign = await makePresigner(r2Config(env));
+    // SR S1.2: every URL expires with the session.
+    presign = await makePresigner({ ...r2Config(env), expiresIn: Math.min(PRESIGN_EXPIRY, sessionExp - nowSeconds) });
   } catch (e) {
     console.error('makePresigner failed:', e);
     return err(503, 'R2 presigning not configured');
@@ -1634,26 +1728,22 @@ async function handleInitiate(request, env, ctx, uuid) {
 async function handleUploadUrls(request, env, uuid) {
   if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
 
-  // ── Session-token auth (timing-safe compare vs KV) ─────────────────────────
-  const presented = request.headers.get('X-Upload-Session') ?? '';
-  let stored = null;
-  try {
-    stored = await env.STATUS_KV.get(`upload_session:${uuid}`);
-  } catch (e) {
-    console.error('upload_session KV read failed:', e);
-    return err(502, 'Session store unavailable');
-  }
-  if (!presented || !stored || !ctEqual(presented, stored)) {
+  // ── Session-token auth (B12-3, SR S1.3): MAC'd; the bound is in the MAC ────
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const session = await verifySessionToken(env, request.headers.get('X-Upload-Session') ?? '', uuid, nowSeconds);
+  if (!session) {
     logEvent(env, { endpoint: 'upload_urls', status: 401, errorMsg: 'session_token_invalid' });
     return err(401, 'Invalid or expired upload session');
   }
 
-  // ── Manifest bounds ────────────────────────────────────────────────────────
+  // ── Manifest state (R2 is the truth for spent / deleted) ───────────────────
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize) return err(502, 'Transfer manifest exceeds size limit');
   if (!manifest) return err(404, 'Transfer not found');
+  if (manifest.consumed === true) return err(410, 'Transfer has been destroyed');
   if (manifest.upload_complete) return err(409, 'Upload already complete');
-  const totalChunks = manifest.total_chunks ?? 0;
+  if (manifest.total_chunks !== session.totalChunks) return err(409, 'Upload session does not match transfer');
+  const totalChunks = session.totalChunks;
 
   let body;
   try {
@@ -1676,7 +1766,8 @@ async function handleUploadUrls(request, env, uuid) {
 
   let presign;
   try {
-    presign = await makePresigner(r2Config(env));
+    // SR S1.2: never valid past the session.
+    presign = await makePresigner({ ...r2Config(env), expiresIn: Math.min(PRESIGN_EXPIRY, session.sessionExp - nowSeconds) });
   } catch (e) {
     console.error('makePresigner failed:', e);
     return err(503, 'R2 presigning not configured');

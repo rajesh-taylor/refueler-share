@@ -8,31 +8,67 @@ import { CHUNK_SIZE } from 'src/sweep_rules.js';
 export function makeBucket(seed = {}) {
   const store = new Map();
   const log   = { puts: [], deletes: [] };
+  let etagSeq = 0;
+  const nextEtag = () => `etag-${++etagSeq}`;
   for (const [key, v] of Object.entries(seed)) {
-    store.set(key, { body: v.body, size: v.size ?? (v.body ? v.body.length : 0), uploaded: new Date(v.uploaded * 1000) });
+    store.set(key, { body: v.body, size: v.size ?? (v.body ? v.body.length : 0), uploaded: new Date(v.uploaded * 1000), etag: nextEtag() });
+  }
+  // R2 onlyIf semantics (proven on real R2 at B12-3): etagMatches → put only if
+  // the current etag equals it; etagDoesNotMatch '*' → put only if absent.
+  // A failed condition returns null. Accepts an R2Conditional or a Headers.
+  function conditionHolds(key, onlyIf) {
+    if (!onlyIf) return true;
+    const cur = store.get(key);
+    const get = (n, h) => (onlyIf instanceof Headers ? onlyIf.get(h) : onlyIf[n]);
+    const m  = get('etagMatches', 'If-Match');
+    const nm = get('etagDoesNotMatch', 'If-None-Match');
+    if (m  !== undefined && m  !== null && (!cur || (m !== '*' && cur.etag !== m))) return false;
+    if (nm !== undefined && nm !== null && cur && (nm === '*' || cur.etag === nm)) return false;
+    return true;
   }
   return {
     _store: store,
     _log:   log,
-    async list({ prefix = '', limit = 1000, cursor } = {}) {
-      const keys  = [...store.keys()].filter(k => k.startsWith(prefix)).sort();
+    async list({ prefix = '', limit = 1000, cursor, delimiter } = {}) {
+      let keys = [...store.keys()].filter(k => k.startsWith(prefix)).sort();
+      const delimitedPrefixes = [];
+      if (delimiter) {
+        const seen = new Set();
+        keys = keys.filter(k => {
+          const i = k.indexOf(delimiter, prefix.length);
+          if (i < 0) return true;
+          const p = k.slice(0, i + delimiter.length);
+          if (!seen.has(p)) { seen.add(p); delimitedPrefixes.push(p); }
+          return false;
+        });
+      }
       const start = cursor ? parseInt(cursor, 10) : 0;
       const next  = start + limit;
+      const truncated = next < keys.length;
       return {
-        objects: keys.slice(start, next).map(k => ({ key: k, size: store.get(k).size, uploaded: store.get(k).uploaded })),
-        list_complete: next >= keys.length,
+        objects: keys.slice(start, next).map(k => ({ key: k, size: store.get(k).size, uploaded: store.get(k).uploaded, etag: store.get(k).etag })),
+        delimitedPrefixes: start === 0 ? delimitedPrefixes : [],
+        list_complete: !truncated,
+        truncated,
         cursor: String(next),
       };
     },
     async get(key) {
       const o = store.get(key);
       if (!o) return null;
-      return { size: o.size, json: async () => JSON.parse(o.body), text: async () => o.body };
+      return { size: o.size, etag: o.etag, json: async () => JSON.parse(o.body), text: async () => o.body };
     },
-    async put(key, value) {
+    async head(key) {
+      const o = store.get(key);
+      return o ? { size: o.size, etag: o.etag } : null;
+    },
+    async put(key, value, opts = {}) {
+      if (!conditionHolds(key, opts.onlyIf)) return null;
       log.puts.push({ key, value });
       const body = typeof value === 'string' ? value : undefined;
-      store.set(key, { body, size: body ? body.length : (value?.byteLength ?? 0), uploaded: new Date(Date.now()) });
+      const etag = nextEtag();
+      store.set(key, { body, size: body ? body.length : (value?.byteLength ?? 0), uploaded: new Date(Date.now()), etag });
+      return { key, etag };
     },
     async delete(keys) {
       const arr = Array.isArray(keys) ? keys : [keys];

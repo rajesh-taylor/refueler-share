@@ -24,7 +24,8 @@
  * }
  */
 
-import { err, json, requireAdmin } from '../utils.js';
+import { err, json, requireAdmin, safeGetManifest } from '../utils.js';
+import { destroyTransfer } from './delete_transfer.js';
 
 const UUID_PREFIX_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//i;
 
@@ -105,35 +106,20 @@ export async function handlePurgeTestTransfers(request, env) {
     let deletedHere = 0;
 
     if (!dryRun) {
-      // Chunks first
-      for (const chunkSeg of (entry?.chunks ?? [])) {
-        const key = `${uuid}/${chunkSeg}`;
-        try {
-          await env.BUCKET.delete(key);
-          deletedHere++;
-        } catch (e) {
-          console.error(`purge_test_transfers: delete failed for ${key}:`, e);
-        }
-      }
-
-      // Hashes sidecar
-      if (entry?.hasHashes) {
-        try {
-          await env.BUCKET.delete(`${uuid}/hashes`);
-          deletedHere++;
-        } catch (e) {
-          console.error(`purge_test_transfers: delete failed for ${uuid}/hashes:`, e);
-        }
-      }
-
-      // Manifest last
+      // B12-3: the shared destruction (delete_transfer.js) — latch, quota
+      // release by the winner, batched deletes, tombstone last. The manifest
+      // now stays as a tombstone (it was deleted outright before), the same
+      // end state as every other deletion path.
       try {
-        await env.BUCKET.delete(`${uuid}/manifest.json`);
-        deletedHere++;
+        const { manifest } = await safeGetManifest(env.BUCKET, uuid, env);
+        if (manifest) {
+          const before = (entry?.chunks.size ?? 0) + (entry?.hasHashes ? 1 : 0);
+          const r = await destroyTransfer(env, uuid, manifest, Math.floor(Date.now() / 1000), 'purge_test');
+          deletedHere = r?.destroyed ? before : 0;
+        }
       } catch (e) {
-        console.error(`purge_test_transfers: delete failed for ${uuid}/manifest.json:`, e);
+        console.error(`purge_test_transfers: destroy failed for ${uuid}:`, e);
       }
-
       totalDeleted += deletedHere;
     }
 

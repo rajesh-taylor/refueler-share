@@ -35,6 +35,11 @@ import { notifyTransfer }                             from '../src/webhook_deliv
 import { handleDeleteTransfer, handleOwnerDelete }    from '../src/handlers/delete_transfer.js';
 import { handleFinalise }                             from '../src/handlers/finalise.js';
 import { handleExecutionDock }                        from '../src/handlers/execution_dock.js';
+import { makeSessionToken } from '../src/upload_session.js';
+// B12-3: upload sessions are MAC'd tokens (upload_session.js); no KV record.
+const SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
+const sessionTok = (uuid, n) => makeSessionToken({ UPLOAD_SESSION_KEY: SESSION_KEY }, uuid, n, Math.floor(Date.now() / 1000) + 3600);
+
 
 const NOW  = 1_800_000_000;
 const DAY  = 86400;
@@ -167,12 +172,12 @@ describe('finalise — X4: no plaintext size in dock_index', () => {
     const seed = { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify({ uuid: UUID, tier: 'creative', total_chunks: 2, total_bytes: 12345, upload_complete: false, expiry_timestamp: NOW + DAY }) },
                    [`${UUID}/0000`]: { size: FULL, uploaded: NOW }, [`${UUID}/0001`]: { size: 10, uploaded: NOW } };
     const bucket = makeBucket(seed);
-    const kv = makeKV({ [`upload_session:${UUID}`]: 'tok', [`dock_index:${UUID}`]: existingDock });
+    const kv = makeKV({ [`dock_index:${UUID}`]: existingDock });
     const req = new Request(`https://w.test/upload/${UUID}/finalise`, {
-      method: 'POST', headers: { 'X-Upload-Session': 'tok' },
+      method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 2) },
       body: JSON.stringify({ hashes: [B32, B32], merkle_root: B32 }),
     });
-    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv }, UUID);
+    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv, UPLOAD_SESSION_KEY: SESSION_KEY }, UUID);
     return { res, entry: JSON.parse(kv._store.get(`dock_index:${UUID}`)) };
   }
 

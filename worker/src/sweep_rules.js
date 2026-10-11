@@ -11,6 +11,7 @@
 
 import { buildTombstone } from './manifest_tg.js';
 import { putManifest }    from './manifest.js';
+import { latchConsumed }  from './latch.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -142,38 +143,26 @@ export async function settleDockEntry(kv, uuid, { mark, nowSeconds }) {
  * `groups` = [chunkKeys, [hashes, date-seal]]; the tombstone is the manifest's
  * final state (written last, exactly as DAD does).
  *
- * The manifest is RE-READ immediately before the guard write. If another path
- * consumed it since classification, this run did NOT make the transition: no
- * purge, and the dock entry is removed (never marked).
- *
- * TODO(B12-3, SR §S1.8): the guard write becomes `put` with
- * `onlyIf: { etagMatches }`; a null return means another path won.
+ * The guard write is the B12-SR S1.8 latch (latch.js): an R2 conditional put
+ * on the freshly re-read manifest. If another path consumed it first, or it is
+ * no longer eligible, this run did NOT make the transition: no purge, and the
+ * dock entry is removed (never marked). Only the winner releases quota.
  */
 export async function purgeExpiredTransfer(env, uuid, groups, nowSeconds) {
-  let fresh = null;
+  let latch;
   try {
-    const obj = await env.BUCKET.get(`${uuid}/manifest.json`);
-    if (obj) fresh = await obj.json();
+    latch = await latchConsumed(env, uuid, nowSeconds, { eligible: (m) => isPurgeableExpired(m, nowSeconds) });
   } catch (e) {
-    console.error(`sweep: manifest re-read failed for ${uuid}:`, e);
-    return { status: 'read_failed', deleted: 0, dock: null };
+    console.error(`sweep: latch failed for ${uuid}:`, e);
+    return { status: 'guard_failed', deleted: 0, dock: null };
   }
-  if (!fresh) return { status: 'gone', deleted: 0, dock: null };
-
-  if (fresh.consumed === true) {
+  if (latch.reason === 'gone') return { status: 'gone', deleted: 0, dock: null };
+  if (latch.reason === 'already_consumed') {
     const dock = await settleDockEntry(env.STATUS_KV, uuid, { mark: false, nowSeconds });
     return { status: 'lost_race', deleted: 0, dock };
   }
-  if (!isPurgeableExpired(fresh, nowSeconds)) {
-    return { status: 'no_longer_eligible', deleted: 0, dock: null };
-  }
-
-  try {
-    await putManifest(env.BUCKET, uuid, { ...fresh, consumed: true, consumed_at: nowSeconds });
-  } catch (e) {
-    console.error(`sweep: consumed guard write failed for ${uuid}:`, e);
-    return { status: 'guard_failed', deleted: 0, dock: null };
-  }
+  if (latch.reason === 'not_eligible') return { status: 'no_longer_eligible', deleted: 0, dock: null };
+  if (!latch.won) return { status: 'guard_failed', deleted: 0, dock: null };
 
   const deleted = await deleteGroups(env.BUCKET, groups);
   try { await env.STATUS_KV.delete(`root_verified:${uuid}`); }

@@ -39,6 +39,7 @@ const utf8 = (s) => new TextEncoder().encode(s);
 function makeEnv(overrides = {}) {
   return {
     COMMITMENT_KEY:          KEY,
+    UPLOAD_SESSION_KEY: 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=',
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,
     TURNSTILE_SECRET_KEY:    'ts',
     ADMIN_KEY:               'admin-test',

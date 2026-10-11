@@ -8,6 +8,7 @@ import worker from '../../src/index.js';
 import { sha256Hex } from '../../src/api_auth.js';
 import { randomBase58 } from '../../src/handlers/api_admin.js';
 import { applyQuotaSpend, addOneMonth } from '../../src/quota.js';
+import { quotaRefFor } from '../../src/quota_store.js';
 import { makeBucket, makeKV } from '../_r2_mock.js';
 import { blindMessage, unblindSignature, pointFromHex } from '@cashu/cashu-ts';
 
@@ -15,12 +16,16 @@ export const MINT_PRIVKEY_HEX = '7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7
 export const ADMIN = 'admin-test';
 export const ctx = { waitUntil() {}, passThroughOnException() {} };
 export const ORIGIN = 'https://api.share.test';
+export const QUOTA_REF_KEY      = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
+export const UPLOAD_SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
 
 // ── Fake Supabase ─────────────────────────────────────────────────────────────
 export function makeSupabase() {
   const keys  = new Map(); // key_hash hex → row
   const pools = new Map(); // org → pool
   const spent = new Set();
+  const quota = new Map();        // quota_ref hex → account   (B12-3; mirrors 20261011_b12_3_quota.sql)
+  const reservations = new Map(); // session_hash hex → { q, chunks, expires_at }
   const calls = [];
   const state = { down: false };
   const now = () => Math.floor(Date.now() / 1000);
@@ -81,6 +86,68 @@ export function makeSupabase() {
       p.remaining = Math.min(p.allocation, p.remaining + (p_cost - back));
       return p;
     },
+    // ── B12-3 quota: same rules as the SQL functions, single-threaded ─────────
+    quota_provision({ p_quota_ref, p_kind, p_limit_chunks, p_max_in_flight }) {
+      const a = quota.get(p_quota_ref) ?? { used_chunks: 0, reserved_chunks: 0 };
+      Object.assign(a, { kind: p_kind, limit_chunks: p_limit_chunks, max_in_flight: p_max_in_flight, updated_at: now() });
+      quota.set(p_quota_ref, a);
+      return qjson(a);
+    },
+    quota_get({ p_quota_ref }) { const a = quota.get(p_quota_ref); return a ? qjson(a) : null; },
+    quota_reserve({ p_quota_ref, p_session_hash, p_need, p_expires_at }) {
+      if (!(p_need >= 1 && p_need <= 8000)) throw new Error('need out of range');
+      const a = quota.get(p_quota_ref);
+      if (!a) return { ok: false, code: 'quota_not_provisioned' };
+      const r = refresh(p_quota_ref);
+      const n = [...reservations.values()].filter(x => x.q === p_quota_ref).length;
+      const fig = { limit_chunks: a.limit_chunks, used_chunks: a.used_chunks, reserved_chunks: r };
+      if (n >= a.max_in_flight) return { ok: false, code: 'too_many_in_flight', ...fig };
+      if (a.used_chunks + r + p_need > a.limit_chunks) return { ok: false, code: 'quota_exceeded', ...fig };
+      if (reservations.has(p_session_hash)) throw new Error('duplicate session_hash');
+      reservations.set(p_session_hash, { q: p_quota_ref, chunks: p_need, expires_at: p_expires_at });
+      a.reserved_chunks = r + p_need; a.updated_at = now();
+      return { ok: true, ...fig, reserved_chunks: a.reserved_chunks };
+    },
+    quota_finalise({ p_session_hash }) {
+      const r = reservations.get(p_session_hash);
+      if (!r) return { ok: true, converted: 0 };
+      reservations.delete(p_session_hash);
+      const a = quota.get(r.q);
+      a.reserved_chunks = Math.max(a.reserved_chunks - r.chunks, 0); a.used_chunks += r.chunks; a.updated_at = now();
+      return { ok: true, converted: r.chunks };
+    },
+    quota_release({ p_quota_ref, p_session_hash, p_chunks, p_complete }) {
+      const a = quota.get(p_quota_ref);
+      if (!a) return { ok: false, code: 'quota_not_provisioned' };
+      const r = reservations.get(p_session_hash);
+      if (r && r.q === p_quota_ref) {
+        reservations.delete(p_session_hash);
+        a.reserved_chunks = Math.max(a.reserved_chunks - r.chunks, 0); a.updated_at = now();
+        return { ok: true, released: 'reservation', chunks: r.chunks };
+      }
+      if (p_complete) {
+        const clamped = a.used_chunks < p_chunks;
+        a.used_chunks = Math.max(a.used_chunks - p_chunks, 0); a.updated_at = now();
+        return { ok: true, released: 'used', chunks: p_chunks, clamped };
+      }
+      return { ok: true, released: 'none', chunks: 0 };
+    },
+    quota_now() { return state.clock ?? now(); },
+    quota_reconcile({ p_t0, p_rows }) {
+      let accounts = 0, corrected = 0, skipped = 0, drift = 0;
+      for (const [q, a] of quota) {
+        accounts++;
+        const e = (p_rows ?? []).find(x => x.q === q);
+        const computed = e?.used ?? 0;
+        if (a.updated_at < p_t0) {
+          for (const h of e?.done ?? []) if (reservations.get(h)?.q === q) reservations.delete(h);
+          refresh(q);
+          if (a.used_chunks !== computed) { corrected++; drift += Math.abs(a.used_chunks - computed); }
+          a.used_chunks = computed; a.reconciled_at = now();
+        } else { skipped++; refresh(q); }
+      }
+      return { ok: true, accounts, corrected, drift_chunks: drift, skipped };
+    },
     api_pool_stats() {
       const prod = [...pools.values()].filter(p => p.plan !== 'sandbox');
       const by_plan = {};
@@ -88,6 +155,21 @@ export function makeSupabase() {
       return { provisioned: prod.length, active: prod.filter(p => p.status === 'active').length, by_plan };
     },
   };
+
+  function qjson(a) {
+    return { kind: a.kind, limit_chunks: a.limit_chunks, used_chunks: a.used_chunks,
+             reserved_chunks: a.reserved_chunks, max_in_flight: a.max_in_flight };
+  }
+  function refresh(q) {
+    const t = now();
+    let r = 0;
+    for (const [h, x] of reservations) {
+      if (x.q !== q) continue;
+      if (x.expires_at <= t) reservations.delete(h); else r += x.chunks;
+    }
+    quota.get(q).reserved_chunks = r;
+    return r;
+  }
 
   async function fetchImpl(url, opts = {}) {
     const u = String(url);
@@ -99,7 +181,9 @@ export function makeSupabase() {
     if (m) {
       const fn = rpcs[m[1]];
       if (!fn) return new Response('no such rpc', { status: 404 });
-      const out = fn(opts.body ? JSON.parse(opts.body) : {});
+      let out;
+      try { out = fn(opts.body ? JSON.parse(opts.body) : {}); }
+      catch (e) { return new Response(String(e.message), { status: 400 }); }
       return new Response(out === null ? 'null' : JSON.stringify(out), { status: 200 });
     }
     if (u.includes('/rest/v1/spent_tokens')) {
@@ -117,7 +201,7 @@ export function makeSupabase() {
     return new Response('[]', { status: 200 });
   }
 
-  return { keys, pools, spent, calls, state, fetchImpl, rpcCalls: (fn) => calls.filter(c => c.path === `/rest/v1/rpc/${fn}`) };
+  return { keys, pools, spent, quota, reservations, calls, state, fetchImpl, rpcCalls: (fn) => calls.filter(c => c.path === `/rest/v1/rpc/${fn}`) };
 }
 
 export function makeEnv(overrides = {}) {
@@ -138,13 +222,15 @@ export function makeEnv(overrides = {}) {
     SHARE_SEAL_CURRENT:      '1',
     SHARE_SEAL_KEY_1:        'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
     KV_MAC_KEY:              'ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=',
+    QUOTA_REF_KEY,
+    UPLOAD_SESSION_KEY,
     WEBHOOK_SIGNING_MASTER_KEY: 'test-master-key',
     ...overrides,
   };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-export async function seedClient(sb, { sandbox = false, plan = 'personal_api', allocation = 10, rail = 'identity' } = {}) {
+export async function seedClient(sb, { sandbox = false, plan = 'personal_api', allocation = 10, rail = 'identity', limitChunks = 8000, maxInFlight = 20, storageQuota = true } = {}) {
   const live = sandbox ? `rfs_test_live_${randomBase58()}` : `rfs_live_${randomBase58()}`;
   const sign = sandbox ? `rfs_test_sign_${randomBase58()}` : `rfs_sign_${randomBase58()}`;
   const org  = crypto.randomUUID();
@@ -153,8 +239,14 @@ export async function seedClient(sb, { sandbox = false, plan = 'personal_api', a
   if (rail === 'identity') {
     sb.pools.set(org, { plan, allocation, remaining: allocation, overage_credits: 0, overage_ceiling: 0,
                         period_start: t, period_end: addOneMonth(t), status: 'active', updated_at: t });
+    // B12-3: identity-rail orgs get a storage quota account at onboarding.
+    if (storageQuota) {
+      const q = await quotaRefFor({ QUOTA_REF_KEY }, org);
+      sb.quota.set(q, { kind: 'chartered', limit_chunks: limitChunks, used_chunks: 0, reserved_chunks: 0,
+                        max_in_flight: maxInFlight, updated_at: t - 10 });
+    }
   }
-  return { live, sign, org };
+  return { live, sign, org, quotaRef: rail === 'identity' && storageQuota ? await quotaRefFor({ QUOTA_REF_KEY }, org) : null };
 }
 
 export async function signedRequest(method, path, { live, sign }, body = '', extra = {}) {

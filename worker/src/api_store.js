@@ -18,7 +18,8 @@ const keyCache = new Map(); // key_hash hex → { record | null, at }
 
 export class StoreUnavailable extends Error {}
 
-async function rpc(env, fn, args) {
+/** Supabase RPC; any failure → StoreUnavailable. Shared with quota_store.js (B12-3). */
+export async function rpc(env, fn, args) {
   let res;
   try {
     res = await supabaseFetch(env, 'POST', `/rest/v1/rpc/${fn}`, args);

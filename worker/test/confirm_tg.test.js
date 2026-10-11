@@ -204,6 +204,7 @@ describe('buildTombstone', () => {
 // via manifest.js and nut11.js.
 
 import { handleConfirmTransfer } from '../src/handlers/confirm_transfer.js';
+import { makeBucket } from './_r2_mock.js';
 
 function makeRequest(method = 'POST', headers = {}) {
   return new Request('https://example.com/confirm/test-uuid', {
@@ -212,29 +213,22 @@ function makeRequest(method = 'POST', headers = {}) {
   });
 }
 
-function makeEnv(manifestData, { aeEnabled = true } = {}) {
-  const manifestJson = JSON.stringify(manifestData);
-
-  const bucket = {
-    get: vi.fn(async (key) => {
-      if (key.endsWith('manifest.json')) {
-        return {
-          size: manifestJson.length,
-          text: async () => manifestJson,
-        };
-      }
-      return null;
-    }),
-    put:    vi.fn(async () => {}),
-    delete: vi.fn(async () => {}),
-    head:   vi.fn(async () => null),
-  };
+function makeEnv(manifestData, { aeEnabled = true, uuid = 'aaaaaaaa-0000-0000-0000-000000000000' } = {}) {
+  // B12-3: a real in-memory bucket (etag + onlyIf, as proven on R2) — the
+  // confirm path now latches with a conditional put and destroys via the
+  // shared destruction (list + batched deletes). delete is spied.
+  const seed = { [`${uuid}/manifest.json`]: { body: JSON.stringify(manifestData), uploaded: 1 } };
+  for (let i = 0; i < (manifestData?.total_chunks ?? 0); i++) seed[`${uuid}/${String(i).padStart(4, '0')}`] = { size: 10, uploaded: 1 };
+  seed[`${uuid}/date-seal.ots.enc`] = { size: 10, uploaded: 1 };
+  const bucket = makeBucket(seed);
+  const realDelete = bucket.delete.bind(bucket);
+  bucket.delete = vi.fn(realDelete);
 
   const ae = aeEnabled ? { writeDataPoint: vi.fn() } : undefined;
 
   return {
     BUCKET:            bucket,
-    STATUS_KV:         { get: vi.fn(async () => null), put: vi.fn(), delete: vi.fn() },
+    STATUS_KV:         { get: vi.fn(async () => null), put: vi.fn(async () => {}), delete: vi.fn(async () => {}) },
     MINT_PRIVATE_KEY:  'test-key',
     AE:                ae,
   };
@@ -313,7 +307,7 @@ describe('handleConfirmTransfer', () => {
       tier:                'max',
       p2sh_secret_hash:    null,
     };
-    const env = makeEnv(manifest);
+    const env = makeEnv(manifest, { uuid });
     const ctx = makeCtx();
 
     const res = await handleConfirmTransfer(makeRequest(), env, ctx, uuid);
@@ -321,15 +315,16 @@ describe('handleConfirmTransfer', () => {
 
     expect(res.status).toBe(200);
     expect(body.destroyed).toBe(true);
+    // B12-3: the latch is written before the 200 (conditional put, consumed:true)
+    expect(JSON.parse(env.BUCKET._store.get(`${uuid}/manifest.json`).body).consumed).toBe(true);
 
     // Flush waitUntil promises
     await ctx.flush();
 
-    // Both chunks should be deleted
-    expect(env.BUCKET.delete).toHaveBeenCalledTimes(3);
-    expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/0000`);
-    expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/0001`);
-    expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/date-seal.ots.enc`);
+    // Both chunks and the date seal are deleted (one batched call)
+    expect(env.BUCKET._store.has(`${uuid}/0000`)).toBe(false);
+    expect(env.BUCKET._store.has(`${uuid}/0001`)).toBe(false);
+    expect(env.BUCKET._store.has(`${uuid}/date-seal.ots.enc`)).toBe(false);
 
     // Tombstone written — putManifest is mocked, verify it was called
     const { putManifest } = await import('../src/manifest.js');
@@ -400,7 +395,7 @@ describe('handleConfirmTransfer', () => {
       p2sh_secret_hash:    'a'.repeat(64),
       tier:                'max',
     };
-    const env = makeEnv(manifest);
+    const env = makeEnv(manifest, { uuid });
     const ctx = makeCtx();
 
     const res = await handleConfirmTransfer(
@@ -414,7 +409,7 @@ describe('handleConfirmTransfer', () => {
     expect(body.destroyed).toBe(true);
 
     await ctx.flush();
-    expect(env.BUCKET.delete).toHaveBeenCalledWith(`${uuid}/0000`);
+    expect(env.BUCKET._store.has(`${uuid}/0000`)).toBe(false);
   });
 });
 

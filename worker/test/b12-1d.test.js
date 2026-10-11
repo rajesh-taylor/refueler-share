@@ -18,6 +18,11 @@ import { computeCommitment } from '../src/commitment.js';
 import { CHUNK_SIZE, CHUNK_TAG_BYTES } from '../src/sweep_rules.js';
 import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 import { importTestCredKey, makeTestCredential, TESTCRED_USED_PREFIX } from '../src/testcred.js';
+import { makeSessionToken } from '../src/upload_session.js';
+// B12-3: upload sessions are MAC'd tokens (upload_session.js); no KV record.
+const SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
+const sessionTok = (uuid, n) => makeSessionToken({ UPLOAD_SESSION_KEY: SESSION_KEY }, uuid, n, Math.floor(Date.now() / 1000) + 3600);
+
 
 const TC_KEY = 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=';
 
@@ -32,6 +37,7 @@ function env() {
     BUCKET:    makeBucket(),
     STATUS_KV: makeKV(),
     COMMITMENT_KEY:          KEY,
+    UPLOAD_SESSION_KEY: 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=',
     TEST_CRED_KEY:           TC_KEY,
     CF_ACCOUNT_ID:           R2.accountId,
     R2_S3_ACCESS_KEY_ID:     R2.accessKeyId,
@@ -71,7 +77,9 @@ async function expectSigned(u, index, contentLength) {
   expect(q.get('X-Amz-SignedHeaders')).toBe('content-length;host');
   const d = q.get('X-Amz-Date');
   const now = new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(9, 11)}:${d.slice(11, 13)}:${d.slice(13, 15)}Z`);
-  const { url } = await presignPutObject({ ...R2, key: `${UUID}/${String(index).padStart(4, '0')}`, contentLength, now });
+  // B12-3 (SR S1.2): URL expiry = the session's remaining life, read from the URL.
+  const expiresIn = Number(q.get('X-Amz-Expires'));
+  const { url } = await presignPutObject({ ...R2, key: `${UUID}/${String(index).padStart(4, '0')}`, contentLength, now, expiresIn });
   expect(u).toBe(url);
 }
 
@@ -202,13 +210,13 @@ describe('B12-1d — finalise exact-size check', () => {
     const seed = { [`${UUID}/manifest.json`]: { uploaded: 1, body: JSON.stringify({ uuid: UUID, tier: 'free', total_chunks: sizes.length, total_bytes: 123, upload_complete: false }) } };
     sizes.forEach((size, i) => { seed[`${UUID}/${String(i).padStart(4, '0')}`] = { size, uploaded: 1 }; });
     const bucket = makeBucket(seed);
-    const kv  = makeKV({ [`upload_session:${UUID}`]: 'tok' });
+    const kv  = makeKV();
     const c   = ctx();
     const req = new Request(`https://w.test/upload/${UUID}/finalise`, {
-      method: 'POST', headers: { 'X-Upload-Session': 'tok' },
+      method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, sizes.length) },
       body: JSON.stringify({ hashes: sizes.map(() => B32), merkle_root: B32 }),
     });
-    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv }, UUID, c);
+    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv, UPLOAD_SESSION_KEY: SESSION_KEY }, UUID, c);
     return { res, body: await res.json(), bucket, kv, c };
   }
 
@@ -229,7 +237,7 @@ describe('B12-1d — finalise exact-size check', () => {
     expect(bucket._log.deletes).toEqual([[`${UUID}/0001`]]);
     expect(bucket._store.has(`${UUID}/hashes`)).toBe(false);
     expect(JSON.parse(bucket._store.get(`${UUID}/manifest.json`).body).upload_complete).toBe(false);
-    expect(kv._store.has(`upload_session:${UUID}`)).toBe(true); // session not spent — browser can re-PUT
+    // session not spent: nothing in R2 says complete, so the browser can re-PUT and retry
   });
 
   it('oversize tail → 409 wrong_size', async () => {
@@ -248,8 +256,8 @@ describe('B12-1d — finalise exact-size check', () => {
                    [`${UUID}/0000`]: { size: 5, uploaded: 1 } }; // wrong size AND 0001/0002 missing
     const bucket = makeBucket(seed);
     const c   = ctx();
-    const req = new Request(`https://w.test/upload/${UUID}/finalise`, { method: 'POST', headers: { 'X-Upload-Session': 'tok' }, body: '{}' });
-    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: makeKV({ [`upload_session:${UUID}`]: 'tok' }) }, UUID, c);
+    const req = new Request(`https://w.test/upload/${UUID}/finalise`, { method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 3) }, body: '{}' });
+    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: makeKV(), UPLOAD_SESSION_KEY: SESSION_KEY }, UUID, c);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'incomplete', missing: ['0001', '0002'] });
     expect(c._p).toHaveLength(0);

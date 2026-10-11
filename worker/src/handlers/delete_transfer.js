@@ -10,6 +10,7 @@ import { buildTombstone }                      from '../manifest_tg.js';
 import { putManifest }                         from '../manifest.js';
 import { verifyDownloadToken }                 from '../nut11.js';
 import { deleteKeys }                          from '../sweep_rules.js';
+import { latchConsumed }                       from '../latch.js';
 import { UUID_RE, safeGetManifest, json, err, requireAdmin } from '../utils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,11 +32,20 @@ import { UUID_RE, safeGetManifest, json, err, requireAdmin } from '../utils.js';
 const isTombstone = (m) => m.consumed === true && !Number.isFinite(m.total_chunks);
 
 // Also the DAD path (Share-DAD-2): finishDownload calls this inside waitUntil.
+// B12-3 (SR S1.8): the live → consumed step is the R2 conditional-put latch.
+// The winner releases quota (inside latchConsumed); a loser, or a resumed
+// partial delete, carries on destroying but never releases.
 export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
-  const consumedAt = manifest.consumed === true ? (manifest.consumed_at ?? nowSeconds) : nowSeconds;
+  let consumedAt = manifest.consumed === true ? (manifest.consumed_at ?? nowSeconds) : nowSeconds;
 
   if (manifest.consumed !== true) {
-    await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: consumedAt });
+    const latch = await latchConsumed(env, uuid, nowSeconds);
+    if (latch.reason === 'gone') return { destroyed: false, gone: true };
+    if (latch.reason === 'contended') {
+      console.error(`${logTag}: manifest latch contended for ${uuid}; left for retry`);
+      return { destroyed: false, partial: true, remaining: null };
+    }
+    consumedAt = latch.consumedAt ?? consumedAt;
   }
 
   const prefix = `${uuid}/`;

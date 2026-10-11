@@ -13,6 +13,11 @@ import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 import { deriveKvMacKey, makeRootVerifiedValue, checkRootVerifiedValue } from '../src/kvmac.js';
 import { readSidecarWithRootCheck } from '../src/handlers/download_verify.js';
 import { reconstructRoot } from '../src/merkle.js';
+import { makeSessionToken } from '../src/upload_session.js';
+// B12-3: upload sessions are MAC'd tokens (upload_session.js); no KV record.
+const SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
+const sessionTok = (uuid, n) => makeSessionToken({ UPLOAD_SESSION_KEY: SESSION_KEY }, uuid, n, Math.floor(Date.now() / 1000) + 3600);
+
 
 const ADMIN_KEY = 'test-admin-key-kvfix1a';
 const T = 1_791_000_000;
@@ -137,12 +142,12 @@ describe('finalise — runs once', () => {
       [`${UUID}/manifest.json`]: { uploaded: 1, body: JSON.stringify(done) },
       [`${UUID}/0000`]: { size: FULL, uploaded: 1 },
     });
-    const kv  = makeKV({ [`upload_session:${UUID}`]: 'planted' });
+    const kv  = makeKV();
     const req = new Request(`https://w.test/upload/${UUID}/finalise`, {
-      method: 'POST', headers: { 'X-Upload-Session': 'planted' },
+      method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 1) },   // a valid, replayed session
       body: JSON.stringify({ hashes: [B32], merkle_root: B32 }),
     });
-    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv }, UUID, { waitUntil() {} });
+    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv, UPLOAD_SESSION_KEY: SESSION_KEY }, UUID, { waitUntil() {} });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'already_complete' });
     expect(JSON.parse(bucket._store.get(`${UUID}/manifest.json`).body).merkle_root).toBe('orig');

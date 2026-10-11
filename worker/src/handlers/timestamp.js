@@ -11,7 +11,7 @@ import {
   buildTimestampPendingPatch,
   isTimestampEligible,
 } from '../manifest_tg.js';
-import { putManifest }                         from '../manifest.js';
+import { updateManifest }                      from '../latch.js';
 import { notifyTransfer, EVENTS } from '../webhook_delivery.js';
 import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
 
@@ -62,7 +62,12 @@ export async function handleTimestampSubmit(request, env, ctx) {
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   const patch = buildTimestampPendingPatch(nowSeconds);
-  await putManifest(env.BUCKET, uuid, { ...manifest, ...patch });
+  // B12-3: conditional write (latch.js) — never overwrites a concurrent consumed:true.
+  const r = await updateManifest(env.BUCKET, uuid, (m) =>
+    (m.consumed === true || !isTimestampEligible(m)) ? null : { ...m, ...patch });
+  if (r.status === 'gone' || r.before?.consumed === true) return err(410, 'Transfer has been destroyed');
+  if (r.status === 'declined') return err(409, 'Timestamp state changed — please retry');
+  if (r.status !== 'written') return err(503, 'Transfer busy — please retry');
 
   // transfer.timestamp_submitted — routed from the manifest's cref_ct (API-Repair-1).
   ctx.waitUntil(notifyTransfer(env, uuid, manifest, EVENTS.TIMESTAMP));

@@ -53,6 +53,7 @@ export async function buildStorageSummary(env, nowSeconds) {
   const blank = () => ({ transfers: 0, bytes: 0 });
   const live = {};                     // tier key → { transfers, bytes }
   const uploading = blank(), expired = blank(), deleted = blank(), unattached = blank(), unreadable = blank();
+  const soak = blank();                // B12-SR S2.5: soak tests on their own line, never hidden
 
   await Promise.all([...byUuid].map(async ([uuid, e]) => {
     let bucket;
@@ -64,6 +65,7 @@ export async function buildStorageSummary(env, nowSeconds) {
       else if (m.consumed === true)             bucket = deleted;
       else if (m.upload_complete !== true)      bucket = uploading;
       else if (nowSeconds > (m.expiry_timestamp ?? 0)) bucket = expired;
+      else if (m.soak === true)                 bucket = soak;
       else {
         const tier = typeof m.tier === 'string' ? m.tier : 'unknown';
         bucket = live[tier] ??= blank();
@@ -85,6 +87,7 @@ export async function buildStorageSummary(env, nowSeconds) {
     // 5 % bands, rounded down (B12-SR S5 rule, applied here too).
     budget_band_pct: Math.floor((totalBytes / GIB) / budget * 20) * 5,
     live,
+    soak,
     uploading, expired, deleted, unattached, unreadable,
     other_bytes: otherBytes,
   };

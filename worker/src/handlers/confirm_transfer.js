@@ -25,17 +25,14 @@
  * we are already inside waitUntil — cannot nest.
  */
 
-import { getManifest, putManifest }                          from '../manifest.js';
-import { buildTombstone }                                    from '../manifest_tg.js';
+import { getManifest }                                       from '../manifest.js';
+import { latchConsumed }                                     from '../latch.js';
+import { destroyTransfer }                                   from './delete_transfer.js';
 import { verifyDownloadToken }                               from '../nut11.js';
 import { notifyTransfer, EVENTS }                            from '../webhook_delivery.js';
 
 const MANIFEST_SIZE_MAX = 64 * 1024;
 
-// Chunk key format — must match upload handler exactly.
-function chunkKey(uuid, index) {
-  return `${uuid}/${index.toString().padStart(4, '0')}`;
-}
 
 export async function handleConfirmTransfer(request, env, ctx, uuid) {
   // ── Auth — mirrors download handler ──────────────────────────────────────
@@ -82,69 +79,36 @@ export async function handleConfirmTransfer(request, env, ctx, uuid) {
   // pending_destruction === true: final chunk was served, sender armed it.
 
   // ── Fail-closed deletion sequence ─────────────────────────────────────────
+  // B12-3: the consumed step is the R2 conditional-put latch (SR S1.8), awaited
+  // before the 200 so the transfer is blocked from that moment. The rest is the
+  // shared destruction (delete_transfer.js — the same call DAD, owner delete and
+  // bearer delete make); it also clears dock_index (B12 §0.3: absence is the
+  // trace — the old "collected" mark here predated that rule).
   const nowSeconds  = Math.floor(Date.now() / 1000);
   const totalChunks = manifest.total_chunks ?? 0;
 
-  // Step 1: consumed marker — synchronous write before returning 200.
-  await putManifest(env.BUCKET, uuid, { ...manifest, consumed: true, consumed_at: nowSeconds });
+  const latch = await latchConsumed(env, uuid, nowSeconds);
+  if (!latch.won) {
+    if (latch.reason === 'gone')      return _err(404, 'Transfer not found.');
+    if (latch.reason === 'contended') return _err(503, 'Transfer busy — please retry.');
+    return _err(410, 'Transfer has already been destroyed.');
+  }
+  const latched = { ...latch.manifest, consumed: true, consumed_at: nowSeconds };
 
-  // Steps 2–5: fire-and-forget via waitUntil. Caller receives 200 immediately.
   ctx.waitUntil(
     (async () => {
-      // ── Step 2: Delete chunks ─────────────────────────────────────────────
-      const deleteErrors = [];
-      for (let i = 0; i < totalChunks; i++) {
-        try {
-          await env.BUCKET.delete(chunkKey(uuid, i));
-        } catch (e) {
-          console.error(`confirm: chunk delete failed at index ${i}:`, e);
-          deleteErrors.push(i);
-        }
-      }
+      const r = await destroyTransfer(env, uuid, latched, nowSeconds, 'confirm')
+        .catch(e => { console.error('confirm: destruction failed:', e); return null; });
 
-      // TH-1: delete encrypted .ots blob if present — load-bearing on all
-      // deletion paths. No-op if timestamp_state was 'none'.
-      env.BUCKET.delete(`${uuid}/date-seal.ots.enc`).catch(e =>
-        console.error('TH-1: date-seal.ots.enc delete failed (confirm path):', e)
-      );
-
-      // ── Step 3: Overwrite with stripped tombstone ──────────────────────────
-      const tombstone = buildTombstone(nowSeconds);
-      try {
-        await putManifest(env.BUCKET, uuid, tombstone);
-      } catch (e) {
-        console.error('confirm: tombstone write failed:', e);
-      }
-
-      // ── Step 4: Mark collected in Execution Dock KV index ─────────────────
-      try {
-        const dockRaw = await env.STATUS_KV.get(`dock_index:${uuid}`, { type: 'json' });
-        if (dockRaw) {
-          await env.STATUS_KV.put(
-            `dock_index:${uuid}`,
-            JSON.stringify({
-              ...dockRaw,
-              collected:    true,
-              collected_at: nowSeconds,
-            }),
-            { expirationTtl: 86400 * 7 },
-          );
-        }
-      } catch (e) {
-        console.error('confirm: dock_index collected update failed:', e);
-      }
-
-      // ── Step 5: Webhook — 'transfer.confirmed' ───────────────────────────
-      // Routed from the manifest read above (cref_ct, pre-tombstone); consumer
-      // transfers have none and are skipped. Inline: already inside waitUntil.
-      // Webhook failure never affects deletion outcome. (API-Repair-1)
+      // Webhook — 'transfer.confirmed'. Routed from the pre-tombstone manifest
+      // (cref_ct); consumer transfers have none and are skipped. Notification,
+      // never control flow (API-Repair-1).
       await notifyTransfer(env, uuid, manifest, EVENTS.CONFIRMED);
 
-      // ── AE log ────────────────────────────────────────────────────────────
       if (env.AE) {
         try {
           env.AE.writeDataPoint({
-            blobs:   ['transfer_destroyed', manifest.tier ?? 'free', deleteErrors.length > 0 ? 'partial_delete' : '', ''],
+            blobs:   ['transfer_destroyed', manifest.tier ?? 'free', r?.destroyed ? '' : 'partial_delete', ''],
             doubles: [0, 200, 0, totalChunks, 0],
             indexes: ['transfer_destroyed'],
           });

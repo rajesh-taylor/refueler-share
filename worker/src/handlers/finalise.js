@@ -12,7 +12,7 @@
  * chunks / ~30 GB), writes the {uuid}/hashes sidecar (raw 32-byte concat,
  * chunk order — merkle-spec §1/§2), records the browser-supplied
  * ciphertext-chunk merkle_root + tree_algo, flips upload_complete:true,
- * spends the session token, and enriches the Execution Dock KV entry with
+ * (session tokens are MAC'd, B12-3 — nothing to spend in KV), and enriches the Execution Dock KV entry with
  * rail · merkle_root. size_bytes is deliberately NOT written (B12-SR X4:
  * plaintext size is never persisted in KV).
  *
@@ -40,9 +40,11 @@
  */
 
 import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
-import { putManifest } from '../manifest.js';
+import { updateManifest } from '../latch.js';
+import { verifySessionToken, sessionHash } from '../upload_session.js';
+import { finaliseQuota } from '../quota_store.js';
 import { wrongSizeSegments, DELETE_BATCH } from '../sweep_rules.js';
-import { hasCref } from '../seal.js';
+import { hasCref, hasQref } from '../seal.js';
 import { issueReceipt } from '../receipts.js';
 
 // base64url → Uint8Array. Returns null on any non-base64url input or decode
@@ -59,21 +61,6 @@ function b64urlToBytes(s) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
-}
-
-// Timing-safe string compare. Local copy of index.js ctEqual (which stays in
-// index.js — it has other callers there). Kept identical so the fold is
-// behaviour-preserving; a handler in handlers/ is self-contained by convention.
-function ctEqual(a, b) {
-  const ab = new TextEncoder().encode(String(a));
-  const bb = new TextEncoder().encode(String(b));
-  if (ab.length !== bb.length) return false;
-  try {
-    if (crypto.subtle.timingSafeEqual) return crypto.subtle.timingSafeEqual(ab, bb);
-  } catch { /* fall through to manual compare */ }
-  let diff = 0;
-  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
-  return diff === 0;
 }
 
 // Minimal AE writer — mirrors index.js logEvent's data-point shape exactly so
@@ -160,33 +147,30 @@ async function listBasedCompleteness(bucket, uuid, chunkCount) {
 export async function handleFinalise(request, env, uuid, ctx) {
   if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
 
-  // ── 1. Session-token auth (timing-safe compare vs KV) ──────────────────────
+  // ── 1. Session-token auth (B12-3, SR S1.3) ────────────────────────────────
+  // MAC'd token; the chunk count comes from the token, never from KV or the
+  // body. No KV session record exists: "spent" is upload_complete in R2.
   const presented = request.headers.get('X-Upload-Session') ?? '';
-  let stored = null;
-  try {
-    stored = await env.STATUS_KV.get(`upload_session:${uuid}`);
-  } catch (e) {
-    console.error('upload_session KV read failed:', e);
-    return err(502, 'Session store unavailable');
-  }
-  if (!presented || !stored || !ctEqual(presented, stored)) {
+  const session = await verifySessionToken(env, presented, uuid, Math.floor(Date.now() / 1000));
+  if (!session) {
     aeLog(env, { endpoint: 'upload_finalise', status: 401, errorMsg: 'session_token_invalid' });
     return err(401, 'Invalid or expired upload session');
   }
 
-  // ── Manifest (source of truth for chunk_count == total_chunks) ─────────────
+  // ── Manifest (must agree with the token's chunk count) ─────────────────────
   const { manifest, oversize } = await safeGetManifest(env.BUCKET, uuid, env);
   if (oversize)  return err(502, 'Transfer manifest exceeds size limit');
   if (!manifest) return err(404, 'Transfer not found');
-  // KV-Fix-1a: finalise runs once. A replayed or planted upload_session must
-  // never re-write the sidecar / merkle_root of a completed transfer.
+  if (manifest.consumed === true) return err(410, 'Transfer has been destroyed');
+  // KV-Fix-1a: finalise runs once. A replayed session must never re-write the
+  // sidecar / merkle_root of a completed transfer.
   if (manifest.upload_complete === true) {
     aeLog(env, { endpoint: 'upload_finalise', status: 409, errorMsg: 'already_complete' });
     return json({ error: 'already_complete' }, 409);
   }
-  const chunkCount = manifest.total_chunks;
-  if (!Number.isInteger(chunkCount) || chunkCount < 1) {
-    return err(502, 'Manifest is missing a valid chunk count');
+  const chunkCount = session.totalChunks;
+  if (manifest.total_chunks !== chunkCount) {
+    return err(502, 'Manifest chunk count does not match the upload session');
   }
 
   // ── 2. list()-based completeness — every {uuid}/{iiii} must exist ──────────
@@ -262,16 +246,33 @@ export async function handleFinalise(request, env, uuid, ctx) {
     return err(502, 'Failed to persist chunk hashes');
   }
 
-  // ── 5. Update manifest + spend the session token ───────────────────────────
+  // ── 5. Update manifest (conditional — B12-3, latch.js) ────────────────────
+  // A deletion that latched consumed:true meanwhile wins: finalise then 410s
+  // and converts nothing (the latch winner already cancelled the reservation).
+  const upd = await updateManifest(env.BUCKET, uuid, (m) =>
+    (m.consumed === true || m.upload_complete === true) ? null
+      : { ...m, merkle_root: merkleRoot, tree_algo: 'rfc6962-unbalanced-blake3-v1', upload_complete: true });
+  if (upd.status === 'gone' || upd.before?.consumed === true) return err(410, 'Transfer has been destroyed');
+  if (upd.status === 'declined') return json({ error: 'already_complete' }, 409);
+  if (upd.status !== 'written') return err(503, 'Transfer busy — please retry');
   manifest.merkle_root     = merkleRoot;                      // trusted b64url string
   manifest.tree_algo       = 'rfc6962-unbalanced-blake3-v1';  // pinned — never vary
   manifest.upload_complete = true;
-  await putManifest(env.BUCKET, uuid, manifest);
 
-  try {
-    await env.STATUS_KV.delete(`upload_session:${uuid}`);      // session is spent
-  } catch (e) {
-    console.error('upload_session KV delete failed:', e);      // manifest already written — do not fail
+  // ── 5b. Quota: reserved → used (B12-SR S1.7) ───────────────────────────────
+  // Idempotent in SQL. On error finalise still succeeds (the user's upload is
+  // done) and the conversion retries 3× off the response path; if all fail the
+  // nightly reconcile counts the transfer from R2 and drops the reservation.
+  if (hasQref(manifest) && manifest.soak !== true) {
+    const sh = await sessionHash(presented);
+    const convert = async () => {
+      for (const wait of [0, 2000, 5000, 15000]) {
+        if (wait) await new Promise(r => setTimeout(r, wait));
+        try { await finaliseQuota(env, sh); return; }
+        catch (e) { console.error('finalise: quota conversion failed:', e?.message ?? e); }
+      }
+    };
+    ctx?.waitUntil?.(convert());
   }
 
   // ── 6. Enrich the Execution Dock entry (Share-Dash-2) ──────────────────────
