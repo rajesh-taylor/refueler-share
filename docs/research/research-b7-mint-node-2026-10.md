@@ -2,6 +2,12 @@
 
 As of **11 October 2026**. This is engineering research, not legal or tax advice.
 
+> **Review box — Research-Review-2 (11 Oct 2026, Opus).** Re-checked at source (same commits; CDK 66a19ce / v0.18.1, Nutshell 0.21.0, phoenixd v0.9.2, nuts 8bde3c0, `cdk-payment-processors`, LNbits via GitHub API). Holds: CDK/Nutshell backends and LNbits removal, processor tiers, phoenixd webhook (one attempt), route access, liquidity/fee-credit defaults, chains, LSP fees, NUT-04/12/20/22/24/25 text. LNbits phoenixd funding source now ✅ (`lnbits/wallets/phoenixd.py`; latest v1.6.2).
+> **Corrections:** (1) CAX21 is **€10.49/mo** excl. VAT since 15 Jun 2026 (Hetzner price-adjustment page), not ~€7. (2) 21,000 + 411 sats is an `estimateliquidityfees` **estimate** (#222), not a real purchase. (3) Strip the **whole `dleq`**, not just `r` — NUT-12: the mint can link "given `e` and `s`, or using `r`"; our nonce is deterministic. (4) The limited phoenixd password cannot spend but **reads the full payment history** (`getbalance`, `payments/*`, `listchannels`, `export`) — put an allowlist proxy in front. (5) phoenixd ignores non-2xx webhook responses entirely (`runCatching` only catches exceptions).
+> **Out of date on Share:** our mint is not hand-rolled since Cred-Fix-2 (cashu-ts 4.11.0 exact pin, NUT-00/02/12 vectors pinned; spent ledger already keyed on `hex(Y)`); test 13 conflicts with `verifyProofV2`, which refuses `dleq` (keep refusing); "exactly one proof" clashes with rate card v1 (10 + 100/GB); our keyset ids are v01. Missing: per-buyer key tagging — needs a pinned, published keyset.
+> **Unverified:** ACINQ ToS (403), Phoenix US exit, Spark operators, Orchard, Amperstrand, absence of audits, trampoline visibility, Object Storage €6.49 + IPv4 €0.50 (secondary), UK regime date (Freeths via live-streaming research).
+> **Decided:** Worker stays the mint (Option A; CDK closed) · phoenixd, one node per product, LNbits off Share's path · anonymous rail = no identity row · B7-Opus (13a) uses §5–§6 as input. See CLAUDE.md 2.16 + Master Context 9.16.
+
 **Legend**
 - ✅ **Verified** against a primary source: the spec text, source code at a named commit, an official repo README or release tag, or the vendor's own words.
 - 🟡 **Secondary**: a blog, forum, review site, a third-party issue tracker, or a search-engine extract.

@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.15 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B12-3 · 11 Oct 2026
+> **Version:** 2.16 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Research-Review-2 · 11 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -26,7 +26,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 | Existence proof | SHA-256 (OTS) | Client-side only — Bitcoin-anchored permanent record. Never touches Worker. |
 | Anonymous authentication | Cashu blind signatures | Access tokens, payment gate |
 | Storage | Cloudflare R2 | Egress-free object store |
-| Payment | LNbits on Hetzner CAX21 (B7+, all Refueler projects) | Upload capacity settled via Lightning |
+| Payment | phoenixd on Hetzner CAX21, one node per product (B7+) | Upload capacity settled via Lightning |
 
 **Three hashes, three jobs — never conflate:**
 - **BLAKE3** → chunk integrity (internal, Worker + browser)
@@ -54,10 +54,12 @@ All five are `type="module"`. Do not collapse back into a single file.
 
 ## Locked decisions
 
-- **Lightning provider: LNbits on Hetzner CAX21. Locked pre-Opus-2 · 28 Aug 2026.** Applies to all Refueler projects (Share, refueler.io POS, Relay, Refill). Blink discontinued custodial accounts UK Aug 31 2026 — dead as a provider. Voltage eliminated (US company, invoice metadata visible to third party, incompatible with compulsion-resistance framing). Strike eliminated (custodial, FCA-dependent). No other candidates.
+- **Lightning node: self-hosted phoenixd on Hetzner, one node per product (Research-Review-2 · 11 Oct 2026; was "LNbits on CAX21", locked pre-Opus-2 · 28 Aug 2026).** Own seed, channel and passwords per product; Share's node first, on the CAX21; later products may share the box while floats are small. Low float, automatic sweep to the Silent Payments address on a threshold (two steps: splice-out to own single-sig wallet, then SP). **LNbits is optional per product and not on Share's path** — the Worker talks to phoenixd directly through a tunnel and an allowlist proxy (`createinvoice` + `payments/incoming/{hash}` only; the limited password can read the full payment history). phoenixd webhooks fire once: crediting works from webhook OR polling into one idempotent Supabase function. Payments belonging to merchants or creators never pass through our node (custody). Blink discontinued custodial accounts UK Aug 31 2026 — dead as a provider. Voltage eliminated (US company, invoice metadata visible to third party, incompatible with compulsion-resistance framing). Strike eliminated (custodial, FCA-dependent). No other candidates.
 - **Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Liquidation destination is a Silent Payments address, which receives on-chain BTC directly. No swap service required.
 - **Node bootstrap is B7 pre-work, not B9.** No dark provisioning — instance goes live only when runbook is ready and test suite passes.
-- No custodial wallet. Payment settled via self-hosted LNbits.
+- No custodial wallet. Payment settled via self-hosted phoenixd.
+- **Mint: the Worker stays the mint (Research-Review-2 · 11 Oct 2026; closes the CDK question).** The Worker holds `k` for every keyset, so uploads never depend on Hetzner; the node only sells credits. No CDK/Nutshell (no phoenixd backend; a sat mint with melt = custody). Reopen only for sat-denominated ecash, a maintained phoenixd processor for CDK, or a move to an LDK node. Credits are one-way vouchers: no melt, no swap endpoint.
+- **The whole `dleq` field never reaches the server** (NUT-12: `e,s` link a proof to its signature as well as `r`). The browser strips it; `verifyProofV2` refuses unknown fields — keep it so.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
 - **No upload-time file-type (MIME) check exists.** The Content-Type denylist lived only on the Worker-relay chunk path, retired at Share-6-6b; direct-to-R2 uploads never sent a type. Retired as a claim (Rajesh, Cred-Fix-1 · 26 Sep 2026) — do not assert it in any copy. The Worker never learns or stores the file type. `MIME_DENYLIST` in `utils.js` is unused; Share-MIME-1 removes it and re-checks public copy.
 - **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
@@ -83,7 +85,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **The rail model extends to the API tier.** Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship.
 - **Rail is declared, not inferred from payment.** The client's principal declares the rail at onboarding; the permitted payment method follows.
 - **Mandatory pre-payment disclosure of both irreversibles** (aimed at the principal, before AP handoff): wording locked SW-Opus-3, four surfaces.
-- **DO NOT add a Supabase row or email field to the anonymous-rail API credential path** — same invariant as the Lightning consumer path. Load-bearing for the anonymous rail's identity promises.
+- **DO NOT add an identity row or email field to the anonymous-rail credential path** (consumer Lightning and API alike) — no email, account, IP or customer id. Payment records only (quote, payment hash, `B'`, spent `Y`) in Supabase via service-role functions — never KV (X1) — with timestamps rounded to the hour and a retention limit (Research-Review-2 · 11 Oct 2026; was "no Supabase row"). Load-bearing for the anonymous rail's identity promises.
 
 **Pricing model (locked SW-Opus-1/2 · 7 Sep 2026):**
 - **Model B (platform credit pool).** Models A and C rejected.
@@ -193,7 +195,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 → B12-4a → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → Hetzner/NB → B7 → SD-block + Block B → B9.
+**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 → B12-4a → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
 
 **TH-block ✓ complete (6 Sep 2026):**
 - TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped

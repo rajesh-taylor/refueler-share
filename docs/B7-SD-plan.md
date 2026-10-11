@@ -8,6 +8,8 @@
 
 ## B7 session plan — Lightning/LNbits + anonymous paid tier
 
+> **Superseded (Research-Review-2 · 11 Oct 2026).** This table predates KV-Audit (KV invoices/flags/credentials break the X1 lock) and assumes LNbits, which is now off Share's path. **B7-Opus** (roadmap 13a) rewrites it; kept for reference only. SD-block below is unaffected.
+
 **All B7 sessions from S74 gate on NB-4 (node live).**
 
 | Session | Label | Scope |
