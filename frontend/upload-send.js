@@ -11,6 +11,7 @@ import { buildMerkleTree } from './merkle.js';
 import { writeChunkState, clearResumeState, _recordOf } from './upload-store.js';
 import { UploadStop, _stopText, NO_RESUME, NOT_SAME_FILE, NOT_SAME_FOLDER } from './upload-stop.js';
 import { _fetchNextUrlBatch, _putChunkDirect } from './upload-net.js';
+import { dropAccount } from './upload-account.js';   // B12-4a-2
 
 export function _stopped(e, job, domRefs, state, helpers) {
   if (!(e instanceof UploadStop)) e = new UploadStop('browser', `${e?.name || 'Error'}: ${e?.message || ''}`);
@@ -20,6 +21,17 @@ export function _stopped(e, job, domRefs, state, helpers) {
   if (e.kind === 'gone' || e.kind === 'changed') {
     if (job) clearResumeState(job.uuid, helpers.reportError).catch(() => {});
     helpers.showStopped(e.kind === 'changed' ? (job?.folder ? NOT_SAME_FOLDER : NOT_SAME_FILE) : NO_RESUME);
+    return;
+  }
+  // B12-4a-2: refused on the Citizen account before anything was sent or spent.
+  // Back to the chosen file with the reason, so the sender can switch to "Send
+  // without my account" (full) or press again without it (signed out: the
+  // account row goes, the page is Pro Bono now). Never switches silently mid-press.
+  if (e.kind === 'signedout' || e.kind === 'full') {
+    helpers.setView('chosen');
+    if (e.kind === 'signedout') dropAccount(domRefs);   // may turn the view to "over" (> 4 GB)
+    helpers.setDropMsg(_stopText(e, null));
+    domRefs.uploadBtn.disabled = false;
     return;
   }
   const retry = job

@@ -12,6 +12,7 @@ import { _send } from './upload-net.js';
 import { UPLOAD_LABEL, _spendTurnstileToken } from './upload-turnstile.js';
 import { _updatePaidFeaturesVisibility, _pickerToUnix, _validateTidal, _showTidalError } from './upload-options.js';
 import { _carryOn, _stopped } from './upload-send.js';
+import { initiateOptions, usingAccount } from './upload-account.js';   // B12-4a-2
 
 export async function startUpload(domRefs, state, helpers, transferOpts) {
   if (!state.selectedFile) return;
@@ -122,13 +123,20 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   if (availableUntilUnix)   initiateHeaders['X-Available-Until']        = String(availableUntilUnix);
 
   setProgress(0, 'Setting up the transfer…');
-  const initRes = await _send(`${WORKER_URL}/upload/${issuedUuid}/initiate`, {
-    method: 'POST',
-    headers: initiateHeaders,
-  }, 'initiate', reportError);
+  // B12-4a-2: the Citizen cookie + X-CSRF ride this one call, and only while the
+  // account is chosen; "Send without my account" sends neither.
+  const onAccount = usingAccount();
+  const initRes = await _send(`${WORKER_URL}/upload/${issuedUuid}/initiate`,
+    initiateOptions(initiateHeaders), 'initiate', reportError);
   if (!initRes.ok) {
     const txt = await initRes.text().catch(() => '');
     reportError('initiate', `HTTP ${initRes.status}`, txt.slice(0, 200));
+    if (onAccount && (initRes.status === 401 || initRes.status === 403)) {
+      throw new UploadStop('signedout', `Initiate refused the account: HTTP ${initRes.status}`);
+    }
+    if (onAccount && initRes.status === 402 && /quota_exceeded/.test(txt)) {
+      throw new UploadStop('full', 'Citizen storage full');
+    }
     throw new UploadStop('refused', `Initiate failed: HTTP ${initRes.status} — ${txt.slice(0, 120)}`);
   }
   const initData = await initRes.json();

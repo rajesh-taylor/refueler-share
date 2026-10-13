@@ -225,6 +225,10 @@ main {
 .up-sheet[data-view="zipping"] .rx-row.up-for-zipping { display: grid; }
 .up-sheet[data-view="zipping"] .up-not-zipping,
 .up-sheet[data-view="over"] .up-not-over { display: none; }
+/* B12-4a-2: the account choice can change only before an upload starts;
+   the Pro Bono facts line is hidden while uploading on the Citizen account */
+.up-sheet[data-account="citizen"] .up-facts { display: none; }
+.up-sheet:is([data-view="zipping"], [data-view="uploading"], [data-view="ready"], [data-view="stopped"]) .up-account-btn { display: none; }
 /* The slip, the resume panel and messages belong to the setup views only. */
 .up-sheet:is([data-view="uploading"], [data-view="ready"], [data-view="stopped"]) :is(.up-slip, .up-panel, .up-msg) { display: none; }
 
@@ -587,3 +591,27 @@ html.up-dragging body::after {
 @media (prefers-reduced-motion: reduce) { .rx-fade { animation: none; } }
 
 .rx-mode :focus-visible { outline: 2px solid var(--accent, #C8A96E); outline-offset: 3px; }
+
+/* ── Sign-in page (B12-4a-2 · src/signin.njk, signin.js) ─────────────────────
+   One part shows per data-state; nothing shows before signin.js picks one. */
+.si-sheet :is(.si-for-ask, .si-for-sent, .si-for-link, .si-for-expired, .si-for-in, .si-for-out) { display: none; }
+.si-sheet[data-state="ask"] .si-for-ask,
+.si-sheet[data-state="sent"] .si-for-sent,
+.si-sheet[data-state="link"] .si-for-link,
+.si-sheet[data-state="expired"] .si-for-expired,
+.si-sheet[data-state="in"] .si-for-in,
+.si-sheet[data-state="out"] .si-for-out { display: block; }
+.si-input {
+  font: 400 16px var(--rx-sans);              /* 16 px: iOS Safari zooms the page into smaller inputs */
+  color: var(--fg);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  width: 100%;
+  outline: none;
+}
+.si-input:focus { border-color: var(--fg-muted); }
+.si-check:not(:empty) { margin-top: 20px; }
+.si-actions a.rx-btn { display: block; text-align: center; text-decoration: none; }
+.si-actions .up-link { align-self: center; }

@@ -13,7 +13,7 @@ import { CHUNK_SIZE } from './config.js';
 // carries on from the last part that arrived. After a refresh the resume card asks
 // for the file as before.
 //
-// Kinds: network · check · refused · missing (finalise 409: parts absent or the wrong
+// Kinds: network · check · refused · signedout · full (Citizen account, B12-4a-2) · missing (finalise 409: parts absent or the wrong
 // size) · unfinished (all sent, finalise failed) · gone (session spent or expired —
 // can't carry on) · changed (resume: the chosen file's sent parts differ from the
 // record) · browser (anything unexpected in this tab).
@@ -48,6 +48,9 @@ export function _stopText(e, job) {
     }
     case 'check':      return 'The security check didn’t go through. Try again.';
     case 'refused':    return 'Refueler refused the upload. Try again; if it keeps happening, check the Status page.';
+    // B12-4a-2: initiate on the Citizen account. Nothing was shared or spent.
+    case 'signedout':  return 'You’re no longer signed in. Nothing was shared. Press the button to send without your account, or sign in again first.';
+    case 'full':       return 'Your Citizen storage is full. You can still send up to 4 GB without your account.';
     case 'missing':    return 'The upload didn’t finish. Some parts didn’t arrive. Try again.';
     case 'unfinished': return 'The upload didn’t finish. Everything was sent; Try again finishes it.';
     default:           return 'Something went wrong in this browser. Try again; if it keeps happening, check the Status page.';

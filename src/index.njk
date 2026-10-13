@@ -200,6 +200,11 @@ function showMaintenanceModal(status) {
               </div>
             </dd>
           </div>
+          <!-- B12-4a-2: shown only to a signed-in paid Citizen (upload-account.js) -->
+          <div class="rx-row" id="up-account-row" hidden>
+            <dt>Account</dt>
+            <dd><span id="up-account-text"></span> <button class="up-link up-account-btn" id="up-account-btn" type="button"></button></dd>
+          </div>
           <div class="rx-row up-for-zipping" id="zip-progress-card">
             <dt>Zipping</dt>
             <dd>

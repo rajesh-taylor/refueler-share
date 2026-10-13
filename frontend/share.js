@@ -57,6 +57,9 @@ const domRefs = {
   dropZone:         $('drop-zone'),
   fileInput:        $('file-input'),
   capWarning:       $('cap-warning'),
+  upAccountRow:     $('up-account-row'),    // B12-4a-2
+  upAccountText:    $('up-account-text'),
+  upAccountBtn:     $('up-account-btn'),
   optionsCard:      $('options-card'),
   fileNameTag:      $('file-name-tag'),
   fileSizeTag:      $('file-size-tag'),

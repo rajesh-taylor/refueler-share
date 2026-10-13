@@ -5,7 +5,7 @@
 //   upload-options.js    delete / tidal / record     upload-send.js    parts, finalise, link
 //   upload-folder.js     reading + zipping folders   upload-resume.js  after a refresh
 //   upload-store.js      IndexedDB resume record     upload-net.js     wire calls
-//   upload-stop.js       stops and their sentences
+//   upload-stop.js       stops and their sentences  upload-account.js "Uploading as Citizen"
 //
 // Exports:
 //   enterUploadMode(domRefs, state, helpers)
@@ -21,7 +21,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { loadDeps } from './crypto.js';
-import { FREE_CAP, FREE_EXPIRY } from './config.js';
+import { FREE_EXPIRY } from './config.js';
+import { loadAccount, uploadCap } from './upload-account.js';   // B12-4a-2
 import { renderTurnstile, _cancelQueuedStart, _uploadBtnDisabled, pressWhenChecked,
          keepTurnstile } from './upload-turnstile.js';
 import { _injectTransferOptions } from './upload-options.js';
@@ -39,6 +40,14 @@ export function enterUploadMode(domRefs, state, helpers) {
     passphraseInput, uploadBtn,
   } = domRefs;
   const { reportError, formatBytes, setDropMsg, clearDropMsg, showZipStage, hideZipCard } = helpers;
+
+  // B12-4a-2: a signed-in paid Citizen uploads on the account (100 GiB) unless
+  // they choose "Send without my account". Switching re-checks a chosen file.
+  loadAccount(domRefs, () => {
+    if (state.selectedFile && ['chosen', 'over'].includes(domRefs.uploadSheet.dataset.view)) {
+      _handleFileSelection(state.selectedFile, domRefs, state, helpers, transferOpts);
+    }
+  });
 
   // Transfer option refs — mutable, populated by _injectTransferOptions
   const transferOpts = {
@@ -171,7 +180,7 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   domRefs.upFileNote.textContent = folderFiles ? `${folderFiles.toLocaleString()} files, zipped in your browser` : '';
   fileSizeTag.textContent = formatBytes(file.size);
   fileSizeTag.classList.remove('up-dim');
-  if (file.size > FREE_CAP) {
+  if (file.size > uploadCap()) {
     fileSizeTag.classList.add('up-warn');
     capWarning.classList.remove('hidden');
     setView('over');
