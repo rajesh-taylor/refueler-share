@@ -13,14 +13,31 @@
 <body>
 
 <header class="sp-top">
-  <h1>Share design specimen · v1 proposal · 13 Oct 2026</h1>
-  <div class="sp-theme" role="group" aria-label="Theme">
-    <button type="button" data-set-theme="carbon" aria-pressed="true">Carbon</button>
-    <button type="button" data-set-theme="paper" aria-pressed="false">Paper</button>
+  <h1>Share design specimen · v1 proposal · parts 1–2 · 13 Oct 2026</h1>
+  <div class="sp-controls">
+    <div class="sp-theme" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="carbon" aria-pressed="true">Carbon</button>
+      <button type="button" data-set-theme="paper" aria-pressed="false">Paper</button>
+    </div>
+    <div class="sp-theme" role="group" aria-label="Stage">
+      <button type="button" data-set-stage="Pre-alpha" aria-pressed="true">Pre-alpha</button>
+      <button type="button" data-set-stage="Alpha" aria-pressed="false">Alpha</button>
+    </div>
+    <div class="sp-theme" role="group" aria-label="Dial">
+      <button type="button" data-set-dial="0" aria-pressed="false">Flat</button>
+      <button type="button" data-set-dial="1" aria-pressed="true">Dial 1 %</button>
+      <button type="button" data-set-dial="2" aria-pressed="false">Dial 2 %</button>
+      <button type="button" data-toggle="dither" aria-pressed="true">Dither</button>
+    </div>
+    <div class="sp-theme" role="group" aria-label="Motion">
+      <button type="button" data-toggle="rm" aria-pressed="false">Reduced motion</button>
+    </div>
   </div>
 </header>
 
 <div class="sp-wrap">
+
+  <p class="sp-part">Part 1 · type, colour, spacing, screens</p>
 
   <!-- ── Type ───────────────────────────────────────────────────── -->
   <section class="sp-sec">
@@ -55,11 +72,6 @@
       <p class="plain">This file is too large to save on this phone. Open the link on a computer.</p>
       <p class="plain">Deleted from Refueler’s servers.</p>
     </div>
-    <div class="sp-measure">
-      <div class="sp-pct">62<sup>%</sup></div>
-      <div class="sp-track"><b></b></div>
-      <div class="sp-readout"><span>2.0 GB of 3.2 GB</span><span>Keep this tab open</span></div>
-    </div>
   </section>
 
   <!-- ── Spacing ────────────────────────────────────────────────── -->
@@ -78,31 +90,31 @@
     </div>
   </section>
 
-  <!-- ── Screens ────────────────────────────────────────────────── -->
+  <!-- ── Screens (part 1, with part 2's header) ─────────────────── -->
   <section class="sp-sec">
-    <h2>Upload · file chosen</h2>
-    <p class="sp-note">Standalone X5 header (no section pill). 480 px sheet. Facts line gone (it was on the empty view). Password note one sentence. Button the width of its words on desktop; full width on the phone, above the 375 × 667 fold.</p>
+    <h2>Upload · file chosen · signed out</h2>
+    <p class="sp-note">Standalone X5 header: wordmark · stage chip · Sign in · theme. 480 px sheet. Facts line gone (it was on the empty view). Size moves into the File row (Part 2, §11 — keeps the fold for Citizens). Button the width of its words on desktop; full width on the phone, above the 375 × 667 fold.</p>
     <div class="sp-screens">
-      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-chosen"></div></div>
-      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-chosen" data-fold data-closed></div></div>
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-chosen" data-account="out"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-chosen" data-account="out" data-fold data-closed></div></div>
     </div>
   </section>
 
   <section class="sp-sec">
     <h2>Upload · link ready</h2>
-    <p class="sp-note">Lede 30 → 16 words. Link shown on two lines (Copy copies all of it). Detail behind “How this link works”.</p>
+    <p class="sp-note">Lede 30 → 8 words (decided 13 Oct). Link on two lines (decided 13 Oct; Copy copies all of it). Detail behind “How this link works”, which opens in place.</p>
     <div class="sp-screens">
-      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-ready"></div></div>
-      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-ready" data-fold></div></div>
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-ready" data-account="out"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-ready" data-account="out" data-fold></div></div>
     </div>
   </section>
 
   <section class="sp-sec">
     <h2>Sign-in · ask</h2>
-    <p class="sp-note">A form, not a ledger: label above, field 22 rem, button the width of its words.</p>
+    <p class="sp-note">A form, not a ledger: label above, field 22 rem, button the width of its words. Eyebrow “Citizen” kept (decided 13 Oct).</p>
     <div class="sp-screens">
-      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-signin"></div></div>
-      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-signin"></div></div>
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-signin" data-account="none"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-signin" data-account="none"></div></div>
     </div>
   </section>
 
@@ -110,22 +122,239 @@
     <h2>Sign-in · signed in</h2>
     <p class="sp-note">One action. Sign out is a text link, not a second button.</p>
     <div class="sp-screens">
-      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-in"></div></div>
-      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-in"></div></div>
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-in" data-account="citizen"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-in" data-account="citizen"></div></div>
     </div>
+  </section>
+
+  <p class="sp-part">Part 2 · motion, haptics, components, stage chip, account, A/B</p>
+
+  <!-- ── Share-PreAlpha-1 preview ───────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Live page now · Pre-alpha chip in the eyebrow row · no account toggle</h2>
+    <p class="sp-note">What the small ship would change on today’s page (refueler.io’s nav stays above it). The chip sits after the eyebrow on every sheet, upload and receiver; not a link yet. Signed in: the Account row just says “Uploading as Citizen” — no “Send without my account”. Drawn with this specimen’s tokens; the live page keeps its own until X5-1. From X5-1 the chip moves to the header.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Upload · desktop</p><div class="frame" data-screen="scr-now-upload" data-nohead></div></div>
+      <div><p class="sp-cap">Upload · phone</p><div class="frame phone" data-screen="scr-now-upload" data-nohead data-closed></div></div>
+    </div>
+    <div class="sp-screens" style="margin-top:32px">
+      <div><p class="sp-cap">Receiver · desktop</p><div class="frame" data-screen="scr-now-receive" data-nohead></div></div>
+      <div><p class="sp-cap">Receiver · phone</p><div class="frame phone" data-screen="scr-now-receive" data-nohead></div></div>
+    </div>
+  </section>
+
+  <!-- ── Motion ─────────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Motion · four verbs, one easing</h2>
+    <p class="sp-note">Arrive, settle, fade the changed figure, press. One easing <code>cubic-bezier(.2, .7, .2, 1)</code>. Opacity and a 6 px rise only — nothing scales, bounces, slides in from the side or moves on its own. “Reduced motion” at the top (or the OS setting) turns every one of them off. Doc §7.</p>
+    <div class="sp-motion">
+      <div class="sp-demo">
+        <p class="sp-cap">Arrive · 500 ms, lines 170 ms apart, button last, once per sheet</p>
+        <div class="mini" id="m-arrive">
+          <p class="eyebrow">A file for you</p>
+          <h3 class="head small">Q3-board-pack.pdf</h3>
+          <dl class="ledger"><div class="row"><dt>Size</dt><dd>3.2 MB</dd></div><div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01</dd></div></dl>
+          <div class="actions"><button class="btn" type="button">Download</button></div>
+        </div>
+        <button class="link sp-replay" type="button" data-replay="m-arrive">Replay</button>
+      </div>
+      <div class="sp-demo">
+        <p class="sp-cap">Settle · 500 ms, one element · the switch itself: 200 ms (the touch)</p>
+        <div class="mini">
+          <label class="switch"><input type="checkbox" id="m-settle-sw" /><span class="track"></span>Ask for a password</label>
+          <div id="m-settle-field" hidden>
+            <input class="input pw" type="password" aria-label="Password" value="correct horse" />
+            <small class="note">Send it separately from the link.</small>
+          </div>
+        </div>
+      </div>
+      <div class="sp-demo">
+        <p class="sp-cap">Fade the changed figure · 450 ms · words every 2 s, time left every 5 s</p>
+        <div class="mini">
+          <p class="readout" id="m-fade"><span>1.2 GB</span> of 3.2 GB<span> · about 50 s left</span></p>
+          <p class="note">Only the amount and the time left fade. “of 3.2 GB” never moves.</p>
+        </div>
+      </div>
+      <div class="sp-demo">
+        <p class="sp-cap">Press · 200 ms tone step (the touch) · Copied returns after 2 s</p>
+        <div class="mini">
+          <div class="actions pair"><button class="btn copy" type="button" data-copy><span>Copy link</span></button><button class="btn ghost" type="button">Show QR code</button></div>
+          <p class="note">No ripple, no scale, no shake. The word changes; the button doesn’t.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Haptics ────────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Haptics · proposed off in v1</h2>
+    <p class="sp-note">Safari (Mac and iPhone) has no vibration for web pages at all. Android browsers built on Chrome (Vanadium included) can give one short tick, only right after a tap. iPhone gives its own tick when a native switch is toggled (iOS 18). To feel these on a phone, open <code>http://192.168.0.199:8093</code> on the same Wi-Fi (Mullvad: turn on “Local network sharing”). Doc §8.</p>
+    <div class="sp-motion">
+      <div class="sp-demo">
+        <p class="sp-cap">The copy tick · 10 ms, once</p>
+        <div class="mini">
+          <div class="actions"><button class="btn copy" type="button" data-copy data-haptic><span>Copy link</span></button></div>
+          <p class="note" id="h-result">Press it on the Pixel. Does it feel like a watch crown clicking, or like a phone notification?</p>
+        </div>
+      </div>
+      <div class="sp-demo">
+        <p class="sp-cap">iPhone · switch tick (iOS 18 Safari)</p>
+        <div class="mini">
+          <label class="native-sw"><input type="checkbox" switch /> Native switch</label>
+          <label class="switch" style="margin-top:16px"><input type="checkbox" switch /><span class="track"></span>Our switch, same input underneath</label>
+          <p class="note">Toggle each on the iPhone. If ours ticks too, the two upload switches get it for free — no code, no trick.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Components ─────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Components · from the part 1 tokens</h2>
+    <p class="sp-note">Each in its states. Hover appears only where there is a mouse. Focus is the gold ring (Tab through this section). Doc §9.</p>
+    <div class="sp-comp">
+
+      <div class="sp-demo"><p class="sp-cap">Button · primary, ghost, focus, busy</p>
+        <div class="mini">
+          <div class="actions pair"><button class="btn" type="button">Encrypt and upload</button><button class="btn ghost" type="button">Start over</button></div>
+          <div class="actions"><button class="btn" type="button" aria-disabled="true" data-busy>Unlocking</button></div>
+          <p class="note">No disabled grey button: a button shows when it can act. While it works, its word says so and it ignores presses.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Text link</p>
+        <div class="mini">
+          <p class="links"><button class="link" type="button">How this link works</button> · <button class="link" type="button">Send another file</button></p>
+          <p class="links"><a class="link" href="#" data-noop>Read it in Legend</a></p>
+          <p class="note">Ink 2, hairline underline. Never gold, never a button shape. Middots between.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Switch · off, on</p>
+        <div class="mini">
+          <label class="switch"><input type="checkbox" /><span class="track"></span>Ask for a password</label>
+          <label class="switch" style="margin-top:12px"><input type="checkbox" checked /><span class="track"></span>Delete the file after download</label>
+          <p class="note">On = ink track. No colour, no “on / off” words; the label says what on means.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Field · rest, wrong password</p>
+        <div class="mini">
+          <div class="field"><label for="c-pw1">Password</label><input class="input pw" id="c-pw1" type="password" /></div>
+          <div class="field"><label for="c-pw2">Password</label><input class="input pw wrong" id="c-pw2" type="password" value="wrong horse" aria-invalid="true" aria-describedby="c-pw2-m" />
+            <p class="field-msg" id="c-pw2-m">That password doesn’t open this file.</p></div>
+          <p class="note">Wrong is said in ink: a full-ink edge, one sentence. No red, no shake.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Ledger · facts on the page</p>
+        <div class="mini">
+          <dl class="ledger">
+            <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf</dd></div>
+            <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>in 6 days</small></dd></div>
+          </dl>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Slip · things you set, one tone step</p>
+        <div class="mini">
+          <div class="slip tone"><dl class="ledger">
+            <div class="row"><dt>Send as</dt><dd>Citizen<small>63 GB free</small></dd></div>
+            <div class="row bare"><dt>Password</dt><dd><label class="switch"><input type="checkbox" /><span class="track"></span>Ask for a password</label></dd></div>
+          </dl></div>
+          <p class="note">Segments by tone, not colour: the slip is one step off the ground, with a faint edge.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Link box · two lines</p>
+        <div class="mini">
+          <div class="linkbox mono" aria-label="Share link, shortened on screen"><span class="clamp">https://share.refueler.io/?uuid=d5c35727-72e7-4087-99a6-5ece4ffb5063#eyJ2IjoyLCJrIjoibVdXX3ZxWWV2S0luaEgzS3ZxbmM0MVlwWkVpd3Z2WXF4Z0hpVWljbnRsSSIsIm4iOiJRMy1ib2FyZC1wYWNrLWZpbmFsLXY3LnBkZiIsInoiOjM0MDAwMDB9</span></div>
+          <p class="note">Plex Mono 13, two lines, then an ellipsis. Not an input (no keyboard on a phone). Copy and QR carry the whole link.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Disclosure · opens in place</p>
+        <div class="mini">
+          <details class="disc"><summary>How this link works</summary>
+            <div class="disc-body">The key that opens the file is the part of the link after the #. Your browser never sends that part to us, so Refueler stores only encrypted noise. If you set a password, we keep only a hash of it.</div>
+          </details>
+          <p class="note">Native details: works before any script loads. No chevron, no modal. ≤ 60 words inside.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">Notice · a sentence with a hairline</p>
+        <div class="mini">
+          <p class="notice once">The link works once, then the file is deleted.</p>
+          <p class="notice">Maintenance: Tue 20 Oct, 02:00–02:30.</p>
+          <p class="notice">Some uploads are failing. We’re looking at it.</p>
+          <p class="note">Gold only on the irreversible line. No icon, no fill, no close button, no slide-in.</p>
+        </div></div>
+
+      <div class="sp-demo"><p class="sp-cap">QR · on request, dark on paper in both themes</p>
+        <div class="mini qr-mini">
+          <canvas id="c-qr" role="img" aria-label="QR code of a sample link"></canvas>
+          <p class="note">Scan with a phone’s camera to download it there.</p>
+          <p class="note">Sample link only — it opens nothing.</p>
+        </div></div>
+
+    </div>
+  </section>
+
+  <!-- ── Stage chip + account ───────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Stage chip · account · upload, signed in as Citizen</h2>
+    <p class="sp-note">Header says who you are (“Citizen”, never the email). The slip’s first row says what this upload uses, and what that means — a fact, not a choice (decided 13 Oct). Switch the stage at the top. Doc §10–11.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-chosen" data-account="citizen"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-chosen" data-account="citizen" data-fold data-closed></div></div>
+    </div>
+  </section>
+
+  <section class="sp-sec">
+    <h2>Account · 100 GB full (proposal for Chambers-Design)</h2>
+    <p class="sp-note">Decided 13 Oct: no “Send without my account” while signed in. Pro Bono appears only when the 100 GB is full, as a way through — never as “not linked” (the same browser just checked the session with its cookie). Wording open.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-chosen" data-account="without"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-chosen" data-account="without" data-fold data-closed></div></div>
+    </div>
+  </section>
+
+  <section class="sp-sec">
+    <h2>Receiver · ready · no account anywhere</h2>
+    <p class="sp-note">The recipient never needs an account, so the receiver header has no “Sign in”. The stage chip stays: the recipient is using alpha software too.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-receive" data-account="none"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-receive" data-account="none"></div></div>
+    </div>
+  </section>
+
+  <!-- ── Progress variants ──────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Progress · the watchmaker variants</h2>
+    <p class="sp-note">All five run on one simulated 3.2 GB upload at the live page’s cadence (bar every 100 ms, words every 2 s, time left every 5 s). A is the live page today. Pick by eye in Safari, then at 375 px. Doc §12.</p>
+    <div class="sp-variants">
+      <div class="sp-demo"><p class="sp-cap">A · Plain (live today)</p><div class="prog" data-v=""></div></div>
+      <div class="sp-demo"><p class="sp-cap">B · Hand tip — chosen 13 Oct</p><div class="prog" data-v="tip"></div></div>
+      <div class="sp-demo"><p class="sp-cap">C · Minute track — dropped</p><div class="prog" data-v="ticks"></div></div>
+      <div class="sp-demo"><p class="sp-cap">D · Date window — dropped</p><div class="prog" data-v="window"></div></div>
+      <div class="sp-demo"><p class="sp-cap">E · All three</p><div class="prog" data-v="tip ticks window"></div></div>
+    </div>
+  </section>
+
+  <section class="sp-sec">
+    <h2>Graded dial · Carbon only</h2>
+    <p class="sp-note">Use “Dial 1 %” / “Dial 2 %” at the top: the whole page lifts very slightly toward the centre, like a Polaris dial. Look for rings (banding) on the grey, on the Mac, the iPhone and any ordinary monitor; “Dither” adds a fine grain that should hide them. If you notice the dial as a spotlight, it’s too much. Decided 13 Oct: Carbon Dial 1 % with dither is the default (and this page’s default); Paper stays flat; a month of alpha feedback, then revisit. Doc §12.</p>
   </section>
 </div>
 
-<!-- ── Screen templates (cloned into both frames by specimen.js) ── -->
+<!-- ── Screen templates (cloned into frames by specimen.js) ── -->
+<template id="app-head">
+  <div class="app-head">
+    <span class="brand"><span class="wordmark">Refueler<em>Share</em></span><a class="chip" href="#" data-noop>Pre-alpha</a></span>
+    <span class="head-r"><a class="acct" href="#" data-noop></a><small class="theme-name">Carbon</small></span>
+  </div>
+</template>
+
 <template id="scr-chosen">
-  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
   <div class="shell"><div class="sheet">
     <p class="eyebrow">Ready to send</p>
     <h1 class="head">Send a file.</h1>
-    <div class="slip"><dl class="ledger">
-      <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf <button class="link" type="button">Choose another</button></dd></div>
-      <div class="row"><dt>Size</dt><dd>3.2 MB</dd></div>
-      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>7 days from upload</small></dd></div>
+    <div class="slip tone"><dl class="ledger">
+      <div class="row acct-row"><dt>Send as</dt><dd><span class="acct-val">Citizen</span> <button class="link acct-btn" type="button">Send without my account</button><small class="acct-note">Counts toward your 100 GB.</small></dd></div>
+      <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf <button class="link" type="button">Choose another</button><small>3.2 MB</small></dd></div>
+      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01 <span class="soft">· 7 days from upload</span></dd></div>
       <div class="row bare"><dt>Password</dt><dd>
         <label class="switch"><input type="checkbox" checked /><span class="track"></span>Ask for a password</label>
         <input class="input pw" type="password" aria-label="Password" value="correct horse" />
@@ -140,23 +369,24 @@
 </template>
 
 <template id="scr-ready">
-  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
   <div class="shell"><div class="sheet">
     <p class="eyebrow">Link ready</p>
     <h1 class="head">Your link is ready.</h1>
-    <p class="lede">Anyone with this link can open the file. Send it only to the person it’s for.</p>
-    <div class="linkbox">https://share.refueler.io/?uuid=d5c35727-72e7-4087-99a6-5ece4ffb5063#eyJ2IjoyLCJrIjoibVdXX3ZxWWV2S0luaEgzS3ZxbmM0MVlwWkVpd3Z2WXF4Z0hpVWljbnRsSSIsIm4iOiJRMy1ib2FyZC1wYWNrLWZpbmFsLXY3LnBkZiIsInoiOjM0MDAwMDB9</div>
-    <div class="actions pair"><button class="btn" type="button">Copy link</button><button class="btn ghost" type="button">Show QR code</button></div>
+    <p class="lede">Anyone with this link can open the file.</p>
+    <div class="linkbox mono"><span class="clamp">https://share.refueler.io/?uuid=d5c35727-72e7-4087-99a6-5ece4ffb5063#eyJ2IjoyLCJrIjoibVdXX3ZxWWV2S0luaEgzS3ZxbmM0MVlwWkVpd3Z2WXF4Z0hpVWljbnRsSSIsIm4iOiJRMy1ib2FyZC1wYWNrLWZpbmFsLXY3LnBkZiIsInoiOjM0MDAwMDB9</span></div>
+    <div class="actions pair"><button class="btn copy" type="button" data-copy><span>Copy link</span></button><button class="btn ghost" type="button">Show QR code</button></div>
     <dl class="ledger">
       <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf</dd></div>
       <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>in 6 days</small></dd></div>
     </dl>
-    <p class="links"><button class="link" type="button">How this link works</button> · <button class="link" type="button">Send another file</button></p>
+    <details class="disc"><summary>How this link works</summary>
+      <div class="disc-body">The key that opens the file is the part of the link after the #. Your browser never sends that part to us, so Refueler stores only encrypted noise.</div>
+    </details>
+    <p class="links"><button class="link" type="button">Send another file</button></p>
   </div></div>
 </template>
 
 <template id="scr-signin">
-  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
   <div class="shell"><div class="sheet">
     <p class="eyebrow">Citizen</p>
     <h1 class="head">Sign in.</h1>
@@ -167,7 +397,6 @@
 </template>
 
 <template id="scr-in">
-  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
   <div class="shell"><div class="sheet">
     <p class="eyebrow">Citizen</p>
     <h1 class="head">You’re signed in.</h1>
@@ -177,6 +406,58 @@
   </div></div>
 </template>
 
+<template id="scr-receive">
+  <div class="shell"><div class="sheet">
+    <p class="eyebrow">A file for you</p>
+    <h1 class="head">Q3-board-pack-final-v7.pdf</h1>
+    <dl class="ledger">
+      <div class="row"><dt>Size</dt><dd>3.2 MB</dd></div>
+      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>in 6 days</small></dd></div>
+    </dl>
+    <div class="actions"><button class="btn" type="button">Download</button></div>
+    <p class="notice once">The link works once, then the file is deleted.</p>
+  </div></div>
+</template>
+
+<template id="scr-now-upload">
+  <div class="nav-stub">refueler.io nav (unchanged)</div>
+  <div class="shell"><div class="sheet">
+    <div class="eyebrow-row"><p class="eyebrow">New transfer</p><span class="chip chip-live">Pre-alpha</span></div>
+    <h1 class="head">Send a file.</h1>
+    <div class="slip tone"><dl class="ledger">
+      <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf <button class="link" type="button">Choose another</button></dd></div>
+      <div class="row"><dt>Size</dt><dd>3.2 MB</dd></div>
+      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>7 days from upload</small></dd></div>
+      <div class="row"><dt>Account</dt><dd>Uploading as Citizen</dd></div>
+      <div class="row bare"><dt>Password</dt><dd><label class="switch"><input type="checkbox" /><span class="track"></span>Ask for a password</label></dd></div>
+      <div class="row bare"><dt>After download</dt><dd><label class="switch"><input type="checkbox" /><span class="track"></span>Delete the file</label></dd></div>
+    </dl></div>
+    <div class="actions"><button class="btn" type="button">Encrypt and upload</button></div>
+  </div></div>
+</template>
+
+<template id="scr-now-receive">
+  <div class="nav-stub">refueler.io nav (unchanged)</div>
+  <div class="shell"><div class="sheet">
+    <div class="eyebrow-row"><p class="eyebrow">A file for you</p><span class="chip chip-live">Pre-alpha</span></div>
+    <h1 class="head">Someone sent you a file.</h1>
+    <dl class="ledger">
+      <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf</dd></div>
+      <div class="row"><dt>Size</dt><dd>3.2 MB</dd></div>
+      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>in 6 days</small></dd></div>
+    </dl>
+    <div class="actions"><button class="btn" type="button">Download</button></div>
+    <p class="fine">No account or email needed.</p>
+  </div></div>
+</template>
+
+<template id="prog">
+  <div class="pct"><span class="win"><span class="n">0</span><sup>%</sup></span></div>
+  <div class="ptrack"><b></b><i class="tick-row" aria-hidden="true"></i></div>
+  <div class="readout"><span class="w"><span class="d"></span><span class="of"></span><span class="l"></span></span><span>Keep this tab open</span></div>
+</template>
+
+<script src="qr-creator.min.js"></script>
 <script src="specimen.js"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
 # Share design theory — v1
 
-> **Part 1 of 2** · Design-Theory-Opus-1 · 13 Oct 2026 · **Proposals only — nothing here is locked until Rajesh agrees it section by section.**
-> Part 2 (Design-Theory-Opus-2) appends: motion, haptics, components, the stage chip, the Account / rail indicator, the A/B test plan.
-> Built for X5-1: Share's standalone layout at `share.refueler.io` is built once, to these rules.
-> Specimen: `dev/share-harness/specimen/` — `python3 -m http.server 8093 --directory dev/share-harness/specimen`, then http://localhost:8093/ in Safari (Carbon / Paper at the top right). Launch config `design-specimen`.
+> **Parts 1 and 2** · Design-Theory-Opus-1 + -2 · 13 Oct 2026 · **Proposals only — nothing here is locked until Rajesh agrees it section by section.** Decided items are marked *Decided (Rajesh, date)*.
+> Part 1 (§1–§6): audit, competitors, principles, type / colour / layout, copy. Part 2 (§7–§12): motion, haptics, components, the stage chip, the account indicator, the A/B plan.
+> Built for X5-1: Share's standalone layout at `share.refueler.io` is built once, to these rules. **Share and Legend share one watchmaker aesthetic** — each Part 2 section ends with how it applies to Legend.
+> Specimen: `dev/share-harness/specimen/` — `python3 -m http.server 8093 --directory dev/share-harness/specimen`, then http://localhost:8093/ in Safari (theme, stage, dial and reduced-motion controls at the top). Launch config `design-specimen`. From a phone on the same Wi-Fi: `http://<Mac LAN IP>:8093` (Mullvad: "Local network sharing" on).
 
 **Aim.** Share should feel unlike every other file-transfer service: no ads, no upsell banners, no juvenile colour. Calm, precise, watchmaker-grade — a well-made instrument that does one thing and says little about it.
 
@@ -77,7 +77,7 @@ First screen, desktop, observed 13 Oct 2026 in the app's browser pane (Chromium)
 
 ## 3. Principles
 
-Eight rules. Each has a **do** and a **don't** taken from our own screens.
+Eight rules. Each has a **do** and a **don't** taken from our own screens. *Decided (Rajesh, 13 Oct): all eight as written.*
 
 **P1 · One action per screen.** Each screen has one primary button. Everything else is a quiet text link.
 - *Do:* Receiver ready — one "Download".
@@ -239,11 +239,11 @@ Today: upload chosen ≈ 55 words; link ready ≈ 50; receiver ready ≈ 20; upl
 2. **A disclosure line** — one quiet "How this works" link under the ledger that opens a short paragraph in place (no modal). For: the key living in the link, the password hash, delete-after-download timing.
 3. **Legend** — anything that is a policy or a promise (retention, what the server sees, what "deleted" means). Working screens link to it; they never paraphrase it.
 
-### 5.3 Proposed rewrites
+### 5.3 Rewrites — *decided (Rajesh, 13 Oct): all as proposed*
 
 | Screen | Now | Proposed |
 |---|---|---|
-| Link ready · lede (30 words) | "The key to the file is inside the link. Anyone who has the link can download the file, so send it only to the person it's for." | "Anyone with this link can open the file. Send it only to the person it's for." (16) — "the key is inside the link" moves to the disclosure |
+| Link ready · lede (30 words) | "The key to the file is inside the link. Anyone who has the link can download the file, so send it only to the person it's for." | **"Anyone with this link can open the file."** (8) — *Decided (Rajesh, 13 Oct): one sentence; the warning is in the fact.* "The key is inside the link" moves to the disclosure |
 | Chosen · password note | "Send it separately from the link. Refueler stores only a hash of it." | "Send it separately from the link." — the hash line moves to the disclosure |
 | Chosen · facts line | Shown on empty **and** chosen | Empty view only |
 | Signed in | Send a file / Sign out / Sign out everywhere | **Send a file** · then text links "Sign out · Sign out everywhere" |
@@ -252,16 +252,215 @@ Today: upload chosen ≈ 55 words; link ready ≈ 50; receiver ready ≈ 20; upl
 
 ---
 
-## 6. Open questions for Rajesh
+## 6. Open questions for Rajesh — answered 13 Oct
 
-1. **Receiver "Download" width.** P6 says intrinsic on desktop. The receiver card is the one place a full-width bar arguably earns it (it's the whole page). Recommend: same rule everywhere, for one consistent hand.
-2. **Sign-in eyebrow "Citizen".** Shown before we know who you are. Keep (it names the plan you're signing in to), or "Account"? Recommend keep — Part 2's Account indicator uses the same word.
-3. **Link box.** Show the link truncated to two lines with Copy copying all of it? Recommend yes — less key material on screen for a shoulder to read, and the box stops dominating.
-4. **Paper input fill lighter than the page** (`#F3EEE6`)? Recommend yes — writing on a fresh sheet; today's darker fill reads as disabled.
-5. **Token ownership after X5.** Share's standalone build owns its token file; refueler.io's `global.css` adopts the contrast fixes separately (refueler.io is frozen until Share is near complete). Recommend that split.
-6. **Legend's token block is out of date.** `legend-design-spec.md` §Design tokens lists Carbon `--fg #E8E2D8`, `--surface #242424`; `global.css` has `#F5F0E8`, `#26282C`. Legend says it inherits `global.css`, so the spec text is what's stale. Recommend: fix the Legend spec when the suite contrast fix lands (one session, refueler-legend repo).
-7. ~~Accent hue.~~ **Decided 13 Oct: gold.** Legend's spec carries a pointer to this section (`refueler-legend/legend-design-spec.md` §Design tokens).
+*Decided (Rajesh, 13 Oct 2026), all as recommended:*
+
+1. **Receiver "Download" width** → **intrinsic everywhere.** One rule (§4.4): a button is as wide as its words on desktop, full width ≤ 440 px. No exception for the receiver card.
+2. **Sign-in eyebrow** → **keep "Citizen".** §11's account indicator uses the same word.
+3. **Link box** → **two lines**, Copy and QR carry the whole link (component in §9).
+4. **Paper field fill** → **lighter than the page, `#F3EEE6`.**
+5. **Token ownership after X5** → **split.** Share's standalone build owns one `share-tokens.css` from X5-1; refueler.io's `global.css` takes the contrast fixes separately when refueler.io unfreezes.
+6. **Legend's stale token block** → **fixed with the suite contrast fix** (one session in `refueler-legend`), not before.
+7. **Accent hue** → gold (decided earlier the same day). Legend's spec carries a pointer to §4.6.
 
 ---
 
-*Part 2 — motion, haptics, components, stage chip, Account / rail indicator, A/B plan — appended by Design-Theory-Opus-2.*
+# Part 2 — Design-Theory-Opus-2 (13 Oct 2026)
+
+Proposals only. Every section ends with **Legend:** — how the same rule applies there. Specimen sections named in each.
+
+## 7. Motion
+
+### 7.1 Four verbs, one easing
+
+Nothing moves unless the person moved it (P3). When something does move, it uses one of four verbs — and only opacity and a 6 px rise. Nothing scales, bounces, slides in from the side, rotates or loops.
+
+| Verb | What it answers | Movement | Duration | Today |
+|---|---|---|---|---|
+| **Arrive** | A new sheet (page open, a step finished) | Each line fades up 6 px, 170 ms apart, button last. **Once per sheet**, never on a re-render or a theme switch | 500 ms per line | `.rx-arrive` (receiver) |
+| **Settle** | One thing appearing because the person pressed something (password field, QR, a disclosure opening, the account row changing) | The same fade-up, one element, no stagger. Closing is instant | 500 ms | — |
+| **Fade the changed figure** | A live value changing (amount sent, time left, "Copied") | Opacity .25 → 1 on the changed words only; the words around them stay still | 450 ms | `setCalmText` / `setProgressWords` |
+| **Press** | A tap or click | A tone step: the button fill darkens one step (`--fg` 78 %) while pressed; a ghost button takes the slip tone. No ripple, no scale | 200 ms | `opacity .88` on hover only |
+
+Two existing movements stay as they are and need no verb: the **switch knob** (200 ms slide, the touch timing — it *is* the control) and the **theme turn** (Legend's 0.35 s on all tokens at once). The **progress bar** glides linearly between 100 ms ticks; that is information, not decoration.
+
+**The touch (decided, Rajesh, 13 Oct).** Every change the person causes by touching something — field edge, switch knob and track, button press and hover, link colour — has the feel of the receiver's password field: **200 ms, one small tone step**. That field isn't a long animation: `global.css` fades its edge over 0.2 s from steel (`--input-border`) to Ink 2 (`--fg-muted`) — a small step, done gently. Smoothness comes from small changes, not slow ones. So: no opacity flashes (today's `.rx-btn:hover` `.88`, `:disabled` `.35`), no jumps of more than one tone.
+
+**Tokens** (one file at X5-1): `--ease: cubic-bezier(.2,.7,.2,1)` (already in `share.css`) · `--d-touch 200ms` (press, knob, field edge, link colour — one value) · `--d-fade 450ms` · `--d-arrive 500ms` · `--stagger 170ms` (must equal `RX_STAGGER_MS` in `download-sheets.js`).
+
+### 7.2 What may never move
+
+- Anything the person didn't cause: no ambient motion, no attention pulse, no shimmer, no carousel, no auto-scroll, no parallax.
+- **No spinner.** Waiting is said in words that change (Legend already does this: "Text updates only — no spinner").
+- **No pulse.** `frontend/status.css` pulses the status dot (`pulse-red`, `pulse-amber`, with `#C0392B`) — breaks P3, the no-red rule and Legend's "No pulse". Remove when the status page is next touched (refueler.io owns Status; the file is still in `SM_CSS`).
+- **No slide-in banner.** `banner-in` (in `global.css` and `share-tokens.css`) goes at X5-1: the status line simply is there when the page arrives.
+- **No shake** on a wrong password. That is the alarm register.
+- The headline and ledger values never move after arrival, except live figures (fade only).
+
+### 7.3 Reduced motion
+
+`prefers-reduced-motion: reduce` turns off arrive, settle, fade and every transition: things appear at once. Press keeps its tone step (a colour change, not movement). The progress bar still advances — it is the information — but in steps, without the glide. The specimen's "Reduced motion" toggle does the same, so it can be judged without changing the OS setting. Test with the real setting: macOS *System Settings › Accessibility › Display › Reduce motion*; iOS *Settings › Accessibility › Motion › Reduce Motion*.
+
+### 7.4 Safari and iOS
+
+- Animate `opacity` and `transform` only. Never `height`: Safari can't animate to `auto`, so a disclosure opens instantly and its *contents* settle.
+- Hover styles only under `@media (hover: hover)` — iOS keeps a tapped element "hovered" until the next tap.
+- `-webkit-tap-highlight-color: transparent` on the page, so the grey iOS tap flash doesn't replace our press state.
+- Restarting a CSS animation needs a reflow (`void el.offsetWidth`) — `setCalmText` already does it; keep it.
+- Background tabs: timers drop to once a second or stop. Steady progress catches up when the tab returns — never past the bytes that really moved — so a jump on return is honest. Nothing depends on 60 fps (Low Power Mode caps at 30).
+- `text-wrap: balance` needs Safari 17.5; `color-mix()` needs 16.2. Both fall back harmlessly.
+
+Specimen: *Motion · four verbs, one easing*.
+
+**Legend:** the vocabulary is a ceiling, not a quota. Legend's own rules are stricter and stand: no animation on result arrival, no pulse, PIR progress is "text updates only", stewardship mode has no motion at all. So Legend uses **press** and the theme turn, and nothing else. If Legend ever wants its PIR lines to fade, that is a Legend spec change, not something this section grants.
+
+## 8. Haptics
+
+### 8.1 What a web page can actually do
+
+| Platform | Vibration API (`navigator.vibrate`) | Other haptics |
+|---|---|---|
+| Safari, macOS and iOS | **Doesn't exist.** Never has. | iOS 18 Safari ticks when a native `<input type="checkbox" switch>` is toggled (the `switch` attribute shipped in Safari 17.4). The page can't call it; it comes with the control. |
+| Chrome on Android, **Vanadium** (GrapheneOS), Brave Android | Works, but only right after a tap (user activation) and only while the page is visible — the spec returns false for a hidden page. | — |
+| Firefox Android | Not checked; don't rely on it. | — |
+| Desktop browsers | No vibration hardware. | — |
+
+So "vibrate when the upload finishes" is impossible where it would matter: the upload finishes while the person is looking elsewhere (tab hidden → refused), and Safari users — Rajesh's first concern — get nothing anyway. A buzz from a page you aren't looking at is the notification register; that belongs to the OS or the future Nostr notice (row 19), not the page.
+
+### 8.2 Proposal: off in v1
+
+*Rajesh (13 Oct) wants switches and presses to feel as smooth as the receiver's password field — that's the visual touch in §7.1 (200 ms, one tone step), not vibration. Vibration stays off.*
+
+- **No `navigator.vibrate` calls in v1.**
+- **One candidate, for the A/B (§12):** the *copy tick* — 10 ms, once, when "Copy link" succeeds, Android only. On a phone, copying gives no physical sign it worked; one tick is the watch-crown click. Never a pattern of pulses, never on an error, never under reduced motion (there's no "reduce haptics" setting on the web, so reduced motion stands in).
+- **Free on iPhone:** if X5-1 builds the two upload switches (password, delete after download) on an `<input type="checkbox" switch>`, iOS 18 ticks them with no code. The specimen has both a native switch and our styled one with the `switch` attribute underneath — **check on the iPhone 13 mini whether ours ticks too.** Using the control as intended is fine; clicking a hidden switch from script to fake haptics elsewhere is a trick — no.
+- **Never:** download finished, wrong password, a status change, anything not under the person's thumb.
+
+Specimen: *Haptics · proposed off in v1* (open it from the Pixel and the iPhone on the same Wi-Fi).
+
+**Legend:** none. Stewardship mode is about stillness; a tick on copying an address would be the only conceivable use, and only if Share adopts the copy tick first.
+
+## 9. Components
+
+Built from the Part 1 tokens. Every interactive one shares: focus = the gold ring (`2px solid --accent`, offset 3 px) on `:focus-visible`; hover only with a mouse; press per §7.1.
+
+| Component | Anatomy | States | Width | Never |
+|---|---|---|---|---|
+| **Button** | Ink fill `--fg`, ground-colour words, DM Sans 500 15, radius 8, padding 15 × 24, min 160 px. **Ghost**: no fill, `--rule-strong` hairline | Rest · hover (fill 90 %) · press (78 %, 120 ms) · focus ring · **busy** — the word says what's happening ("Unlocking") and presses are ignored | Its words (desktop); full width ≤ 440 px; a pair = two halves | A disabled grey button: a button appears when it can act. Gold. Icons. Two primaries on one screen (P1) |
+| **Text link** | DM Sans, `--fg-muted`, 1 px underline in `--rule-strong`, offset 3 | Hover → `--fg`; focus ring | Its words | Gold. A button shape. "Click here". An arrow, except "→" for a link that leaves the page |
+| **Switch** | 34 × 20 track, edge `--input-border` (3 : 1), knob `--fg-muted`; label to the right says what *on* means | Off · on (ink track, ground-colour knob, 200 ms) · focus ring on the track | Its label | Colour for on. "On / off" words. A switch that acts on its own — it only sets a choice |
+| **Field** | Mono-caps label **above**; fill `--input-bg`; edge `--input-border`; 16 px text (iOS zoom); radius 8; padding 12 × 14 | Rest · focus (edge → `--fg` + gold ring) · **wrong** — edge 2 px of ink (inset, no shift), one sentence below in `--fg`: "That password doesn't open this file." Value kept, selected, for retyping | Email `min(100%, 352px)`; password `min(100%, 288px)`; full ≤ 440 px | Red. A shake. An icon in the field. A field inside a ledger row |
+| **Ledger row** | Label column 132 px, Plex Mono 500 11 caps `--fg-subtle`; value DM Sans 15 `--fg`; note ≤ 12 words, 13 `--fg-muted`; hairline `--rule` between rows | Static. Live values in Plex Mono, fade per §7.1 | Full sheet; ≤ 440 px label above value, padding 12 | Colour in a value. Inputs (forms aren't ledgers). A row with nothing the reader can check |
+| **Slip** | The ledger of *things you set before sending*, **Carbon:** one tone step up, `--slip-bg #201F1C` + a `--rule` hairline (labels 4.75, switch edge 3.02). **Paper: hairline only** (`--rule-strong`, no fill) — *decided (Rajesh, 13 Oct)*: three near-whites (page, slip, field) was one step too many; the field stays the one lighter sheet to write on. (A darker Paper step `#DFD9CF` would also fail AA: labels 4.30, switch edge 2.90.) Radius 10 | — | Full sheet | A second colour. A shadow. Facts after sending (those sit on the page) |
+| **Link box** | Plex Mono 13 / 1.5, fill `--input-bg`, edge `--input-border`, radius 8; **two lines then an ellipsis** (*decided 13 Oct*) — clamp on an inner element, or the third line shows in the padding | Static; not an input (no phone keyboard) | Full sheet | The whole link on screen. A text field. Editing |
+| **Disclosure** | Native `<details>`: the summary is a text link ("How this link works"), the body ≤ 60 words, 13 `--fg-muted`, ≤ 52 ch | Closed · open (summary → `--fg`, body settles in; closing is instant) | Sheet | A chevron or ＋. A modal. Policy text — that lives in Legend (§5.2) |
+| **Notice** | One sentence, 15 `--fg`, a 1 px hairline on the left, padding 14 | Hairline `--rule-strong`; **gold only on the irreversible line** ("The link works once, then the file is deleted.") | ≤ 52 ch | An icon, emoji, fill, close button or slide-in. Amber (reserved, §4.6) |
+| **QR** | Shown on request ("Show QR code" ↔ "Hide QR code"); dark modules `#1A1917` on a paper tile `#F5F0E8` **in both themes** (scanners want dark on light), 4-module quiet zone, whole pixels per module, radius 8; one fine line: "Scan with a phone's camera to download it there." | Hidden · shown (settles in) | ≤ 260 px desktop, ≤ 220 px phone | A logo in the middle. Inverted (light on dark). Shown by default |
+
+The live page already gets the QR right (`share.js` `_renderQr`, U-9 / F-16 / F-19); the specimen reuses it.
+
+**Copy-link press.** "Copy link" → "Copied" (fade), back after 2 s (fade). The button keeps its width (min 160 px), so nothing jumps.
+
+Specimen: *Components · from the part 1 tokens*.
+
+**Legend:** the same set, with three Legend-specific rules. (1) **Never truncate an address or TXID** — Legend's reader checks characters; Legend's long strings use the link-box styling *without* the clamp. (2) Legend's result is facts, so it is a **ledger on the page**, not a slip. (3) Legend's short explainers (privacy explainer) could become disclosures instead of modals; modals stay for flows (batch input). Proposal only — a Legend design session decides.
+
+## 10. Stage chip
+
+*Share-PreAlpha-1 folded in (13 Oct).*
+
+- **Words:** `Pre-alpha` on the X5-1 staging host → `Alpha` from X5-2 cutover → `Beta` later → gone at 1.0. Sentence case in the source; CSS sets the caps.
+- **Form:** Plex Mono 500 10 px, caps, `--fg-muted`, a 1 px `--rule-strong` hairline, radius 4, padding 4 × 6. **Ink and a hairline — never a coloured badge**, never gold, never amber.
+- **Place:** in the X5 standalone header, directly after the wordmark: `Refueler Share  [ALPHA]` · then, right-aligned, account (§11) · theme. One 48 px row; fits at 375 px (specimen, all phone frames: no overflow).
+- **Both modes.** The receiver sees it too — the recipient is running alpha code as much as the sender.
+- **It's a link** to one short paragraph on the X5 landing page (`refueler.io/share/`, "What alpha means"): things will change; links made now may stop working before 1.0; don't send anything you can't send again. Honest scope (P8) in one place, not on every screen.
+- **Decided (Rajesh, 13 Oct) — now, not at X5-1:** the chip goes on the **live page now, in the eyebrow row** (both modes; not a link yet — the landing page doesn't exist), then moves to the header at X5-1. The refueler.io homepage Share entry gets the same chip in the same small ship (Rajesh OK'd editing refueler.io from this repo for it). Supersedes the 13 Oct "no chip on the old mirror".
+- Not in emails, not in MCP output.
+
+Specimen: the *Stage* control at the top switches every header.
+
+**Legend:** the same chip, same rule, beside "Legend" when Legend has a public build.
+
+## 11. Account / rail indicator
+
+A-7: "Uploading as Citizen · Send without my account" is one row among five and reads as a footnote, but it decides the size cap, whose storage is used, and what's linked to an account.
+
+### 11.1 Two places, one job each
+
+| Where | Says | Signed in, paid Citizen | Signed out | Receiver page |
+|---|---|---|---|---|
+| **Header**, right, before the theme | **Who this browser is** | `Citizen` — a text link to the signed-in page (Send a file · Sign out · Sign out everywhere) | `Sign in` — a quiet text link, the only entry point | **Nothing.** A recipient never needs an account; "Sign in" there would suggest they do |
+| **Slip, first row "Send as"** | **What this upload uses, and what that means** | `Citizen` · *Send without my account* — note "Counts toward your 100 GB." | Row absent | — |
+| ~~Same row after one press~~ | | ~~`Without my account` · *Use my account*~~ — **withdrawn, see 11.1a** | | |
+
+### 11.1a No "Send without my account" when signed in — *decided (Rajesh, 13 Oct)*
+
+Reverses B12-4a-2's one-tap opt-out. Rajesh's reason: signed-in people will assume an upload is tracked whatever the button says, and the option invites them to expect account-side tracking either way. **Pushback checked, and it supports him:** the claim "Not linked to your account" would overclaim — the same browser asked `/chambers/session` *with* the cookie seconds earlier, so the Worker sees a signed-in check and a cookie-less upload from the same address moments apart. Unlinked is only honest in a private window or after signing out.
+
+- Signed in, paid: every upload is a Citizen upload. The "Send as" row becomes a plain fact — `Citizen` · **"63 GB free"** (*decided, Rajesh, 13 Oct*; replaces "Counts toward your 100 GB." — needs `/chambers/session` to return free space, B12-4b / Chambers-Design). Until then the live row reads "Uploading as Citizen".
+- **Only when the 100 GB is full** does Pro Bono appear, as a way through, not a privacy option: e.g. "Your 100 GB is full. Send this one free, up to 4 GB?" — wording for Chambers-Design; it must not say "not linked".
+- Someone who wants an unlinked transfer signs out or uses a private window; the account page (Chambers) can say so in one line.
+- Build: `upload-account.js` loses the toggle at X5-1 (the row is rebuilt there anyway). Logged as a carried item.
+
+- **Never the email address** in the header — screenshots and shoulders. The plan name is enough.
+- **Size moves into the File row's note** ("3.2 MB" under the file name) and the expiry note joins its date line, so the extra row costs nothing: Citizen chosen at 375 px keeps "Encrypt and upload" above the fold (specimen: button bottom 652 px of 667).
+- **Signed out mid-page** (initiate 401/403, today's `dropAccount`): header → "Sign in"; row → gone; one sentence goes back to the chosen file (B12-4a-2 behaviour, unchanged).
+- **One request, as now.** `loadAccount`'s single `/chambers/session` call feeds both places. The receiver page makes no call to the auth host at all (already true; keep it — it means opening a link never sends a cookie anywhere).
+- **Open for Chambers-Design:** a signed-in Citizen whose plan has lapsed. Today the page shows nothing (unpaid → Pro Bono silently). Proposed: header "Citizen", row "Without my account" with the note "Your Citizen plan isn't active. Free up to 4 GB." — needs `/chambers/session` to say "signed in, unpaid", which it partly does (`tier`).
+
+### 11.2 What feeds Chambers-Design
+
+"Send as" is the rail slot. It holds whatever principal the upload will be charged to: `Citizen` (identity rail, today) · `Without my account` (Pro Bono) · later `Credits on this device` (anonymous rail, B7 — bearer, nothing to sign in to, so the header shows no name, only the slip row) · a Chartered org's own label in Custom House. The header slot only ever shows an *identity* (Citizen, Sovereign, an org) — never a balance, never a credit count. Chambers-Design decides the area's name and whether Sovereign's local ledger shows in this row.
+
+Specimen: *Stage chip · account* (Citizen), *Account · sending without my account*, *Receiver · ready*; the "Send without my account" link in each frame works.
+
+**Legend:** Legend's credential status icon (a small gold circle, filled / outlined) carries state in colour and shape — the one place Legend breaks "the sentence carries the signal" and "gold marks a reference point". Proposal for a Legend design session: replace it with the same header text slot — e.g. `Private queries` as a text link to the credential modal — so the suite has one indicator. Not decided; noted in Legend's spec.
+
+## 12. The A/B plan — about 30 users, no analytics
+
+### 12.1 What's tested
+
+| # | Variant | vs | Where |
+|---|---|---|---|
+| P-1 | **Date window** — the % in a small framed aperture, one tone in | Plain % (live today) | Uploading + downloading |
+| P-2 | **Minute track** — a tick every 5 %, longer every 25 %, under the line | Plain line | Same |
+| P-3 | **Hand tip** — a 2 × 9 px gold tip on the fill | No tip | Same |
+| G | **Graded dial** — the Carbon ground lifts 1 % or 2 % toward the centre, with or without fine dither | Flat | Whole page, Carbon only |
+
+**Decided (Rajesh, 13 Oct), first round:** P-3 **hand tip (B) chosen**; P-1 date window and P-2 minute track **dropped** (the window reads as a field, the track is busy at 375 px). G: **Carbon Dial 1 % with dither is the default from X5-1**; 2 % reads as a spotlight; **Paper stays flat** (a printed sheet isn't graded; a lighter centre on a light ground reads as glare). Then **a month of alpha feedback** (from X5-2) before revisiting — this replaces the four-screen gate below, with one ten-minute look on an ordinary non-Apple screen before X5-1 ships. Round 3's `rs-dial` preference is no longer needed for P-1–P-3. In production the dither is a small static PNG tile (`img-src 'self'`), not a canvas data URL.
+| H | **Copy tick** — 10 ms on Android | None | Link ready |
+
+Specimen: *Progress · the watchmaker variants* (A plain · B tip · C track · D window · E all three, one simulated 3.2 GB upload at the live cadence) and the *Dial* / *Dither* controls at the top.
+
+### 12.2 Method — three rounds, no telemetry
+
+1. **Rajesh's pass (now, before X5-1).** Safari on the MacBook with Mullvad on, then the iPhone 13 mini and the Pixel 9a. Strike anything he doesn't want; keep a shortlist. He is the design authority — the panel informs, it doesn't vote him down.
+2. **Taste panel (X5-1 staging).** Five to eight people whose eye he trusts, in person or over Signal, looking at the specimen on their own device. Two questions per item: *"Which would you rather watch for ten minutes?"* and *"Did either feel busy, slow or like it was selling you something?"* Counts only, no names, kept off-repo.
+3. **Local preference in the alpha (X5-2 → decision).** The uploading screen carries one fine-line text link under the readout, **alpha only**: `Plain dial · Watch dial`. First visit picks one at random; the choice is kept in `localStorage` (`rs-dial`) in that browser and **never sent** — no cookie, no request, no server flag. In Rajesh's normal alpha check-in: *"Did you switch the dial? Which one did you keep?"* The setting people keep is the signal. The link is removed when the decision is made.
+
+### 12.3 What decides each
+
+| Item | Ship it if | Otherwise |
+|---|---|---|
+| P-1 date window | Rajesh keeps it after round 1 **and** most of the panel prefer it **and** it reads at 375 px without wrapping | Plain % |
+| P-2 minute track | Nobody in the panel calls it busy at 375 px | Plain line |
+| P-3 hand tip | Nobody reads it as a cursor, a fault or a second colour | No tip |
+| G graded dial | **No banding** (rings) on all four: MacBook, iPhone 13 mini, Pixel 9a, one ordinary non-Apple screen — with dither if needed — **and** nobody notices it as a spotlight without being told | **Flat** (the default) |
+| H copy tick | Rajesh on the Pixel says "crown click", not "notification", **and** no Android alpha user wants it gone | Off (the default) |
+
+**Ties go to the plainer variant** (§4.6a: the more precious, the quieter). Thirty people is a taste panel, not a statistic — the plan says so rather than pretending otherwise.
+
+**Never:** an analytics script, an event ping, a server-side experiment flag, a fingerprint, or "which variant converted better". Share has nothing to convert.
+
+**Legend:** same three rounds. Legend has no progress bar (PIR is text), so only G (graded dial) and P-1's *framing* (a balance or block height in a date window) are candidates — and stewardship mode's stillness rule outranks any variant.
+
+---
+
+## 13. Review round 1 — what was decided (13 Oct, with Rajesh)
+
+Principles (§3) and copy rewrites (§5.3) as written · §6 answers · hand tip; Carbon Dial 1 % + dither, Paper flat, one month of alpha feedback · the touch (200 ms, one tone step) · lede one sentence · Paper slip hairline only · no "Send without my account" while signed in; Pro Bono only when the 100 GB is full · "63 GB free" · **Pre-alpha chip on the live page now** in the eyebrow row (specimen: *Live page now*), header from X5-1, refueler.io homepage entry in the same ship.
+
+Still proposals: §7 motion detail, §8 haptics (pending the iPhone / Pixel checks), §9 components detail, §11.2 rail slot. **Next design rounds (Rajesh):** Chambers-Design builds the account page out fully; a further design round follows a few weeks later, once the alpha has lived with these changes (alongside the dial feedback).
+
+*End of Part 2. Next: Share-PreAlpha-1 (chip ship) → X5-Plan builds the standalone layout from §4 + §7–§11.*
