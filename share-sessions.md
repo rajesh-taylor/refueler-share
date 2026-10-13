@@ -575,3 +575,12 @@ Soak tools back on the live flow; `--encrypt` / `--decrypt` on the browser's own
 **Review with Rajesh (same session):** decided hand tip; Carbon Dial 1 % + dither (Paper flat, month of alpha feedback); the touch = 200 ms one tone step (receiver password field is the reference — `global.css` 0.2 s edge fade); one-sentence lede; Pre-alpha chip on the live page now (eyebrow row) + refueler.io homepage entry; no "Send without my account" while signed in (Pro Bono only when 100 GB full; "not linked" would overclaim); principles + §5.3 rewrites; Paper slip hairline only; "63 GB free". Specimen updated (defaults, *Live page now* preview). Doc §13.
 Toggle stays live until the full-storage offer is built (Rajesh). **Next:** Share-PreAlpha-1 (chip only) → X5-Plan; Chambers-Design builds the account page fully, then another design round a few weeks later.
 
+
+## Share-PreAlpha-1 (13 Oct 2026) — Pre-alpha chip on the live page · share `2cdb8cc` · refueler.io `506ac42`, `0fd713c`, `2ec012e`
+
+**Built:** `src/index.njk` (6 sheet eyebrows) + `src/signin.njk` (6) wrapped in `.rx-eyebrow-row` with `.stage-chip`; `share.css` chip rule, word in `::before` (one place in Share). refueler.io homepage: chip on Share; Legend status "Research"; status chips ink + hairline only (`home.css`).
+**Checked first locally:** harness (`dev/share-harness/build.sh`, :8765 + fake Worker :8766) — send, sign-in, homepage at 375 px; Rajesh test-uploaded there (download needs the real Worker).
+**Decided (Rajesh):** stage chip never coloured (pre-alpha → live); homepage status colours removed — back to the suite rule.
+**Ship:** `ship-frontend.sh` ✗ on a transient missing cache-control (`upload-stop.js`), re-check ✓ (`sync-share.sh --live`). **Live ✓** Rajesh: Safari + Mullvad, Carbon + Paper, full upload / password / DAD / dead link / sign-in, iPhone.
+**Noted:** harness theme toggle works once only (harness-only). Link box two-line clamp → X5 (§9).
+**Next:** X5-Plan.
