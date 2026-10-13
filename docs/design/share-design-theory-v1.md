@@ -401,7 +401,7 @@ Reverses B12-4a-2's one-tap opt-out. Rajesh's reason: signed-in people will assu
 - Signed in, paid: every upload is a Citizen upload. The "Send as" row becomes a plain fact — `Citizen` · **"63 GB free"** (*decided, Rajesh, 13 Oct*; replaces "Counts toward your 100 GB." — needs `/chambers/session` to return free space, B12-4b / Chambers-Design). Until then the live row reads "Uploading as Citizen".
 - **Only when the 100 GB is full** does Pro Bono appear, as a way through, not a privacy option: e.g. "Your 100 GB is full. Send this one free, up to 4 GB?" — wording for Chambers-Design; it must not say "not linked".
 - Someone who wants an unlinked transfer signs out or uses a private window; the account page (Chambers) can say so in one line.
-- Build: `upload-account.js` loses the toggle at X5-1 (the row is rebuilt there anyway). Logged as a carried item.
+- Build: **the live toggle stays until this is built properly** (Rajesh, 13 Oct: don't remove it while it's the only way to send when the 100 GB is full). Chambers-Design designs the full-storage offer; X5-1 or B12-4b builds it and removes the toggle in the same change.
 
 - **Never the email address** in the header — screenshots and shoulders. The plan name is enough.
 - **Size moves into the File row's note** ("3.2 MB" under the file name) and the expiry note joins its date line, so the extra row costs nothing: Citizen chosen at 375 px keeps "Encrypt and upload" above the fold (specimen: button bottom 652 px of 667).
@@ -459,7 +459,7 @@ Specimen: *Progress · the watchmaker variants* (A plain · B tip · C track · 
 
 ## 13. Review round 1 — what was decided (13 Oct, with Rajesh)
 
-Principles (§3) and copy rewrites (§5.3) as written · §6 answers · hand tip; Carbon Dial 1 % + dither, Paper flat, one month of alpha feedback · the touch (200 ms, one tone step) · lede one sentence · Paper slip hairline only · no "Send without my account" while signed in; Pro Bono only when the 100 GB is full · "63 GB free" · **Pre-alpha chip on the live page now** in the eyebrow row (specimen: *Live page now*), header from X5-1, refueler.io homepage entry in the same ship.
+Principles (§3) and copy rewrites (§5.3) as written · §6 answers · hand tip; Carbon Dial 1 % + dither, Paper flat, one month of alpha feedback · the touch (200 ms, one tone step) · lede one sentence · Paper slip hairline only · no "Send without my account" while signed in; Pro Bono only when the 100 GB is full (the live toggle stays until that offer is built) · "63 GB free" · **Pre-alpha chip on the live page now** in the eyebrow row (specimen: *Live page now*), header from X5-1, refueler.io homepage entry in the same ship.
 
 Still proposals: §7 motion detail, §8 haptics (pending the iPhone / Pixel checks), §9 components detail, §11.2 rail slot. **Next design rounds (Rajesh):** Chambers-Design builds the account page out fully; a further design round follows a few weeks later, once the alpha has lived with these changes (alongside the dial feedback).
 
