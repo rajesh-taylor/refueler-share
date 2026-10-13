@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="carbon">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Share design specimen</title>
+<!-- Dev only. X5 self-hosts these three families; Google Fonts is just for the preview. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="specimen.css" />
+</head>
+<body>
+
+<header class="sp-top">
+  <h1>Share design specimen · v1 proposal · 13 Oct 2026</h1>
+  <div class="sp-theme" role="group" aria-label="Theme">
+    <button type="button" data-set-theme="carbon" aria-pressed="true">Carbon</button>
+    <button type="button" data-set-theme="paper" aria-pressed="false">Paper</button>
+  </div>
+</header>
+
+<div class="sp-wrap">
+
+  <!-- ── Type ───────────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Type · seven steps</h2>
+    <p class="sp-note">Serif for the one headline, mono capitals for labels and live figures, DM Sans for everything read. Doc §4.1.</p>
+    <dl class="sp-type">
+      <div><dt>Figure<small>Plex Mono 400 · 44–64</small></dt><dd style="font: var(--t-figure)">62<span style="font-size:.4em;vertical-align:.9em;color:var(--fg-muted)">%</span></dd></div>
+      <div><dt>Head<small>Source Serif 4 300 · 30–40</small></dt><dd style="font: var(--t-head)">Your link is ready.</dd></div>
+      <div><dt>Title<small>Source Serif 4 300 · 21</small></dt><dd style="font: var(--t-title)">What a subpoena can reach</dd></div>
+      <div><dt>Body<small>DM Sans 400 · 15</small></dt><dd>Tue 20 Oct, 19:01 · 3.2 MB · Q3-board-pack-final-v7.pdf</dd></div>
+      <div><dt>Lede<small>DM Sans 300 · 15 · ≤ 40 ch</small></dt><dd style="font: var(--t-lede); color: var(--fg-muted)">Anyone with this link can open the file. Send it only to the person it’s for.</dd></div>
+      <div><dt>Fine<small>DM Sans 400 · 13 · ≤ 52 ch</small></dt><dd style="font: var(--t-fine); color: var(--fg-muted)">An hour without use signs you out sooner.</dd></div>
+      <div><dt>Label<small>Plex Mono 500 · 11 · caps</small></dt><dd style="font: var(--t-label); letter-spacing:.14em; text-transform:uppercase; color: var(--fg-subtle)">Available until</dd></div>
+    </dl>
+  </section>
+
+  <!-- ── Colour ─────────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Colour · inks and one accent</h2>
+    <p class="sp-note">Like a Polaris dial: a dark ground, cream inks, steel rules, and one small marker. No colour for success or failure — the sentence says it (Legend’s rule). Contrast is measured live against the ground. Doc §4.5–4.6.</p>
+    <div class="sp-swatches">
+      <div class="sp-sw" data-var="--fg"><i></i><b>Ink</b><span>Headline, values, button</span><code></code></div>
+      <div class="sp-sw" data-var="--fg-muted"><i></i><b>Ink 2</b><span>Ledes, fine, links</span><code></code></div>
+      <div class="sp-sw" data-var="--fg-subtle"><i></i><b>Ink 3</b><span>Labels, footer — now AA</span><code></code></div>
+      <div class="sp-sw" data-var="--input-border" data-min="3"><i></i><b>Steel</b><span>Field edge</span><code></code></div>
+      <div class="sp-sw" data-var="--accent"><i></i><b>Accent · gold</b><span>The one marker: focus, drop frame, the “once” line, the tip of a moving bar</span><code></code></div>
+      <div class="sp-sw" data-var="--attention"><i></i><b>Attention · reserved</b><span>Legend’s amber. Share v1 has no use for it</span><code></code></div>
+    </div>
+    <div class="sp-status">
+      <p class="once">The link works once, then the file is deleted.</p>
+      <p class="plain">That password doesn’t open this file.</p>
+      <p class="plain">This file is too large to save on this phone. Open the link on a computer.</p>
+      <p class="plain">Deleted from Refueler’s servers.</p>
+    </div>
+    <div class="sp-measure">
+      <div class="sp-pct">62<sup>%</sup></div>
+      <div class="sp-track"><b></b></div>
+      <div class="sp-readout"><span>2.0 GB of 3.2 GB</span><span>Keep this tab open</span></div>
+    </div>
+  </section>
+
+  <!-- ── Spacing ────────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Spacing · eight steps</h2>
+    <p class="sp-note">4 · 8 · 12 · 16 · 24 · 32 · 48 · 64. Today the pages use 17 different values. Doc §4.3.</p>
+    <div class="sp-space">
+      <div><code>4</code><i style="width:4px"></i></div>
+      <div><code>8</code><i style="width:8px"></i></div>
+      <div><code>12</code><i style="width:12px"></i></div>
+      <div><code>16</code><i style="width:16px"></i></div>
+      <div><code>24</code><i style="width:24px"></i></div>
+      <div><code>32</code><i style="width:32px"></i></div>
+      <div><code>48</code><i style="width:48px"></i></div>
+      <div><code>64</code><i style="width:64px"></i></div>
+    </div>
+  </section>
+
+  <!-- ── Screens ────────────────────────────────────────────────── -->
+  <section class="sp-sec">
+    <h2>Upload · file chosen</h2>
+    <p class="sp-note">Standalone X5 header (no section pill). 480 px sheet. Facts line gone (it was on the empty view). Password note one sentence. Button the width of its words on desktop; full width on the phone, above the 375 × 667 fold.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-chosen"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-chosen" data-fold data-closed></div></div>
+    </div>
+  </section>
+
+  <section class="sp-sec">
+    <h2>Upload · link ready</h2>
+    <p class="sp-note">Lede 30 → 16 words. Link shown on two lines (Copy copies all of it). Detail behind “How this link works”.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-ready"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-ready" data-fold></div></div>
+    </div>
+  </section>
+
+  <section class="sp-sec">
+    <h2>Sign-in · ask</h2>
+    <p class="sp-note">A form, not a ledger: label above, field 22 rem, button the width of its words.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-signin"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-signin"></div></div>
+    </div>
+  </section>
+
+  <section class="sp-sec">
+    <h2>Sign-in · signed in</h2>
+    <p class="sp-note">One action. Sign out is a text link, not a second button.</p>
+    <div class="sp-screens">
+      <div><p class="sp-cap">Desktop</p><div class="frame" data-screen="scr-in"></div></div>
+      <div><p class="sp-cap">Phone · 375</p><div class="frame phone" data-screen="scr-in"></div></div>
+    </div>
+  </section>
+</div>
+
+<!-- ── Screen templates (cloned into both frames by specimen.js) ── -->
+<template id="scr-chosen">
+  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
+  <div class="shell"><div class="sheet">
+    <p class="eyebrow">Ready to send</p>
+    <h1 class="head">Send a file.</h1>
+    <div class="slip"><dl class="ledger">
+      <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf <button class="link" type="button">Choose another</button></dd></div>
+      <div class="row"><dt>Size</dt><dd>3.2 MB</dd></div>
+      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>7 days from upload</small></dd></div>
+      <div class="row bare"><dt>Password</dt><dd>
+        <label class="switch"><input type="checkbox" checked /><span class="track"></span>Ask for a password</label>
+        <input class="input pw" type="password" aria-label="Password" value="correct horse" />
+        <small>Send it separately from the link.</small>
+      </dd></div>
+      <div class="row bare"><dt>After download</dt><dd>
+        <label class="switch"><input type="checkbox" /><span class="track"></span>Delete the file</label>
+      </dd></div>
+    </dl></div>
+    <div class="actions"><button class="btn" type="button">Encrypt and upload</button></div>
+  </div></div>
+</template>
+
+<template id="scr-ready">
+  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
+  <div class="shell"><div class="sheet">
+    <p class="eyebrow">Link ready</p>
+    <h1 class="head">Your link is ready.</h1>
+    <p class="lede">Anyone with this link can open the file. Send it only to the person it’s for.</p>
+    <div class="linkbox">https://share.refueler.io/?uuid=d5c35727-72e7-4087-99a6-5ece4ffb5063#eyJ2IjoyLCJrIjoibVdXX3ZxWWV2S0luaEgzS3ZxbmM0MVlwWkVpd3Z2WXF4Z0hpVWljbnRsSSIsIm4iOiJRMy1ib2FyZC1wYWNrLWZpbmFsLXY3LnBkZiIsInoiOjM0MDAwMDB9</div>
+    <div class="actions pair"><button class="btn" type="button">Copy link</button><button class="btn ghost" type="button">Show QR code</button></div>
+    <dl class="ledger">
+      <div class="row"><dt>File</dt><dd>Q3-board-pack-final-v7.pdf</dd></div>
+      <div class="row"><dt>Available until</dt><dd>Tue 20 Oct, 19:01<small>in 6 days</small></dd></div>
+    </dl>
+    <p class="links"><button class="link" type="button">How this link works</button> · <button class="link" type="button">Send another file</button></p>
+  </div></div>
+</template>
+
+<template id="scr-signin">
+  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
+  <div class="shell"><div class="sheet">
+    <p class="eyebrow">Citizen</p>
+    <h1 class="head">Sign in.</h1>
+    <p class="lede">We’ll email you a link.</p>
+    <div class="field"><label for="x-email">Email</label><input class="input" id="x-email" type="email" autocomplete="off" placeholder="" /></div>
+    <div class="actions"><button class="btn" type="button">Email me a link</button></div>
+  </div></div>
+</template>
+
+<template id="scr-in">
+  <div class="app-head"><span class="wordmark">Refueler<em>Share</em></span><small>Carbon</small></div>
+  <div class="shell"><div class="sheet">
+    <p class="eyebrow">Citizen</p>
+    <h1 class="head">You’re signed in.</h1>
+    <dl class="ledger"><div class="row"><dt>Signed in until</dt><dd>Wed 14 Oct, 19:05<small>Sooner after an hour without use.</small></dd></div></dl>
+    <div class="actions"><button class="btn" type="button">Send a file</button></div>
+    <p class="links"><button class="link" type="button">Sign out</button> · <button class="link" type="button">Sign out everywhere</button></p>
+  </div></div>
+</template>
+
+<script src="specimen.js"></script>
+</body>
+</html>
