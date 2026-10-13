@@ -10,7 +10,12 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { checkRateLimit, getClientIp, rateLimitResponse } from 'src/ratelimit.js';
-import { makeEnv, makeKv } from './helpers/kv-mock.js';
+import { makeEnv as makeKvEnv, makeKv } from './helpers/kv-mock.js';
+import { rlId } from 'src/auth.js';
+
+// B12-4a-2: counters are keyed by rlId (AUTH_PEPPER subkey), never the raw value.
+const PEPPER = 'QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=';
+const makeEnv = (over = {}) => makeKvEnv({ AUTH_PEPPER: PEPPER, ...over });
 
 // ─── Time helpers ────────────────────────────────────────────────────────────
 
@@ -122,6 +127,25 @@ describe('checkRateLimit', () => {
     expect(result.limited).toBe(false);
   });
 
+  it('KV keys are keyed pseudonyms — no raw IP at rest (B12-4a-2)', async () => {
+    await checkRateLimit(env, IP, ENDPOINT, MAX, WINDOW);
+    const keys = [...env.STATUS_KV._store.keys()];
+    expect(keys).toEqual([`rl:${ENDPOINT}:${await rlId(env, ENDPOINT, IP)}`]);
+    expect(keys[0]).not.toContain(IP);
+    expect(keys[0]).toMatch(/^rl:credential_issue:[0-9a-f]{64}$/);
+  });
+
+  it('pseudonym depends on the endpoint (no cross-endpoint join)', async () => {
+    expect(await rlId(env, 'a', IP)).not.toBe(await rlId(env, 'b', IP));
+  });
+
+  it('fails open (and stores nothing) without AUTH_PEPPER', async () => {
+    const noPepper = makeKvEnv();
+    const result = await checkRateLimit(noPepper, IP, ENDPOINT, MAX, WINDOW);
+    expect(result.limited).toBe(false);
+    expect(noPepper.STATUS_KV._store.size).toBe(0);
+  });
+
   it('fails open when STATUS_KV is not present', async () => {
     const degradedEnv = makeEnv({ STATUS_KV: undefined });
     const result = await checkRateLimit(degradedEnv, IP, ENDPOINT, MAX, WINDOW);
@@ -131,7 +155,7 @@ describe('checkRateLimit', () => {
 
   it('fails open on KV read error', async () => {
     // Corrupt the stored value so JSON.parse throws
-    env.STATUS_KV._store.set(`rl:${ENDPOINT}:${IP}`, '{INVALID}');
+    env.STATUS_KV._store.set(`rl:${ENDPOINT}:${await rlId(env, ENDPOINT, IP)}`, '{INVALID}');
     const result = await checkRateLimit(env, IP, ENDPOINT, MAX, WINDOW);
     // ratelimit.js catches and returns fail-open
     expect(result.limited).toBe(false);

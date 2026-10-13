@@ -2,7 +2,7 @@
 // Unit tests for worker/src/manifest.js
 //
 // Covers:
-//   TIER_CAPS         — correct byte values for all tiers
+//   TIER_CAPS         — free / max / api byte values (B12-4a-2)
 //   TIER_EXPIRY_SECONDS — free=7days, paid tiers null
 //   createManifest    — required fields, defaults, p2shSecretHash optional
 //   isExpired         — past/future expiry_timestamp
@@ -78,16 +78,13 @@ describe('TIER_CAPS', () => {
     expect(TIER_CAPS.free).toBe(4 * 1024 * 1024 * 1024);
   });
 
-  it('creative tier is exactly 100 GB', () => {
-    expect(TIER_CAPS.creative).toBe(100 * 1024 * 1024 * 1024);
+  it('max (Citizen) is exactly 100 GiB, api (Chartered) 250 GiB', () => {
+    expect(TIER_CAPS.max).toBe(100 * 1024 * 1024 * 1024);
+    expect(TIER_CAPS.api).toBe(250 * 1024 * 1024 * 1024);
   });
 
-  it('production tier is exactly 250 GB', () => {
-    expect(TIER_CAPS.production).toBe(250 * 1024 * 1024 * 1024);
-  });
-
-  it('enterprise tier is Infinity', () => {
-    expect(TIER_CAPS.enterprise).toBe(Infinity);
+  it('one wire name per tier — no legacy keys (B12-4a-2)', () => {
+    expect(Object.keys(TIER_CAPS).sort()).toEqual(['api', 'free', 'max']);
   });
 });
 

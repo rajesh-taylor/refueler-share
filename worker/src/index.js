@@ -33,7 +33,7 @@ import { handleGrowthSnapshot } from './handlers/growth_snapshot.js';  // Share-
 import { handleWebhookRegister }        from './webhook_reg.js';
 import { retryDeadLetterQueue } from './webhook_delivery.js';
 import { sealCref, sealQref } from './seal.js';                                // API-Repair-1, B12-3
-import { quotaRefFor, reserveQuota, releaseQuota, quotaBand } from './quota_store.js'; // B12-3
+import { quotaRefFor, citizenQuotaRefFor, reserveQuota, releaseQuota, provisionQuota, quotaBand, CITIZEN_LIMIT_CHUNKS, DEFAULT_MAX_IN_FLIGHT } from './quota_store.js'; // B12-3, B12-4a-2
 import { putManifestIfAbsent } from './latch.js';                               // B12-3: X6
 import { makeSessionToken, verifySessionToken, sessionHash, sessionExpiry, hasUploadSessionKey, MAX_TRANSFER_CHUNKS } from './upload_session.js'; // B12-3
 import { handleQuotaReconcile, runQuotaReconcile } from './handlers/quota_reconcile.js';                    // B12-3
@@ -60,7 +60,8 @@ import { checkTestCredential, TESTCRED_USED_PREFIX } from './testcred.js';    //
 import { applyQuotaSpend } from './quota.js';
 
 import { handleStripeWebhook, handleCheckout } from './handlers/stripe_sub.js';
-import { AUTH_PATHS, onAuthHost, routeAuth, authCors } from './handlers/auth.js';
+import { AUTH_PATHS, onAuthHost, routeAuth, authCors, requireSession, citizenTier } from './handlers/auth.js';
+import { COOKIE_NAME, isAuthOrigin } from './auth.js';                             // B12-4a-2
 import { sweepAuth } from './auth_store.js';
 import { fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber } from './handlers/stripe_sub.js';
 import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp.js';
@@ -131,6 +132,10 @@ export default {
     }
 
     if (request.method === 'OPTIONS') {
+      // B12-4a-2: initiate's preflight may carry a Citizen's credentials.
+      if (INITIATE_PATH_RE.test(new URL(request.url).pathname)) {
+        return new Response(null, { status: 204, headers: initiateCors(request, env) });
+      }
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
 
@@ -342,9 +347,9 @@ export default {
         const rl = await checkRateLimit(env, ip, 'upload_initiate', 20, 60);
         if (rl.limited) {
           logEvent(env, { endpoint: 'upload_initiate', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
-          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+          return rateLimitResponse(request, rl.resetAt, initiateCors(request, env));
         }
-        return timed('upload_initiate', () => handleInitiate(request, env, ctx, initiateMatch[1]).then(r => addCors(r, request)), {
+        return timed('upload_initiate', () => handleInitiate(request, env, ctx, initiateMatch[1]).then(r => withHeaders(r, initiateCors(request, env))), {
           httpProtocol: request.cf?.httpProtocol ?? '',
         });
       }
@@ -1299,6 +1304,35 @@ function paymentRequired402(response402, cost) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Initiate CORS (B12-4a-2). The public corsHeaders(), plus — only for an exact
+// AUTH_ORIGINS origin on AUTH_API_HOST — Allow-Credentials, so a signed-in
+// Citizen's cookie can travel on this one call (S6.6). The localhost echo in
+// corsHeaders() never gets Allow-Credentials: isAuthOrigin is an exact list.
+// ─────────────────────────────────────────────────────────────────────────────
+const INITIATE_PATH_RE = /^\/upload\/[0-9a-f-]{36}\/initiate$/i;
+
+function initiateCors(request, env) {
+  const h = { ...corsHeaders(request), 'Vary': 'Origin' };
+  const origin = request.headers.get('Origin');
+  if (onAuthHost(request, env) && isAuthOrigin(env, origin)) {
+    h['Access-Control-Allow-Origin'] = origin;
+    h['Access-Control-Allow-Credentials'] = 'true';
+  }
+  return h;
+}
+
+function withHeaders(response, headers) {
+  const h = new Headers(response.headers);
+  for (const [k, v] of Object.entries(headers)) h.set(k, v);
+  return new Response(response.body, { status: response.status, headers: h });
+}
+
+/** True when the request carries any session cookie (even a malformed one). */
+function hasSessionCookie(request) {
+  return (request.headers.get('Cookie') ?? '').includes(`${COOKIE_NAME}=`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /upload/:uuid/initiate
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleInitiate(request, env, ctx, uuid) {
@@ -1425,13 +1459,50 @@ async function handleInitiate(request, env, ctx, uuid) {
       return err(503, 'Upload temporarily unavailable');
     }
   }
-  // Citizen (no principal until B12-4a), Pro Bono and soak: quotaRef stays null —
-  // no reservation, no qref_ct. Bearer-rail principals never get one (X2).
+  // ── Citizen (B12-4a-2, SR S6.10): the principal comes from the S6 session ──
+  // only, and only when the browser chose to send the cookie (upload.js does so
+  // unless the sender picked "Send without my account"). A cookie means all
+  // three of S6.6: valid session · X-CSRF · exact Origin — else 401/403 before
+  // anything is consumed. Only a citizen session counts; an org admin session
+  // can't upload through the web page. Paid (active + period not over) →
+  // 'max' + the Citizen's quota; unpaid → Pro Bono, no quota.
+  // Pro Bono and soak: quotaRef stays null — no reservation, no qref_ct.
+  // Bearer-rail principals never get one (X2).
+  let citizenPaid = false;
+  if (!isChartered && !isTestCredential && hasSessionCookie(request) && onAuthHost(request, env)) {
+    const sess = await requireSession(request, env, { stateChanging: true });
+    if (sess instanceof Response) {
+      logEvent(env, { endpoint: 'upload_initiate', status: sess.status, errorMsg: 'citizen_session_refused' });
+      return sess;
+    }
+    if (sess.kind !== 'citizen') {
+      logEvent(env, { endpoint: 'upload_initiate', status: 403, errorMsg: 'session_not_citizen' });
+      return err(403, 'This sign-in cannot upload — send without your account');
+    }
+    let tier;
+    try { tier = await citizenTier(env, sess.ref); }
+    catch (e) {
+      if (!(e instanceof StoreUnavailable)) throw e;
+      console.error('upload_initiate: entitlement store unavailable:', e.message);
+      return err(503, 'Account check unavailable — please retry');
+    }
+    if (tier === 'max') {
+      quotaRef = await citizenQuotaRefFor(env, sess.ref);
+      if (!quotaRef) {
+        console.error('upload_initiate: QUOTA_REF_KEY unavailable — refusing Citizen initiate');
+        return err(503, 'Upload temporarily unavailable');
+      }
+      citizenPaid = true;
+    }
+  }
 
   // ── Resolved tier — never issued_tier for the cap ─────────────────────────
-  // Cred-Fix-1: no request header selects a tier. Every consumer upload is
-  // 'free' until B12-4a resolves paid tiers from an authenticated session.
-  const resolvedTier = 'free';
+  // Cred-Fix-1: no request header selects a tier. B12-4a-2: 'api' only after
+  // the Chartered HMAC check, 'max' only from a paid Citizen session. Soak
+  // credentials stay 'free' (their cap comes from the MAC'd token).
+  const resolvedTier = (isChartered && !isTestCredential) ? TIERS.CHARTERED
+                     : citizenPaid ? 'max'
+                     : 'free';
   // Test credential: cap from the MAC'd token; TIER_CAPS is not consulted.
   const tierCap = isTestCredential
     ? testCred.capChunks * CHUNK_SIZE
@@ -1573,6 +1644,12 @@ async function handleInitiate(request, env, ctx, uuid) {
     let rsv;
     try {
       rsv = await reserveQuota(env, quotaRef, sessHash, totalChunks, sessionExp);
+      // B12-4a-2: a Citizen's account-of-one is created on first upload. Only on
+      // not_provisioned — provision overwrites the limit, so never otherwise.
+      if (citizenPaid && rsv?.code === 'quota_not_provisioned') {
+        await provisionQuota(env, quotaRef, { kind: 'registered', limitChunks: CITIZEN_LIMIT_CHUNKS, maxInFlight: DEFAULT_MAX_IN_FLIGHT });
+        rsv = await reserveQuota(env, quotaRef, sessHash, totalChunks, sessionExp);
+      }
     } catch (e) {
       if (!(e instanceof StoreUnavailable)) throw e;
       console.error('upload_initiate: quota store unavailable:', e.message);
@@ -1580,12 +1657,22 @@ async function handleInitiate(request, env, ctx, uuid) {
     }
     if (!rsv?.ok) {
       const code = rsv?.code ?? 'quota_exceeded';
-      logEvent(env, { endpoint: 'upload_initiate', tier: TIERS.CHARTERED, status: code === 'too_many_in_flight' ? 429 : 402, errorMsg: code });
+      logEvent(env, { endpoint: 'upload_initiate', tier: resolvedTier, status: code === 'too_many_in_flight' ? 429 : 402, errorMsg: code });
       if (code === 'too_many_in_flight') {
         return json({ error: 'Too many uploads in progress for this account', code }, 429);
       }
       if (code === 'quota_not_provisioned') {
         return json({ error: 'No storage quota found — contact support', code }, 402);
+      }
+      // Citizen 402: exact figures — it's their own account (SR S5).
+      if (citizenPaid) {
+        return json({
+          error: 'Your Citizen storage is full — wait for transfers to be collected or expire',
+          code: 'quota_exceeded',
+          held_chunks: (rsv?.used_chunks ?? 0) + (rsv?.reserved_chunks ?? 0),
+          limit_chunks: rsv?.limit_chunks ?? 0,
+          need_chunks: totalChunks,
+        }, 402);
       }
       // Chartered 402: the held share as a 5 % band, never exact figures (SR S5).
       return json({ error: 'Storage quota full — wait for transfers to be collected or expire', code: 'quota_exceeded', band: quotaBand(rsv ?? {}) }, 402);

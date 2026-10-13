@@ -46,6 +46,12 @@ export async function deleteAllSessions(env, sessionHash) {
   return rpc(env, 'auth_session_delete_all', { p_session_hash: sessionHash });
 }
 
+/** Citizen principal ref → { tier, paid } (B12-4a-2). Unknown ref → free, unpaid. */
+export async function citizenEntitlement(env, ref) {
+  const r = await rpc(env, 'citizen_entitlement', { p_ref: ref });
+  return { tier: typeof r?.tier === 'string' ? r.tier : 'free', paid: r?.paid === true };
+}
+
 export async function sweepAuth(env) {
   return rpc(env, 'auth_sweep', {});
 }

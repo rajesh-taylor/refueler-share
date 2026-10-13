@@ -9,7 +9,7 @@
 # ── What gets mirrored ────────────────────────────────────────────────────────
 # Every top-level frontend/*.js and *.css MUST appear in exactly one of the lists below.
 # An unlisted file is a hard failure (this is the merkle.js / Share-6-3d trap, now closed).
-SM_JS="share.js share-early.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js timestamp.js refueler-badge.js fragment.js merkle.js"
+SM_JS="share.js share-early.js signin.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js upload-account.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js timestamp.js refueler-badge.js fragment.js merkle.js"
 SM_CSS="share.css share-tokens.css status.css"
 SM_VENDOR="fflate.min.js qr-creator.min.js noble-blake3.js cashu-crypto.js"
 SM_CANARY="mirror-canary.txt"             # pipeline canary — edit freely to prove a deploy, never app code
@@ -21,10 +21,12 @@ SM_ASSETS="$SM_JS $SM_CSS $SM_VENDOR $SM_CANARY"
 # ── Where things live (relative to each repo root) ────────────────────────────
 SM_C_FRONT="frontend"
 SM_C_NJK="src/index.njk"
+SM_C_SIGNIN="src/signin.njk"             # B12-4a-2: sign-in page (magic-link landing)
 SM_C_B3SRC="src/blake3"
 SM_C_ADMIN="worker/src/share/admin/test-upload.html"
 SM_M_ASSETS="src/share/assets"
 SM_M_NJK="src/share/index.njk"
+SM_M_SIGNIN="src/share/signin/index.njk"  # served at refueler.io/share/signin/ (= AUTH_SIGNIN_URL)
 SM_M_ADMIN="src/share/admin/test-upload.html"
 
 # shellcheck disable=SC2034  # used by the scripts that source this file
@@ -55,12 +57,12 @@ sm_files_under() {
 sm_canon_paths() {
   local p="" n
   for n in $SM_ASSETS; do p="$p $SM_C_FRONT/$n"; done
-  echo "$p $SM_C_FRONT/blake3 $SM_C_NJK $SM_C_B3SRC $SM_C_ADMIN"
+  echo "$p $SM_C_FRONT/blake3 $SM_C_NJK $SM_C_SIGNIN $SM_C_B3SRC $SM_C_ADMIN"
 }
 sm_mirror_paths() {
   local p="" n
   for n in $SM_ASSETS; do p="$p $SM_M_ASSETS/$n"; done
-  echo "$p $SM_M_ASSETS/blake3 $SM_M_NJK $SM_M_ADMIN"
+  echo "$p $SM_M_ASSETS/blake3 $SM_M_NJK $SM_M_SIGNIN $SM_M_ADMIN"
 }
 
 # ── index.njk: canonical → refueler.io rendering (stdout) ─────────────────────
@@ -71,6 +73,7 @@ sm_render_njk() {
   script="$(mktemp "${TMPDIR:-/tmp}/sm-njk.XXXXXX")"
   {
     echo 's|^permalink: /index\.html$|permalink: /share/index.html|'
+    echo 's|^permalink: /signin/index\.html$|permalink: /share/signin/index.html|'
     echo 's|^activePage: ""$|activePage: "share"|'
     for n in $SM_ASSETS; do
       esc="$(printf '%s' "$n" | sed 's/\./\\./g')"
@@ -91,6 +94,15 @@ sm_verify_njk() { # sm_verify_njk RENDERED_FILE
   done
 }
 
+sm_verify_signin() { # sm_verify_signin RENDERED_FILE
+  local f="$1" n
+  grep -q '^permalink: /share/signin/index\.html$' "$f"   || sm_fail "signin.njk: permalink not /share/signin/index.html (AUTH_SIGNIN_URL)"
+  grep -q 'src="/share/assets/signin\.js"' "$f"          || sm_fail "signin.njk: script not /share/assets/signin.js"
+  for n in $SM_ASSETS; do
+    if grep -qF "\"/$n\"" "$f"; then sm_fail "signin.njk: \"/$n\" still root-relative — would 404 on refueler.io"; fi
+  done
+}
+
 # ── Canonical self-consistency (no mirror needed) ─────────────────────────────
 sm_check_canon() { # sm_check_canon SHARE_ROOT
   local s="$1" f n
@@ -103,6 +115,7 @@ sm_check_canon() { # sm_check_canon SHARE_ROOT
     [ -f "$s/$SM_C_FRONT/$n" ] || sm_fail "frontend/$n is listed for sync but missing — remove it from the list or restore it"
   done
   [ -f "$s/$SM_C_NJK" ]   || sm_fail "$SM_C_NJK missing"
+  [ -f "$s/$SM_C_SIGNIN" ] || sm_fail "$SM_C_SIGNIN missing"
   [ -f "$s/$SM_C_ADMIN" ] || sm_fail "$SM_C_ADMIN missing"
   [ -f "$s/$SM_C_FRONT/blake3/browser-async.js" ] || sm_fail "frontend/blake3/ missing or empty"
   # src/blake3 feeds frontend/blake3 via Eleventy passthrough — an un-built vendor update ships stale WASM
@@ -150,6 +163,15 @@ sm_compare() { # sm_compare SHARE_ROOT IO_ROOT
     rm -f "$tmp"
   fi
 
+  if [ -f "$s/$SM_C_SIGNIN" ]; then
+    tmp="$(mktemp "${TMPDIR:-/tmp}/sm-sig.XXXXXX")"
+    sm_render_njk "$s/$SM_C_SIGNIN" > "$tmp"
+    sm_verify_signin "$tmp"
+    if [ ! -f "$m/$SM_M_SIGNIN" ]; then sm_fail "mirror missing $SM_M_SIGNIN"
+    elif ! cmp -s "$tmp" "$m/$SM_M_SIGNIN"; then sm_fail "mirror stale: $SM_M_SIGNIN (edited directly in refueler.io, or not synced)"; fi
+    rm -f "$tmp"
+  fi
+
   if [ -f "$s/$SM_C_ADMIN" ]; then
     if [ ! -f "$m/$SM_M_ADMIN" ]; then sm_fail "mirror missing $SM_M_ADMIN"
     elif ! cmp -s "$s/$SM_C_ADMIN" "$m/$SM_M_ADMIN"; then sm_fail "mirror stale: $SM_M_ADMIN"; fi
@@ -170,6 +192,8 @@ sm_sync() { # sm_sync SHARE_ROOT IO_ROOT
   done
   echo "  ✓ blake3/"
   sm_render_njk "$s/$SM_C_NJK" > "$m/$SM_M_NJK"; echo "  ✓ index.njk (rendered for refueler.io)"
+  mkdir -p "$(dirname "$m/$SM_M_SIGNIN")"
+  sm_render_njk "$s/$SM_C_SIGNIN" > "$m/$SM_M_SIGNIN"; echo "  ✓ signin/index.njk (rendered for refueler.io)"
   mkdir -p "$(dirname "$m/$SM_M_ADMIN")"
   cp "$s/$SM_C_ADMIN" "$m/$SM_M_ADMIN"; echo "  ✓ admin/test-upload.html"
 }
@@ -189,7 +213,7 @@ sm_extract() { # sm_extract REPO REV DEST PATH...
 
 # shellcheck disable=SC2046  # word-splitting the path list is the point
 sm_extract_canon()  { sm_extract "$1" "$2" "$3" $(sm_canon_paths); }
-sm_extract_mirror() { sm_extract "$1" "$2" "$3" $SM_M_ASSETS $SM_M_NJK $SM_M_ADMIN; }
+sm_extract_mirror() { sm_extract "$1" "$2" "$3" $SM_M_ASSETS $SM_M_NJK $SM_M_SIGNIN $SM_M_ADMIN; }
 
 # ── Live check: fetch from the PUBLIC site, compare hashes. ───────────────────
 # Status codes prove nothing here: refueler.io answers a missing asset with 200 + the homepage.
@@ -239,11 +263,12 @@ sm_live() { # sm_live CANON_ROOT TIMEOUT_SECONDS
       [ "$got" = "$want" ] || still="$still $rel"
     done
     if [ -z "$still" ]; then
-      if curl -sSL --max-time 20 "$SM_LIVE_BASE/share/?v=$(date +%s)" | grep -q 'src="/share/assets/share\.js"'; then
-        rm -rf "$tmp"; echo "  ✓ every mirrored file is live and byte-identical; /share/ loads share.js from /share/assets/"
+      if curl -sSL --max-time 20 "$SM_LIVE_BASE/share/?v=$(date +%s)" | grep -q 'src="/share/assets/share\.js"' \
+         && curl -sSL --max-time 20 "$SM_LIVE_BASE/share/signin/?v=$(date +%s)" | grep -q 'src="/share/assets/signin\.js"'; then
+        rm -rf "$tmp"; echo "  ✓ every mirrored file is live and byte-identical; /share/ and /share/signin/ load their modules from /share/assets/"
         sm_live_cache; return $?
       fi
-      still="/share/ page"
+      still="/share/ or /share/signin/ page"
     fi
     now=$(date +%s); waited=$((now - start))
     if [ "$waited" -ge "$timeout" ]; then

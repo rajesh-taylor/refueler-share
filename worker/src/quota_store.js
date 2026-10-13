@@ -8,9 +8,13 @@
 //
 //   quota_ref = HMAC-SHA256(QUOTA_REF_KEY, utf8("refueler.share.quotaref.v1") ‖ 0x00 ‖ org16)
 //
-// computed ONLY from an authenticated principal (S1.4): today the Chartered org
-// from requireApiAuth; Citizen joins at B12-4a from the S6 session. No request
-// field can name one. Bearer-rail principals never get one (X2).
+// computed ONLY from an authenticated principal (S1.4): the Chartered org from
+// requireApiAuth, or the Citizen from the S6 session (B12-4a-2):
+//
+//   quota_ref = HMAC-SHA256(QUOTA_REF_KEY, utf8("refueler.share.quotaref.citizen.v1") ‖ 0x00 ‖ utf8(stripe_customer_id))
+//
+// Own tag, so a Citizen ref can never equal an org ref. No request field can
+// name one. Bearer-rail principals never get one (X2).
 // Nothing here touches KV. Any Supabase failure throws StoreUnavailable.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -20,7 +24,9 @@ import { uuidToBytes, b64ToBytes, macFields } from './kvmac.js';
 const MIN_SECRET_BYTES = 32;
 
 export const QUOTAREF_TAG          = 'refueler.share.quotaref.v1';
+export const CITIZEN_QUOTAREF_TAG = 'refueler.share.quotaref.citizen.v1';
 export const DEFAULT_ORG_LIMIT_CHUNKS = 8_000;  // 250 GiB held at once (Rajesh, 11 Oct 2026)
+export const CITIZEN_LIMIT_CHUNKS     = 3_200;  // 100 GiB held at once (Rajesh, 13 Oct 2026)
 export const DEFAULT_MAX_IN_FLIGHT    = 20;     // S1.11; asked at onboarding, watched early on
 
 const hex = (b) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
@@ -32,6 +38,18 @@ export async function quotaRefFor(env, org) {
   if (!o || !secret || secret.length < MIN_SECRET_BYTES) return null;
   const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = await macFields(key, QUOTAREF_TAG, o);
+  return mac ? hex(mac) : null;
+}
+
+const CUS_RE = /^cus_[A-Za-z0-9]{1,64}$/;
+
+/** citizenQuotaRefFor(env, stripeCustomerId) → 64 hex chars | null. */
+export async function citizenQuotaRefFor(env, stripeCustomerId) {
+  if (typeof stripeCustomerId !== 'string' || !CUS_RE.test(stripeCustomerId)) return null;
+  const secret = typeof env?.QUOTA_REF_KEY === 'string' ? b64ToBytes(env.QUOTA_REF_KEY) : null;
+  if (!secret || secret.length < MIN_SECRET_BYTES) return null;
+  const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await macFields(key, CITIZEN_QUOTAREF_TAG, new TextEncoder().encode(stripeCustomerId));
   return mac ? hex(mac) : null;
 }
 

@@ -4,7 +4,7 @@
  * Manifest schema (stored at {uuid}/manifest.json):
  * {
  *   uuid:                    string
- *   tier:                    'free' | 'creative' | 'production' | 'enterprise'
+ *   tier:                    'free' | 'max' | 'api'   (resolved at initiate)
  *   total_chunks:            number
  *   (no total_bytes — Share-Size-1: the exact size travels in the link fragment;
  *    manifests written before 6 Oct 2026 may still carry it until they expire)
@@ -18,18 +18,20 @@
  * }
  */
 
+// One wire name per tier (B12-4a-2). The cap is checked at initiate against the
+// RESOLVED tier: 'max' only from a paid Citizen session, 'api' only after the
+// Chartered HMAC check. Locks: Sovereign/Citizen 100 GB (TH-Opus-1),
+// API 250 GB (SW-Opus-1) = MAX_TRANSFER_CHUNKS × 32 MiB.
 export const TIER_CAPS = {
-  free:       4  * 1024 * 1024 * 1024,   // 4 GB
-  creative:   100 * 1024 * 1024 * 1024,  // 100 GB
-  production: 250 * 1024 * 1024 * 1024,  // 250 GB
-  enterprise: Infinity,
+  free: 4   * 1024 * 1024 * 1024,   //   4 GiB — Pro Bono
+  max:  100 * 1024 * 1024 * 1024,   // 100 GiB — Citizen (wire 'max')
+  api:  250 * 1024 * 1024 * 1024,   // 250 GiB — Chartered (wire 'api')
 };
 
-// KV-Fix-1a (Rajesh, 8 Oct 2026): until B12-4a resolves paid tiers, initiate
-// enforces the free cap on EVERY upload, Chartered included. API issue
-// `allocation_bytes` and capabilities `max_file_size_gb` read this — never a
-// second literal. B12-4a changes it in one place.
-export const CHARTERED_CAP_BYTES = TIER_CAPS.free;
+// Chartered cap: API issue `allocation_bytes` and capabilities
+// `max_file_size_gb` read this — never a second literal. Live from B12-4a-2
+// (was the free cap under KV-Fix-1a until initiate could resolve the tier).
+export const CHARTERED_CAP_BYTES = TIER_CAPS.api;
 
 export const TIER_EXPIRY_SECONDS = {
   free: 7 * 24 * 60 * 60,           // 7 days, fixed

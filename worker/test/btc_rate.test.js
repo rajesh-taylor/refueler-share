@@ -164,9 +164,10 @@ describe('handleApiCapabilities — cap.v1 response shape', () => {
     });
   });
 
-  test('limits.max_file_size_gb is the enforced free cap (KV-Fix-1a)', async () => {
+  test('limits.max_file_size_gb is the enforced Chartered cap (B12-4a-2)', async () => {
     const { body } = await callCapabilities(makeEnv());
-    expect(body.limits.max_file_size_gb).toBe(4);
+    expect(body.limits.max_file_size_gb).toBe(250);
+    expect(body.limits.max_transfer_bytes).toBe(250 * 1024 ** 3);
   });
 
   test('mcp_tools contains all four locked tool names', async () => {

@@ -78,10 +78,11 @@ function originOk(request, env) {
   return isAuthOrigin(env, request.headers.get('Origin'));
 }
 
+// checkRateLimit keys every counter by rlId itself (B12-4a-2); here a missing
+// pepper fails closed before it gets that far.
 async function limited(env, scope, value, lim) {
-  const id = await rlId(env, scope, value);
-  if (!id) return { limited: true, resetAt: Math.floor(Date.now() / 1000) + lim.window }; // no pepper → fail closed
-  return checkRateLimit(env, id, scope, lim.max, lim.window);
+  if (!(await rlId(env, scope, value))) return { limited: true, resetAt: Math.floor(Date.now() / 1000) + lim.window };
+  return checkRateLimit(env, value, scope, lim.max, lim.window);
 }
 
 export function handleAuthOptions(request, env) {
@@ -185,16 +186,31 @@ export async function requireSession(request, env, { stateChanging }) {
   return { sessionId, sessionHash, ...s };
 }
 
+/**
+ * citizenTier(env, ref) → 'max' | 'free' (B12-4a-2). 'max' only for a paid
+ * subscription (active + period not over). Throws StoreUnavailable.
+ */
+export async function citizenTier(env, ref) {
+  const e = await store.citizenEntitlement(env, ref);
+  return e.paid && e.tier === 'max' ? 'max' : 'free';
+}
+
 // ── GET /chambers/session ────────────────────────────────────────────────────
 // Side-effect free apart from sliding the idle window. Never returns the
-// principal ref (Stripe customer id / org id).
+// principal ref (Stripe customer id / org id). Citizens also get `tier`, so the
+// upload page knows whether "Uploading as Citizen" applies.
 export async function handleSession(request, env) {
   const s = await requireSession(request, env, { stateChanging: false });
   if (s instanceof Response) return s;
-  return reply(request, env, 200, {
+  const body = {
     kind: s.kind, csrf: await csrfFor(env, s.sessionId),
     idle_expires_at: s.idle_expires_at, absolute_expires_at: s.absolute_expires_at,
-  });
+  };
+  if (s.kind === 'citizen') {
+    try { body.tier = await citizenTier(env, s.ref); }
+    catch { return reply(request, env, 503, { error: 'Unavailable' }); }
+  }
+  return reply(request, env, 200, body);
 }
 
 // ── POST /auth/signout · /auth/signout-everywhere ────────────────────────────

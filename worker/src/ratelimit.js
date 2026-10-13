@@ -2,13 +2,18 @@
 // ratelimit.js — KV-backed sliding window rate limiter
 //
 // Uses STATUS_KV (existing binding) — no new Cloudflare resources needed.
-// Key format: rl:{endpoint}:{ip}
+// Key format: rl:{endpoint}:{id}, id = rlId(endpoint, value) — a keyed BLAKE3
+// pseudonym under an AUTH_PEPPER subkey (auth.js). No raw IP, email or UUID is
+// ever a KV key (KV-Audit, B12-4a-2). Rotating AUTH_PEPPER resets every counter.
+// A courtesy throttle, never a security gate: no pepper or KV → fail open.
 // Value: JSON array of timestamps (ms) within the current window
 //
 // Usage:
 //   const limited = await checkRateLimit(env, ip, 'credential_issue', 10, 60);
 //   if (limited) return rateLimitResponse(request);
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { rlId } from './auth.js';
 
 /**
  * Sliding-window rate limiter.
@@ -26,7 +31,12 @@ export async function checkRateLimit(env, ip, endpoint, maxRequests, windowSecon
     return { limited: false, remaining: maxRequests, resetAt: 0 };
   }
 
-  const key = `rl:${endpoint}:${ip}`;
+  const id = await rlId(env, endpoint, String(ip));
+  if (!id) {
+    console.error('ratelimit: AUTH_PEPPER missing — limiter off');
+    return { limited: false, remaining: maxRequests, resetAt: 0 };
+  }
+  const key = `rl:${endpoint}:${id}`;
   const now = Date.now();
   const windowMs = windowSeconds * 1000;
   const cutoff = now - windowMs;

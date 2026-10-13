@@ -21,7 +21,7 @@ const ORG    = '00000000-0000-4000-8000-0000000b124a';
 
 // ── fake Supabase (auth functions only) ──────────────────────────────────────
 function makeAuthDb() {
-  const db = { down: false, principals: new Map(), tokens: new Map(), sessions: new Map() };
+  const db = { down: false, principals: new Map(), tokens: new Map(), sessions: new Map(), entitlements: new Map() };
   const now = () => Math.floor(Date.now() / 1000);
   const exists = (k, r) => [...db.principals.values()].flat().some(p => p.kind === k && p.ref === r);
   const fns = {
@@ -60,6 +60,7 @@ function makeAuthDb() {
       return n;
     },
     auth_sweep: () => ({ tokens: 0, sessions: 0 }),
+    citizen_entitlement: ({ p_ref }) => db.entitlements.get(p_ref) ?? { tier: 'free', paid: false },
   };
   db.fetchImpl = async (url, opts) => {
     const m = String(url).match(/\/rest\/v1\/rpc\/(\w+)$/);
@@ -263,8 +264,15 @@ describe('session, sign-out, sign-out-everywhere (S6.6, S6.7)', () => {
     const r = await getSession(cookie);
     expect(r.status).toBe(200);
     const b = await r.json();
-    expect(b).toMatchObject({ kind: 'citizen', csrf });
+    expect(b).toMatchObject({ kind: 'citizen', csrf, tier: 'free' });
     expect(JSON.stringify(b)).not.toContain(CUS);
+  });
+  it('GET /chambers/session: tier max only when paid (B12-4a-2)', async () => {
+    const { cookie } = await signIn();
+    db.entitlements.set(CUS, { tier: 'max', paid: true });
+    expect((await (await getSession(cookie)).json()).tier).toBe('max');
+    db.entitlements.set(CUS, { tier: 'max', paid: false });
+    expect((await (await getSession(cookie)).json()).tier).toBe('free');
   });
   it('expired session → 401 and the cookie is cleared', async () => {
     const { cookie } = await signIn();

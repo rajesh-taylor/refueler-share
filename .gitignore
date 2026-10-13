@@ -41,3 +41,4 @@ refueler-share-financial-model.xlsx
 
 Claude outputs/
 *.timestamp-*.mjs
+frontend/signin/

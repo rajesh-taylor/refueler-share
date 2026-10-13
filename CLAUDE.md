@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.19 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B12-4a-1 · 13 Oct 2026
+> **Version:** 2.20 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B12-4a-2 · 13 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -69,7 +69,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - DO NOT edit inline CSS/JS in `src/index.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
 - DO NOT put `share.js` as a regular script — must remain `type="module"`.
 - **Sovereign storage cap: 100 GB. Locked TH-Opus-1.**
-- **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.** Target, not live: until B12-4a every upload gets the free cap, so API issue and capabilities report `CHARTERED_CAP_BYTES` (`manifest.js`, = free cap). Never promise 250 GB before then (KV-Fix-1a).
+- **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.** Live since B12-4a-2 (13 Oct 2026): an HMAC-authenticated Chartered initiate resolves to tier `api` with `TIER_CAPS.api` = 250 GiB = `CHARTERED_CAP_BYTES` (`manifest.js`), which API issue and capabilities report. Overage billing is not built.
 - **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
 - **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
 - **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
@@ -183,6 +183,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 - **Names (X3 · 9 Oct 2026):** Harbourmaster = Silent Drop Quay owner (Locke sign-in) only; Chartered org admin = Custom House; Navy Office live-transfer view = Execution Dock.
 - **Auth follows rail, not surface name.** Registered → magic link (15-min, single-use, fragment + click) + `__Host-rfs_session` cookie + CSRF + exact-origin credentialed CORS. Bearer → Locke (B8). No magic link ever reaches a Bearer principal. The `localhost` CORS echo is never combined with `Allow-Credentials`.
 - **B12-4a-1 locks (13 Oct 2026):** sign-in tokens + sessions live in Supabase `auth_tokens` / `auth_sessions` (BLAKE3 hashes only, no IP/UA, functions only) — never KV, never cached. Auth routes (`/auth/*`, `/chambers/session`) are served on `AUTH_API_HOST` only and use `authCors()` (exact `AUTH_ORIGINS`, credentials) — never `corsHeaders()`. X5-2 changes the vars `AUTH_ORIGINS` + `AUTH_SIGNIN_URL` only. `AUTH_PEPPER` is never used directly: HKDF subkeys `refueler.share.csrf.v1` / `refueler.share.rl.v1`. New authenticated routes gate on `requireSession()` (`handlers/auth.js`). Email = **Cloudflare Email Sending** (binding `EMAIL`, from `signin@mail.refueler.io`, own DMARC `p=reject`; email preview **off** — it would store live links). **workers.dev is off — keep it off** (cookie must never be valid there). Stripe webhook = `https://api.share.refueler.io/webhook/stripe`. **Stripe lookup keys stay `share-max-*`**: the webhook derives the tier from them (wire `max`; display "Citizen").
+- **B12-4a-2 locks (13 Oct 2026):** the tier at initiate is **resolved, never declared**: `api` only after `requireApiAuth`; `max` only from a Citizen S6 session (cookie + `X-CSRF` + exact Origin, on `AUTH_API_HOST`) whose `citizen_entitlement` is paid (status active **and** `current_period_end` in the future — null = unpaid); everything else `free`. `TIER_CAPS` = one wire name per tier: `free` 4 GiB · `max` 100 GiB · `api` 250 GiB. Citizen quota = own account-of-one (`kind 'registered'`, 3,200 chunks = 100 GiB held), `quota_ref` tag `refueler.share.quotaref.citizen.v1` ‖ 0x00 ‖ utf8(`cus_…`), provisioned only on `quota_not_provisioned` (provision overwrites the limit). Citizen 402 = exact figures; Chartered 402 = band. The browser sends the cookie on **initiate only** (`credentials: 'include'` there and on `/auth/*` + `/chambers/session`; nowhere else), and only while "Uploading as Citizen" is chosen; "Send without my account" = Pro Bono, no cookie, no `X-CSRF`. Initiate credentials CORS only for exact `AUTH_ORIGINS` on `AUTH_API_HOST` (`initiateCors`). Rate-limit KV keys are `rl:{endpoint}:{rlId}` — never a raw IP/email/UUID. Sign-in page = `src/signin.njk` + `frontend/signin.js` at `refueler.io/share/signin/` (= `AUTH_SIGNIN_URL`), mirrored by `share-mirror.sh` (`SM_C_SIGNIN`); one button **"Sign in"** under "Welcome." — no "Chambers" on any button (the one-click rule is the lock, not the word).
 - **Bearer-rail Chartered follows Sovereign (X2):** no Supabase row, no `org_dock`, no `qref_ct`.
 - **Sovereign ledger never leaves the user's control.** Refueler never stores a Chambers blob. Portability = Deed + user-held backup file, or QR pairing with a 6-digit check code (ephemeral secp256k1 ECDH via `@noble/secp256k1` — no new curve lib). Domain tags `refueler.share.chambers.*` — never shared with the refueler.io merchant implementation of the same protocol.
 - **Chambers + lodge page move to a dedicated origin with strict CSP (X5)** before the Sovereign ledger ships.
@@ -196,7 +197,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 → Share-PreAlpha-1 → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
+**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 ✓ → Share-PreAlpha-1 → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
 
 **TH-block ✓ complete (6 Sep 2026):**
 - TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped
@@ -302,13 +303,13 @@ This is not optional.
 **`share-sessions.md`:**
 - Sessions more than two blocks old: convert full narrative entries to compact one-row table format
   (session number · commit · one-line summary). Do-not-retry blocks are permanent — never trim.
-- Target: ≤ 550 lines (10 % over the old 500 is fine; up to +20 % only to keep something load-bearing). Each close: last ~4 sessions in full, older ones one row each.
+- Target: ≤ 700 lines (raised 13 Oct 2026, Rajesh — compaction costs more than the extra lines). Compact at **block close only**: last ~4 sessions in full, older ones one row each.
 
 **`Share-Master-Context.md`:**
 - §Current state table: drop rows older than two blocks. Block summaries in §Roadmap carry the history.
 - §Known broken / do not retry: remove entries that duplicate `CLAUDE.md` locked decisions.
 - §B-n snag list: remove fully resolved items. Carried items only.
-- Target: ≤ 385 lines (same rule: +10 %, +20 % only for load-bearing items).
+- Target: ≤ 500 lines (raised 13 Oct 2026). Trim at block close only.
 
 **Applies to:** SW-MCP-8 (next B-close) · then B8, B9, B10, B11, B12 close sessions.
 Also apply at any session where either file exceeds its target line count mid-block.

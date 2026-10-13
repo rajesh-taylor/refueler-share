@@ -13,6 +13,14 @@ const CHUNK = 32 * 1024 * 1024;
 const T = new Map();             // uuid → { total, bytes, chunks: [], dad, pw, expiry, done }
 let ctl = { fail: 'none', slow: 0, rate: 0 };
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
+// B12-4a-2: sign-in + Citizen. One fake session; the cookie is plain (no __Host-/Secure on http).
+// GET /_last → what the last initiate carried. /_ctl?tier=free makes the session unpaid.
+const auth = { session: null, tokens: new Set(), tier: 'max', last: null };
+const hasCookie = (req) => /(?:^|;\s*)rfs_session=1(?:;|$)/.test(req.headers.cookie || '');
+const credCors = (req) => req.headers.origin === 'http://localhost:8765'
+  ? { 'Access-Control-Allow-Origin': req.headers.origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type, X-CSRF, X-Cashu-Credential, X-Credential-Commitment, X-Issued-Tier, X-Total-Chunks, X-Total-Bytes, X-Expiry-Timestamp, X-File-Name, X-P2SH-Secret-Hash, X-Destroy-After-Download', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Vary': 'Origin' }
+  : {};
+const cjson = (req, res, code, o, extra = {}) => { res.writeHead(code, { ...cors, ...credCors(req), 'Content-Type': 'application/json', ...extra }); res.end(JSON.stringify(o)); };
 const json = (res, code, o) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
 const body = (req) => new Promise(r => { const b = []; req.on('data', c => { b.push(c); if (ctl.rate) { req.pause(); setTimeout(() => req.resume(), c.length / (ctl.rate * 1048.576)); } }); req.on('end', () => r(Buffer.concat(b))); });
 const dropOnce = (i) => { if (ctl.fail !== 'drop:' + i) return false; ctl.fail = 'none'; return true; };
@@ -26,9 +34,42 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const url = (u, i) => `http://localhost:8766/r2/${u}/${i}`;
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean);
-  if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+  if (req.method === 'OPTIONS') {   // credentialed CORS only where the real Worker has it
+    const cred = ['auth', 'chambers'].includes(p[0]) || (p[0] === 'upload' && p[2] === 'initiate');
+    res.writeHead(204, { ...cors, ...(cred ? credCors(req) : {}) }); return res.end();
+  }
   try {
-    if (p[0] === '_ctl') { ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0), rate: +(u.searchParams.get('rate') || 0) }; return json(res, 200, ctl); }
+    if (p[0] === '_ctl') { if (u.searchParams.get('tier')) auth.tier = u.searchParams.get('tier'); if (u.searchParams.get('signout')) auth.session = null; ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0), rate: +(u.searchParams.get('rate') || 0) }; return json(res, 200, ctl); }
+    if (p[0] === '_last') return json(res, 200, auth.last);
+    if (p[0] === 'auth' || p[0] === 'chambers') {
+      const b = req.method === 'POST' ? JSON.parse((await body(req)) || '{}') : {};
+      const ok = () => auth.session && hasCookie(req);
+      if (p[1] === 'magic') {
+        const t = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+        auth.tokens.add(t);
+        console.log(`[fake] sign-in link for ${b.email}: http://localhost:8765/share/signin/#t=${t}`);
+        return cjson(req, res, 202, { ok: true });
+      }
+      if (p[1] === 'verify') {
+        if (!auth.tokens.delete(b.token)) return cjson(req, res, 401, { error: 'This link has expired or was already used' });
+        auth.session = { csrf: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url') };
+        const now = Math.floor(Date.now() / 1000);
+        return cjson(req, res, 200, { kind: 'citizen', csrf: auth.session.csrf, idle_expires_at: now + 3600, absolute_expires_at: now + 86400 },
+          { 'Set-Cookie': 'rfs_session=1; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400' });
+      }
+      if (p[1] === 'session') {
+        if (!ok()) return cjson(req, res, 401, { error: 'Not signed in' });
+        const now = Math.floor(Date.now() / 1000);
+        return cjson(req, res, 200, { kind: 'citizen', csrf: auth.session.csrf, tier: auth.tier, idle_expires_at: now + 3600, absolute_expires_at: now + 86400 });
+      }
+      if (p[1] === 'signout' || p[1] === 'signout-everywhere') {
+        if (!ok()) return cjson(req, res, 401, { error: 'Not signed in' });
+        if (req.headers['x-csrf'] !== auth.session.csrf) return cjson(req, res, 403, { error: 'Forbidden' });
+        auth.session = null;
+        return cjson(req, res, 200, { ok: true }, { 'Set-Cookie': 'rfs_session=; Path=/; Max-Age=0' });
+      }
+      return cjson(req, res, 404, { error: 'no route' });
+    }
     if (p[0] === 'status') return json(res, 200, { state: u.searchParams.get('s') || 'operational' });
     if (p[0] === 'log') { await body(req); return json(res, 200, { ok: true }); }
     if (p[0] === 'credential') {
@@ -47,12 +88,20 @@ http.createServer(async (req, res) => {
     }
     if (p[0] === 'upload' && p[2] === 'initiate') {
       await body(req);
-      if (ctl.fail === 'initiate') return json(res, 401, { error: 'invalid credential' });
+      auth.last = { cookie: hasCookie(req), csrf: req.headers['x-csrf'] ?? null, bytes: +req.headers['x-total-bytes'] };
+      console.log('[fake] initiate', JSON.stringify(auth.last));
+      if (auth.last.cookie && auth.last.csrf !== null) {
+        if (!auth.session) return cjson(req, res, 401, { error: 'Not signed in' });
+        if (auth.last.csrf !== auth.session.csrf) return cjson(req, res, 403, { error: 'Forbidden' });
+      }
+      const capOk = auth.last.cookie && auth.session && auth.tier === 'max' ? 100 * 1024 ** 3 : 4 * 1024 ** 3;
+      if (auth.last.bytes > capOk) return cjson(req, res, 413, { error: 'over cap' });
+      if (ctl.fail === 'initiate') return cjson(req, res, 401, { error: 'invalid credential' });
       const total = +req.headers['x-total-chunks'], bytes = +req.headers['x-total-bytes'];
       T.set(p[1], { total, bytes, chunks: [], dad: !!req.headers['x-destroy-after-download'], pw: req.headers['x-p2sh-secret-hash'] || null,
         expiry: +req.headers['x-expiry-timestamp'], done: false });
       const full = total - 1, first = Math.min(full, 256);
-      return json(res, 200, { session_token: 'st-' + p[1], urls: [...Array(first)].map((_, i) => ({ index: i, url: url(p[1], i) })),
+      return cjson(req, res, 200, { session_token: 'st-' + p[1], urls: [...Array(first)].map((_, i) => ({ index: i, url: url(p[1], i) })),
         batch_next: first < full ? first : null, tail_url: { index: total - 1, url: url(p[1], total - 1), expires: Date.now() / 1000 + 518400 } });
     }
     if (p[0] === 'upload' && p[2] === 'urls') {
