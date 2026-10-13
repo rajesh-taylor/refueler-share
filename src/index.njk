@@ -164,7 +164,7 @@ function showMaintenanceModal(status) {
          use is kept: drop-zone is the slip, file-btn "Choose a file", folder-btn
          "or a folder". -->
     <section class="rx-sheet up-sheet" id="upload-sheet" data-view="empty">
-      <p class="rx-eyebrow" id="up-eyebrow">New transfer</p>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="up-eyebrow">New transfer</p><span class="stage-chip"></span></div>
       <h1 class="rx-head" id="up-head">Send a file.</h1>
 
       <!-- Resume: shown on arrival when this browser has an unfinished upload -->
@@ -306,7 +306,7 @@ function showMaintenanceModal(status) {
 
     <!-- Ready card: also password, folder and timed-window variants -->
     <section class="rx-sheet" id="receiver-card" hidden>
-      <p class="rx-eyebrow" id="rc-eyebrow">A file for you</p>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="rc-eyebrow">A file for you</p><span class="stage-chip"></span></div>
       <h1 class="rx-head" id="rc-head">Someone sent you a file.</h1>
       <dl class="rx-ledger">
         <div class="rx-row">
@@ -328,7 +328,7 @@ function showMaintenanceModal(status) {
 
     <!-- Password screen -->
     <section class="rx-sheet" id="unlock-screen" hidden>
-      <p class="rx-eyebrow">Password needed</p>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow">Password needed</p><span class="stage-chip"></span></div>
       <h1 class="rx-head">This file has a password.</h1>
       <p class="rx-lede">The sender gives you this separately from the link.</p>
       <div class="rx-field">
@@ -344,7 +344,7 @@ function showMaintenanceModal(status) {
 
     <!-- Downloading -->
     <section class="rx-sheet" id="download-card" hidden>
-      <p class="rx-eyebrow" id="dl-stage-tag">Downloading</p>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="dl-stage-tag">Downloading</p><span class="stage-chip"></span></div>
       <h1 class="rx-head">Downloading.</h1>
       <div class="rx-measure">
         <div class="rx-pct"><span id="dl-pct">0</span><sup>%</sup></div>
@@ -356,7 +356,7 @@ function showMaintenanceModal(status) {
 
     <!-- Finished -->
     <section class="rx-sheet" id="rx-done" hidden>
-      <p class="rx-eyebrow">Complete</p>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow">Complete</p><span class="stage-chip"></span></div>
       <h1 class="rx-head">Downloaded.</h1>
       <dl class="rx-ledger">
         <div class="rx-row"><dt id="rx-done-name-label">File</dt><dd><span class="rx-fname"><span id="rx-done-name">Encrypted file</span></span></dd></div>
@@ -371,7 +371,7 @@ function showMaintenanceModal(status) {
 
     <!-- Closed window, dead link, stopped download. Send line: dead link only (item 11). -->
     <section class="rx-sheet" id="rx-notice" hidden>
-      <p class="rx-eyebrow" id="rx-notice-eyebrow"></p>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="rx-notice-eyebrow"></p><span class="stage-chip"></span></div>
       <h1 class="rx-head" id="rx-notice-head"></h1>
       <p class="rx-lede" id="rx-notice-lede"></p>
       <p class="rx-send-wrap" id="rx-notice-send" hidden><a class="rx-send" href="/share/"><span>Send your own file, free up to 4 GB →</span></a></p>

@@ -424,6 +424,22 @@ html.up-dragging body::after {
   color: var(--fg-muted);
   margin: 0 0 18px;
 }
+/* Stage chip (design theory §10): ink and a hairline, never a coloured badge. Not a link
+   until the X5 landing page exists. The word lives HERE only — "Alpha" at X5-2. */
+.rx-eyebrow-row { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; }
+.rx-eyebrow-row .rx-eyebrow { margin: 0; }
+.stage-chip {
+  font: 500 10px/1 var(--rx-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  border: 1px solid var(--rx-rule-strong);
+  border-radius: 4px;
+  padding: 4px 6px;
+  white-space: nowrap;
+  flex: none;
+}
+.stage-chip::before { content: "Pre-alpha"; }
 .rx-head {
   font: 300 clamp(30px, 5vw, 40px)/1.12 var(--rx-serif);
   letter-spacing: -.01em;
