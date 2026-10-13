@@ -1,7 +1,7 @@
 // worker/src/handlers/stripe_sub.js
 //
 // SW9a — Extracted from index.js (Phase 2).
-// Stripe subscription handlers: webhook, checkout, status, portal.
+// Stripe subscription handlers: webhook, checkout.
 // Stripe helper functions: fetchTierFromSubscription, fetchPeriodEnd,
 //   tierFromPriceKey, upsertSubscriber.
 //
@@ -107,72 +107,13 @@ export async function handleCheckout(request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Subscription status — GET /subscription/status
+// GET /subscription/status and POST /subscription/portal — REMOVED (B12-4a task 0)
+//
+// Both took an unproven email: status answered "is this address a subscriber"
+// for anyone, and portal opened ANY subscriber's Stripe Customer Portal for
+// whoever typed their email. index.js now answers both with 410. The portal
+// returns at B12-6 as POST /billing/portal behind the S6 session (B12-SR S6.9).
 // ─────────────────────────────────────────────────────────────────────────────
-export async function handleSubscriptionStatus(request, env) {
-  const url   = new URL(request.url);
-  const email = url.searchParams.get('email');
-  if (!email) return err(400, 'Missing email');
-
-  const res = await supabaseFetch(env, 'GET', `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=tier,status,current_period_end&limit=1`);
-  if (!res.ok) return err(502, 'Database unavailable');
-  const rows = await res.json();
-
-  if (!rows.length || rows[0].status === 'cancelled') {
-    return json({ tier: 'free', status: 'inactive' });
-  }
-
-  const { tier, status, current_period_end } = rows[0];
-  return json({ tier, status, current_period_end });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Portal — POST /subscription/portal
-// ─────────────────────────────────────────────────────────────────────────────
-export async function handlePortal(request, env) {
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return err(400, 'Invalid JSON');
-  }
-
-  const { email } = body;
-  if (!email) return err(400, 'Missing email');
-
-  const res = await supabaseFetch(env, 'GET', `/rest/v1/subscribers?email=eq.${encodeURIComponent(email)}&select=stripe_customer_id,status&limit=1`);
-  if (!res.ok) return err(502, 'Database unavailable');
-  const rows = await res.json();
-
-  if (!rows.length || !rows[0].stripe_customer_id) {
-    return err(404, 'No active subscription found for this email');
-  }
-  if (rows[0].status === 'cancelled') {
-    return err(404, 'No active subscription found for this email');
-  }
-
-  const customerId = rows[0].stripe_customer_id;
-  const portalRes  = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-      'Content-Type':  'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      customer:   customerId,
-      return_url: 'https://refueler.io/share/upgrade/',
-    }).toString(),
-  });
-
-  if (!portalRes.ok) {
-    const portalErr = await portalRes.json();
-    console.error('Portal session error:', portalErr);
-    return err(502, 'Could not create portal session');
-  }
-
-  const session = await portalRes.json();
-  return json({ url: session.url });
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stripe helpers

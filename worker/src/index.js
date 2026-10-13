@@ -59,7 +59,9 @@ import { checkTestCredential, TESTCRED_USED_PREFIX } from './testcred.js';    //
 // SW-MCP-W2: monthly credit allocation rules (pure; the atomic spend is SQL — KV-Fix-2)
 import { applyQuotaSpend } from './quota.js';
 
-import { handleStripeWebhook, handleCheckout, handleSubscriptionStatus, handlePortal } from './handlers/stripe_sub.js';
+import { handleStripeWebhook, handleCheckout } from './handlers/stripe_sub.js';
+import { AUTH_PATHS, onAuthHost, routeAuth, authCors } from './handlers/auth.js';
+import { sweepAuth } from './auth_store.js';
 import { fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber } from './handlers/stripe_sub.js';
 import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp.js';
 import { handleDeleteTransfer, handleOwnerDelete }    from './handlers/delete_transfer.js';
@@ -109,6 +111,25 @@ function logEvent(env, {
 // ─────────────────────────────────────────────────────────────────────────────
 export default {
     async fetch(request, env, ctx) {
+    // B12-4a: auth routes have their own credentialed, exact-origin CORS and are
+    // served on AUTH_API_HOST only (never workers.dev). They skip the public
+    // OPTIONS/corsHeaders path, whose localhost echo must never meet credentials.
+    if (AUTH_PATHS.has(new URL(request.url).pathname)) {
+      if (!onAuthHost(request, env)) return new Response('Not found', { status: 404 });
+      const t0a = performance.now();
+      try {
+        const res = await routeAuth(request, env, ctx);
+        logEvent(env, { endpoint: 'auth', status: res.status, latency: performance.now() - t0a });
+        return res;
+      } catch {
+        console.error('auth: unhandled error');
+        logEvent(env, { endpoint: 'auth', status: 500, latency: performance.now() - t0a });
+        return new Response(JSON.stringify({ error: 'Internal error' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...authCors(request, env) },
+        });
+      }
+    }
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
@@ -441,12 +462,12 @@ export default {
         return timed('subscription_checkout', () => handleCheckout(request, env).then(r => addCors(r, request)));
       }
 
-      if (request.method === 'GET' && path === '/subscription/status') {
-        return timed('subscription_status', () => handleSubscriptionStatus(request, env).then(r => addCors(r, request)));
-      }
-
-      if (request.method === 'POST' && path === '/subscription/portal') {
-        return timed('subscription_portal', () => handlePortal(request, env).then(r => addCors(r, request)));
+      // B12-4a task 0: both routes trusted an unproven email (subscriber lookup
+      // for anyone; any subscriber's Stripe portal for anyone). Gone. The portal
+      // returns at B12-6 as POST /billing/portal behind the S6 session.
+      if ((request.method === 'GET'  && path === '/subscription/status') ||
+          (request.method === 'POST' && path === '/subscription/portal')) {
+        return err(410, 'Gone', request);
       }
 
       if (request.method === 'POST' && path === '/log/error') {
@@ -648,6 +669,13 @@ export default {
         await runQuotaReconcile(env);
       } catch (e) {
         console.error('scheduled/quota_reconcile: unhandled error:', e);
+      }
+
+      // Task 5 — sign-in tokens and sessions past expiry (B12-4a, S6.4)
+      try {
+        await sweepAuth(env);
+      } catch {
+        console.error('scheduled/auth_sweep: unhandled error');
       }
     }
   },
@@ -1190,7 +1218,7 @@ async function handleMeta(request, env, uuid) {
 
 // handleTimestampSubmit, handleTimestampSeal — moved to ./handlers/timestamp.js (SW9a)
 // handleDeleteTransfer, handleOwnerDelete    — moved to ./handlers/delete_transfer.js (SW9a)
-// handleStripeWebhook, handleCheckout, handleSubscriptionStatus, handlePortal,
+// handleStripeWebhook, handleCheckout, (status + portal removed B12-4a task 0),
 // fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber
 //   — moved to ./handlers/stripe_sub.js (SW9a)
 

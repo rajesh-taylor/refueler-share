@@ -40,6 +40,13 @@ PRICE_MAX_YEARLY_GBP       = "288"
 # Sealing key generation (B12-SR S3): secret SHARE_SEAL_KEY_<n>, n = this value.
 # Rotate by adding SHARE_SEAL_KEY_2 and flipping this to "2" (src/seal.js).
 SHARE_SEAL_CURRENT         = "1"
+# B12-4a sign-in (B12-SR S6). AUTH_ORIGINS = exact origins allowed credentialed
+# calls (comma-separated, https only, never localhost). X5-2 swaps both URLs to
+# share.refueler.io — no code change. Secret AUTH_PEPPER set via wrangler secret.
+AUTH_API_HOST              = "api.share.refueler.io"
+AUTH_ORIGINS               = "https://refueler.io"
+AUTH_SIGNIN_URL            = "https://refueler.io/share/signin/"
+AUTH_MAIL_FROM             = "signin@mail.refueler.io"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
@@ -49,6 +56,10 @@ SHARE_SEAL_CURRENT         = "1"
 type = "CompiledWasm"
 globs = ["**/*.wasm"]
 fallthrough = false
+
+# B12-4a: Cloudflare Email Sending (beta) — sign-in links only (src/mailer.js).
+[[send_email]]
+name = "EMAIL"
 
 [[kv_namespaces]]
 binding = "STATUS_KV"
