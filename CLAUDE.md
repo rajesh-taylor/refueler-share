@@ -197,7 +197,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 ✓ → Share-PreAlpha-1 → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
+**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 ✓ → Design-Theory-Opus-1/-2 (PreAlpha chip folded in) → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
 
 **TH-block ✓ complete (6 Sep 2026):**
 - TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped
