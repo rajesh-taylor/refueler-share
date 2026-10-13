@@ -584,3 +584,12 @@ Toggle stays live until the full-storage offer is built (Rajesh). **Next:** Shar
 **Ship:** `ship-frontend.sh` ✗ on a transient missing cache-control (`upload-stop.js`), re-check ✓ (`sync-share.sh --live`). **Live ✓** Rajesh: Safari + Mullvad, Carbon + Paper, full upload / password / DAD / dead link / sign-in, iPhone.
 **Noted:** harness theme toggle works once only (harness-only). Link box two-line clamp → X5 (§9).
 **Next:** X5-Plan.
+
+## X5-Plan (13 Oct 2026) — Block A planned · docs only · `docs/X5-plan-v1.md`
+
+**Read:** CLAUDE.md 2.20, Master Context (Share-PreAlpha-1, Design-Theory-Opus-2, row 16a), last four sessions, served-code research, design theory §4 + §7–§13, `share-mirror.sh`, `ship-frontend.sh`, `wrangler.toml`, `index.njk` / `head.njk`, Worker CORS + R2 CORS (read-only `wrangler r2 bucket cors list`), DNS (`share.refueler.io` has no record), live headers on `refueler.io/share/`.
+**Found:** `corsHeaders()` + `auth_ping.js` hard-code `https://refueler.io` (every public call would fail from a new origin) → X5 is not "vars only"; R2 bucket CORS refueler.io-only; Notes card goes cross-origin; theme cookie on `.refueler.io`; relative `/share/…` links; Pages `Link:` header already emitted; cookie scope unaffected (API host).
+**Decided (Rajesh):** X5-1 builds on `share.refueler.io` itself, unannounced (a `share-staging` URL would read as a hoax to testers; private staging later, Rajesh only) · direct-upload Pages project via `ship-app.sh` · old links forwarded until 12 Jan 2027 · Notes card kept.
+**Written:** plan doc (findings, origin, X5-1 build list incl. exact CSP + `_headers`, Worker `APP_ORIGINS`, ship-app.sh, gate; X5-2 ordered cutover + rollback; Share-Release-1 scope; risks; session list). CLAUDE.md 2.21 (B12-4a-1 lock corrected), Master Context 9.24 (+ row 16a note).
+**Next:** X5-1.
+
