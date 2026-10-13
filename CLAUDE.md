@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.18 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Research-Review-4 · 11 Oct 2026
+> **Version:** 2.19 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** B12-4a-1 · 13 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -182,6 +182,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 - **Lodgement refs:** `LR-` + 6 Crockford chars is display only; every action uses the 128-bit handle.
 - **Names (X3 · 9 Oct 2026):** Harbourmaster = Silent Drop Quay owner (Locke sign-in) only; Chartered org admin = Custom House; Navy Office live-transfer view = Execution Dock.
 - **Auth follows rail, not surface name.** Registered → magic link (15-min, single-use, fragment + click) + `__Host-rfs_session` cookie + CSRF + exact-origin credentialed CORS. Bearer → Locke (B8). No magic link ever reaches a Bearer principal. The `localhost` CORS echo is never combined with `Allow-Credentials`.
+- **B12-4a-1 locks (13 Oct 2026):** sign-in tokens + sessions live in Supabase `auth_tokens` / `auth_sessions` (BLAKE3 hashes only, no IP/UA, functions only) — never KV, never cached. Auth routes (`/auth/*`, `/chambers/session`) are served on `AUTH_API_HOST` only and use `authCors()` (exact `AUTH_ORIGINS`, credentials) — never `corsHeaders()`. X5-2 changes the vars `AUTH_ORIGINS` + `AUTH_SIGNIN_URL` only. `AUTH_PEPPER` is never used directly: HKDF subkeys `refueler.share.csrf.v1` / `refueler.share.rl.v1`. New authenticated routes gate on `requireSession()` (`handlers/auth.js`). Email = **Cloudflare Email Sending** (binding `EMAIL`, from `signin@mail.refueler.io`, own DMARC `p=reject`; email preview **off** — it would store live links). **workers.dev is off — keep it off** (cookie must never be valid there). Stripe webhook = `https://api.share.refueler.io/webhook/stripe`. **Stripe lookup keys stay `share-max-*`**: the webhook derives the tier from them (wire `max`; display "Citizen").
 - **Bearer-rail Chartered follows Sovereign (X2):** no Supabase row, no `org_dock`, no `qref_ct`.
 - **Sovereign ledger never leaves the user's control.** Refueler never stores a Chambers blob. Portability = Deed + user-held backup file, or QR pairing with a 6-digit check code (ephemeral secp256k1 ECDH via `@noble/secp256k1` — no new curve lib). Domain tags `refueler.share.chambers.*` — never shared with the refueler.io merchant implementation of the same protocol.
 - **Chambers + lodge page move to a dedicated origin with strict CSP (X5)** before the Sovereign ledger ships.
@@ -195,7 +196,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 → B12-4a → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
+**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 → Share-PreAlpha-1 → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
 
 **TH-block ✓ complete (6 Sep 2026):**
 - TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped
