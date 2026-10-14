@@ -7,6 +7,11 @@
 //   node dev/speed/speed.mjs                         # all installed engines, default pages
 //   node dev/speed/speed.mjs --engines=chromium --runs=5 --base=http://localhost:8094
 //   node dev/speed/speed.mjs --slow                  # Chromium only: throttled "fast 3G"-ish link
+//   node dev/speed/speed.mjs --label=vpn-off         # names the conditions in the saved file
+//
+// Routine (Rajesh, 14 Oct 2026): at every app release, and once a month as an internal
+// performance check — same Mac, same Wi-Fi, Mullvad OFF (--label=vpn-off), then once with
+// Mullvad ON (--label=vpn-on). Note anything unusual (another download running, etc.).
 //
 // Writes dev/speed/results/<date>-<release>.json and prints a table. Compare releases by eye;
 // a jump of more than ~20 % in "ready" or "bytes" is worth a look before shipping.
@@ -24,6 +29,7 @@ const BASE    = arg('base', 'https://share.refueler.io');
 const RUNS    = Number(arg('runs', '3'));
 const PAGES   = arg('pages', '/,/signin/').split(',');
 const SLOW    = process.argv.includes('--slow');
+const LABEL   = arg('label', '').replace(/[^a-z0-9-]/gi, '').slice(0, 24);
 const ENGINES = { chromium, webkit, firefox };
 const wanted  = arg('engines', 'chromium,webkit,firefox').split(',');
 
@@ -58,7 +64,7 @@ const median = (xs) => {
 const ms = (x) => x == null ? '—' : `${Math.round(x)} ms`;
 const kb = (x) => x == null ? '—' : `${Math.round(x / 1024)} KB`;
 
-const results = { base: BASE, when: new Date().toISOString(), runs: RUNS, slow: SLOW, release: null, engines: {} };
+const results = { base: BASE, when: new Date().toISOString(), label: LABEL || null, runs: RUNS, slow: SLOW, release: null, engines: {} };
 
 for (const name of wanted) {
   const engine = ENGINES[name];
@@ -91,7 +97,7 @@ for (const name of wanted) {
   await browser.close();
 }
 
-console.log(`\nshare speed · ${BASE} · release ${results.release ?? '?'} · ${RUNS} cold loads each${SLOW ? ' · Chromium throttled' : ''} (medians)\n`);
+console.log(`\nshare speed · ${BASE} · release ${results.release ?? '?'} · ${RUNS} cold loads each${SLOW ? ' · Chromium throttled' : ''}${LABEL ? ` · ${LABEL}` : ''} (medians)\n`);
 console.log('engine    page        first byte  first paint  largest paint  ready      requests  bytes');
 for (const [name, pages] of Object.entries(results.engines)) {
   for (const [path, { median: m }] of Object.entries(pages)) {
@@ -101,6 +107,6 @@ for (const [name, pages] of Object.entries(results.engines)) {
 
 const dir = new URL('./results/', import.meta.url).pathname;
 mkdirSync(dir, { recursive: true });
-const file = `${dir}${results.when.slice(0, 10)}-${results.release ?? 'unknown'}${SLOW ? '-slow' : ''}.json`;
+const file = `${dir}${results.when.slice(0, 16).replace(/[:T]/g, '-')}-${results.release ?? 'unknown'}${SLOW ? '-slow' : ''}${LABEL ? `-${LABEL}` : ''}.json`;
 writeFileSync(file, JSON.stringify(results, null, 2) + '\n');
 console.log(`\nsaved ${file.replace(process.cwd() + '/', '')}`);
