@@ -274,8 +274,9 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
       });
       if (!authRes.ok) {
         _setUnlockError(unlockInput, unlockError,
-          authRes.status === 401 ? 'Incorrect password.' : 'Something went wrong.',
+          authRes.status === 401 ? 'That password doesn’t open this file.' : 'Something went wrong.',
           authRes.status === 401);
+        if (authRes.status === 401) unlockInput.select();   // §9: value kept, selected for retyping
         unlockBtn.disabled = false;
         return;
       }
