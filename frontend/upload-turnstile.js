@@ -4,8 +4,9 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Turnstile (U-10): invisible unless Cloudflare needs a click; then the
-// #turnstile-wrap line and widget show above the button. Drawn once, when the upload
-// page opens (Share-Upload-5: a slow check runs while the sender picks a file), and
+// #turnstile-wrap line and widget show above the button. Drawn once, at the first pick
+// (X5-1b: Cloudflare's script loads then, not on arrival; a slow check runs while the
+// sender sets the options), and
 // kept across "Choose another" (U-11); Cloudflare refreshes an
 // expired token itself. A token is single-use: startUpload spends it at
 // /credential/issue, then resets the widget so a retry gets a fresh check.
@@ -26,10 +27,20 @@ let turnstileAsking   = false;  // Cloudflare's box is showing (wants a click)
 let checkWaitTimer    = null;
 const CHECK_WAIT_MS   = 2000;
 
+const TURNSTILE_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+let turnstileLoading = false;
+
 export function renderTurnstile(state, domRefs, helpers) {
   const container = document.getElementById('cf-turnstile');
   if (!container) return;
   if (!window.turnstile) {
+    if (!turnstileLoading) {
+      turnstileLoading = true;
+      const s = document.createElement('script');
+      s.src = TURNSTILE_SRC;
+      s.async = true;
+      document.head.appendChild(s);
+    }
     if (!turnstilePolling) {
       turnstilePolling = true;
       const deadline = Date.now() + 15000;
@@ -41,7 +52,7 @@ export function renderTurnstile(state, domRefs, helpers) {
         } else if (Date.now() > deadline) {
           clearInterval(poll);
           turnstilePolling = false;
-          helpers.reportError('turnstile_load', 'Turnstile script did not load within 15s', navigator.userAgent.slice(0, 100));
+          helpers.reportError('turnstile_load', 'timeout', '');
         }
       }, 200);
     }

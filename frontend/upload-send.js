@@ -5,19 +5,18 @@
 import { blake3Hash, hexToBuf, derivePartKey, encryptPart } from './crypto.js';
 import { WORKER_URL, CHUNK_SIZE } from './config.js';
 import { makeSteadyProgress, progressBytesText, setProgressWords } from './progress.js';
-import { runPermanentRecord } from './timestamp.js';
 import { assembleFragment } from './fragment.js';
 import { buildMerkleTree } from './merkle.js';
 import { writeChunkState, clearResumeState, _recordOf } from './upload-store.js';
 import { UploadStop, _stopText, NO_RESUME, NOT_SAME_FILE, NOT_SAME_FOLDER } from './upload-stop.js';
-import { _fetchNextUrlBatch, _putChunkDirect } from './upload-net.js';
+import { _fetchNextUrlBatch, _putChunkDirect, _errCode } from './upload-net.js';
 import { dropAccount } from './upload-account.js';   // B12-4a-2
 
 export function _stopped(e, job, domRefs, state, helpers) {
   if (!(e instanceof UploadStop)) e = new UploadStop('browser', `${e?.name || 'Error'}: ${e?.message || ''}`);
   // B12-2: one line per stop, whatever the kind — Navy Office counts these as the
   // real failures; the per-try lines before it are retries or detail.
-  helpers.reportError(`upload_stopped:${e.kind}`, String(e.message || '').slice(0, 160), job ? `uuid:${job.uuid.slice(0, 8)}` : '');
+  helpers.reportError(`upload_stopped:${e.kind}`, '', job ? `uuid:${job.uuid.slice(0, 8)}` : '');
   if (e.kind === 'gone' || e.kind === 'changed') {
     if (job) clearResumeState(job.uuid, helpers.reportError).catch(() => {});
     helpers.showStopped(e.kind === 'changed' ? (job?.folder ? NOT_SAME_FOLDER : NOT_SAME_FILE) : NO_RESUME);
@@ -136,7 +135,7 @@ export async function _carryOn(job, domRefs, state, helpers) {
     for (let i = 0; i < job.sent; i++) {
       const h = blake3Hash(await _encryptChunk(await _readChunk(chunks[i]), i, totalChunks, state));
       if (job.expectedHashes && h !== job.expectedHashes[i]) {
-        reportError('resume_part_mismatch', `part ${i} of ${job.sent}`, `uuid:${short}`);
+        reportError('resume_part_mismatch', '', `uuid:${short} chunk:${i}`);
         throw new UploadStop('changed', `resume part ${i} differs`);
       }
       job.hashes.push(h);
@@ -183,8 +182,9 @@ export async function _carryOn(job, domRefs, state, helpers) {
   setStage('Finishing');
   setProgress(100, 'Checking every part arrived…');
   if (job.plainHash && job.sealNonceHex) {
+    const { runPermanentRecord } = await import('./timestamp.js');   // X5-1b: paid option only
     const prResult = await runPermanentRecord(job.uuid, job.plainHash.digest('hex'), job.sealNonceHex, state.sessionAesKey);
-    if (!prResult.ok) reportError('permanent_record', prResult.error || 'unknown', `uuid:${short}`);
+    if (!prResult.ok) reportError('permanent_record', 'failed', `uuid:${short}`);
     // (paid only, unreachable today, F-10 — reported, not shown.)
     job.plainHash = null;   // once per transfer, even if finalise needs a retry
   }
@@ -213,7 +213,7 @@ export async function _carryOn(job, domRefs, state, helpers) {
       body: JSON.stringify(finaliseBody),
     });
   } catch (e) {
-    reportError('finalise_fetch', e.message?.slice(0, 120), `uuid:${short}`);
+    reportError('finalise_fetch', e?.name || 'Error', `uuid:${short}`);
     throw new UploadStop('unfinished', e.message);
   }
 
@@ -224,7 +224,7 @@ export async function _carryOn(job, domRefs, state, helpers) {
     try { body = await finRes.json(); } catch { /* not JSON */ }
     const redo = (body.missing || body.segments || []).map(s => parseInt(s, 10)).filter(n => n >= 0);
     reportError(body.error === 'wrong_size' ? 'finalise_wrong_size' : 'finalise_incomplete',
-      `${redo.length}: ${redo.slice(0, 20).join(',')}`, `uuid:${short}`);
+      `missing ${redo.length}`, `uuid:${short}`);
     job.sent = redo.length ? Math.min(job.sent, ...redo) : 0;
     job.hashes.length = job.sent;
     writeChunkState(_recordOf(job), reportError).catch(() => {});
@@ -236,7 +236,7 @@ export async function _carryOn(job, domRefs, state, helpers) {
   }
   if (!finRes.ok) {
     const txt = await finRes.text().catch(() => '');
-    reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${short} ${txt.slice(0, 120)}`);
+    reportError('finalise_status', `HTTP ${finRes.status} ${_errCode(txt)}`.trim(), `uuid:${short}`);
     throw new UploadStop(finRes.status >= 500 ? 'unfinished' : 'browser', `finalise ${finRes.status}`);
   }
 

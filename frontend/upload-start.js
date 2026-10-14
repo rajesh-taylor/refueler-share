@@ -5,10 +5,9 @@
 import { sha256Hex, generateBlindedCredential, unblindSignature, CredentialProofError, bufToHex,
          blake3CreateHash } from './crypto.js';
 import { WORKER_URL, CHUNK_SIZE, FREE_EXPIRY } from './config.js';
-import { generateSealNonce } from './timestamp.js';
 import { SCHEME } from './upload-store.js';
 import { UploadStop, _loadDepsOrSay } from './upload-stop.js';
-import { _send } from './upload-net.js';
+import { _send, _errCode } from './upload-net.js';
 import { UPLOAD_LABEL, _spendTurnstileToken } from './upload-turnstile.js';
 import { _updatePaidFeaturesVisibility, _pickerToUnix, _validateTidal, _showTidalError } from './upload-options.js';
 import { _carryOn, _stopped } from './upload-send.js';
@@ -67,7 +66,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
 
   if (!issueRes.ok) {
     const errText = await issueRes.text().catch(() => '');
-    reportError('credential_issue', `HTTP ${issueRes.status}`, errText.slice(0, 200));
+    reportError('credential_issue', `HTTP ${issueRes.status} ${_errCode(errText)}`.trim(), '');
     // 400 no token · 403 check failed · 429 token already used → the check; else refused.
     const check = issueRes.status === 400 || issueRes.status === 403 || (issueRes.status === 429 && /turnstile/i.test(errText));
     throw new UploadStop(check ? 'check' : 'refused', `Credential issue failed: HTTP ${issueRes.status}`);
@@ -81,7 +80,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
     credential = await unblindSignature(issued, blinded);
   } catch (e) {
     if (!(e instanceof CredentialProofError)) throw e;
-    reportError('credential_dleq', e.name, String(e.message).slice(0, 120));
+    reportError('credential_dleq', e?.name || 'Error', '');
     showStopped('Share couldn’t get a valid upload pass. Reload to try again.');
     return null;
   }
@@ -104,7 +103,8 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
 
   const isPaidTier = issuedTier && issuedTier !== 'free' && issuedTier !== 'citizen';
   const wantsPermanentRecord = isPaidTier && transferOpts.permanentRecordToggle && transferOpts.permanentRecordToggle.checked;
-  const sealNonceHex = wantsPermanentRecord ? generateSealNonce() : null;
+  // X5-1b: timestamp.js loads only when a permanent record is wanted (paid only).
+  const sealNonceHex = wantsPermanentRecord ? (await import('./timestamp.js')).generateSealNonce() : null;
 
   // ── Direct-to-R2 upload path (Share-6-6b: only path) ─────────────────────
   // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
@@ -130,7 +130,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
     initiateOptions(initiateHeaders), 'initiate', reportError);
   if (!initRes.ok) {
     const txt = await initRes.text().catch(() => '');
-    reportError('initiate', `HTTP ${initRes.status}`, txt.slice(0, 200));
+    reportError('initiate', `HTTP ${initRes.status} ${_errCode(txt)}`.trim(), `uuid:${issuedUuid.slice(0, 8)}`);
     if (onAccount && (initRes.status === 401 || initRes.status === 403)) {
       throw new UploadStop('signedout', `Initiate refused the account: HTTP ${initRes.status}`);
     }

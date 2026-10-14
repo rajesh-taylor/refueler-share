@@ -13,6 +13,23 @@ import { sha256Hex } from './crypto.js';
 // unzip tools restore exactly. Unknown or out-of-range dates (zip fields run
 // 1980–2038) use 1 Jan 1980. Needs the global fflate (fflate.min.js).
 // ─────────────────────────────────────────────────────────────────────────────
+// X5-1b (page weight): fflate.min.js loads on the first folder, not with the page.
+// Resolves true once the global fflate is there; false if it can't load.
+let _fflateLoading = null;
+export function loadFflate() {
+  if (!_fflateLoading) {
+    _fflateLoading = new Promise((resolve) => {
+      if (typeof fflate !== 'undefined') { resolve(true); return; }
+      const s = document.createElement('script');
+      s.src = new URL('./fflate.min.js', import.meta.url).href;
+      s.onload  = () => resolve(typeof fflate !== 'undefined');
+      s.onerror = () => { _fflateLoading = null; resolve(false); };
+      document.head.appendChild(s);
+    });
+  }
+  return _fflateLoading;
+}
+
 const ZIP_DATE_MIN = new Date(1980, 0, 1, 12).getTime();
 const ZIP_DATE_MAX = 2 ** 31 * 1000 - 1;
 

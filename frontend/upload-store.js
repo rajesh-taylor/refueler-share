@@ -49,7 +49,7 @@ export async function writeChunkState(record, reportError) {
     });
     db.close();
   } catch (e) {
-    reportError('idb_write', e.message, record.uuid?.slice(0, 8) ?? '');
+    reportError('idb_write', e?.name || 'Error', record.uuid ? `uuid:${record.uuid.slice(0, 8)}` : '');
   }
 }
 
@@ -81,7 +81,7 @@ export async function clearResumeState(uuid, reportError) {
     });
     db.close();
   } catch (e) {
-    reportError('idb_clear', e.message, uuid?.slice(0, 8) ?? '');
+    reportError('idb_clear', e?.name || 'Error', uuid ? `uuid:${uuid.slice(0, 8)}` : '');
   }
 }
 

@@ -19,15 +19,22 @@ if (location.hash.length > 1) document.documentElement.classList.add('rx-pending
       res:  fetch('https://api.share.refueler.io/meta/' + q[1]).catch(function () { return null; }),
     };
   }
+  // X5-1b (page weight): share.js imports the receiver code only for a link, so fetch it now.
+  if (location.hash.length > 1 && document.currentScript) {
+    ['download.js', 'download-fetch.js', 'download-save.js', 'download-sheets.js', 'download-notes.js']
+      .forEach(function (f) { preload(f); });
+  }
   if (location.hash.length <= 1 && document.currentScript) {
     // Share-JS-Split-2: every module the upload page imports, so none waits on another.
+    // X5-1b: timestamp.js (paid permanent record) and the vendored fflate/QR scripts load on use.
     ['upload.js', 'upload-turnstile.js', 'upload-options.js', 'upload-folder.js', 'upload-start.js',
      'upload-send.js', 'upload-resume.js', 'upload-store.js', 'upload-stop.js', 'upload-net.js',
-     'zip.js', 'timestamp.js', 'merkle.js'].forEach(function (f) {
-      var l = document.createElement('link');
-      l.rel = 'modulepreload';
-      l.href = new URL(f, document.currentScript.src).href;
-      document.head.appendChild(l);
-    });
+     'upload-account.js', 'zip.js', 'merkle.js'].forEach(function (f) { preload(f); });
+  }
+  function preload(f) {
+    var l = document.createElement('link');
+    l.rel = 'modulepreload';
+    l.href = new URL(f, document.currentScript.src).href;
+    document.head.appendChild(l);
   }
 })();

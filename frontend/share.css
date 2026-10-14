@@ -254,7 +254,17 @@ html.up-dragging body::after {
 .up-slip.drag-over .up-hint { display: block; margin-top: 0; }
 .up-slip.drag-over .up-pick { display: none; }        /* "Release to add." takes the buttons' place */
 .up-facts { margin: 0; padding: 12px 18px; font: 400 13px/1.55 var(--rx-sans); color: var(--fg-muted); }
+.up-size-inline { display: none; }   /* X5-1b: app phones only (app.css) */
 .up-facts span { white-space: nowrap; }
+/* Three phrases; the dots are drawn here, so a line never ends on one. Where the
+   three don't fit on one line (they need ~480 px of slip: the app's 480 px sheet and
+   phones are narrower) they stack, one per line, without dots (X5-1b). */
+.up-slip { container-type: inline-size; }
+.up-facts span + span::before { content: "·"; margin: 0 .45em 0 .1em; }
+@container (max-width: 495px) {
+  .up-facts span { display: block; }
+  .up-facts span + span::before { content: none; }
+}
 
 /* The drop line comes second, as a fine line, and only where there's a mouse or trackpad
    (U-8): phones get the buttons. (Rajesh, 14 Oct: buttons first, drop line second.) */
@@ -531,7 +541,7 @@ html.up-dragging body::after {
   color: var(--fg-subtle);
 }
 .rx-field input {
-  font: 400 15px var(--rx-sans);
+  font: 400 16px var(--rx-sans);              /* 16 px: iOS Safari zooms the page into smaller inputs */
   color: var(--fg);
   background: var(--input-bg);
   border: 1px solid var(--input-border);

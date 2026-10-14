@@ -25,9 +25,8 @@ function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
     + 'Nothing was saved to your device. Ask the sender for a new link.');
 
   // Log for ops visibility — fire-and-forget
-  const detail = chunkIdx !== null ? `chunk:${chunkIdx}` : 'root_or_sidecar';
   try {
-    reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)} ${detail}`);
+    reportError('integrity_check_failed', 'ciphertext_storage_integrity', `uuid:${uuid.slice(0,8)}${chunkIdx != null ? ` chunk:${chunkIdx}` : ''}`);
   } catch {}
 }
 
@@ -68,7 +67,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
         try {
           plaintext = await _decryptPart(state, ciphertextBuf, i, totalChunks);
         } catch (e) {
-          reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
+          reportError('decrypt', e?.name || 'Error', `uuid:${uuid.slice(0,8)} chunk:${i}`);
           throw DECRYPT_STOP;
         }
         await writable.write(new Uint8Array(plaintext));
@@ -82,7 +81,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
     }
 
     if (state.linkVersion === 2 && bytesWritten !== totalBytes) {
-      reportError('decrypt', `size ${bytesWritten} != ${totalBytes}`, `uuid:${uuid.slice(0,8)}`);
+      reportError('decrypt', 'size_mismatch', `uuid:${uuid.slice(0,8)}`);
       await writable.abort();
       _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
       return;
@@ -133,7 +132,7 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
       decrypted.push(plain);
       plainBytes += plain.byteLength;
     } catch (e) {
-      reportError('decrypt', e.message, `uuid:${uuid.slice(0,8)} chunk:${i}`);
+      reportError('decrypt', e?.name || 'Error', `uuid:${uuid.slice(0,8)} chunk:${i}`);
       _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
       return;
     }
@@ -141,7 +140,7 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
     setCalmText($('dl-mb'), 'Decrypting…');
   }
   if (state.linkVersion === 2 && plainBytes !== totalBytes) {
-    reportError('decrypt', `size ${plainBytes} != ${totalBytes}`, `uuid:${uuid.slice(0,8)}`);
+    reportError('decrypt', 'size_mismatch', `uuid:${uuid.slice(0,8)}`);
     _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
     return;
   }
@@ -174,7 +173,7 @@ function _downloadFailed(e, uuid, domRefs, reportError) {
     _showIntegrityFailure(domRefs, reportError, uuid, e.chunk);
     return;
   }
-  reportError('download_chunk_retry_exhausted', e.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
+  reportError('download_chunk_retry_exhausted', e?.name || 'Error', `uuid:${uuid.slice(0,8)}`);
   if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
   else if (e.status === 410)  _showLinkInactive(domRefs);
   else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);

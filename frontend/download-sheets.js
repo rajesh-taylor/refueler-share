@@ -125,8 +125,8 @@ export function _showPreDownloadModal(onConfirm, onCancel) {
   overlay.innerHTML = `
     <div class="pre-dl-modal-card">
       <p class="pre-dl-modal-heading" id="pre-dl-modal-heading">This transfer is deleted after download</p>
-      <button id="pre-dl-modal-btn" class="btn btn-primary btn-full">Download</button>
-      <button id="pre-dl-modal-cancel" class="btn btn-ghost btn-full">Not now</button>
+      <button id="pre-dl-modal-btn" class="rx-btn" type="button">Download</button>
+      <button id="pre-dl-modal-cancel" class="rx-btn up-ghost" type="button">Not now</button>
     </div>`;
   document.body.appendChild(overlay);
   document.getElementById('pre-dl-modal-btn').addEventListener('click', () => { overlay.remove(); onConfirm(); }, { once: true });

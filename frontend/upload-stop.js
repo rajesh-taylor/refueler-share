@@ -65,7 +65,7 @@ export async function _loadDepsOrSay(domRefs, helpers) {
     await loadDeps();
     return true;
   } catch (e) {
-    helpers.reportError('load_deps', e?.name || 'Error', String(e?.message || '').slice(0, 120));
+    helpers.reportError('load_deps', e?.name || 'Error', '');
     helpers.showStopped('Share couldn’t start in this browser. Reload to try again, or use another browser.');
     return false;
   }

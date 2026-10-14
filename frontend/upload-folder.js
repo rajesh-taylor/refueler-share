@@ -100,7 +100,7 @@ export async function zipAndSelect(entries, folderName, domRefs, helpers) {
       showZipStage('Zipping', Math.min(Math.round((done / totalBytes) * 95), 95), `${formatBytes(done)} of ${formatBytes(totalBytes)}`);
     });
   } catch (err) {
-    reportError('folder_zip', err?.message || 'fflate error', folderName.slice(0, 100));
+    reportError('folder_zip', err?.name || 'Error', '');
     hideZipCard();
     helpers.resetRows(); helpers.setView('empty');
     setDropMsg('Zipping the folder didn’t work. Try again, or zip it yourself and send the .zip as a file.');

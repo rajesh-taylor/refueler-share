@@ -9,12 +9,11 @@
         <h1 class="rx-head">Sign in.</h1>
         <p class="rx-lede">We’ll email you a link.</p>
         <form id="si-form" novalidate>
-          <dl class="rx-ledger">
-            <div class="rx-row">
-              <dt><label for="si-email">Email</label></dt>
-              <dd><input type="email" id="si-email" class="si-input" autocomplete="email" inputmode="email" spellcheck="false" required /></dd>
-            </div>
-          </dl>
+          <!-- A form, not a ledger (design theory §4.4): label above the field. -->
+          <div class="rx-field si-field">
+            <label for="si-email">Email</label>
+            <input type="email" id="si-email" class="si-input" autocomplete="email" inputmode="email" spellcheck="false" required />
+          </div>
           <div id="si-check" class="si-check"></div>
           <div class="rx-actions">
             <button class="rx-btn" id="si-send" type="submit" disabled>Email me a link</button>

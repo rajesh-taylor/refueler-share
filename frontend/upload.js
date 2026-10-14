@@ -21,9 +21,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { loadDeps } from './crypto.js';
+import { loadFflate } from './zip.js';
 import { FREE_EXPIRY } from './config.js';
 import { loadAccount, uploadCap } from './upload-account.js';   // B12-4a-2
-import { renderTurnstile, _cancelQueuedStart, _uploadBtnDisabled, pressWhenChecked,
+import { _cancelQueuedStart, _uploadBtnDisabled, pressWhenChecked,
          keepTurnstile } from './upload-turnstile.js';
 import { _injectTransferOptions } from './upload-options.js';
 import { FOLDER_MAX_FILES, readDirectoryEntry, zipAndSelect, _folderTooMany,
@@ -86,6 +87,7 @@ export function enterUploadMode(domRefs, state, helpers) {
     dragOff();
     if (!droppable()) return;
     clearDropMsg();
+    keepTurnstile(state, domRefs, helpers);   // X5-1b: the check starts at the first pick
 
     const items = e.dataTransfer.items;
     if (e.dataTransfer.files.length > 1 || (items && items.length > 1)) { setDropMsg('One file or one folder at a time.'); return; }
@@ -124,12 +126,13 @@ export function enterUploadMode(domRefs, state, helpers) {
   if (fileBtn) {
     fileBtn.addEventListener('click', e => {
       e.stopPropagation();
+      keepTurnstile(state, domRefs, helpers);
       fileInput.value = '';
       fileInput.click();
     });
   }
 
-  folderBtn.addEventListener('click', e => { e.stopPropagation(); folderInput.value = ''; folderInput.click(); });
+  folderBtn.addEventListener('click', e => { e.stopPropagation(); keepTurnstile(state, domRefs, helpers); loadFflate(); folderInput.value = ''; folderInput.click(); });
 
   folderInput.addEventListener('change', () => {
     if (folderInput.files.length === 0) return;
@@ -158,9 +161,9 @@ export function enterUploadMode(domRefs, state, helpers) {
   setPressUpload(pressUpload);
   uploadBtn.addEventListener('click', pressUpload);
 
-  // Start the check now, not on the first file: on hardened browsers (Vanadium)
-  // Cloudflare can take ~10 s to decide it wants a click.
-  renderTurnstile(state, domRefs, helpers);
+  // X5-1b (Rajesh, 14 Oct): the check starts at the first pick (button press or drop),
+  // not on arrival — Cloudflare's script and challenge never load for someone who only
+  // looks. Setting a password and delete-after-download covers Vanadium's ~10 s check.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,6 +182,7 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   domRefs.upFileNote.hidden = !folderFiles;
   domRefs.upFileNote.textContent = folderFiles ? `${folderFiles.toLocaleString()} files, zipped in your browser` : '';
   fileSizeTag.textContent = formatBytes(file.size);
+  domRefs.upFileSize.textContent = formatBytes(file.size);
   fileSizeTag.classList.remove('up-dim');
   if (file.size > uploadCap()) {
     fileSizeTag.classList.add('up-warn');
@@ -206,6 +210,7 @@ function _resetRows(domRefs) {
   domRefs.fileNameTag.textContent = '';
   domRefs.upFileNote.hidden = true;
   domRefs.fileSizeTag.textContent = '—';
+  domRefs.upFileSize.textContent = '';
   domRefs.fileSizeTag.classList.add('up-dim');
   domRefs.fileSizeTag.classList.remove('up-warn');
   domRefs.upUntil.textContent = '7 days after upload';
@@ -224,7 +229,7 @@ function _startZipView(folderName, fileCount, domRefs, helpers) {
 
 async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transferOpts) {
   const { setDropMsg, showZipStage, hideZipCard, reportError } = helpers;
-  if (typeof fflate === 'undefined') {
+  if (!(await loadFflate())) {
     setDropMsg('Folders can’t be zipped in this browser. Zip it yourself and send the .zip as a file.');
     return;
   }
@@ -234,7 +239,7 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
   try {
     files = await readDirectoryEntry(directoryEntry);
   } catch (e) {
-    reportError('folder_read', e.message, 'drag_entry');
+    reportError('folder_read', e?.name || 'Error', '');
     hideZipCard();
     _resetRows(domRefs); helpers.setView('empty');
     setDropMsg(e.message.includes('nested more than')
@@ -266,7 +271,7 @@ function _setFolder(state, print) {
 async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpts) {
   const { setDropMsg, showZipStage, hideZipCard } = helpers;
   if (fileList.length === 0) return;
-  if (typeof fflate === 'undefined') {
+  if (!(await loadFflate())) {
     setDropMsg('Folders can’t be zipped in this browser. Zip it yourself and send the .zip as a file.');
     return;
   }

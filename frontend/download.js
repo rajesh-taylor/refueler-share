@@ -68,7 +68,7 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
   try {
     await _enterDownloadMode(detected, domRefs, state, helpers);
   } catch (e) {
-    try { helpers.reportError('receiver_setup', e?.name || 'Error', String(e?.message || '').slice(0, 120)); } catch {}
+    try { helpers.reportError('receiver_setup', e?.name || 'Error', ''); } catch {}
     _showNotice('Stopped', 'Share couldn’t start in this browser.',
       'Reload to try again, or use another browser.');
   }
@@ -131,7 +131,7 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
 
   // ── v2: the stored part count must match the link's size, before any download ──
   if (isV2 && meta.total_chunks !== Math.ceil(detected.sizeBytes / CHUNK_SIZE)) {
-    helpers.reportError('part_count', `link ${Math.ceil(detected.sizeBytes / CHUNK_SIZE)} meta ${meta.total_chunks}`, `uuid:${uuid.slice(0,8)}`);
+    helpers.reportError('part_count', 'mismatch', `uuid:${uuid.slice(0,8)}`);
     _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
     return;
   }
@@ -251,7 +251,7 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
     try {
       outcome = await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers);
     } catch (e) {
-      helpers.reportError('download_unhandled', e?.message || 'unknown', `uuid:${uuid.slice(0,8)}`);
+      helpers.reportError('download_unhandled', e?.name || 'Error', `uuid:${uuid.slice(0,8)}`);
       _showDownloadError('Download failed. Please try again.', domRefs);
       return;
     }
@@ -328,7 +328,7 @@ async function _startDownloadGated(uuid, meta, fileName, willSelfDestruct, domRe
       fileHandle = await showSaveFilePicker({ suggestedName: fileName, types: [] });
     } catch (e) {
       if (e.name === 'AbortError') return 'cancelled';
-      helpers.reportError('fsaa_picker_error', e.message, `uuid:${uuid.slice(0,8)}`);
+      helpers.reportError('fsaa_picker_error', e?.name || 'Error', `uuid:${uuid.slice(0,8)}`);
       await _startDownload(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers);
       return;
     }

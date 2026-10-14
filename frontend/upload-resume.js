@@ -5,7 +5,7 @@
 import { loadDeps } from './crypto.js';
 import { CHUNK_SIZE, FREE_EXPIRY, TIER_EXPIRY_SECONDS } from './config.js';
 import { progressBytesText } from './progress.js';
-import { zipFolder, zipSize, folderPrint } from './zip.js';
+import { zipFolder, zipSize, folderPrint, loadFflate } from './zip.js';
 import { readResumeState, clearResumeState, SCHEME } from './upload-store.js';
 import { RESUME_HEAD, NO_RESUME, NOT_SAME_FILE, FOLDER_ASK, FOLDER_DIFFERENT, FOLDER_CHANGED,
          FOLDER_TIME_ZONE, _loadDepsOrSay } from './upload-stop.js';
@@ -139,7 +139,7 @@ export async function resumeUpload(record, domRefs, state, helpers) {
 
   if (Math.ceil(resumeFile.size / CHUNK_SIZE) !== record.totalChunks) {
     backToCard(NOT_SAME_FILE);
-    reportError('resume_chunk_count', `expected ${record.totalChunks} got ${Math.ceil(resumeFile.size / CHUNK_SIZE)}`, `uuid:${record.uuid.slice(0,8)}`);
+    reportError('resume_chunk_count', 'mismatch', `uuid:${record.uuid.slice(0,8)}`);
     return;
   }
 
@@ -242,7 +242,7 @@ async function _resumeFolder(record, fileList, domRefs, state, helpers) {
 
   const { folderName, entries } = _folderEntries(fileList);
   if (folderName !== want.name) { back(FOLDER_DIFFERENT(want)); return; }
-  if (typeof fflate === 'undefined') { back('Folders can’t be zipped in this browser. Discard it and send the folder as a .zip file.'); return; }
+  if (!(await loadFflate())) { back('Folders can’t be zipped in this browser. Discard it and send the folder as a .zip file.'); return; }
 
   let print;
   try {
@@ -253,12 +253,12 @@ async function _resumeFolder(record, fileList, domRefs, state, helpers) {
     return;
   }
   if (print.list !== want.list || zipSize(entries) !== record.fileSize) {
-    reportError('resume_folder_changed', `files ${print.files} of ${want.files}`, short);
+    reportError('resume_folder_changed', 'mismatch', short);
     back(FOLDER_CHANGED(want));
     return;
   }
   if (print.local !== want.local) {
-    reportError('resume_folder_tz', 'local dates differ', short);
+    reportError('resume_folder_tz', 'mismatch', short);
     back(FOLDER_TIME_ZONE(want));
     return;
   }
@@ -276,13 +276,13 @@ async function _resumeFolder(record, fileList, domRefs, state, helpers) {
       helpers.setProgress(0, words(done));
     });
   } catch (e) {
-    reportError('resume_folder_zip', e?.message?.slice(0, 80) || 'fflate error', short);
+    reportError('resume_folder_zip', e?.name || 'Error', short);
     back('Zipping the folder didn’t work. Try again, or discard it and start again.');
     return;
   }
   const zipFile = new File([zipBlob], record.fileName, { type: 'application/zip' });
   if (zipFile.size !== record.fileSize) {   // can't happen when the print matched; never send on a guess
-    reportError('resume_folder_size', `${zipFile.size} vs ${record.fileSize}`, short);
+    reportError('resume_folder_size', 'mismatch', short);
     back(FOLDER_CHANGED(want));
     return;
   }

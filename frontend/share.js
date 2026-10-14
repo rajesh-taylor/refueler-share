@@ -17,7 +17,7 @@
 import { WORKER_URL, FREE_EXPIRY }                     from './config.js';
 import { setCalmText }                                 from './progress.js';
 import { parseFragment }                                from './fragment.js';
-import { enterDownloadMode }                            from './download.js';
+import { _countdown }                                  from './download-time.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared mutable state — single object passed by reference to upload + download.
@@ -45,6 +45,7 @@ const domRefs = {
   upHead:           $('up-head'),
   upFileLabel:      $('up-file-label'),
   upFileNote:       $('up-file-note'),
+  upFileSize:       $('up-file-size'),   // X5-1b
   upHint:           $('up-hint'),
   upUntil:          $('up-until'),
   upUntilNote:      $('up-until-note'),
@@ -151,7 +152,24 @@ function setView(view, { eyebrow, head } = {}) {
   domRefs.upEyebrow.textContent = eyebrow || e;
   domRefs.upHead.textContent    = head || h;
   if (view !== 'uploading') document.title = PAGE_TITLE;
+  else _loadQr();   // X5-1b: ready by the time the link is
   if (changed) revealSheet();
+}
+
+// X5-1b (page weight): the QR library loads when an upload starts, not on arrival.
+let _qrLoading = null;
+function _loadQr() {
+  if (!_qrLoading) {
+    _qrLoading = new Promise((resolve) => {
+      if (typeof QrCreator !== 'undefined') { resolve(true); return; }
+      const s = document.createElement('script');
+      s.src = new URL('./qr-creator.min.js', import.meta.url).href;
+      s.onload  = () => resolve(typeof QrCreator !== 'undefined');
+      s.onerror = () => { _qrLoading = null; resolve(false); };
+      document.head.appendChild(s);
+    });
+  }
+  return _qrLoading;
 }
 
 // F-27: a view change keeps the scroll position, so the eyebrow and headline could sit
@@ -219,16 +237,25 @@ function formatWhen(d) {
     + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-// reportError — fire-and-forget, never blocks flow, never surfaces to user (S36b)
+// reportError — fire-and-forget, never blocks flow, never surfaces to user (S36b).
+// X5-1b: a report carries only the step, a short code and the transfer's first 8
+// characters (plus chunk / attempt numbers). Callers send codes, never free text;
+// anything outside these shapes is replaced, so no name, size or server reply leaves.
+const _RE_CONTEXT = /^[a-z0-9_:]{1,64}$/;
+const _RE_MESSAGE = /^(|[A-Za-z0-9_]{1,48}|HTTP \d{3}( [a-z0-9_]{1,40})?|missing \d{1,6})$/;   // one token, an HTTP code, or a count
+const _RE_DETAIL  = /^(uuid:[0-9a-f]{8})?( ?(chunk|attempt|from):\d{1,6})*$/;
 function reportError(context, message, detail) {
   try {
+    context = String(context || '');
+    message = String(message || '');
+    detail  = String(detail  || '');
     fetch(`${WORKER_URL}/log/error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        context: String(context).slice(0, 64),
-        message: String(message || '').slice(0, 200),
-        detail:  String(detail  || '').slice(0, 200),
+        context: _RE_CONTEXT.test(context) ? context : 'unknown',
+        message: _RE_MESSAGE.test(message) ? message : 'redacted',
+        detail:  _RE_DETAIL.test(detail)   ? detail  : '',
         ts:      Date.now(),
       }),
     }).catch(() => {});
@@ -251,8 +278,9 @@ function showSharePanel(url, info = {}) {
   if (info.fileName) row(info.isFolder ? 'Folder' : 'File', info.fileName);
   if (info.sizeBytes) row('Size', formatBytes(info.sizeBytes));
   if (info.expiryTimestamp) {
-    const days = Math.round((info.expiryTimestamp * 1000 - Date.now()) / 86400000);
-    row('Available until', formatWhen(new Date(info.expiryTimestamp * 1000)), days > 1 ? `in ${days} days` : '');
+    // One countdown for sender and receiver (download-time.js floors; §1.3).
+    row('Available until', formatWhen(new Date(info.expiryTimestamp * 1000)),
+      _countdown(Math.max(0, info.expiryTimestamp - Date.now() / 1000)));
   }
   if (info.isProtected) row('Password', 'Needed to download', 'Send it separately from the link.');
   if (info.destroyAfterDownload) row('After download', 'The link works once');
@@ -261,6 +289,7 @@ function showSharePanel(url, info = {}) {
   domRefs.qrBtn.textContent = 'Show QR code';
   domRefs.qrBtn.setAttribute('aria-expanded', 'false');
   domRefs.qrBtn.hidden = typeof QrCreator === 'undefined';
+  if (domRefs.qrBtn.hidden) _loadQr().then((ok) => { domRefs.qrBtn.hidden = !ok; });
   setView('ready');
 }
 
@@ -368,7 +397,21 @@ function detectMode() {
 const detected = detectMode();
 
 if (detected) {
-  enterDownloadMode(detected, domRefs, state, helpers);   // sets .rx-mode before its first await
+  // X5-1b (page weight): the receiver code loads only for a Share link; share-early.js
+  // has already started fetching it. The upload page never downloads it.
+  import('./download.js').then(({ enterDownloadMode }) => {
+    enterDownloadMode(detected, domRefs, state, helpers);   // sets .rx-mode before its first await
+  }).catch((e) => {
+    reportError('receiver_module', e?.name || 'Error', '');
+    document.documentElement.classList.add('rx-mode');
+    $('rx-notice-eyebrow').textContent = 'Stopped';
+    $('rx-notice-head').textContent    = 'Share couldn’t start in this browser.';
+    $('rx-notice-lede').textContent    = 'Reload to try again, or use another browser.';
+    $('rx-notice').hidden = false;
+  }).finally(() => {
+    // F-23: the mode is known; share-early.js's mark has done its job.
+    document.documentElement.classList.remove('rx-pending');
+  });
 } else {
   // Safari-Slow-Link-1: the upload code loads only here, so a receiver never waits
   // on it (share-early.js has already started fetching it on the upload page).
@@ -376,9 +419,9 @@ if (detected) {
     checkResumeState(domRefs, state, helpers).catch(() => {});
     enterUploadMode(domRefs, state, helpers);
   }).catch((e) => {
-    reportError('upload_module', e?.name || 'Error', String(e?.message || '').slice(0, 120));
+    reportError('upload_module', e?.name || 'Error', '');
     showStopped('Share couldn’t start in this browser. Reload to try again, or use another browser.');
   });
 }
-// F-23: the mode is known; share-early.js's mark has done its job.
-document.documentElement.classList.remove('rx-pending');
+// F-23 (upload page): the mode is known; share-early.js's mark has done its job.
+if (!detected) document.documentElement.classList.remove('rx-pending');

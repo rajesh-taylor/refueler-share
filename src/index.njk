@@ -19,16 +19,8 @@ ioBase: ""
 <link rel="modulepreload" href="/share.js">
 <link rel="modulepreload" href="/crypto.js">
 <link rel="modulepreload" href="/fragment.js">
-<link rel="modulepreload" href="/download.js">
 <link rel="modulepreload" href="/config.js">
 <link rel="modulepreload" href="/progress.js">
-<link rel="modulepreload" href="/download-fetch.js">
-<link rel="modulepreload" href="/download-save.js">
-<link rel="modulepreload" href="/download-sheets.js">
-<link rel="modulepreload" href="/download-time.js">
-<link rel="modulepreload" href="/download-notes.js">
-<!-- async, not defer: the modules no longer wait for it (upload-turnstile.js waits for window.turnstile itself) -->
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async></script>
 {% endset %}
 {% include "head.njk" %}
 <!-- ── Status banner (hidden until JS populates from /status) ─────────────── -->
@@ -158,11 +150,7 @@ function showMaintenanceModal(status) {
 
 {% include "footer.njk" %}
 
-<!-- fflate + qr-creator self-hosted (S56 — cdnjs blocked). defer, not blocking  -->
-<!-- (Safari-Slow-Link-1): deferred scripts run in order before the module script, -->
-<!-- so the globals are still defined before share.js executes.                    -->
-<script src="/fflate.min.js" defer></script>
-<script src="/qr-creator.min.js" defer></script>
+<!-- fflate + qr-creator (self-hosted, S56) load on use since X5-1b: zip.js loadFflate, share.js _loadQr. -->
 <script type="module" src="/share.js"></script>
 </body>
 </html>

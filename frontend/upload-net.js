@@ -35,6 +35,12 @@ function _xhrPut(url, body, stallMs, onProgress) {
 // _fetchNextUrlBatch — POST /upload/{uuid}/urls {from,count}, session-token authed.
 // Never re-verifies or re-spends Cashu (spec §6 / do-not-retry §10).
 // ─────────────────────────────────────────────────────────────────────────────
+// X5-1b: the error code from a Worker reply ({"error":"quota_exceeded"} → quota_exceeded),
+// never the reply itself — replies can carry figures, and R2's XML names the object key.
+export function _errCode(text) {
+  try { const c = JSON.parse(text)?.error; return /^[a-z0-9_]{1,40}$/.test(c) ? c : ''; } catch { return ''; }
+}
+
 export async function _fetchNextUrlBatch(uuid, sessionToken, from, count, reportError) {
   let res;
   try {
@@ -44,12 +50,12 @@ export async function _fetchNextUrlBatch(uuid, sessionToken, from, count, report
       body: JSON.stringify({ from, count }),
     });
   } catch (e) {
-    reportError('url_batch_fetch', e.message?.slice(0, 80), `uuid:${uuid.slice(0, 8)} from:${from}`);
+    reportError('url_batch_fetch', e?.name || 'Error', `uuid:${uuid.slice(0, 8)} from:${from}`);
     throw new Error(`URL batch fetch failed (network): ${e.message}`);
   }
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
-    reportError('url_batch_status', `HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} from:${from} ${txt.slice(0, 80)}`);
+    reportError('url_batch_status', `HTTP ${res.status} ${_errCode(txt)}`.trim(), `uuid:${uuid.slice(0, 8)} from:${from}`);
     const e = new Error(`URL batch ${from} failed: HTTP ${res.status}`);
     e.status = res.status; // resume uses 400 to spot an old record on a B12-1c Worker
     throw e;
@@ -75,27 +81,27 @@ export async function _putChunkDirect(presignedUrl, encryptedBytes, chunkIndex, 
 
       // 403 = signature invalid / URL reused — unrecoverable without a new URL
       if (res.status === 403) {
-        reportError('direct_put_403', `chunk ${chunkIndex} 403 — URL invalid`, `uuid:${uuid.slice(0, 8)} attempt:${attempt} ${res.text.slice(0, 80)}`);
+        reportError('direct_put_403', 'HTTP 403', `uuid:${uuid.slice(0, 8)} chunk:${chunkIndex} attempt:${attempt}`);
         throw new UploadStop('refused', `Chunk ${chunkIndex} direct PUT 403: presigned URL rejected`);
       }
 
       if (res.status === 429) {
-        reportError('direct_put_429', `chunk ${chunkIndex} 429 attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
+        reportError('direct_put_429', 'HTTP 429', `uuid:${uuid.slice(0, 8)} chunk:${chunkIndex} attempt:${attempt}`);
         lastErr = new Error('HTTP 429');
       } else if (res.status < 500) {
-        reportError('direct_put_4xx', `chunk ${chunkIndex} HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} ${res.text.slice(0, 80)}`);
+        reportError('direct_put_4xx', `HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} chunk:${chunkIndex} attempt:${attempt}`);
         throw new UploadStop('refused', `Chunk ${chunkIndex} direct PUT: HTTP ${res.status}`);
       } else {
         lastErr = new Error(`HTTP ${res.status}`);
-        reportError('direct_put_5xx', `chunk ${chunkIndex} HTTP ${res.status} attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
+        reportError('direct_put_5xx', `HTTP ${res.status}`, `uuid:${uuid.slice(0, 8)} chunk:${chunkIndex} attempt:${attempt}`);
       }
     } catch (e) {
       if (e instanceof UploadStop) throw e; // fatal — propagate immediately
       lastErr = e;
       if (e.timedOut) {
-        reportError('direct_put_timeout', `chunk ${chunkIndex} timed out attempt ${attempt}`, `uuid:${uuid.slice(0, 8)}`);
+        reportError('direct_put_timeout', 'timeout', `uuid:${uuid.slice(0, 8)} chunk:${chunkIndex} attempt:${attempt}`);
       } else {
-        reportError('direct_put_err', `chunk ${chunkIndex} attempt ${attempt}: ${e.message?.slice(0, 80)}`, `uuid:${uuid.slice(0, 8)}`);
+        reportError('direct_put_err', e?.name || 'Error', `uuid:${uuid.slice(0, 8)} chunk:${chunkIndex} attempt:${attempt}`);
       }
     }
     if (attempt < tries - 1) {
@@ -111,7 +117,7 @@ export async function _send(url, options, what, reportError) {
   try {
     return await fetch(url, options);
   } catch (e) {
-    reportError(`${what}_fetch`, e.message?.slice(0, 120), '');
+    reportError(`${what}_fetch`, e?.name || 'Error', '');
     throw new UploadStop('network', `${what}: ${e.message}`);
   }
 }
