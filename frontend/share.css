@@ -254,7 +254,7 @@ html.up-dragging body::after {
 .up-slip.drag-over .up-hint { display: block; margin-top: 0; }
 .up-slip.drag-over .up-pick { display: none; }        /* "Release to add." takes the buttons' place */
 .up-facts { margin: 0; padding: 12px 18px; font: 400 13px/1.55 var(--rx-sans); color: var(--fg-muted); }
-.up-size-inline { display: none; }   /* X5-1b: app phones only (app.css) */
+.rx-row dd small.up-size-inline { display: none; }   /* X5-1b: app phones only (app.css); beats .rx-row dd small */
 .up-facts span { white-space: nowrap; }
 /* Three phrases; the dots are drawn here, so a line never ends on one. Where the
    three don't fit on one line (they need ~480 px of slip: the app's 480 px sheet and
