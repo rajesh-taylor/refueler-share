@@ -181,7 +181,10 @@ prove() {
     [ -z "$(header_of "$url" 'content-security-policy')" ] || sm_fail "an ENFORCED CSP is on $url (X5-1 is Report-Only)"
     lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || sm_fail "Link header on $url: $lk"
     cc="$(header_of "$url" 'cache-control' | tr 'A-Z' 'a-z')"
-    case "$cc" in *no-transform*) ;; *) sm_fail "no-transform missing on $url ($cc)" ;; esac
+    # Pages answers a 404 with its own fixed "Cache-Control: no-store", ignoring _headers
+    # (seen live 14 Oct). Harmless: nothing caches it, and the share.refueler.io Configuration
+    # Rule turns the injections off anyway. Every 200 must carry no-transform.
+    case "$url:$cc" in *no-such-page-*:no-store) ;; *:*no-transform*) ;; *) sm_fail "no-transform missing on $url ($cc)" ;; esac
     case "$cc" in *max-age=0*|*no-store*|*no-cache*) ;; *) sm_fail "browser-cacheable $url ($cc) — restore the Cache Rule: host share.refueler.io, Browser TTL = Respect origin" ;; esac
   done
   [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP_HOST/no-such-page-$RANDOM")" = "404" ] || sm_fail "unknown path is not a 404 (SPA fallback? 404.html missing?)"
@@ -217,7 +220,8 @@ case "$MODE" in
     step "2/5"; build "$SHA" "$PREV"
     step "3/5"; check "$SHA"
     step "4/5 deploy (Cloudflare Pages, direct upload, project $PROJECT)"
-    ( cd "$ROOT/worker" && npx wrangler pages deploy "$DIST" --project-name "$PROJECT" --branch main \
+    # Run from a directory with no wrangler.toml (the Worker's would be read and ignored, with a warning).
+    ( cd "$DIST" && "$ROOT/worker/node_modules/.bin/wrangler" pages deploy "$DIST" --project-name "$PROJECT" --branch main \
         --commit-hash "$(git -C "$ROOT" rev-parse HEAD)" --commit-message "release $SHA" --commit-dirty=false ) \
       || die "wrangler pages deploy failed"
     step "5/5"; prove || die "prove FAILED — deployed, but share.refueler.io is not serving dist/ exactly"
