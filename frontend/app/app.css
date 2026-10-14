@@ -253,6 +253,11 @@ main, .rx-mode main { max-width: var(--sheet); }
 .rx-btn:active:not(:disabled), .up-fill:active { background: color-mix(in srgb, var(--fg) 78%, var(--bg)); }
 .rx-btn.up-ghost:active:not(:disabled), .up-fill-ghost:active { background: color-mix(in srgb, var(--fg) 10%, transparent); }
 .up-link, .rx-send, .rx-reveal { transition: color var(--d-touch) var(--ease); }
+/* Outlined (second) buttons take the field edge, 3 : 1 (WCAG 1.4.11) — on --rule-strong they read
+   as unavailable (Rajesh, iPhone, 14 Oct). Only a button that can't act yet keeps the faint edge. */
+.rx-btn.up-ghost { border-color: var(--input-border); }
+.up-fill-ghost   { box-shadow: inset 0 0 0 1px var(--input-border); }
+.rx-btn.up-ghost:disabled { border-color: var(--rule-strong); box-shadow: none; }
 /* A button that can't act yet is drawn as an outline in the quiet ink, not a greyed fill. */
 .rx-btn:disabled {
   opacity: 1;
