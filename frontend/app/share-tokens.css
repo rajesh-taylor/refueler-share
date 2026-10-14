@@ -135,9 +135,9 @@
   --attention:    #C9A227;
   --slip-bg:      #201F1C;   /* one tone step above the ground */
   --slip-edge:    var(--rule);
-  /* §12.1: Dial 1 % — the ground lifts toward the centre. The dither tile that
-     breaks up banding is X5-1b (a static PNG, img-src 'self'). */
-  --dial-img:     radial-gradient(ellipse at 50% 40%, rgba(245,240,232,.01), rgba(245,240,232,0) 70%);
+  /* §12.1: Dial 1 % — the ground lifts toward the centre; a fine noise tile on top
+     breaks up the banding (dither.png, built by dev/dither/make-dither.mjs). */
+  --dial-img:     url(./dither.png), radial-gradient(ellipse at 50% 40%, rgba(245,240,232,.01), rgba(245,240,232,0) 70%);
   color-scheme: dark;
 }
 
@@ -153,7 +153,7 @@ html {
   transition: background-color .35s var(--ease), color .35s var(--ease);   /* the theme turn */
 }
 body { min-height: 100vh; background: transparent; }
-body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--dial-img); }
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--dial-img); background-size: 64px 64px, 100% 100%; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 a { color: inherit; }
 [hidden] { display: none !important; }

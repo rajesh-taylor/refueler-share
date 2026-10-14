@@ -2,8 +2,8 @@
    Loaded after share.css, on the app only (src/_includes/app-layout.njk). The old
    page (refueler.io/share/) never loads it, so nothing here can change that page.
    Design: docs/design/share-design-theory-v1.md §4.2–§4.4, §10, §11.
-   X5-1a = header, measure, tokens wired in. The §2.2 carry-ins (link box clamp,
-   dither, hand tip, the touch, components) are X5-1b, also in this file.
+   X5-1a = header, measure, tokens wired in. X5-1b = calm pass + the §2.2 carry-ins
+   (link box clamp, hand tip, the touch, components) at the end of this file.
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* share.css declares its own --rx-* on :root / [data-theme="carbon"]; point them at
@@ -53,12 +53,14 @@
 /* The stage chip sits in each sheet's eyebrow row, above the headline (Rajesh, 14 Oct:
    out of the header, so the header never fights for space). */
 
-.site-nav { display: flex; align-items: center; gap: 32px; }
+.site-nav { display: flex; align-items: center; gap: 28px; }
+/* Calm pass (Rajesh, 14 Oct): the eight caps items were the loudest thing on the page —
+   regular weight and the quiet ink; only the page you're on is full ink. */
 .site-nav a, .nav-drawer a {
-  font: 500 11px/1 var(--heading);
+  font: 400 11px/1 var(--heading);
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--fg-muted);
+  color: var(--fg-subtle);
   text-decoration: none;
   transition: color var(--d-touch) var(--ease);
   white-space: nowrap;
@@ -68,11 +70,11 @@
   font: 500 10.5px/1 var(--heading);
   letter-spacing: .1em;
   text-transform: uppercase;
-  border: 1px solid var(--rule-strong);
+  border: 1px solid var(--rule);
   border-radius: 100px;
   padding: 7px 14px;
   background: transparent;
-  color: var(--fg-muted);
+  color: var(--fg-subtle);
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
@@ -95,7 +97,7 @@
 .nav-hamburger span { display: block; width: 16px; height: 1.5px; background: var(--fg-muted); border-radius: 1px; }
 @media (hover: hover) {
   .site-nav a:hover, .nav-drawer a:hover { color: var(--fg); }
-  .theme-pill:hover { border-color: var(--fg-muted); color: var(--fg); }
+  .theme-pill:hover { border-color: var(--rule-strong); color: var(--fg); }
   .nav-hamburger:hover { border-color: var(--fg-muted); }
 }
 .nav-drawer {
@@ -218,25 +220,11 @@
 .app-modal-card button { align-self: flex-start; margin-top: var(--s3); }
 
 /* ── Measure (§4.2): one 480 px sheet, 132 px label column ──────────────────── */
+.rx-eyebrow-row { margin-bottom: var(--s4); }   /* §4.3: eyebrow → headline 16 */
 .shell { min-height: calc(100vh - 57px - 80px); padding: var(--s7) var(--s4) var(--s8); }
 main, .rx-mode main { max-width: var(--sheet); }
 .rx-row { grid-template-columns: var(--label-col) minmax(0, 1fr); }
 .rx-row dt { font: var(--t-label); }
-
-/* refueler.io global.css button classes, still used by the receiver's pre-download
-   dialog (download-sheets.js). Mapped onto Share's own button; X5-1b moves that
-   dialog onto .rx-btn and these go. */
-.btn {
-  font: 500 15px var(--sans);
-  border: 0;
-  border-radius: var(--radius);
-  padding: 15px 24px;
-  cursor: pointer;
-  background: var(--fg);
-  color: var(--bg);
-}
-.btn-ghost { background: none; color: var(--fg); border: 1px solid var(--rule-strong); }
-.btn-full { width: 100%; }
 
 /* ── Error pages ───────────────────────────────────────────────────────────── */
 .app-error .rx-lede a { color: var(--fg); }
@@ -244,6 +232,119 @@ main, .rx-mode main { max-width: var(--sheet); }
 /* ── Phone (§4.4) ──────────────────────────────────────────────────────────── */
 @media (max-width: 440px) {
   .app-status { padding: var(--s3) var(--s4); }
-  .shell { padding: var(--s6) var(--s4) var(--s7); }
+  .shell { padding: var(--s7) var(--s4) var(--s7); }   /* calm pass: more room above the eyebrow */
   .rx-row { grid-template-columns: 1fr; }
+}
+
+/* ══ X5-1b — design carry-ins (docs/X5-plan-v1.md §2.2; design theory §7, §9, §12.1) ══ */
+
+/* ── The touch (§7.1, §13): every press, hover and edge change is 200 ms and one tone
+   step. No opacity flashes (share.css's .88 hover / .35 disabled are undone here). */
+.rx-btn, .up-fill {
+  transition: background-color var(--d-touch) var(--ease), color var(--d-touch) var(--ease),
+              box-shadow var(--d-touch) var(--ease), border-color var(--d-touch) var(--ease);
+}
+.rx-btn:hover:not(:disabled), .up-fill:hover { opacity: 1; }
+@media (hover: hover) {
+  .rx-btn:hover:not(:disabled), .up-fill:hover { background: color-mix(in srgb, var(--fg) 90%, var(--bg)); }
+  .rx-btn.up-ghost:hover:not(:disabled), .up-fill-ghost:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+  .up-link:hover, .rx-send:hover, .rx-reveal:hover { color: var(--fg); }
+}
+.rx-btn:active:not(:disabled), .up-fill:active { background: color-mix(in srgb, var(--fg) 78%, var(--bg)); }
+.rx-btn.up-ghost:active:not(:disabled), .up-fill-ghost:active { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.up-link, .rx-send, .rx-reveal { transition: color var(--d-touch) var(--ease); }
+/* A button that can't act yet is drawn as an outline in the quiet ink, not a greyed fill. */
+.rx-btn:disabled {
+  opacity: 1;
+  background: none;
+  color: var(--fg-subtle);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+  cursor: default;
+}
+
+/* ── Buttons (§9, §4.4): the width of their words on desktop (min 160), left on the
+   text column; full width on phones. Pairs: two intrinsic buttons, 12 px apart. */
+.rx-btn { font: 500 15px var(--sans); letter-spacing: .01em; padding: 15px 24px; }
+.rx-actions { align-items: flex-start; gap: var(--s3); }
+.rx-actions .rx-fine { text-align: left; }
+@media (min-width: 441px) {
+  .rx-btn { width: auto; min-width: 160px; }
+  .up-btnrow { display: flex; flex-wrap: wrap; gap: var(--s3); }
+  .up-stop-actions:has(> [hidden]) { display: flex; }
+  /* File row (trial 14 Oct): the two pick buttons at body size, so they read as the row's action. */
+  .up-fill { font: 500 15px var(--sans); letter-spacing: .01em; padding: 12px 20px; }
+  .si-actions a.rx-btn { display: inline-block; }
+}
+@media (max-width: 440px) {
+  .rx-actions { align-items: stretch; }
+}
+.pre-dl-modal-card .rx-btn { width: 100%; }
+.pre-dl-modal-card { background: var(--surface); border-color: var(--rule); }
+.pre-dl-modal-heading { font: var(--t-title); }
+
+/* ── Fields (§9): mono-caps label above; 16 px; focus = ink edge + gold ring;
+   wrong = a 2 px ink edge drawn inside (no shift), the sentence below in ink. */
+.rx-field label { font: var(--t-label); letter-spacing: .14em; text-transform: uppercase; color: var(--fg-subtle); }
+.rx-field input, .si-input, .up-pwf input {
+  font: var(--t-input);
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  transition: border-color var(--d-touch) var(--ease), box-shadow var(--d-touch) var(--ease);
+}
+.rx-field input:focus, .si-input:focus, .up-pwf input:focus { border-color: var(--fg); }
+.rx-field input:focus-visible, .si-input:focus-visible, .up-pwf input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.rx-field input[aria-invalid="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.rx-err { font: var(--t-fine); color: var(--fg); }
+.si-field { margin-top: var(--s6); }
+@media (min-width: 441px) {
+  #unlock-screen .rx-field input, .up-pwf input { width: min(100%, 288px); }
+  .si-input { width: min(100%, 352px); }
+}
+
+/* ── Switch (§9): the track edge is the field edge (3 : 1); the knob moves in the touch. */
+.up-track { border-color: var(--input-border); transition: background-color var(--d-touch) var(--ease), border-color var(--d-touch) var(--ease); }
+.up-track::after { transition: transform var(--d-touch) var(--ease), background-color var(--d-touch) var(--ease); }
+
+/* ── Notice (§9): one sentence, a hairline on the left; gold only on the irreversible line. */
+.rx-once { font: var(--t-body); border-left-color: var(--rule-strong); }
+#destroy-notice { border-left-color: var(--accent); }
+
+/* ── Link box (§9): Plex Mono, two lines then an ellipsis. The clamp is on the inner
+   span, so a third line never shows in the box's padding. Copy copies all of it. */
+.up-linkbox { font: 400 13px/1.5 var(--mono); padding: 12px 14px; }
+.up-linktext {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* ── Hand tip on the progress bar (§12.1, P-3 chosen): a 2 × 9 px gold tip on the fill. */
+.rx-track b::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3px;
+  width: 2px;
+  height: 9px;
+  background: var(--accent);
+}
+.up-slip .rx-track b::after { display: none; }   /* the zipping row's small measure has no hand */
+
+/* ── Phone fold (§4.4): with a file chosen, "Encrypt and upload" is above the fold at
+   375 × 667. Size folds into the File row, the switch rows drop their mono label (the
+   switch says what the row is), rows pad 12. Opening the password field may push the
+   button down: the person moved it (P3). */
+@media (max-width: 440px) {
+  .up-slip .rx-row { padding: var(--s3) var(--s4); }
+  #options-card .rx-actions { margin-top: var(--s5); }   /* slip → button 24 (was 28, off the scale) */
+  .up-sheet[data-view="chosen"] .up-size-inline { display: block; }
+  .up-sheet[data-view="chosen"] .up-slip .rx-row:has(#file-size-tag) { display: none; }
+  .up-slip .rx-row:has(.up-switch) > dt { display: none; }
+}
+/* Smallest phones: "Choose a folder" won't fit half of 320 px on one line — stack the pair. */
+@media (max-width: 360px) {
+  .up-pick { flex-direction: column; align-items: stretch; }
 }

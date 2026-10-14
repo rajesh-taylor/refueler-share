@@ -14,22 +14,13 @@ statusLine: true
 <link rel="modulepreload" href="{{ assetBase }}/share.js">
 <link rel="modulepreload" href="{{ assetBase }}/crypto.js">
 <link rel="modulepreload" href="{{ assetBase }}/fragment.js">
-<link rel="modulepreload" href="{{ assetBase }}/download.js">
 <link rel="modulepreload" href="{{ assetBase }}/config.js">
 <link rel="modulepreload" href="{{ assetBase }}/progress.js">
-<link rel="modulepreload" href="{{ assetBase }}/download-fetch.js">
-<link rel="modulepreload" href="{{ assetBase }}/download-save.js">
-<link rel="modulepreload" href="{{ assetBase }}/download-sheets.js">
-<link rel="modulepreload" href="{{ assetBase }}/download-time.js">
-<link rel="modulepreload" href="{{ assetBase }}/download-notes.js">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async></script>
 {% endblock %}
 {% block main %}
 {% include "share-body.njk" %}
 {% endblock %}
 {% block scripts %}
-<script src="{{ assetBase }}/fflate.min.js" defer></script>
-<script src="{{ assetBase }}/qr-creator.min.js" defer></script>
 <script type="module" src="{{ assetBase }}/share.js"></script>
 <script type="module" src="{{ assetBase }}/status-banner.js"></script>
 {% endblock %}

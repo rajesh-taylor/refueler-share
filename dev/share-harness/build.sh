@@ -18,7 +18,7 @@ cp "$S/$SM_C_ADMIN" "$OUT/io/src/$(echo "$SM_M_ADMIN" | sed 's|^src/||')"   # ca
 cp "$H/turnstile-stub.js" "$A/turnstile-stub.js"
 sed -i '' 's|https://api.share.refueler.io|http://localhost:8766|g' "$A/config.js" "$A/share-early.js" "$OUT/io/src/share/index.njk"
 sed -i '' 's|https://challenges.cloudflare.com/turnstile/v0/api.js[^"]*|/share/assets/turnstile-stub.js|' "$OUT/io/src/share/index.njk"
-sed -i '' "s|https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit|/share/assets/turnstile-stub.js|" "$A/signin.js"
+sed -i '' "s|https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit|/share/assets/turnstile-stub.js|" "$A/signin.js" "$A/upload-turnstile.js"   # X5-1b: upload loads it at the first pick
 sed -i '' 's|https://refueler.io/notes/|http://localhost:8765/notes/|g' "$A/download-notes.js"
 # Part retries wait 2 → 10 s live (~2 min before "Stopped"); 0.2 s each here.
 perl -0pi -e 's/RETRY_DELAYS_MS = \[[^\]]*\]/RETRY_DELAYS_MS = [200, 200, 200, 200, 200]/' "$A/progress.js"

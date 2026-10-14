@@ -605,3 +605,14 @@ Toggle stays live until the full-storage offer is built (Rajesh). **Next:** Shar
 **Closed:** app release `a0e0c7c204` ✓ SHIPPED (app); old page `7bc3e10` ✓ SHIPPED; refueler.io `4f4dff1` suite contrast fix + footer. Speed check on all three engines from Rajesh's Terminal; routine = every release + monthly, Mullvad off then on, `--label`. Next prompt (X5-1b) given in chat.
 **Not done (Rajesh / X5-1b):** every deploy; live checks; Safari, iPhone, Pixel; §2.9 gate.
 **Next:** X5-1b.
+
+## X5-1b (14 Oct 2026) — design carry-ins, calm pass, page weight · built + checked locally, uncommitted at close
+
+**Read:** CLAUDE.md 2.22, X5 plan §2.2 + §2.9, Master Context (X5-1a), last four sessions, design theory §1.3, §4, §7–§13, private note (error reports), app layout + sheets + `frontend/app/*`, `share.css`, `ship-app.sh`, `speed.mjs`.
+**First:** X5-1a live — `ship-app.sh --prove` ✓ `a0e0c7c204`; preflight echoes `share.refueler.io` and `refueler.io`; R2 CORS lists both; refueler.io contrast fix + footer live and pushed.
+**Proposed, then decided (Rajesh):** all as proposed; Turnstile at the first pick (agreed — choosing + options take well over the check); keep `chunk:` / `attempt:` in reports (operational only; nothing an attacker with Analytics Engine access wouldn't already have).
+**Built:** see Master Context §Current state (X5-1b). Found on the way: Worker reply text, exact sizes and file counts also went into reports (now codes only); the phone fold failed at 785 px (fixed to 664); the facts line needs 443 px and the app's slip gives 442 (container query).
+**Checked:** local only — harness full flows (file + password + delete-after-download, receiver dialog, folder), app `dist/` both themes at four widths, dead link, console clean (expected Report-Only line only). Speed local before/after saved (`dev/speed/results/*-local-*.json`).
+**Not done (Rajesh):** commit + ship (frontend, then app); Worker tests with Mullvad off; speed from Terminal (`--label=vpn-off` / `vpn-on`); the §2.9 gate on Safari / iPhone 13 mini / Pixel 9a / non-Apple screen; file-row verdict.
+**Next:** X5-1b gate → X5-2.
+
