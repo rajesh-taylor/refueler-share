@@ -8,7 +8,7 @@
  *   UUID_RE, CHUNK_SIZE_MAX, MANIFEST_SIZE_MAX, MIME_DENYLIST
  *
  * Exports (functions):
- *   corsHeaders(request) → headers object
+ *   corsHeaders(request) → headers object (allowlist: setAppOrigins(env), X5-1)
  *   safeGetManifest(bucket, uuid, env) → { manifest, oversize }
  *   supabaseFetch(env, method, path, body?, extraHeaders?) → Response
  *   json(data, status?) → Response
@@ -71,15 +71,40 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS
 // ─────────────────────────────────────────────────────────────────────────────
+// X5-1: the page origins allowed to call the public API, from var APP_ORIGINS
+// (comma-separated, https only — same parser as AUTH_ORIGINS). Set once per
+// request by setAppOrigins(env) at the top of fetch(); env is fixed for the
+// isolate, so this never carries one request's state into another. Unset or
+// empty falls back to the pre-X5 list. An origin not on the list is answered
+// with the first entry, as before (never an echo).
+const DEFAULT_APP_ORIGINS = ['https://refueler.io'];
+let appOriginList = DEFAULT_APP_ORIGINS;
+
+export function parseOrigins(value) {
+  return String(value ?? '')
+    .split(',').map(s => s.trim()).filter(s => /^https:\/\/[a-z0-9.-]+$/.test(s));
+}
+
+export function setAppOrigins(env) {
+  const list = parseOrigins(env?.APP_ORIGINS);
+  appOriginList = list.length ? list : DEFAULT_APP_ORIGINS;
+}
+
+/** The ACAO value for a public (non-credentialed) response. */
+export function appAllowOrigin(origin) {
+  return appOriginList.includes(origin) ? origin : appOriginList[0];
+}
+
 export function corsHeaders(request) {
   const origin = request.headers.get('Origin') ?? '';
-  const allowed = ['https://refueler.io'];
   // Share-Admin-1: allow any localhost origin for local soak testing.
   // Never reaches production paths — admin test endpoint is X-Admin-Key gated.
+  // Never combined with Allow-Credentials (initiateCors/authCors use exact lists).
   const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-  const allowOrigin = (allowed.includes(origin) || isLocalhost) ? origin : allowed[0];
+  const allowOrigin = isLocalhost ? origin : appAllowOrigin(origin);
   return {
     'Access-Control-Allow-Origin': allowOrigin,
+    'Vary': 'Origin',   // X5-1: the answer now depends on Origin (two app origins)
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Upload-Session, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Api-Sign-Key, X-Transfer-Ref, X-Test-Credential, X-CSRF',
     'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp, X-Integrity, X-Chunk-Index',

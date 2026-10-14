@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <!-- Maskable PWA icon (X5-1): refueler.io favicon.svg's R, full-bleed ground,
+       scaled to 70 % about the centre so it sits inside the 80 % safe zone. -->
+  <rect width="180" height="180" fill="#1A1917"/>
+  <g transform="translate(90 90) scale(0.7) translate(-83 -90)">
+    <rect x="46" y="40" width="13" height="100" fill="#C8A96E" rx="1.5"/>
+    <rect x="59" y="40" width="34" height="52" fill="#C8A96E"/>
+    <ellipse cx="93" cy="66" rx="26" ry="26" fill="#C8A96E"/>
+    <rect x="59" y="49" width="26" height="34" fill="#1A1917"/>
+    <ellipse cx="85" cy="66" rx="18" ry="17" fill="#1A1917"/>
+    <polygon points="68,92 81,92 120,140 107,140" fill="#C8A96E"/>
+  </g>
+</svg>

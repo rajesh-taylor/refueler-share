@@ -55,6 +55,7 @@ import { requireApiAuth, sha256Hex } from './api_auth.js';
 import { quotaSummary }              from './quota.js';
 import { getPool }                   from './api_store.js';
 import { isCharteredTier }           from './tiers.js';
+import { appAllowOrigin }            from './utils.js';
 
 /**
  * handleAuthPing
@@ -71,10 +72,10 @@ export async function handleAuthPing(request, env) {
   } catch (e) {
     if (e instanceof Response) {
       const h = new Headers(e.headers);
-      h.set('Access-Control-Allow-Origin', 'https://refueler.io');
+      h.set('Access-Control-Allow-Origin', pingOrigin(request));
       return new Response(e.body, { status: e.status, headers: h });
     }
-    return jsonError(500, 'auth_check_failed', 'Internal error during auth verification.');
+    return jsonError(request, 500, 'auth_check_failed', 'Internal error during auth verification.');
   }
 
   const apiKeyHash = await sha256Hex(apiKey);
@@ -82,7 +83,7 @@ export async function handleAuthPing(request, env) {
   // ── 2. Tier gate (F8: helper, never a literal) ──────────────────────────
   if (!isCharteredTier(client.tier)) {
     logPingEvent(env, apiKeyHash, 'ping_rejected_wrong_tier');
-    return jsonError(403, 'api_tier_required',
+    return jsonError(request, 403, 'api_tier_required',
       'The Custom House dashboard requires an API-tier credential.');
   }
 
@@ -111,28 +112,34 @@ export async function handleAuthPing(request, env) {
 
   return new Response(JSON.stringify(responseBody), {
     status:  200,
-    headers: corsHeaders(),
+    headers: corsHeaders(request),
   });
 }
 
 // ── CORS preflight ─────────────────────────────────────────────────────────────
-export function handleAuthPingOptions() {
-  return new Response(null, { status: 204, headers: corsHeaders() });
+export function handleAuthPingOptions(request) {
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function jsonError(status, code, message) {
+function jsonError(request, status, code, message) {
   return new Response(JSON.stringify({ ok: false, error: code, message }), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(request) },
   });
 }
 
-function corsHeaders() {
+// X5-1: same APP_ORIGINS allowlist as the public corsHeaders(); no localhost echo here.
+function pingOrigin(request) {
+  return appAllowOrigin(request?.headers?.get('Origin') ?? '');
+}
+
+function corsHeaders(request) {
   return {
     'Content-Type':                 'application/json',
-    'Access-Control-Allow-Origin':  'https://refueler.io',
+    'Access-Control-Allow-Origin':  pingOrigin(request),
+    'Vary':                         'Origin',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, X-Refueler-Timestamp, X-Refueler-Key',
     'Cache-Control':                'no-store',

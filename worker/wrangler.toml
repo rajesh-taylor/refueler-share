@@ -41,10 +41,13 @@ PRICE_MAX_YEARLY_GBP       = "288"
 # Rotate by adding SHARE_SEAL_KEY_2 and flipping this to "2" (src/seal.js).
 SHARE_SEAL_CURRENT         = "1"
 # B12-4a sign-in (B12-SR S6). AUTH_ORIGINS = exact origins allowed credentialed
-# calls (comma-separated, https only, never localhost). X5-2 swaps both URLs to
-# share.refueler.io — no code change. Secret AUTH_PEPPER set via wrangler secret.
+# calls (comma-separated, https only, never localhost). Secret AUTH_PEPPER set via
+# wrangler secret. X5-1: both origins during the parallel run; X5-2 moves
+# AUTH_SIGNIN_URL; X5-2b drops https://refueler.io from both lists.
+# APP_ORIGINS = page origins the public CORS (corsHeaders, auth_ping) echoes.
 AUTH_API_HOST              = "api.share.refueler.io"
-AUTH_ORIGINS               = "https://refueler.io"
+AUTH_ORIGINS               = "https://refueler.io,https://share.refueler.io"
+APP_ORIGINS                = "https://refueler.io,https://share.refueler.io"
 AUTH_SIGNIN_URL            = "https://refueler.io/share/signin/"
 AUTH_MAIL_FROM             = "signin@mail.refueler.io"
 

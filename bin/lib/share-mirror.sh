@@ -22,6 +22,7 @@ SM_ASSETS="$SM_JS $SM_CSS $SM_VENDOR $SM_CANARY"
 SM_C_FRONT="frontend"
 SM_C_NJK="src/index.njk"
 SM_C_SIGNIN="src/signin.njk"             # B12-4a-2: sign-in page (magic-link landing)
+SM_C_BODY="src/_includes/share-body.njk src/_includes/signin-body.njk"  # X5-1: sheets shared with src/app/*.njk; pasted in by sm_render_njk
 SM_C_B3SRC="src/blake3"
 SM_C_ADMIN="worker/src/share/admin/test-upload.html"
 SM_M_ASSETS="src/share/assets"
@@ -57,7 +58,7 @@ sm_files_under() {
 sm_canon_paths() {
   local p="" n
   for n in $SM_ASSETS; do p="$p $SM_C_FRONT/$n"; done
-  echo "$p $SM_C_FRONT/blake3 $SM_C_NJK $SM_C_SIGNIN $SM_C_B3SRC $SM_C_ADMIN"
+  echo "$p $SM_C_FRONT/blake3 $SM_C_NJK $SM_C_SIGNIN $SM_C_BODY $SM_C_B3SRC $SM_C_ADMIN"
 }
 sm_mirror_paths() {
   local p="" n
@@ -68,9 +69,13 @@ sm_mirror_paths() {
 # ── index.njk: canonical → refueler.io rendering (stdout) ─────────────────────
 # Front-matter patches + every root-relative reference to a mirrored asset gets the
 # /share/assets/ prefix. Generic, so a new <script src="/x.js"> can't silently 404.
+# X5-1: a line that is exactly {% include "share-body.njk" %} or {% include "signin-body.njk" %}
+# is replaced by that file (from the same tree's src/_includes/), so refueler.io gets one
+# self-contained page and never needs the include. Other includes are refueler.io's own.
 sm_render_njk() {
-  local script n esc
+  local script n esc incdir
   script="$(mktemp "${TMPDIR:-/tmp}/sm-njk.XXXXXX")"
+  incdir="$(dirname "$1")/_includes"
   {
     echo 's|^permalink: /index\.html$|permalink: /share/index.html|'
     echo 's|^permalink: /signin/index\.html$|permalink: /share/signin/index.html|'
@@ -80,7 +85,14 @@ sm_render_njk() {
       echo "s|\"/$esc\"|\"/share/assets/$n\"|g"
     done
   } > "$script"
-  sed -f "$script" "$1"
+  awk -v incdir="$incdir" '
+    $0 == "{% include \"share-body.njk\" %}" || $0 == "{% include \"signin-body.njk\" %}" {
+      inc = $0; sub(/^{% include "/, "", inc); sub(/" %}$/, "", inc); inc = incdir "/" inc
+      if ((getline line < inc) <= 0) { print "share-mirror: missing " inc > "/dev/stderr"; exit 1 }
+      do print line; while ((getline line < inc) > 0)
+      close(inc); next
+    }
+    { print }' "$1" | sed -f "$script"
   rm -f "$script"
 }
 
@@ -89,6 +101,8 @@ sm_verify_njk() { # sm_verify_njk RENDERED_FILE
   grep -q '^permalink: /share/index\.html$' "$f"          || sm_fail "index.njk: permalink not /share/index.html (HQ2)"
   grep -q '^activePage: "share"$' "$f"                     || sm_fail "index.njk: activePage not \"share\" (HQ2)"
   grep -q 'href="/share/assets/share\.css"' "$f"           || sm_fail "index.njk: CSS href not /share/assets/share.css (HQ2)"
+  grep -q 'include "share-body\.njk"' "$f"                 && sm_fail "index.njk: share-body.njk include not pasted in (refueler.io has no such include)"
+  grep -q 'id="upload-sheet"' "$f"                         || sm_fail "index.njk: rendered page has no upload sheet (share-body.njk empty?)"
   for n in $SM_ASSETS; do
     if grep -qF "\"/$n\"" "$f"; then sm_fail "index.njk: \"/$n\" still root-relative — would 404 on refueler.io"; fi
   done
@@ -98,6 +112,8 @@ sm_verify_signin() { # sm_verify_signin RENDERED_FILE
   local f="$1" n
   grep -q '^permalink: /share/signin/index\.html$' "$f"   || sm_fail "signin.njk: permalink not /share/signin/index.html (AUTH_SIGNIN_URL)"
   grep -q 'src="/share/assets/signin\.js"' "$f"          || sm_fail "signin.njk: script not /share/assets/signin.js"
+  grep -q 'include "signin-body\.njk"' "$f"                && sm_fail "signin.njk: signin-body.njk include not pasted in"
+  grep -q 'id="signin-sheet"' "$f"                         || sm_fail "signin.njk: rendered page has no sign-in sheet"
   for n in $SM_ASSETS; do
     if grep -qF "\"/$n\"" "$f"; then sm_fail "signin.njk: \"/$n\" still root-relative — would 404 on refueler.io"; fi
   done
@@ -116,6 +132,7 @@ sm_check_canon() { # sm_check_canon SHARE_ROOT
   done
   [ -f "$s/$SM_C_NJK" ]   || sm_fail "$SM_C_NJK missing"
   [ -f "$s/$SM_C_SIGNIN" ] || sm_fail "$SM_C_SIGNIN missing"
+  for f in $SM_C_BODY; do [ -f "$s/$f" ] || sm_fail "$f missing"; done
   [ -f "$s/$SM_C_ADMIN" ] || sm_fail "$SM_C_ADMIN missing"
   [ -f "$s/$SM_C_FRONT/blake3/browser-async.js" ] || sm_fail "frontend/blake3/ missing or empty"
   # src/blake3 feeds frontend/blake3 via Eleventy passthrough — an un-built vendor update ships stale WASM

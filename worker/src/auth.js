@@ -131,7 +131,8 @@ export function readSessionCookie(request) {
 
 // ── Origins (S6.6) ───────────────────────────────────────────────────────────
 // AUTH_ORIGINS (wrangler var): comma-separated exact origins allowed to make
-// credentialed calls. X5-2 swaps it to https://share.refueler.io — no code change.
+// credentialed calls. X5-1: both origins (parallel run); X5-2b drops refueler.io.
+// The public, non-credentialed list is APP_ORIGINS (utils.js setAppOrigins).
 // Never a localhost entry in production; never a wildcard.
 
 export function authOrigins(env) {

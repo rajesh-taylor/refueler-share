@@ -1,0 +1,21 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://refueler.io", "https://share.refueler.io"],
+        "methods": ["PUT"],
+        "headers": ["content-type", "content-md5", "content-length"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    },
+    {
+      "allowed": {
+        "origins": ["http://localhost:8181", "http://127.0.0.1:8181"],
+        "methods": ["PUT", "GET", "HEAD"],
+        "headers": ["*"]
+      },
+      "maxAgeSeconds": 86400
+    }
+  ]
+}

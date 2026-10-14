@@ -205,7 +205,7 @@ Turnstile in a sandboxed gate frame, WEBCAT enrolment, Sigsum, app (all Block B)
 
 | Session | Model | Deliverable | Gate |
 |---|---|---|---|
-| X5-1 | Sonnet (Opus if the Worker CORS change grows) | App on `share.refueler.io` (unannounced), `ship-app.sh`, Worker `APP_ORIGINS`, R2 CORS, Turnstile hostname, Cache Rule | §2.9 |
+| X5-1 (split 14 Oct, Rajesh: **1a** = Worker, R2, shared body, layout, `ship-app.sh`, dashboard · **1b** = §2.2 carry-ins + gate) | Sonnet (Opus if the Worker CORS change grows) | App on `share.refueler.io` (unannounced), `ship-app.sh`, Worker `APP_ORIGINS`, R2 CORS, Turnstile hostname, Cache Rule | §2.9 |
 | X5-2 | Sonnet | Cutover + landing + forwarder + pipeline retired + sweep | §3.8, then testers |
 | X5-2b (tiny) | Sonnet | Drop `https://refueler.io` from `APP_ORIGINS` / `AUTH_ORIGINS` / R2 CORS (7 days after X5-2) | curl |
 | Share-Release-1 | Sonnet | Reproducible build, manifest, Verify page, watchdog | two identical builds; watchdog green |

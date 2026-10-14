@@ -4,6 +4,7 @@ description: "Sign in to Refueler Share with a one-time email link."
 permalink: /signin/index.html
 activePage: "share"
 wordmarkSection: "Share"
+sendHref: "/share/"
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -27,72 +28,7 @@ wordmarkSection: "Share"
      Cloudflare's check loads only for the email form (signin.js). -->
 <div class="shell">
   <main id="app">
-    <section class="rx-sheet si-sheet" id="signin-sheet" data-state="">
-
-      <div class="si-for-ask">
-        <div class="rx-eyebrow-row"><p class="rx-eyebrow">Citizen</p><span class="stage-chip"></span></div>
-        <h1 class="rx-head">Sign in.</h1>
-        <p class="rx-lede">We’ll email you a link.</p>
-        <form id="si-form" novalidate>
-          <dl class="rx-ledger">
-            <div class="rx-row">
-              <dt><label for="si-email">Email</label></dt>
-              <dd><input type="email" id="si-email" class="si-input" autocomplete="email" inputmode="email" spellcheck="false" required /></dd>
-            </div>
-          </dl>
-          <div id="si-check" class="si-check"></div>
-          <div class="rx-actions">
-            <button class="rx-btn" id="si-send" type="submit" disabled>Email me a link</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="si-for-sent">
-        <div class="rx-eyebrow-row"><p class="rx-eyebrow">Citizen</p><span class="stage-chip"></span></div>
-        <h1 class="rx-head">Check your email.</h1>
-        <p class="rx-lede">If the address has an account, a link is on its way.</p>
-      </div>
-
-      <div class="si-for-link">
-        <div class="rx-eyebrow-row"><p class="rx-eyebrow">Citizen</p><span class="stage-chip"></span></div>
-        <h1 class="rx-head">Welcome.</h1>
-        <div class="rx-actions">
-          <button class="rx-btn" id="si-enter" type="button">Sign in</button>
-        </div>
-      </div>
-
-      <div class="si-for-expired">
-        <div class="rx-eyebrow-row"><p class="rx-eyebrow">Citizen</p><span class="stage-chip"></span></div>
-        <h1 class="rx-head">This link has expired or was already used.</h1>
-        <div class="rx-actions">
-          <button class="rx-btn" id="si-again" type="button">Email me a new link</button>
-        </div>
-      </div>
-
-      <div class="si-for-in">
-        <div class="rx-eyebrow-row"><p class="rx-eyebrow">Citizen</p><span class="stage-chip"></span></div>
-        <h1 class="rx-head">You’re signed in.</h1>
-        <dl class="rx-ledger">
-          <div class="rx-row"><dt>Signed in until</dt><dd id="si-until">—</dd></div>
-        </dl>
-        <p class="rx-fine up-left">An hour without use signs you out sooner.</p>
-        <div class="rx-actions si-actions">
-          <a class="rx-btn" href="/share/">Send a file</a>
-          <button class="rx-btn up-ghost" id="si-signout" type="button">Sign out</button>
-          <button class="up-link" id="si-everywhere" type="button">Sign out everywhere</button>
-        </div>
-      </div>
-
-      <div class="si-for-out">
-        <div class="rx-eyebrow-row"><p class="rx-eyebrow">Citizen</p><span class="stage-chip"></span></div>
-        <h1 class="rx-head">Signed out.</h1>
-        <div class="rx-actions">
-          <button class="rx-btn up-ghost" id="si-out-again" type="button">Sign in again</button>
-        </div>
-      </div>
-
-      <p class="up-msg" id="si-msg" role="alert" hidden></p>
-    </section>
+{% include "signin-body.njk" %}
   </main>
 </div>
 

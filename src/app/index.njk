@@ -1,0 +1,35 @@
+---
+title: "Refueler Share — encrypted file transfer"
+description: "Encrypted file transfer. Files are encrypted in the browser before upload. No account or email needed."
+permalink: /index.html
+sendHref: "/"
+ioBase: "https://refueler.io"
+accountSlot: true
+statusLine: true
+---
+{% extends "app-layout.njk" %}
+{% block head %}
+<!-- F-23: marks a Share link before the modules load; Safari-Slow-Link-1: starts /meta or preloads the upload modules -->
+<script src="{{ assetBase }}/share-early.js"></script>
+<link rel="modulepreload" href="{{ assetBase }}/share.js">
+<link rel="modulepreload" href="{{ assetBase }}/crypto.js">
+<link rel="modulepreload" href="{{ assetBase }}/fragment.js">
+<link rel="modulepreload" href="{{ assetBase }}/download.js">
+<link rel="modulepreload" href="{{ assetBase }}/config.js">
+<link rel="modulepreload" href="{{ assetBase }}/progress.js">
+<link rel="modulepreload" href="{{ assetBase }}/download-fetch.js">
+<link rel="modulepreload" href="{{ assetBase }}/download-save.js">
+<link rel="modulepreload" href="{{ assetBase }}/download-sheets.js">
+<link rel="modulepreload" href="{{ assetBase }}/download-time.js">
+<link rel="modulepreload" href="{{ assetBase }}/download-notes.js">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async></script>
+{% endblock %}
+{% block main %}
+{% include "share-body.njk" %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ assetBase }}/fflate.min.js" defer></script>
+<script src="{{ assetBase }}/qr-creator.min.js" defer></script>
+<script type="module" src="{{ assetBase }}/share.js"></script>
+<script type="module" src="{{ assetBase }}/status-banner.js"></script>
+{% endblock %}

@@ -18,6 +18,13 @@ import { WORKER_URL, FREE_CAP, CITIZEN_CAP } from './config.js';
 
 const account = { csrf: null, use: false, onChange: () => {} };   // csrf set only for a paid Citizen
 
+// X5-1: the standalone header (share.refueler.io) shows who this browser is from the
+// same single /chambers/session answer — no second request. detail.who: 'citizen' | null.
+// The plan name only, never the email address. Harmless where nothing listens.
+function announce(who) {
+  try { document.dispatchEvent(new CustomEvent('rfs:account', { detail: { who } })); } catch { /* old browser */ }
+}
+
 /** Ask once whether this browser is signed in as a paid Citizen. Silent on any failure. */
 export async function loadAccount(domRefs, onChange) {
   let s = null;
@@ -25,6 +32,7 @@ export async function loadAccount(domRefs, onChange) {
     const r = await fetch(`${WORKER_URL}/chambers/session`, { credentials: 'include', cache: 'no-store' });
     if (r.ok) s = await r.json();
   } catch { /* offline, blocked, or no auth host: Pro Bono, say nothing */ }
+  announce(s && s.kind === 'citizen' ? 'citizen' : null);
   if (!s || s.kind !== 'citizen' || s.tier !== 'max' || typeof s.csrf !== 'string') return;
   account.csrf = s.csrf;
   account.use  = true;
@@ -51,6 +59,7 @@ export function dropAccount(domRefs) {
   account.use  = false;
   if (domRefs.upAccountRow) domRefs.upAccountRow.hidden = true;
   domRefs.uploadSheet.dataset.account = '';
+  announce(null);
   account.onChange();   // re-checks the chosen file against the Pro Bono cap
 }
 

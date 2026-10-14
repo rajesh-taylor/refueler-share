@@ -49,7 +49,7 @@ import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleS
 import {
   UUID_RE, MANIFEST_SIZE_MAX,
   corsHeaders, safeGetManifest, supabaseFetch,
-  json, err, addCors, parseRange, requireAdmin } from './utils.js';
+  json, err, addCors, parseRange, requireAdmin, setAppOrigins } from './utils.js';
 
 import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
@@ -112,6 +112,7 @@ function logEvent(env, {
 // ─────────────────────────────────────────────────────────────────────────────
 export default {
     async fetch(request, env, ctx) {
+    setAppOrigins(env);   // X5-1: corsHeaders() allowlist from var APP_ORIGINS
     // B12-4a: auth routes have their own credentialed, exact-origin CORS and are
     // served on AUTH_API_HOST only (never workers.dev). They skip the public
     // OPTIONS/corsHeaders path, whose localhost echo must never meet credentials.
@@ -172,7 +173,7 @@ export default {
         const challengeResponse = handleCfChallenge(path);
         if (challengeResponse) return challengeResponse;
       }
-      if (request.method === 'OPTIONS' && path === '/api/v1/auth/ping') return handleAuthPingOptions();
+      if (request.method === 'OPTIONS' && path === '/api/v1/auth/ping') return handleAuthPingOptions(request);
       if (request.method === 'GET'     && path === '/api/v1/auth/ping') return handleAuthPing(request, env);
 
       // SW1: white-label config discovery

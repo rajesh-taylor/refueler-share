@@ -1,0 +1,141 @@
+/* ── app.css — share.refueler.io standalone layout (X5-1 · 14 Oct 2026) ────────
+   Loaded after share.css, on the app only (src/_includes/app-layout.njk). The old
+   page (refueler.io/share/) never loads it, so nothing here can change that page.
+   Design: docs/design/share-design-theory-v1.md §4.2–§4.4, §10, §11.
+   X5-1a = header, measure, tokens wired in. The §2.2 carry-ins (link box clamp,
+   dither, hand tip, the touch, components) are X5-1b, also in this file.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* share.css declares its own --rx-* on :root / [data-theme="carbon"]; point them at
+   the one token file instead (same specificity, later file wins). §4.7.5: the old
+   Paper --rx-accent #9A7A3E goes; --rx-danger is ink (§4.6: faults said in ink). */
+:root, [data-theme="carbon"] {
+  --rx-serif:       var(--serif);
+  --rx-sans:        var(--sans);
+  --rx-mono:        var(--mono);
+  --rx-rule:        var(--rule);
+  --rx-rule-strong: var(--rule-strong);
+  --rx-accent:      var(--accent);
+  --rx-danger:      var(--fg);
+}
+
+/* ── Header (§4.4, §10, §11): one 48 px row ─────────────────────────────────── */
+.app-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s3);
+  height: 48px;
+  padding: 0 var(--s5);
+  border-bottom: 1px solid var(--rule);
+}
+.app-brand, .app-head-r { display: inline-flex; align-items: center; gap: var(--s3); min-width: 0; }
+.app-head-r { gap: 20px; }
+/* Wordmark: Source Serif 4 until the Satoshi licence is checked (X5-Plan §2.2). */
+.app-mark {
+  font: 300 19px/1 var(--serif);
+  letter-spacing: -.005em;
+  color: var(--fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.app-mark span { color: var(--fg-muted); margin-left: 5px; }
+/* The chip lives in the header on the app; the eyebrow-row copy is the old page's. */
+.rx-eyebrow-row .stage-chip { display: none; }
+.app-head .stage-chip { padding: 4px 6px 3px; }
+.app-account, .app-theme {
+  font: var(--t-fine);
+  color: var(--fg-muted);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: color var(--d-touch) var(--ease);
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .app-account:hover, .app-theme:hover { color: var(--fg); }
+}
+
+/* ── Status line (no slide-in, no emoji, §7.2 / §4.7.7) ─────────────────────── */
+.app-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  align-items: baseline;
+  padding: var(--s3) var(--s5);
+  border-bottom: 1px solid var(--rule);
+  font: var(--t-fine);
+  color: var(--fg);
+}
+.app-status a, .app-status button {
+  font: var(--t-fine);
+  color: var(--fg-muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px;
+}
+
+/* Maintenance dialog: ink on the raised surface, one Close button. */
+.app-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s4);
+  background: rgba(0,0,0,.6);
+}
+.app-modal-card {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--s6) var(--s5) var(--s5);
+  background: var(--surface);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.app-modal-card h2 { font: var(--t-title); color: var(--fg); }
+.app-modal-card p { font: var(--t-body); color: var(--fg-muted); }
+.app-modal-card button { align-self: flex-start; margin-top: var(--s3); }
+
+/* ── Measure (§4.2): one 480 px sheet, 132 px label column ──────────────────── */
+.shell { min-height: calc(100vh - 49px); padding: var(--s7) var(--s4) var(--s8); }
+main, .rx-mode main { max-width: var(--sheet); }
+.rx-row { grid-template-columns: var(--label-col) minmax(0, 1fr); }
+.rx-row dt { font: var(--t-label); }
+
+/* refueler.io global.css button classes, still used by the receiver's pre-download
+   dialog (download-sheets.js). Mapped onto Share's own button; X5-1b moves that
+   dialog onto .rx-btn and these go. */
+.btn {
+  font: 500 15px var(--sans);
+  border: 0;
+  border-radius: var(--radius);
+  padding: 15px 24px;
+  cursor: pointer;
+  background: var(--fg);
+  color: var(--bg);
+}
+.btn-ghost { background: none; color: var(--fg); border: 1px solid var(--rule-strong); }
+.btn-full { width: 100%; }
+
+/* ── Error pages ───────────────────────────────────────────────────────────── */
+.app-error .rx-lede a { color: var(--fg); }
+
+/* ── Phone (§4.4) ──────────────────────────────────────────────────────────── */
+@media (max-width: 440px) {
+  .app-head { padding: 0 var(--s4); }
+  .app-brand { gap: var(--s2); }
+  .app-head-r { gap: 14px; }
+  .app-status { padding: var(--s3) var(--s4); }
+  .shell { padding: var(--s6) var(--s4) var(--s7); }
+  .rx-row { grid-template-columns: 1fr; }
+}

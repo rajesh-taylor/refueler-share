@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <rect width="180" height="180" fill="#1A1A1A" rx="38"/>
+  <!-- R: stem left=46, stem width=13, bowl height=52, leg diagonal -->
+  <!-- Vertical stem -->
+  <rect x="46" y="40" width="13" height="100" fill="#C8A96E" rx="1.5"/>
+  <!-- Bowl: outer shape — rect + semicircle right side -->
+  <rect x="59" y="40" width="34" height="52" fill="#C8A96E"/>
+  <ellipse cx="93" cy="66" rx="26" ry="26" fill="#C8A96E"/>
+  <!-- Bowl inner cutout -->
+  <rect x="59" y="49" width="26" height="34" fill="#1A1A1A"/>
+  <ellipse cx="85" cy="66" rx="18" ry="17" fill="#1A1A1A"/>
+  <!-- Leg: from bowl base (y=92) diagonal to bottom right -->
+  <polygon points="68,92 81,92 120,140 107,140" fill="#C8A96E"/>
+</svg>
