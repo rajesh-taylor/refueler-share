@@ -67,7 +67,7 @@ export function enterUploadMode(domRefs, state, helpers) {
     clearTimeout(dragTimer);
     document.documentElement.classList.remove('up-dragging');
     dropZone.classList.remove('drag-over');
-    domRefs.upHint.textContent = 'Drop it anywhere on this page';
+    domRefs.upHint.textContent = 'Or drop it anywhere on this page.';
   };
   document.addEventListener('dragover', e => {
     if (!hasFiles(e)) return;
@@ -239,7 +239,7 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
     _resetRows(domRefs); helpers.setView('empty');
     setDropMsg(e.message.includes('nested more than')
       ? e.message
-      : 'The dropped folder couldn’t be read. Try “or a folder” instead.');
+      : 'The dropped folder couldn’t be read. Try “Choose a folder” instead.');
     return;
   }
   if (files.length === 0) { hideZipCard(); _resetRows(domRefs); helpers.setView('empty'); setDropMsg('That folder is empty.'); return; }

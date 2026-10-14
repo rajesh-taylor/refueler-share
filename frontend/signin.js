@@ -115,12 +115,30 @@ function loadTurnstile() {
   }, 200);
 }
 
+// Cloudflare draws the check in light or dark only, fixed when drawn (X5-1a): follow a
+// Carbon/Paper switch like upload-turnstile.js does. A token already held is kept (a redraw
+// would throw it away); the next draw after it is used or expires takes the new colours.
+const pageTheme = () => document.documentElement.getAttribute('data-theme') === 'carbon' ? 'dark' : 'light';
+let turnstileTheme = null;
+let themeWatch = null;
+
 function drawTurnstile() {
   if (turnstileId !== null) return;
+  if (!themeWatch) {
+    themeWatch = new MutationObserver(() => {
+      if (turnstileId === null || turnstileToken || pageTheme() === turnstileTheme) return;
+      try { window.turnstile.remove(turnstileId); } catch { /* already gone */ }
+      turnstileId = null;
+      drawTurnstile();
+    });
+    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  turnstileTheme = pageTheme();
   turnstileId = window.turnstile.render(els.check, {
     sitekey: SITEKEY,
-    theme: document.documentElement.getAttribute('data-theme') === 'carbon' ? 'dark' : 'light',
+    theme: turnstileTheme,
     appearance: 'interaction-only',
+    size: 'flexible',   // full width, like the upload page's check
     callback: (t) => { turnstileToken = t; els.send.disabled = false; },
     'expired-callback': () => { turnstileToken = null; els.send.disabled = true; },
     'error-callback': () => { turnstileToken = null; els.send.disabled = true; },

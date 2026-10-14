@@ -42,12 +42,14 @@
           <div class="rx-row">
             <dt id="up-file-label">File</dt>
             <dd>
+              <!-- Empty: two equal buttons, the drop line second (mouse/trackpad only); no
+                   "File" label until there is a file (Rajesh, 14 Oct — evaluate at X5-1b). -->
               <div class="up-for-empty">
-                <span class="up-hint" id="up-hint">Drop it anywhere on this page</span>
                 <div class="up-pick">
                   <button class="up-fill" id="file-btn" type="button">Choose a file</button>
-                  <button class="up-link" id="folder-btn" type="button">or a folder</button>
+                  <button class="up-fill up-fill-ghost" id="folder-btn" type="button">Choose a folder</button>
                 </div>
+                <span class="up-hint" id="up-hint">Or drop it anywhere on this page.</span>
               </div>
               <div class="up-for-file">
                 <span class="rx-fname"><span id="file-name-tag"></span><button class="up-link up-swap up-for-chosen" id="choose-another-btn" type="button">Choose another</button></span>

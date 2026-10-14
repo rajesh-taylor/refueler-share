@@ -251,17 +251,20 @@ html.up-dragging body::after {
 }
 .up-sheet .up-slip.drag-over .up-for-empty { display: revert; }
 .up-sheet .up-slip.drag-over .up-for-file { display: none; }
-.up-slip.drag-over .up-hint { display: block; }
-.up-slip.drag-over .up-pick { visibility: hidden; }
+.up-slip.drag-over .up-hint { display: block; margin-top: 0; }
+.up-slip.drag-over .up-pick { display: none; }        /* "Release to add." takes the buttons' place */
 .up-facts { margin: 0; padding: 12px 18px; font: 400 13px/1.55 var(--rx-sans); color: var(--fg-muted); }
 .up-facts span { white-space: nowrap; }
 
-.up-hint { display: none; font: 400 15px/1.45 var(--rx-sans); color: var(--fg); }
-/* The drop line only where there's a mouse or trackpad (U-8): phones get the buttons. */
+/* The drop line comes second, as a fine line, and only where there's a mouse or trackpad
+   (U-8): phones get the buttons. (Rajesh, 14 Oct: buttons first, drop line second.) */
+.up-hint { display: none; margin-top: 12px; font: 400 13px/1.5 var(--rx-sans); color: var(--fg-muted); }
 @media (hover: hover) and (pointer: fine) {
   .up-hint { display: block; }
-  .up-pick { margin-top: 12px; }
 }
+/* Empty slip: no "File" label until there is a file — the row is an action, not a fact yet. */
+.up-sheet[data-view="empty"] #up-file-label { display: none; }
+.up-sheet[data-view="empty"] .up-slip .rx-row:first-child { grid-template-columns: minmax(0, 1fr); }
 .up-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .up-fill {
   font: 500 13.5px var(--rx-sans);
@@ -275,6 +278,8 @@ html.up-dragging body::after {
   transition: opacity .2s;
 }
 .up-fill:hover { opacity: .88; }
+/* The second button of a pair: same size, outline only (like Show QR code / Start over). */
+.up-fill-ghost { background: none; color: var(--fg); box-shadow: inset 0 0 0 1px var(--rx-rule-strong); }
 .up-link {
   font: 400 13.5px var(--rx-sans);
   color: var(--fg-muted);
@@ -370,8 +375,7 @@ html.up-dragging body::after {
 @media (max-width: 440px) {
   .up-slip .rx-row { padding: 14px 16px; }
   .up-facts { padding: 12px 16px; }
-  .up-fill { flex: 1 1 100%; padding: 13px 16px; font-size: 14px; }
-  .up-pick .up-link { margin-inline: auto; }
+  .up-fill { flex: 1 1 0; padding: 13px 12px; font-size: 14px; }   /* the pair: two equal halves */
   .up-panel { padding: 18px 16px; }
 }
 
