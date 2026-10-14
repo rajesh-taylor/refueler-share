@@ -19,44 +19,155 @@
   --rx-danger:      var(--fg);
 }
 
-/* ── Header (§4.4, §10, §11): one 48 px row ─────────────────────────────────── */
-.app-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--s3);
-  height: 48px;
-  padding: 0 var(--s5);
+/* ── Header: one refueler.io-style row (Rajesh, 14 Oct) ─────────────────────
+   Same look as refueler.io's global.css header (56 px, Satoshi wordmark, small-caps
+   links, CARBON / PAPER pill), with the app's tokens. Phones: links go to the drawer,
+   and the theme pill moves into it so wordmark · chip · account · menu fit at 320 px. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg);
   border-bottom: 1px solid var(--rule);
+  padding: 0 clamp(20px, 4vw, 48px);
 }
-.app-brand, .app-head-r { display: inline-flex; align-items: center; gap: var(--s3); min-width: 0; }
-.app-head-r { gap: 20px; }
-/* Wordmark: Source Serif 4 until the Satoshi licence is checked (X5-Plan §2.2). */
-.app-mark {
-  font: 300 19px/1 var(--serif);
-  letter-spacing: -.005em;
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.app-brand { display: inline-flex; align-items: center; gap: var(--s3); min-width: 0; }
+.wordmark {
+  font: 600 14px/1 var(--heading);
+  letter-spacing: .06em;
   color: var(--fg);
   text-decoration: none;
   white-space: nowrap;
 }
-.app-mark span { color: var(--fg-muted); margin-left: 5px; }
-/* The chip lives in the header on the app; the eyebrow-row copy is the old page's. */
-.rx-eyebrow-row .stage-chip { display: none; }
-.app-head .stage-chip { padding: 4px 6px 3px; }
-.app-account, .app-theme {
-  font: var(--t-fine);
+.wordmark-divider { font-weight: 300; opacity: .5; margin: 0 8px; }
+.wordmark-section { font-weight: 400; letter-spacing: .08em; opacity: .55; }
+/* The stage chip sits in each sheet's eyebrow row, above the headline (Rajesh, 14 Oct:
+   out of the header, so the header never fights for space). */
+
+.site-nav { display: flex; align-items: center; gap: 32px; }
+.site-nav a, .nav-drawer a {
+  font: 500 11px/1 var(--heading);
+  letter-spacing: .1em;
+  text-transform: uppercase;
   color: var(--fg-muted);
   text-decoration: none;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
   transition: color var(--d-touch) var(--ease);
   white-space: nowrap;
 }
-@media (hover: hover) {
-  .app-account:hover, .app-theme:hover { color: var(--fg); }
+.site-nav a.active, .nav-drawer a.active { color: var(--fg); }
+.theme-pill {
+  font: 500 10.5px/1 var(--heading);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule-strong);
+  border-radius: 100px;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+  transition: border-color var(--d-touch) var(--ease), color var(--d-touch) var(--ease);
 }
+.nav-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--d-touch) var(--ease);
+}
+.nav-hamburger span { display: block; width: 16px; height: 1.5px; background: var(--fg-muted); border-radius: 1px; }
+@media (hover: hover) {
+  .site-nav a:hover, .nav-drawer a:hover { color: var(--fg); }
+  .theme-pill:hover { border-color: var(--fg-muted); color: var(--fg); }
+  .nav-hamburger:hover { border-color: var(--fg-muted); }
+}
+.nav-drawer {
+  display: none;
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+  padding: var(--s4) clamp(20px, 4vw, 48px);
+  flex-direction: column;
+}
+.nav-drawer a { font-size: 12.5px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.nav-drawer .drawer-theme { align-self: flex-start; margin-top: var(--s4); display: none; }
+.site-header.nav-open .nav-drawer { display: flex; }
+
+/* Account (§11): who this browser is — styled as a header link. */
+.app-account.active-account { color: var(--fg); }
+
+@media (max-width: 960px) {
+  .site-nav { gap: 20px; }
+  .site-nav a.nav-secondary { display: none; }
+  .nav-hamburger { display: flex; }
+}
+@media (max-width: 640px) {
+  .site-header { padding: 0 var(--s4); }
+  .site-nav { gap: 12px; }
+  .site-nav a:not(.app-account) { display: none; }   /* links live in the drawer */
+  .site-nav .theme-pill { display: none; }           /* …and so does the theme pill */
+  .nav-drawer { padding: var(--s3) var(--s4) var(--s4); }
+  .nav-drawer .drawer-theme { display: inline-block; }
+  /* Receiver (R-14): no menu, so the pill stays in the header. */
+  .rx-mode .site-nav .theme-pill { display: inline-block; }
+}
+@media (max-width: 420px) {
+  .header-inner { gap: var(--s3); }
+  .app-brand { gap: var(--s2); }
+  .wordmark-divider { margin: 0 5px; }
+  .theme-pill { padding: 6px 10px; letter-spacing: .06em; }
+}
+/* Smallest phones (≤ 360 px): the account link joins the theme pill in the menu. */
+.nav-drawer .drawer-account { display: none; }
+@media (max-width: 360px) {
+  .wordmark { font-size: 13px; letter-spacing: .03em; }
+  .wordmark-divider { margin: 0 3px; }
+  .wordmark-section { letter-spacing: .04em; }
+  .theme-pill { font-size: 9.5px; letter-spacing: .04em; padding: 6px 8px; }
+  .site-nav .app-account { display: none !important; }
+  .nav-drawer .drawer-account:not([hidden]) { display: block; }
+}
+
+/* ── Footer: Plans and Status moved here from the section pill ──────────────── */
+.app-foot {
+  display: flex;
+  flex-direction: row-reverse;      /* markup: links, then note → desktop: note left, links right */
+  flex-wrap: wrap;                  /* when it wraps, the links (first) stay on top */
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--s5) clamp(20px, 4vw, 48px) var(--s6);
+  border-top: 1px solid var(--rule);
+  font: var(--t-fine);
+  color: var(--fg-subtle);
+}
+.app-foot nav { display: flex; flex-wrap: wrap; gap: var(--s5); }
+@media (max-width: 640px) {
+  .app-foot { flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; }
+}
+.app-foot a { color: var(--fg-muted); text-decoration: none; transition: color var(--d-touch) var(--ease); }
+@media (hover: hover) { .app-foot a:hover { color: var(--fg); } }
 
 /* ── Status line (no slide-in, no emoji, §7.2 / §4.7.7) ─────────────────────── */
 .app-status {
@@ -107,7 +218,7 @@
 .app-modal-card button { align-self: flex-start; margin-top: var(--s3); }
 
 /* ── Measure (§4.2): one 480 px sheet, 132 px label column ──────────────────── */
-.shell { min-height: calc(100vh - 49px); padding: var(--s7) var(--s4) var(--s8); }
+.shell { min-height: calc(100vh - 57px - 80px); padding: var(--s7) var(--s4) var(--s8); }
 main, .rx-mode main { max-width: var(--sheet); }
 .rx-row { grid-template-columns: var(--label-col) minmax(0, 1fr); }
 .rx-row dt { font: var(--t-label); }
@@ -132,9 +243,6 @@ main, .rx-mode main { max-width: var(--sheet); }
 
 /* ── Phone (§4.4) ──────────────────────────────────────────────────────────── */
 @media (max-width: 440px) {
-  .app-head { padding: 0 var(--s4); }
-  .app-brand { gap: var(--s2); }
-  .app-head-r { gap: 14px; }
   .app-status { padding: var(--s3) var(--s4); }
   .shell { padding: var(--s6) var(--s4) var(--s7); }
   .rx-row { grid-template-columns: 1fr; }

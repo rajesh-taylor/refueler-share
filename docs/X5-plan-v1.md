@@ -51,7 +51,7 @@ Goal: the full app running on the new origin **in parallel** with `refueler.io/s
 
 - **Header** (§4.4, §10, §11): one 48 px row — SVG wordmark "Refueler Share" · stage chip `Pre-alpha` · right: account slot · theme toggle. Fits at 375 px. Chip **moves from the eyebrow row to the header** on the app page; the word stays in `share.css` `::before` (one place). Chip not a link until the landing page exists (X5-2). Receiver: no account slot.
 - **Account** (§11): header = who (`Citizen` / `Sign in`); slip "Send as" row = what this upload uses. **The live "Send without my account" toggle stays** until Chambers-Design designs the full-storage offer (§11.1a); X5-1 restyles it, doesn't remove it.
-- **Tokens** (§4.5–§4.7, §6.5): one rebuilt `share-tokens.css` (contrast fixes both themes, warm Carbon surfaces, solid field edges, `--accent` gold `#C8A96E` / `#7A5F2E`, `--attention` reserved and unused, no `--danger`/`--warn`/`--success`, `--rx-*` folded in). The old mirror keeps loading the old file (refueler.io `global.css` takes its own fixes when refueler.io unfreezes).
+- **Tokens** (§4.5–§4.7, §6.5): one rebuilt `share-tokens.css` (contrast fixes both themes, warm Carbon surfaces, solid field edges, `--accent` gold `#C8A96E` / `#7A5F2E`, `--attention` reserved and unused, no `--danger`/`--warn`/`--success`, `--rx-*` folded in). The old mirror keeps loading the old file (refueler.io `global.css` took the suite contrast fix on 14 Oct 2026 (X5-1a)).
 - **Type and measure** (§4.1–§4.4): seven-step scale, 480 px sheet, 132 px label column, spacing scale, width rules, phone fold rule (button above the fold at 375 × 667).
 - **Carried in from the design sessions:** link box two-line clamp **on an inner span** (§9) · one-sentence link-ready lede (§5.3, §13) · Carbon **Dial 1 % + dither** (static PNG tile, `img-src 'self'`), Paper flat (§12.1) · hand tip on the progress bar (§12.1) · the touch: 200 ms, one tone step (§13) · motion tokens + never-move list incl. the `status.css` pulse and `banner-in` (§7) · components (§9) · emoji out of banner/modal, "Got it" → "Close" (§4.7.7) · small bugs: day count round vs floor (`share.js:254`, `download-time.js:37`), curly apostrophe on the finished screen (§1.3).
 - **Fonts:** self-hosted WOFF2 in `/v/<sha>/fonts/`: Source Serif 4 300, DM Sans variable 300–500, IBM Plex Mono 400/500, Latin subset; OFL texts shipped beside them. **Wordmark:** inline SVG paths (Satoshi outlined) — X5-1 checks the Satoshi licence (Fontshare / ITF FFL) allows an outlined logo; if not, set the wordmark in Source Serif 4.
@@ -197,7 +197,7 @@ Order matters; each step is reversible until step 9.
 
 ## 6. Not in Block A
 
-Turnstile in a sandboxed gate frame, WEBCAT enrolment, Sigsum, app (all Block B) · Nostr relay hosts (Nostr build) · removing the "Send without my account" toggle (Chambers-Design → X5-1 or B12-4b) · full Chambers account page · refueler.io `global.css` contrast fixes (when refueler.io unfreezes) · Legend token fixes (refueler-legend session) · streaming download service worker (DL track) · `require-trusted-types-for 'script'` (try at B12-Audit).
+Turnstile in a sandboxed gate frame, WEBCAT enrolment, Sigsum, app (all Block B) · Nostr relay hosts (Nostr build) · removing the "Send without my account" toggle (Chambers-Design → X5-1 or B12-4b) · full Chambers account page · Legend token fixes (refueler-legend session) · streaming download service worker (DL track) · `require-trusted-types-for 'script'` (try at B12-Audit).
 
 ---
 

@@ -21,6 +21,7 @@
 <script src="{{ assetBase }}/theme-early.js"></script>
 <link rel="preload" href="{{ assetBase }}/fonts/source-serif-4-300.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="preload" href="{{ assetBase }}/fonts/dm-sans-var.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="{{ assetBase }}/fonts/Satoshi-Variable.woff2" as="font" type="font/woff2" crossorigin />
 {% block head %}{% endblock %}
 <link rel="stylesheet" href="{{ assetBase }}/share-tokens.css" />
 <link rel="stylesheet" href="{{ assetBase }}/share.css" />
@@ -29,15 +30,37 @@
 
 <body class="app{% if bodyClass %} {{ bodyClass }}{% endif %}">
 
-<header class="app-head">
-  <span class="app-brand">
-    <a class="app-mark" href="/" aria-label="Refueler Share, send a file">Refueler<span>Share</span></a>
-    <span class="stage-chip"></span>
-  </span>
-  <span class="app-head-r">
-    {% if accountSlot %}<a class="app-account" id="app-account" href="/signin/" hidden></a>{% endif %}
-    <button class="app-theme" id="app-theme" type="button" aria-label="Switch theme"></button>
-  </span>
+<!-- Header (X5-1a, Rajesh 14 Oct): one refueler.io-style row — "Refueler / Share" in Satoshi,
+     the refueler.io site links (absolute; plain navigations), the account slot
+     and the CARBON / PAPER pill. No section pill: Plans and Status live in the footer.
+     Rebuilt in the app's own files (app.css, app-header.js) — no refueler.io CSS/JS, no onclick. -->
+<header class="site-header" id="site-header">
+  <div class="header-inner">
+    <span class="app-brand">
+      <a href="/" class="wordmark" aria-label="Refueler Share, send a file">Refueler<span class="wordmark-divider">/</span><span class="wordmark-section">Share</span></a>
+    </span>
+    <nav class="site-nav" aria-label="Refueler">
+      <a href="/" class="active nav-here">Share</a>
+      <a href="https://refueler.io/legend/">Legend</a>
+      <a href="https://refueler.io/notes/">Notes</a>
+      <a href="https://refueler.io/editorial/" class="nav-secondary">Editorial</a>
+      <a href="https://refueler.io/support/" class="nav-secondary">Support</a>
+      <a href="https://refueler.io/privacy/" class="nav-secondary">Privacy</a>
+      {% if accountSlot %}<a class="app-account" id="app-account" href="/signin/" hidden></a>{% endif %}
+      <button class="nav-hamburger" id="nav-hamburger" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-drawer"><span></span><span></span><span></span></button>
+      <button class="theme-pill" id="app-theme" type="button" aria-label="Switch between Carbon and Paper">Carbon / Paper</button>
+    </nav>
+  </div>
+  <div class="nav-drawer" id="nav-drawer">
+    <a href="/" class="active">Share</a>
+    <a href="https://refueler.io/legend/">Legend</a>
+    <a href="https://refueler.io/notes/">Notes</a>
+    <a href="https://refueler.io/editorial/">Editorial</a>
+    <a href="https://refueler.io/support/">Support</a>
+    <a href="https://refueler.io/privacy/">Privacy</a>
+    {% if accountSlot %}<a class="app-account drawer-account" id="app-account-drawer" href="/signin/" hidden></a>{% endif %}
+    <button class="theme-pill drawer-theme" id="app-theme-drawer" type="button" aria-label="Switch between Carbon and Paper">Carbon / Paper</button>
+  </div>
 </header>
 
 {% if statusLine %}
@@ -53,6 +76,16 @@
 {% block main %}{% endblock %}
   </main>
 </div>
+
+<footer class="app-foot">
+  <nav aria-label="More">
+    <a href="https://refueler.io/share/plans/">Plans</a>
+    <a href="https://refueler.io/share/status/">Status</a>
+    <a href="https://refueler.io/privacy/">Privacy</a>
+    <a href="https://refueler.io/support/">Support</a>
+  </nav>
+  <span>© 2026 Refueler Ltd (incorporating) · refueler.io</span>
+</footer>
 
 {% block scripts %}{% endblock %}
 <script type="module" src="{{ assetBase }}/app-header.js"></script>

@@ -260,7 +260,7 @@ Today: upload chosen ≈ 55 words; link ready ≈ 50; receiver ready ≈ 20; upl
 2. **Sign-in eyebrow** → **keep "Citizen".** §11's account indicator uses the same word.
 3. **Link box** → **two lines**, Copy and QR carry the whole link (component in §9).
 4. **Paper field fill** → **lighter than the page, `#F3EEE6`.**
-5. **Token ownership after X5** → **split.** Share's standalone build owns one `share-tokens.css` from X5-1; refueler.io's `global.css` takes the contrast fixes separately when refueler.io unfreezes.
+5. **Token ownership after X5** → **split.** Share's standalone build owns one `share-tokens.css` from X5-1; refueler.io's `global.css` takes the contrast fixes separately — done 14 Oct 2026 (X5-1a: `--fg-subtle` both themes, warm Carbon surfaces and field, solid field edges).
 6. **Legend's stale token block** → **fixed with the suite contrast fix** (one session in `refueler-legend`), not before.
 7. **Accent hue** → gold (decided earlier the same day). Legend's spec carries a pointer to §4.6.
 

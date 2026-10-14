@@ -29,6 +29,11 @@ CSP_FILE="$ROOT/bin/lib/app-csp.txt"
 DIST="$ROOT/dist"
 APP_SRC="$ROOT/frontend/app"
 PROVE_TIMEOUT="${PROVE_TIMEOUT:-300}"
+# Satoshi (header only): ITF Free Font License v2.0 allows self-hosting on our own site but not
+# redistribution, so the official WOFF2 is gitignored and lives only on this Mac. Hash = the file
+# from Fontshare's Satoshi zip, unmodified (no subsetting or conversion allowed).
+SATOSHI="$APP_SRC/fonts/Satoshi-Variable.woff2"
+SATOSHI_SHA256="e739aff9b4d02c264341d6d4872edcda28e79373aeda936f659566a1cd3eb47f"
 
 die()  { echo "" >&2; echo "✗ $*" >&2; exit 1; }
 step() { echo "▶ $*"; }
@@ -76,6 +81,8 @@ live_release() {
 build() {
   local sha="$1" prev="$2" tmp
   step "build dist/ (release $sha${prev:+, keeping $prev})"
+  [ -f "$SATOSHI" ] || die "Satoshi missing: $SATOSHI — download the Satoshi zip from fontshare.com and copy Fonts/WEB/fonts/Satoshi-Variable.woff2 there (never commit it)"
+  [ "$(sm_hash "$SATOSHI")" = "$SATOSHI_SHA256" ] || die "Satoshi-Variable.woff2 is not the official file (hash differs) — the licence forbids modified copies"
   rm -rf "$DIST"
   ( cd "$ROOT" && APP_SHA="$sha" npx --no-install eleventy --config=eleventy.app.js --quiet ) >/dev/null \
     || die "Eleventy build failed: cd $ROOT && APP_SHA=$sha npx eleventy --config=eleventy.app.js"
@@ -85,6 +92,7 @@ build() {
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/ship-app-prev.XXXXXX")"
     git -C "$ROOT" archive --format=tar "$prev" -- frontend | tar -x -C "$tmp"
     copy_release "$tmp" "$DIST/v/$prev"
+    cp "$SATOSHI" "$DIST/v/$prev/fonts/Satoshi-Variable.woff2"   # gitignored: not in the archive
     rm -rf "$tmp"
   fi
   write_headers
@@ -123,6 +131,8 @@ check() {
   for f in $(sm_files_under "$APP_SRC"); do
     cmp -s "$APP_SRC/$f" "$DIST/v/$sha/$f" || sm_fail "release $f is not frontend/app/$f"
   done
+  git -C "$ROOT" ls-files --error-unmatch "frontend/app/fonts/Satoshi-Variable.woff2" >/dev/null 2>&1 \
+    && sm_fail "Satoshi is tracked by git — the licence forbids distributing it: git rm --cached frontend/app/fonts/Satoshi-Variable.woff2"
   for f in $(find "$DIST/v/$sha" -maxdepth 1 \( -name '*.js' -o -name '*.css' \) | LC_ALL=C sort); do
     if grep -q 'sourceMappingURL' "$f"; then sm_fail "${f#$DIST/} has a sourceMappingURL line"; fi
   done

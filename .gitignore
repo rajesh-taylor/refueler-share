@@ -42,3 +42,8 @@ refueler-share-financial-model.xlsx
 Claude outputs/
 *.timestamp-*.mjs
 frontend/signin/
+
+# X5-1a: Satoshi (ITF Free Font License v2.0) may be self-hosted on our own site but NOT
+# distributed through a repository or other public channel. Kept on Rajesh's Mac only;
+# bin/ship-app.sh copies it into each release and checks its hash (official file, unmodified).
+frontend/app/fonts/Satoshi-*
