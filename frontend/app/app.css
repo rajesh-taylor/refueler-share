@@ -340,7 +340,7 @@ main, .rx-mode main { max-width: var(--sheet); }
 @media (max-width: 440px) {
   .up-slip .rx-row { padding: var(--s3) var(--s4); }
   #options-card .rx-actions { margin-top: var(--s5); }   /* slip → button 24 (was 28, off the scale) */
-  .up-sheet[data-view="chosen"] .up-size-inline { display: block; }
+  .up-sheet[data-view="chosen"] .rx-row dd small.up-size-inline { display: block; }
   .up-sheet[data-view="chosen"] .up-slip .rx-row:has(#file-size-tag) { display: none; }
   .up-slip .rx-row:has(.up-switch) > dt { display: none; }
 }
