@@ -1,7 +1,7 @@
 {
   "base": "https://share.refueler.io",
   "when": "2026-10-14T11:11:40.587Z",
-  "label": "vpn-off",
+  "label": "vpn-on",
   "runs": 3,
   "slow": false,
   "release": "a0e0c7c204",
@@ -252,5 +252,6 @@
         ]
       }
     }
-  }
+  },
+  "note": "Run with --label=vpn-off by mistake; Mullvad was ON (Rajesh, 14 Oct). Filename corrected."
 }
