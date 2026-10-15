@@ -1,5 +1,5 @@
 // X5-1 — public CORS answers both app origins during the parallel run
-// (refueler.io/share/ and share.refueler.io). docs/X5-plan-v1.md §2.7.
+// (refueler.io/share/ until X5-2b, and share.refueler.io). docs/X5-plan-v1.md §2.7.
 // Allowlist = var APP_ORIGINS, set once per request by setAppOrigins(env).
 // Credentials stay exact AUTH_ORIGINS on AUTH_API_HOST only; localhost never gets them.
 

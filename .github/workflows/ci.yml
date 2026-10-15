@@ -30,7 +30,7 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
-      # ── Eleventy build check ─────────────────────────────────────────────
+      # ── Eleventy build check (the app's HTML, eleventy.app.js) ──────────
       - name: Eleventy build
         run: npm run build
 

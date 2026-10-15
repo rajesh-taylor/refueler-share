@@ -1,6 +1,6 @@
 // ── frontend/signin.js — the sign-in page (B12-4a-2 · 13 Oct 2026) ───────────
 // Design: docs/B12-SR-spec-v1.md S6.2 / S6.3 / S6.6. Served at
-// refueler.io/share/signin/ (= Worker AUTH_SIGNIN_URL), from src/signin.njk.
+// share.refueler.io/signin/ (= Worker AUTH_SIGNIN_URL), from src/app/signin.njk.
 //
 //   no fragment, signed out  → email + Cloudflare check → "Check your email"
 //                              (same words whatever the address)

@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.22 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** X5-1a · 14 Oct 2026
+> **Version:** 2.23 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** X5-2 · 15 Oct 2026
 > Load alongside `share-sessions.md` at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -61,7 +61,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Mint: the Worker stays the mint (Research-Review-2 · 11 Oct 2026; closes the CDK question).** The Worker holds `k` for every keyset, so uploads never depend on Hetzner; the node only sells credits. No CDK/Nutshell (no phoenixd backend; a sat mint with melt = custody). Reopen only for sat-denominated ecash, a maintained phoenixd processor for CDK, or a move to an LDK node. Credits are one-way vouchers: no melt, no swap endpoint.
 - **The whole `dleq` field never reaches the server** (NUT-12: `e,s` link a proof to its signature as well as `r`). The browser strips it; `verifyProofV2` refuses unknown fields — keep it so.
 - Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
-- **No analytics script on any refueler.io host (Rajesh, X5-1a · 14 Oct 2026).** Cloudflare Web Analytics / RUM is **disabled** for the whole zone (the free plan has no per-host rules; automatic setup injected a beacon into refueler.io/share/). Traffic numbers come only from Cloudflare's server-side HTTP Traffic analytics, which the proxy sees anyway. Never re-enable it. **Share pages (`refueler.io/share/`, `share.refueler.io`) load no analytics or session-replay script of any kind** — not even refueler.io's own first-party `analytics.js` (`analytics.refueler.io`, loaded on refueler.io's homepage/Notes/Privacy/Support pages; kept — Rajesh, 14 Oct: site pages aren't a product; analytics is decided per product, Legend when its time comes). `ship-app.sh` fails if anything is injected into the app's HTML.
+- **No analytics script on any refueler.io host (Rajesh, X5-1a · 14 Oct 2026).** Cloudflare Web Analytics / RUM is **disabled** for the whole zone (the free plan has no per-host rules; automatic setup injected a beacon into refueler.io/share/). Traffic numbers come only from Cloudflare's server-side HTTP Traffic analytics, which the proxy sees anyway. Never re-enable it. **Share pages (`share.refueler.io`, and the `refueler.io/share/` landing page) load no analytics or session-replay script of any kind** — not even refueler.io's own first-party `analytics.js` (`analytics.refueler.io`, loaded on refueler.io's homepage/Notes/Privacy/Support pages; kept — Rajesh, 14 Oct: site pages aren't a product; analytics is decided per product, Legend when its time comes). `ship-app.sh` fails if anything is injected into the app's HTML.
 - **No upload-time file-type (MIME) check exists.** The Content-Type denylist lived only on the Worker-relay chunk path, retired at Share-6-6b; direct-to-R2 uploads never sent a type. Retired as a claim (Rajesh, Cred-Fix-1 · 26 Sep 2026) — do not assert it in any copy. The Worker never learns or stores the file type. `MIME_DENYLIST` in `utils.js` is unused; Share-MIME-1 removes it and re-checks public copy.
 - **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
 - **Upload credential = credential format v2, a standard Cashu proof `{id, amount: 1, secret, C}` (Cred-Fix-2 · 5 Oct 2026).** Worker `verifyProofV2` (`worker/src/nut00.js`): `Y = hash_to_curve(utf8(secret))`, `k·Y == C`, serial `hex(Y)`; anything else 401, nothing spent. Browser and Worker both use `@cashu/cashu-ts` (exact pin) — the browser via vendored `frontend/cashu-crypto.js`, rebuilt only by `bin/vendor-cashu.sh`. Upgrade both pins together. No hand-rolled curve maths. Browser checks the NUT-12 DLEQ proof; key not pinned until the anonymous rail. Note: `docs/Cred-verification-note-v1.md`.
@@ -74,7 +74,7 @@ All five are `type="module"`. Do not collapse back into a single file.
 - **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
 - **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
 - **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
-- **Own origin + served-code integrity (Served-Code-Opus · 10 Oct 2026).** Share moves to `share.refueler.io` with its own Pages project and no mirror into refueler.io (X5 = Block A, Master Context row 16a). **Until X5-2 ships, the deploy surfaces and frontend checklist below stand unchanged.** **Parallel run (X5-1a):** the app is `src/app/*.njk` + `frontend/app/` (app-only files) → `dist/`, shipped by `bin/ship-app.sh` (Rajesh runs it; ends `✓ SHIPPED (app)`). The sheets live once in `src/_includes/share-body.njk` / `signin-body.njk` — edit there, never in `index.njk`. A change to shared JS/CSS ships twice: `ship-frontend.sh`, then `ship-app.sh`. CSP = `bin/lib/app-csp.txt` only. **Header (Rajesh, 14 Oct):** one refueler.io-style row on the app — "Refueler / Share" in Satoshi, refueler.io site links, account slot, CARBON / PAPER pill (the Pre-alpha chip stays in each sheet's eyebrow row, never the header); no Send · Plans · Status pill (Plans + Status in the footer; footer = links then © line on phones, matching refueler.io's footer type since 14 Oct); phones: links + pill in the menu, receiver keeps the pill. **Satoshi** (ITF Free Font License v2.0): self-hosted on the app only, the official `Satoshi-Variable.woff2` unmodified, **never committed or published** (no redistribution via repo or release) — gitignored at `frontend/app/fonts/`, hash-checked by `ship-app.sh`. **Speed:** `node dev/speed/speed.mjs` (Playwright from the Mac; no user telemetry) at each release. Every key-handling product gets its own origin; no master app. WEBCAT/app = Block B (V2). Never claim "verified"; the Verify page explains how to check, it never "proves".
+- **Own origin + served-code integrity (Served-Code-Opus · 10 Oct 2026).** Share moves to `share.refueler.io` with its own Pages project and no mirror into refueler.io (X5 = Block A, Master Context row 16a). **X5-2 shipped 15 Oct 2026:** the app is `src/app/*.njk` + `frontend/` (+ `frontend/app/`) → `dist/`, shipped by `bin/ship-app.sh` only (Rajesh runs it; ends `✓ SHIPPED (app)`); the refueler.io mirror and its pipeline are gone; CSP **enforced** = `bin/lib/app-csp.txt` only; stage chip reads **Alpha** and links to `refueler.io/share/#alpha`. The sheets live once in `src/_includes/share-body.njk` / `signin-body.njk`. X5-2b (22 Oct) drops `https://refueler.io` from `AUTH_ORIGINS`, `APP_ORIGINS`, R2 CORS and the Turnstile hostnames. **Header (Rajesh, 14 Oct):** one refueler.io-style row on the app — "Refueler / Share" in Satoshi, refueler.io site links, account slot, CARBON / PAPER pill (the stage chip stays in each sheet's eyebrow row, never the header); no Send · Plans · Status pill (Plans + Status in the footer; footer = links then © line on phones, matching refueler.io's footer type since 14 Oct); phones: links + pill in the menu, receiver keeps the pill. **Satoshi** (ITF Free Font License v2.0): self-hosted on the app only, the official `Satoshi-Variable.woff2` unmodified, **never committed or published** (no redistribution via repo or release) — gitignored at `frontend/app/fonts/`, hash-checked by `ship-app.sh`. **Speed:** `node dev/speed/speed.mjs` (Playwright from the Mac; no user telemetry) at each release. Every key-handling product gets its own origin; no master app. WEBCAT/app = Block B (V2). Never claim "verified"; the Verify page explains how to check, it never "proves".
 - **No OHTTP — Nostr relays for private requests and notifications (Served-Code-Opus · 10 Oct 2026).** Third-party relays only, never our own; one key per job (per transfer / per Quay, never a personal npub); sender notification key random, never derived from the link key; notification never control flow; relay login (NIP-42) only ever with a per-job key, never an identity key (Research-Review-3 · 11 Oct 2026). Copy says "collected" — never "delivered", "opened" or "proof of delivery"; a notice "expires", never "deleted" (relays ignored NIP-09/NIP-62 in the live test). Rules + features: Master Context row 19.
 
 **Tier model (locked SW-Opus-1 · 7 Sep 2026):**
@@ -103,13 +103,11 @@ All five are `type="module"`. Do not collapse back into a single file.
 - One API keypair per commercial relationship. No sub-keys. Rotation via `POST /api/v1/keys/rotate` (24h grace window).
 - Webhooks are notification, never control flow. Credential issuance and transfer completion proceed identically whether the client webhook endpoint is up or down.
 - DO NOT use Cloudflare Queues, Durable Objects, or D1 for webhook delivery or any other purpose. `ctx.waitUntil` + KV dead-letter only.
-- Badge links to `refueler.io/share/`.
+- Badge links to `refueler.io/share/` (the landing page, since X5-2).
 - **CF for SaaS enabled on `refueler.io` zone (SW1 · 8 Sep 2026).** Fallback origin: `fallback.share.refueler.io`. Custom hostname: `api.share.refueler.io`. hostname_id: `d1d04abe-854c-48a0-8afe-bca47dfb0c3b`. ssl_id: `a3bd125f-f48c-4226-9e7c-d26e77fbaa90`. API token: `refueler-share-saas` (Zone → SSL and Certificates → Edit, scoped to `refueler.io`). Worker route: `api.share.refueler.io/*` in `wrangler.toml`. `wl_config.js` is the host-lookup module — add new client hostnames to `WL_CONFIGS` there.
 - API tier invoiced manually via Stripe invoice template. No subscription price object for API tier — invoice template only, managed manually in Stripe dashboard, off-repo.
 - `X-Email` header dropped from upload path entirely.
-- `frontend/index.html` is a local-preview build of `src/index.njk` — gitignored, never served or mirrored. Edit `src/index.njk`. The pages.dev-era `src/status.njk`, `src/upgrade.njk` and their `frontend/*.html` were removed (Share-Cleanup-1, F-3); refueler.io owns Status, Plans and `/upgrade.html`.
-- `refueler-io/src/share/index.njk` must have `permalink: /share/index.html` — never `/index.html`.
-- `refueler-io/src/share/index.njk` CSS href must be `/share/assets/share.css` — never `/share.css`. Both are produced by `bin/sync-share.sh` rendering canonical `src/index.njk` — never edit the refueler.io copy directly (CI and the pre-push hook flag it stale; the next ship overwrites it).
+- **The app is `src/app/*.njk` + `src/_includes/{app-layout,share-body,signin-body}.njk` + `frontend/` → `dist/`** (X5-2, 15 Oct 2026). The old `src/index.njk` / `src/signin.njk` mirror pages, `.eleventy.js` and `src/blake3/` were deleted. refueler.io owns Status, Plans, `/upgrade.html` and the `/share/` landing page (`refueler-io/src/share/index.njk`, `permalink: /share/index.html`, edited in that repo directly).
 
 **API feature gates (locked SW-Opus-1 · 7 Sep 2026):**
 - **v1 (ships in SW block):** capability discovery (`GET /api/v1/capabilities`), OTS-confirmation webhook, acceptance receipts + collection receipts. "Proof of delivery" retired — unprovable, never claim it.
@@ -184,7 +182,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 - **Names (X3 · 9 Oct 2026):** Harbourmaster = Silent Drop Quay owner (Locke sign-in) only; Chartered org admin = Custom House; Navy Office live-transfer view = Execution Dock.
 - **Auth follows rail, not surface name.** Registered → magic link (15-min, single-use, fragment + click) + `__Host-rfs_session` cookie + CSRF + exact-origin credentialed CORS. Bearer → Locke (B8). No magic link ever reaches a Bearer principal. The `localhost` CORS echo is never combined with `Allow-Credentials`.
 - **B12-4a-1 locks (13 Oct 2026):** sign-in tokens + sessions live in Supabase `auth_tokens` / `auth_sessions` (BLAKE3 hashes only, no IP/UA, functions only) — never KV, never cached. Auth routes (`/auth/*`, `/chambers/session`) are served on `AUTH_API_HOST` only and use `authCors()` (exact `AUTH_ORIGINS`, credentials) — never `corsHeaders()`. Public CORS (`corsHeaders()`, `auth_ping.js`) echoes only var `APP_ORIGINS`, set once per request by `setAppOrigins(env)` (X5-1a); X5-2 moves `AUTH_SIGNIN_URL`, X5-2b drops `https://refueler.io` from `AUTH_ORIGINS`, `APP_ORIGINS` and R2 CORS (`docs/X5-plan-v1.md` §2.7, §3). `AUTH_PEPPER` is never used directly: HKDF subkeys `refueler.share.csrf.v1` / `refueler.share.rl.v1`. New authenticated routes gate on `requireSession()` (`handlers/auth.js`). Email = **Cloudflare Email Sending** (binding `EMAIL`, from `signin@mail.refueler.io`, own DMARC `p=reject`; email preview **off** — it would store live links). **workers.dev is off — keep it off** (cookie must never be valid there). Stripe webhook = `https://api.share.refueler.io/webhook/stripe`. **Stripe lookup keys stay `share-max-*`**: the webhook derives the tier from them (wire `max`; display "Citizen").
-- **B12-4a-2 locks (13 Oct 2026):** the tier at initiate is **resolved, never declared**: `api` only after `requireApiAuth`; `max` only from a Citizen S6 session (cookie + `X-CSRF` + exact Origin, on `AUTH_API_HOST`) whose `citizen_entitlement` is paid (status active **and** `current_period_end` in the future — null = unpaid); everything else `free`. `TIER_CAPS` = one wire name per tier: `free` 4 GiB · `max` 100 GiB · `api` 250 GiB. Citizen quota = own account-of-one (`kind 'registered'`, 3,200 chunks = 100 GiB held), `quota_ref` tag `refueler.share.quotaref.citizen.v1` ‖ 0x00 ‖ utf8(`cus_…`), provisioned only on `quota_not_provisioned` (provision overwrites the limit). Citizen 402 = exact figures; Chartered 402 = band. The browser sends the cookie on **initiate only** (`credentials: 'include'` there and on `/auth/*` + `/chambers/session`; nowhere else), and only while "Uploading as Citizen" is chosen; "Send without my account" = Pro Bono, no cookie, no `X-CSRF`. Initiate credentials CORS only for exact `AUTH_ORIGINS` on `AUTH_API_HOST` (`initiateCors`). Rate-limit KV keys are `rl:{endpoint}:{rlId}` — never a raw IP/email/UUID. Sign-in page = `src/signin.njk` + `frontend/signin.js` at `refueler.io/share/signin/` (= `AUTH_SIGNIN_URL`), mirrored by `share-mirror.sh` (`SM_C_SIGNIN`); one button **"Sign in"** under "Welcome." — no "Chambers" on any button (the one-click rule is the lock, not the word).
+- **B12-4a-2 locks (13 Oct 2026):** the tier at initiate is **resolved, never declared**: `api` only after `requireApiAuth`; `max` only from a Citizen S6 session (cookie + `X-CSRF` + exact Origin, on `AUTH_API_HOST`) whose `citizen_entitlement` is paid (status active **and** `current_period_end` in the future — null = unpaid); everything else `free`. `TIER_CAPS` = one wire name per tier: `free` 4 GiB · `max` 100 GiB · `api` 250 GiB. Citizen quota = own account-of-one (`kind 'registered'`, 3,200 chunks = 100 GiB held), `quota_ref` tag `refueler.share.quotaref.citizen.v1` ‖ 0x00 ‖ utf8(`cus_…`), provisioned only on `quota_not_provisioned` (provision overwrites the limit). Citizen 402 = exact figures; Chartered 402 = band. The browser sends the cookie on **initiate only** (`credentials: 'include'` there and on `/auth/*` + `/chambers/session`; nowhere else), and only while "Uploading as Citizen" is chosen; "Send without my account" = Pro Bono, no cookie, no `X-CSRF`. Initiate credentials CORS only for exact `AUTH_ORIGINS` on `AUTH_API_HOST` (`initiateCors`). Rate-limit KV keys are `rl:{endpoint}:{rlId}` — never a raw IP/email/UUID. Sign-in page = `src/app/signin.njk` + `frontend/signin.js` at `share.refueler.io/signin/` (= `AUTH_SIGNIN_URL` since X5-2; `refueler.io/share/signin/` forwards there until 12 Jan 2027); one button **"Sign in"** under "Welcome." — no "Chambers" on any button (the one-click rule is the lock, not the word).
 - **Bearer-rail Chartered follows Sovereign (X2):** no Supabase row, no `org_dock`, no `qref_ct`.
 - **Sovereign ledger never leaves the user's control.** Refueler never stores a Chambers blob. Portability = Deed + user-held backup file, or QR pairing with a 6-digit check code (ephemeral secp256k1 ECDH via `@noble/secp256k1` — no new curve lib). Domain tags `refueler.share.chambers.*` — never shared with the refueler.io merchant implementation of the same protocol.
 - **Chambers + lodge page move to a dedicated origin with strict CSP (X5)** before the Sovereign ledger ships.
@@ -198,7 +196,7 @@ Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (securit
 See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
 Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
 
-**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 ✓ → Design-Theory-Opus-1/-2 (PreAlpha chip folded in) → Block A (X5-Plan → X5-1 → X5-2 → Share-Release-1) → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
+**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 ✓ → Design-Theory-Opus-1/-2 (PreAlpha chip folded in) → Block A (X5-Plan ✓ → X5-1 ✓ → X5-2 ✓ 15 Oct → X5-2b 22 Oct → Tester-Programme-Opus → Share-Release-1) → Design-Nav-Opus sessions (no limit) → Chambers-Design → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
 
 **TH-block ✓ complete (6 Sep 2026):**
 - TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped
@@ -236,53 +234,65 @@ git commit -m "message" && git push
 Rajesh consistently forgets the push step. Claude must always include `&& git push` in the
 commit command at session close, without being asked.
 
-**Deploy surfaces (corrected Share-DAD-1, enforced Share-Sync-1 · 25 Sep 2026):**
+**Deploy surfaces (rewritten X5-2 · 15 Oct 2026; was the refueler.io mirror, Share-Sync-1):**
 
 1. **`refueler-share` Worker** (`api.share.refueler.io`) — `npm run deploy` from `worker/`. Not
-   Git-connected; pushing does nothing here.
-2. **`refueler.io/share/`** — the ONLY public frontend, served by the Git-connected `refueler-io`
-   repo. Share frontend reaches it ONLY via `bin/ship-frontend.sh`.
-3. **`refueler-share.pages.dev`** — orphaned Pages project (Share's pre-`refueler.io/share/` home,
-   retired for SEO — one domain for the suite). No Git connection, CORS-blocked from the API.
-   Deletion blocked by Cloudflare (too many deployments, code 8000076) — parked. Dead wood:
-   NEVER `wrangler pages deploy` to it, never verify against it. A "success" there proves nothing.
+   Git-connected; pushing does nothing here. Rajesh runs it.
+2. **`share.refueler.io`** — the ONLY place Share's frontend is served. Cloudflare Pages project
+   `refueler-share-app`, **direct upload** (never Git-connected), reached ONLY via `bin/ship-app.sh`.
+   Rajesh runs it. Its `refueler-share-app.pages.dev` alias is in no allowlist — never link it, never verify there.
+3. **refueler.io** (Git-connected `refueler-io` repo; pushing `main` deploys) owns Share's
+   **landing page `/share/`**, **Plans**, **Status**, `/upgrade.html`, Navy Office, and
+   `share/forward.js` (carries old `refueler.io/share/?uuid=…#…` and `/share/signin/#t=…` links to
+   share.refueler.io; fixed destination, never reads the fragment; **remove 12 Jan 2027**). Its
+   `/share/` + `/share/signin/` CSP allows refueler.io's inline theme script and two nav `onclick`s by
+   hash (`src/_headers`) — change `head.njk`'s script or a nav `onclick` → recompute the hash there.
+4. **`refueler-share.pages.dev`** — orphaned Pages project (Share's pre-refueler.io home). No Git
+   connection, CORS-blocked from the API. Deletion blocked by Cloudflare (code 8000076) — parked.
+   Dead wood: NEVER `wrangler pages deploy` to it, never verify against it.
 
-`git push` in `refueler-share` deploys nothing public — and pushing `main` is **blocked** by the
-pre-push hook unless refueler.io's pushed `main` already serves the same frontend.
+`git push` in `refueler-share` deploys nothing public. There is no pre-push hook any more
+(`git config --unset core.hooksPath` once, X5-2).
 
 ---
 ## Frontend change checklist — mandatory
 
-Applies to ANY change to a mirrored path: `frontend/*.js`, `frontend/*.css`, `frontend/blake3/`,
-`src/index.njk`, `src/blake3/`, `worker/src/share/admin/test-upload.html`.
+Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3/`), `src/app/`,
+`src/_includes/`, `eleventy.app.js` or `bin/lib/app-csp.txt`.
 
-1. Ship with ONE command — commits, syncs, pushes both repos, then proves the bytes are live:
-   `/Users/rajeshtaylor/Documents/refueler-share/bin/ship-frontend.sh "message"`
-   It must end `✓ SHIPPED`. Anything else = not shipped, whatever GitHub or wrangler says.
-2. Then eyeball behaviour at **https://refueler.io/share/** (the script proves bytes, not behaviour):
+1. Commit and push (`git commit -m "…" && git push`), then ship with ONE command — build → check →
+   deploy → prove: `/Users/rajeshtaylor/Documents/refueler-share/bin/ship-app.sh`
+   It must end `✓ SHIPPED (app)`. Anything else = not shipped, whatever GitHub or wrangler says.
+   (`--check` = build + checks only, safe anywhere; `--prove` = is the live site serving `dist/`?)
+2. Then eyeball behaviour at **https://share.refueler.io/** (the script proves bytes, not behaviour) —
+   Safari on the Mac with Mullvad on first:
    a. Share URL contains `?uuid=` and a non-empty `#` fragment
    b. Pasting that URL in a new tab shows the receiver card — NOT the upload screen
    c. File name, size, and expiry are populated on the receiver card
    d. For error-state changes: trigger the actual error condition live and read the
       rendered text/UI directly — do not infer correctness from the diff alone
-3. If the change touches passphrase flow: verify unlock screen appears on paste.
+   e. Console: no `Content-Security-Policy` errors from our own files (errors inside Cloudflare's
+      Turnstile frame, `flexible?lang=auto`, are Turnstile's own CSP and not ours)
+3. If the change touches the password flow: verify the unlock screen appears on paste.
+4. Speed: `node dev/speed/speed.mjs` (`--label=vpn-off`, then `--label=vpn-on-daita`) from Rajesh's Terminal.
 
-**Enforced, not remembered (Share-Sync-1):**
-- The mirrored file list lives in ONE place: `bin/lib/share-mirror.sh`. A new `frontend/*.js` or
-  `*.css` not listed fails every check loudly (the merkle.js / Share-6-3d trap). Add it there, same session.
-- `bin/githooks/pre-push` blocks pushing `main` unless refueler.io's PUSHED `main` matches.
-  Activated by `git config core.hooksPath bin/githooks`; `ship-frontend.sh` re-asserts it every run.
-- `--no-verify` is pointless: `.github/workflows/mirror-check.yml` re-checks on every push and every
-  6 h (committed mirror only — the live byte check runs in ship-frontend.sh from the Mac). Red = run `ship-frontend.sh`.
-- `bin/sync-share.sh` on its own only copies into refueler.io's working tree. It deploys NOTHING.
-- Never edit refueler.io's `src/share/assets/*`, `src/share/index.njk` or
-  `src/share/admin/test-upload.html` directly. Refueler.io-owned exceptions: `plans.css`, `navy-office.*`.
-- `test-upload.html` is now in the pipeline (to `src/share/admin/`, never `assets/`) — supersedes the
-  Share-Admin-1 "never add to sync-share.sh" rule; its intent (never in the public assets mirror) holds.
-- Diagnostics: `bin/sync-share.sh --check` (repos) · `bin/sync-share.sh --live` (public site).
-  Status codes prove nothing — refueler.io answers a missing asset with 200 + the homepage.
-- Pipeline doubt? Edit `frontend/mirror-canary.txt` and ship. Never test the pipeline with app code.
-- **Browser cache (Share-Cache-1 · 26 Sep 2026):** Cloudflare Cache Rule on refueler.io — `(http.host eq "refueler.io" and starts_with(http.request.uri.path, "/share/assets/"))`, Browser TTL = Respect origin TTL. Without it the zone Browser Cache TTL rewrites Pages' `max-age=0` to 4 h and browsers run old/mixed ES modules after a ship. Dashboard-only (off-repo); `sm_live_cache` fails `ship-frontend.sh` if it's lost. Never delete it; never add `max-age` > 0 for `/share/assets/*` in refueler.io `_headers`.
+**Enforced, not remembered:**
+- The release asset list lives in ONE place: `bin/lib/app-assets.sh`. A top-level `frontend/*.js`
+  or `*.css` not listed fails `ship-app.sh` and CI (the merkle.js / Share-6-3d trap). Add it there, same session.
+- `ship-app.sh` refuses: inline `<script>`, `on*=` or `style=` in built HTML; a `_headers` CSP that
+  isn't byte-equal to `bin/lib/app-csp.txt` (**enforced** since X5-2); a missing `! Link` or
+  `no-transform`; Satoshi tracked by git. Live: CSP exact, no Report-Only, no `X-Robots-Tag`, no
+  `Link`, `max-age=0`, real 404.
+- CI: `.github/workflows/app-check.yml` runs `bin/ship-app.sh --ci` (same build + checks, an empty
+  stand-in for the never-committed Satoshi, no deploy) alongside `ci.yml`. The live byte check runs
+  only from the Mac (in `ship-app.sh`) until Share-Release-1's public watchdog.
+- Versioned assets: every release lives at `/v/<sha>/` and the previous one is kept, so a tab open
+  across a ship still loads its own modules.
+- **Browser cache:** Cloudflare Cache Rule `http.host eq "share.refueler.io"` → Browser TTL = Respect
+  origin (dashboard, off-repo); `ship-app.sh` fails if responses become browser-cacheable. The old
+  refueler.io `/share/assets/` Cache Rule was removed at X5-2 (nothing is served there now).
+- Local preview of every state: `dev/share-harness/` (builds the real app, fake Worker, stub Turnstile).
+- Admin tooling never goes on share.refueler.io. `worker/src/share/admin/test-upload.html` is local-only.
 
 **Incident record:** DAD-ERROR-TEXT (Share-DAD-1, 25 Sep 2026) — a correct fix deployed to the wrong
 target three times before reaching refueler.io. A green log on the wrong project is not verification.

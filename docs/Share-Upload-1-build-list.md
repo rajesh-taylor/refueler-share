@@ -1,4 +1,7 @@
 # Share-Upload-1 — upload page + Share sub-menu build list
+
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Session:** Share-Upload-1 · 28 Sep 2026 (design, no code changed)
 > **Status:** Design approved by Rajesh (mock v3, 28 Sep). Share-Deps-1 ✓ (F-20, F-21, 28 Sep). **Share-Upload-2 ✓ (6 Oct): Part 1 (refueler.io `580135c`) + Part 2 B1 (`565efd9`), live-verified. B2 (behaviour) → Share-Upload-3.** **Share-Upload-3 ✓ (6 Oct): B2 items 1–4 (`4bb3fde`, `627c0d0`).** **Share-Upload-4 ✓ (6 Oct): F-11 + Try again (`2fb1b30`); Turnstile theme follow (`fa3b2a1`).** Statuses per item in §3.
 > **Mock:** https://claude.ai/artifact/MAQmeQhhM3KieZo1Cr2FYg (private; v1 = A/B, v2 = open sheet, v3 = empty ledger) · repo copy `docs/drafts/share-upload-mock-v3.html`

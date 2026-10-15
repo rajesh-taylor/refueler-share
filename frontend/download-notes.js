@@ -4,8 +4,9 @@
 
 import { RX_SETTLE_MS } from './download-sheets.js';
 
-// Newest Notes article, shown on the finished screen (R-10/R-11). Same site as
-// refueler.io/share/. A missing file answers 200 + the homepage, so only a body
+// Newest Notes article, shown on the finished screen (R-10/R-11). Cross-origin since X5-2:
+// refueler.io sends Access-Control-Allow-Origin: https://share.refueler.io for this file, and the
+// app CSP lists https://refueler.io in connect-src. A missing file answers 200 + the homepage, so only a body
 // that parses and passes every check below becomes a card.
 const NOTES_LATEST_URL = 'https://refueler.io/notes/latest.json';
 const NOTES_URL_PREFIX = 'https://refueler.io/notes/';

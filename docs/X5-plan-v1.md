@@ -3,6 +3,7 @@
 > **X5-Plan · 13 Oct 2026** (Opus, planning, no code). Builds on Served-Code-Opus (Master Context row 16a, `docs/research/served-code-and-ohttp-2026-10.md`) and the design theory (`docs/design/share-design-theory-v1.md` §4, §7–§13).
 > Sessions: **X5-1** (build on the real host, unannounced) → **X5-2** (cutover, invite testers) → **Share-Release-1** (release discipline).
 > Decisions in §8 were taken by Rajesh in this session.
+> **Status (15 Oct 2026):** X5-1 ✓, **X5-2 ✓** (steps 1–8; step 9 invites wait for Tester-Programme-Opus). As built, X5-2 differs from §3 in four places: step 3 shipped with step 5 (the chip link needs the landing page); refueler.io keeps `share-tokens.css` + `status.css` (Plans and Status load them); the landing CSP is scripts-only with hashes (refueler.io's header has one inline script and two `onclick`s); CI runs `ship-app.sh --ci` (Satoshi is never committed). Mentions below of the mirror pipeline describe the plan, not the repo today.
 
 ---
 

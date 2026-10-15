@@ -1,5 +1,7 @@
 # Share design theory — v1
 
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Parts 1 and 2** · Design-Theory-Opus-1 + -2 · 13 Oct 2026 · **Proposals only — nothing here is locked until Rajesh agrees it section by section.** Decided items are marked *Decided (Rajesh, date)*.
 > Part 1 (§1–§6): audit, competitors, principles, type / colour / layout, copy. Part 2 (§7–§12): motion, haptics, components, the stage chip, the account indicator, the A/B plan.
 > Built for X5-1: Share's standalone layout at `share.refueler.io` is built once, to these rules. **Share and Legend share one watchmaker aesthetic** — each Part 2 section ends with how it applies to Legend.

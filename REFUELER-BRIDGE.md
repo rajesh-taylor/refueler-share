@@ -10,7 +10,7 @@
 
 Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (solo founder, London). Operating within UK jurisdictional law. Not a fintech product. Not a loyalty app.
 
-**Products:** Share (anonymous encrypted file transfer, live at `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant terminal (Fenchurch St line cafés and restaurants — tablet, counter/kitchen, landscape) · **Relay** (`io.refueler.merchant`, formerly NumoPay fork — in-venue order entry, Android phone, floor/waiter staff, portrait) · Refueler Pass (Lightning-native ticketing and venue access — own repo + Claude project) · **Refill** (consumer app, React Native, LNbits Lightning — commuter pre-orders + Legend + Pass)
+**Products:** Share (anonymous encrypted file transfer, live at `share.refueler.io` since 15 Oct 2026; landing page `refueler.io/share/`) · Legend (privacy-first Bitcoin block explorer, post-B9) · Merchant terminal (Fenchurch St line cafés and restaurants — tablet, counter/kitchen, landscape) · **Relay** (`io.refueler.merchant`, formerly NumoPay fork — in-venue order entry, Android phone, floor/waiter staff, portrait) · Refueler Pass (Lightning-native ticketing and venue access — own repo + Claude project) · **Refill** (consumer app, React Native, LNbits Lightning — commuter pre-orders + Legend + Pass)
 
 **Product names locked CC-103:** Floor staff Android app = Relay ("Relay by Refueler"). Consumer app = Refill.
 
@@ -33,20 +33,20 @@ Refueler is a suite of Bitcoin-native privacy products built by Rajesh Taylor (s
 ### Share boundary
 | `refueler-io` | `refueler-share` |
 |---|---|
-| All Nunjucks templates at `refueler.io/share/*` | Cloudflare Worker (`worker/src/index.js`), `wrangler.toml` |
+| refueler.io's own Share pages: landing `/share/`, Plans, Status, `share/forward.js` (old links, until 12 Jan 2027) | Cloudflare Worker (`worker/src/index.js`), `wrangler.toml`; the app at `share.refueler.io` (`src/app/`, `frontend/`, `bin/ship-app.sh`) |
 | `share-nav.njk`, `share-footer.njk`, `share.js`, `blake3/` | BLAKE3 source + build tooling |
 | Admin dashboard pages `src/share/admin/` | Admin Worker endpoints |
 | Notes articles at `refueler.io/notes/` | `notes-articles-list.md` (editorial planning) |
 **MCP server boundary:** `refueler-mcp` is a separate repo (`/Users/rajeshtaylor/Documents/refueler-mcp/`). Runs in the agent's trust domain — not in `refueler-share`. Handles ciphertext only. Apache 2.0. One repo serves all Refueler products. SW-MCP-1 shipped `ab7e010` (12 Sep 2026).
 
-**Dual-repo asset sync (SYNC-1 · 31 Aug 2026, incident + enforcement note added Share-DAD-1 · 25 Sep 2026):** `share.js`, `share.css`, `share-tokens.css`, `status.css`, `fflate.min.js`, `qr-creator.min.js`, `blake3/` exist in both repos. **`refueler-share/frontend/` is canonical.** `refueler.io/src/share/assets/` is the mirror. Mirror copies carry a `GENERATED FILE` header — never edit them directly. Sync tool: `bin/sync-share.sh` in `refueler-share` (**path: `bin/sync-share.sh`**, not repo root). Run after every edit to any shared asset. `plans.css` is io-only and excluded from sync. **Incident (Share-DAD-1):** a correct frontend fix (DAD-ERROR-TEXT) was deployed to two wrong targets — the `refueler-share` Worker and the ungit-connected `refueler-share.pages.dev` — before the sync/push-from-`refueler-io` step was identified as the actual missing action. Full account: `share-sessions.md` §Share-DAD-1. A pre-push hook to block unsynced pushes is planned (`Share-Sync-1`, not yet built) — it will not automate the required second `git push` from `refueler-io`, which stays manual.
+**[Historical — retired at X5-2, 15 Oct 2026: Share is served only from share.refueler.io, shipped by `bin/ship-app.sh`; nothing is mirrored into refueler-io any more.]** **Dual-repo asset sync (SYNC-1 · 31 Aug 2026, incident + enforcement note added Share-DAD-1 · 25 Sep 2026):** `share.js`, `share.css`, `share-tokens.css`, `status.css`, `fflate.min.js`, `qr-creator.min.js`, `blake3/` exist in both repos. **`refueler-share/frontend/` is canonical.** `refueler.io/src/share/assets/` is the mirror. Mirror copies carry a `GENERATED FILE` header — never edit them directly. Sync tool: `bin/sync-share.sh` in `refueler-share` (**path: `bin/sync-share.sh`**, not repo root). Run after every edit to any shared asset. `plans.css` is io-only and excluded from sync. **Incident (Share-DAD-1):** a correct frontend fix (DAD-ERROR-TEXT) was deployed to two wrong targets — the `refueler-share` Worker and the ungit-connected `refueler-share.pages.dev` — before the sync/push-from-`refueler-io` step was identified as the actual missing action. Full account: `share-sessions.md` §Share-DAD-1. A pre-push hook to block unsynced pushes is planned (`Share-Sync-1`, not yet built) — it will not automate the required second `git push` from `refueler-io`, which stays manual.
 
 **Share index.njk locked rules (HQ2 · 2 Sep 2026) — three values that must never revert:**
 - `permalink: /share/index.html` — never `/index.html` (conflicts with site root `src/index.njk`)
 - CSS href: `/share/assets/share.css` — never `/share.css` (CSS lives at `/share/assets/`, not root)
 - `activePage: "share"` — never `""` (nav conditionals for PLANS/STATUS depend on this)
 
-**`index.njk` is synced by `bin/sync-share.sh`** — run it after any template change.
+~~**`index.njk` is synced by `bin/sync-share.sh`**~~ — retired X5-2 (15 Oct 2026); the app ships with `bin/ship-app.sh`.
 The script patches the four repo-specific values (permalink, activePage, CSS href, asset
 paths) automatically and verifies the three HQ2 invariants on every run. Do not apply
 manual sed patches to `refueler.io/src/share/index.njk` — the script owns that file.
@@ -188,7 +188,7 @@ manual sed patches to `refueler.io/src/share/index.njk` — the script owns that
 - **[Lightning — ALL projects] LNbits on Hetzner CAX21 LOCKED.** Next: NB-2 (provision + phoenixd + Cloudflare Tunnel — refueler-share project).
 - **[Share] Locked block sequence:** `SW-MCP (complete 1–6) → SW-MCP-8 (npm distribution) → B8-Opus (NUT-11 Mode 2 / Locke design lock) → [Hetzner commitment] → NB-2–NB-4 → B7 → B8 build → SD-block → B9 build`. B9-Opus complete (12 Sep 2026) — design locked ahead of build.
 - **[All products] Remove all Blink references** from merchant handover docs, Worker secrets, and config files. Replace `BLINK_API_KEY` / `BLINK_SHARE_API_KEY` with `LNBITS_URL` / `LNBITS_API_KEY`. Execute at NB-5 for refueler-io; at B7-S74 for Share Worker. Remaining: Worker secrets + `LIGHTNING_STATE_LABELS` display text in `dashboard.js` (update at B7-S74 when node live).
-- **[Share] Run `bin/sync-share.sh`** after every edit to any shared frontend asset.
+- **[Share] Ship frontend changes with `bin/ship-app.sh`** (since X5-2, 15 Oct 2026; `sync-share.sh` is retired).
 - **Open Revolut Business account** ← Stripe fiat commission payout destination (before first real merchant).
 - **Create Refueler Crypto Ops Ledger** ← sats + GBP equivalent columns (Ops wallet created at NB-3).
 - Upgrade Supabase to Pro at first real merchant.

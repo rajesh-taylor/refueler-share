@@ -289,7 +289,7 @@ allocation with a hard reset** (full mechanics locked in §7.4):
   "payment": {
     "method": "out_of_band_v1",
     "instructions": "identity: request a credit top-up (or wait for your monthly reset) from your Refueler account. anonymous: buy a credit block on the dashboard and add the credits to this MCP's local config.",
-    "dashboard_url": "https://refueler.io/share/",
+    "dashboard_url": "https://share.refueler.io/",
     "offer": null            // reserved for BOLT12 offer — B9+, always null in v1
   }
 }
@@ -717,7 +717,7 @@ server's twin is `src/crypto.js`, gated on the same vectors in
   browser-side OTS pipeline (`frontend/timestamp.js`) the server does not implement,
   so writing `s` without running it would hand the recipient a nonce for a seal that
   was never made. `refueler_send_file` returns `not_supported` and points at
-  refueler.io/share/.
+  share.refueler.io (moved from refueler.io/share/ at X5-2, 15 Oct 2026).
 - **Send / upload (MCP send tool AND consumer `upload.js`):** build the blob above;
   send `X-File-Name: "encrypted-payload"` (a **constant** placeholder — not random;
   random only adds entropy the Worker would log for no gain) to the Worker. The

@@ -198,7 +198,7 @@ Next update: [specific time UTC]
 
 ### Homepage persistent indicator
 
-A small status widget in the bottom-right corner of `refueler.io/share`. Always visible. Three states:
+A small status widget in the bottom-right corner of the Share app (`share.refueler.io`; was `refueler.io/share` until X5-2). Always visible. Three states:
 
 - **Green** (default): "All systems operational"
 - **Amber**: "Service degraded — see status page"

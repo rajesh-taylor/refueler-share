@@ -1,6 +1,6 @@
 /* ── app.css — share.refueler.io standalone layout (X5-1 · 14 Oct 2026) ────────
-   Loaded after share.css, on the app only (src/_includes/app-layout.njk). The old
-   page (refueler.io/share/) never loads it, so nothing here can change that page.
+   Loaded after share.css (src/_includes/app-layout.njk). Since X5-2 (15 Oct 2026) the
+   app is the only Share page; refueler.io/share/ is a landing page that loads none of this.
    Design: docs/design/share-design-theory-v1.md §4.2–§4.4, §10, §11.
    X5-1a = header, measure, tokens wired in. X5-1b = calm pass + the §2.2 carry-ins
    (link box clamp, hand tip, the touch, components) at the end of this file.

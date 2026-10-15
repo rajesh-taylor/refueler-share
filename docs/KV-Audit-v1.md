@@ -1,4 +1,7 @@
 # KV-Audit-v1 — every STATUS_KV key against B12-SR X1
+
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Session:** KV-Audit-Opus (Opus, design only, no code) · 8 Oct 2026
 > **Rule audited:** B12-SR X1 — KV is compromised for **write** as well as read. No KV value may authorise access, lift a limit or select a privileged branch unless it is MAC'd under a Worker secret (or moved to Supabase).
 > **Scope:** every `env.STATUS_KV` call in `worker/src` (the only KV binding), plus the pages that render KV-sourced data. Live KV census (key names only) on 8 Oct: 107 keys, 13 prefixes in use.

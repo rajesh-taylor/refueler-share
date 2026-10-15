@@ -14,14 +14,13 @@ yarn-error.log*
 
 # Build output
 dist/
-# …except the vendored BLAKE3 WASM bundle: it ships to refueler.io/share/ and must be
-# canonical + verifiable here (Share-Sync-1). Without these, the live WASM had no source in git.
+# …except the vendored BLAKE3 WASM bundle: it ships in every app release and must be
+# verifiable here (Share-Sync-1; frontend/VENDORED.md). Without this, the live WASM had no source in git.
 !frontend/blake3/dist/
-!src/blake3/dist/
 build/
-# Local-preview page `npm run build` writes from src/index.njk. Never served or mirrored:
-# refueler.io/share/ is rendered from src/index.njk itself (Share-Cleanup-1, F-3).
+# Old local-preview page (the src/index.njk build, retired X5-2). Kept ignored so a stale copy never gets committed.
 frontend/index.html
+frontend/signin/
 .wrangler/
 
 # OS

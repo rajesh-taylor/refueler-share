@@ -148,7 +148,7 @@ in the URL fragment and must be transmitted to the recipient by a separate chann
 ```json
 {
   "transfer_id": "uuid",
-  "share_url": "https://refueler.io/share/#fragment...",
+  "share_url": "https://share.refueler.io/?uuid=…#fragment...",
   "expires_at": 1234567890,
   "sat_cost": 10,
   "balance_remaining_sats": 48190,

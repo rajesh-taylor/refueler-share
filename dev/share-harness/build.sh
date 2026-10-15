@@ -1,26 +1,23 @@
 #!/bin/bash
-# Share-Upload-2 preview harness: refueler.io (current working tree) + canonical Share page,
-# pointed at the fake Worker on :8766 and a stub Turnstile. Output: $OUT/io/_site (served on :8765).
+# Share preview harness: the real app build (bin/ship-app.sh --check → dist/), pointed at the
+# fake Worker on :8766 and a stub Turnstile. Output: $OUT/app (served on :8765).
+# X5-2 (15 Oct 2026): rebuilt on dist/ — it used to render the old refueler.io mirror page.
 set -euo pipefail
 H="$(cd "$(dirname "$0")" && pwd)"; OUT="$H/.out"
 S="$(cd "$H/../.." && pwd)"
-IO="${REFUELER_IO_ROOT:-$(cd "$S/../refueler.io" && pwd)}"
-. "$S/bin/lib/share-mirror.sh"
-rm -rf "$OUT/io/src"; mkdir -p "$OUT/io"
-cp -R "$IO/src" "$OUT/io/src"; cp "$IO/eleventy.config.js" "$IO/package.json" "$OUT/io/"
-[ -e "$OUT/io/node_modules" ] || ln -s "$IO/node_modules" "$OUT/io/node_modules"
-A="$OUT/io/src/share/assets"
-for n in $SM_ASSETS; do [ -f "$S/frontend/$n" ] && cp "$S/frontend/$n" "$A/$n"; done
-rm -rf "$A/blake3"; cp -R "$S/frontend/blake3" "$A/blake3"
-sm_render_njk "$S/src/index.njk" > "$OUT/io/src/share/index.njk"
-mkdir -p "$OUT/io/src/share/signin"; sm_render_njk "$S/$SM_C_SIGNIN" > "$OUT/io/src/share/signin/index.njk"   # B12-4a-2
-cp "$S/$SM_C_ADMIN" "$OUT/io/src/$(echo "$SM_M_ADMIN" | sed 's|^src/||')"   # canonical admin page, not the mirror's
+"$S/bin/ship-app.sh" --check >/dev/null
+rm -rf "$OUT/app"; mkdir -p "$OUT"; cp -R "$S/dist" "$OUT/app"; rm -f "$OUT/app/_headers"
+REL="$(sed -n 's|.*src="/v/\([0-9a-z]*\)/share.js".*|\1|p' "$OUT/app/index.html" | head -1)"
+A="$OUT/app/v/$REL"
 cp "$H/turnstile-stub.js" "$A/turnstile-stub.js"
-sed -i '' 's|https://api.share.refueler.io|http://localhost:8766|g' "$A/config.js" "$A/share-early.js" "$OUT/io/src/share/index.njk"
-sed -i '' 's|https://challenges.cloudflare.com/turnstile/v0/api.js[^"]*|/share/assets/turnstile-stub.js|' "$OUT/io/src/share/index.njk"
-sed -i '' "s|https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit|/share/assets/turnstile-stub.js|" "$A/signin.js" "$A/upload-turnstile.js"   # X5-1b: upload loads it at the first pick
+sed -i '' 's|https://api.share.refueler.io|http://localhost:8766|g' "$A/config.js" "$A/share-early.js"
+sed -i '' "s|https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit|/v/$REL/turnstile-stub.js|" "$A/signin.js" "$A/upload-turnstile.js"
 sed -i '' 's|https://refueler.io/notes/|http://localhost:8765/notes/|g' "$A/download-notes.js"
 # Part retries wait 2 → 10 s live (~2 min before "Stopped"); 0.2 s each here.
 perl -0pi -e 's/RETRY_DELAYS_MS = \[[^\]]*\]/RETRY_DELAYS_MS = [200, 200, 200, 200, 200]/' "$A/progress.js"
-(cd "$OUT/io" && npx @11ty/eleventy --quiet >/dev/null)
-echo "built $(date +%H:%M:%S)"
+# Notes card: a fixed stand-in for refueler.io/notes/latest.json
+mkdir -p "$OUT/app/notes"
+cat > "$OUT/app/notes/latest.json" <<'JSON'
+{"schema":"notes-latest.v1","title":"Harness article","summary":"A stand-in for the newest Notes article.","url":"http://localhost:8765/notes/harness/"}
+JSON
+echo "built $(date +%H:%M:%S) (release $REL)"

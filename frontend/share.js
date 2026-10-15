@@ -5,7 +5,8 @@
 // Loaded as <script type="module" src="/share.js"></script> — do not change type.
 //
 // Link format v2 (Share-Crypto-1; grammar in fragment.js):
-//   URL format: https://refueler.io/share/?uuid=<uuid>#<base64url-JSON-blob>
+//   URL format: https://share.refueler.io/?uuid=<uuid>#<base64url-JSON-blob>
+//   (before X5-2, 15 Oct 2026: https://refueler.io/share/… — forwarded until 12 Jan 2027)
 //   Fragment blob: base64url( JSON { v:2, k:"<key-b64url>", n:"<filename>", s:"<seal-nonce-b64url>"?, z:<bytes> } )
 //   UUID travels in the query string (?uuid=) — not secret, never in the fragment.
 //   The key travels in the fragment only — never in requests, never in logs.
@@ -357,8 +358,8 @@ domRefs.upRestartBtn.addEventListener('click', () => location.reload());
 // ─────────────────────────────────────────────────────────────────────────────
 // Mode detection — fragment grammar v1 (SW-MCP-4) + legacy fallback
 //
-// v1 URL:     https://refueler.io/share/?uuid=<uuid>#<base64url-JSON-blob>
-// Legacy URL: https://refueler.io/share/#uuid=<uuid>&key=<hex>&iv=<hex>[&sn=<hex>]
+// v1 URL:     https://share.refueler.io/?uuid=<uuid>#<base64url-JSON-blob>
+// Legacy URL: https://share.refueler.io/#uuid=<uuid>&key=<hex>&iv=<hex>[&sn=<hex>]
 //
 // Detection order:
 //   1. Fragment present + parseable as v1 JSON blob → download mode (v1)

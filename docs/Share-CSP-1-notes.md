@@ -1,5 +1,7 @@
 # Share-CSP-1 — Content-Security-Policy for refueler.io/share/ (notes, not built)
 
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > Written at Share-Deps-1 (28 Sep 2026). Its own session, after Deps-1 is live and tested.
 > Lives in the refueler.io repo's `_headers`, scoped to `/share/*`. Nothing in refueler-share changes
 > except moving inline scripts out of `src/index.njk` (below).

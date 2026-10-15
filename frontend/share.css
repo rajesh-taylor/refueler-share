@@ -438,8 +438,9 @@ html.up-dragging body::after {
   color: var(--fg-muted);
   margin: 0 0 18px;
 }
-/* Stage chip (design theory §10): ink and a hairline, never a coloured badge. Not a link
-   until the X5 landing page exists. The word lives HERE only — "Alpha" at X5-2. */
+/* Stage chip (design theory §10): ink and a hairline, never a coloured badge. Since X5-2 it is
+   a link to "What alpha means" on refueler.io/share/ (new tab, so nobody loses a transfer).
+   The word lives HERE only. */
 .rx-eyebrow-row { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; }
 .rx-eyebrow-row .rx-eyebrow { margin: 0; }
 .stage-chip {
@@ -453,7 +454,9 @@ html.up-dragging body::after {
   white-space: nowrap;
   flex: none;
 }
-.stage-chip::before { content: "Pre-alpha"; }
+.stage-chip::before { content: "Alpha"; }
+a.stage-chip { text-decoration: none; }
+a.stage-chip:hover, a.stage-chip:focus-visible { color: var(--fg); }
 .rx-head {
   font: 300 clamp(30px, 5vw, 40px)/1.12 var(--rx-serif);
   letter-spacing: -.01em;

@@ -2,7 +2,7 @@
 
 > Anonymous, encrypted file transfer. No account. No email. No key on our side.
 
-**Live at:** [refueler.io/share](https://refueler.io/share)  
+**Live at:** [share.refueler.io](https://share.refueler.io) (about Share: [refueler.io/share](https://refueler.io/share/))  
 **Part of the [Refueler](https://refueler.io) ecosystem**
 
 ---
@@ -158,7 +158,7 @@ Designs are written down before they are built, and security-sensitive blocks ge
 | TH-block | ✅ | Permanent record (OpenTimestamps + Bitcoin), frontend module split |
 | SW-block | ✅ | Custom API hostname, HMAC API auth, webhooks, receipts, sandbox |
 | Share-6 | ✅ | Direct-to-R2 uploads, Merkle root at upload, ciphertext storage verification at download (B9-1…B9-3) |
-| Ops | ✅ | Navy Office admin dashboard; batched, resumable deletes; one-command frontend deploy with byte-level live check, pre-push guard and CI mirror check |
+| Ops | ✅ | Navy Office admin dashboard; batched, resumable deletes; one-command app deploy (`bin/ship-app.sh`) with build checks, byte-level live check and CI app check |
 | Credential hardening | ✅ | Upload credentials bound to one transfer (keyed commitment); standard Cashu proofs verified on every upload; DLEQ checked in the browser; reviewed library code on both sides |
 | Share-Size-1 | ✅ | Exact file size moved into the share link; no longer stored in the transfer record or served by the API. Narrows who can learn the size; does not hide it from storage |
 | Share-Upload-2 | ✅ | Redesigned upload page; one Share menu (Send · Plans · Status) on every Share page; links no longer flash the upload page; working QR code |
@@ -215,15 +215,14 @@ frontend/            Browser JS and CSS (canonical source)
   download.js        Receiver page and download state machine
   timestamp.js       OTS pipeline
   cashu-crypto.js    Vendored @cashu/cashu-ts subset (generated — see bin/vendor-cashu.sh)
-bin/ship-frontend.sh Commit, mirror into refueler-io, push both, prove bytes live
-bin/sync-share.sh    Mirror step and --check / --live diagnostics
+bin/ship-app.sh      Build, check, deploy and prove the app on share.refueler.io
 bin/vendor-cashu.sh  Reproducible build of frontend/cashu-crypto.js from a pinned lockfile
 bin/githooks/        Pre-push guard: main can't drift from the live site
 docs/                Design specs and security reviews
 merkle-spec-v1.md    Merkle tree specification
 ```
 
-Frontend files are canonical here and served from `refueler.io/share/` via the `refueler-io` repo. Ship with `bin/ship-frontend.sh`; never edit the mirror directly.
+The app is built from `src/app/` + `frontend/` into `dist/` and served from `share.refueler.io` (its own Cloudflare Pages project). Ship with `bin/ship-app.sh`.
 
 ---
 

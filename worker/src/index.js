@@ -608,7 +608,7 @@ export default {
       // X-Admin-Key gated. Issues a blind-signed credential plus a MAC'd
       // X-Test-Credential (KV-Fix-1b, B12-SR S2) that lets /initiate skip the spend
       // ledger, capped at cap_chunks. Soak-test only.
-      // NEVER add to bin/sync-share.sh.
+      // Admin tooling never goes on a public host (X5-2: not on share.refueler.io either).
       if (request.method === 'POST' && path === '/admin/test-credential') {
         // KV-Fix-1b (S2.4): courtesy throttle — the admin key is the gate.
         const rl = await checkRateLimit(env, getClientIp(request), 'admin_test_credential', 10, 3600);

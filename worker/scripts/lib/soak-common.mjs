@@ -15,7 +15,7 @@ import { blake3 } from '@noble/hashes/blake3';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-// ─── Browser modules (the same files refueler.io/share/ serves) ────────────
+// ─── Browser modules (the same files share.refueler.io serves) ────────────
 const FRONTEND = new URL('../../../frontend/', import.meta.url);
 export const { derivePartKey, encryptPart, decryptPart } = await import(new URL('crypto.js', FRONTEND).href);
 export const { assembleFragment, parseFragment }         = await import(new URL('fragment.js', FRONTEND).href);

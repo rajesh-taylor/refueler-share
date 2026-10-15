@@ -1,4 +1,7 @@
 # B12-SR-spec-v1 — Security review of B12-spec-v1.1
+
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Session:** Share-B12-SR (Opus, security review + design, no code) · 24 Sep 2026
 > **Reviews:** `docs/B12-spec-v1.1.md` · builds on `docs/B8-spec-v1.md`, `Share-6-spec-v1.md`
 > **Status key:** 🔒 LOCKED · 🟡 PROVISIONAL (Rajesh) · ⚠️ FLAW FOUND (design changes, amendment listed in §A)

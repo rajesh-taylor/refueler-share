@@ -1,4 +1,7 @@
 # Share-Receiver-1 — receiver page build list
+
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Session:** Share-Receiver-1 · 27 Sep 2026 (design, no code changed)
 > **Status:** Design approved by Rajesh (mock v5). N-1 ✅ · N-2a ✅ shipped 27 Sep (`82105b4`) · N-2b ✅ shipped 28 Sep (`22689ef`; Safari ✓) · N-3 ✅ N-4 ✅ (Share-Cleanup-1, 28 Sep) · item 13 waits on Share-DL-W1.
 > **Mock:** https://claude.ai/artifact/1HRgQc8hxtcpod7ZKqE66t (private) · repo copy `docs/drafts/share-receiver-mock-v5.html`

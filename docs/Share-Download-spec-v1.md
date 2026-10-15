@@ -1,5 +1,7 @@
 # Share-Download-spec-v1.md — large downloads (100–250 GB) for paid tiers
 
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Session:** Share-Download-Opus · 27 Sep 2026 · Opus · design only, no Worker or frontend code
 > **Status:** **Decisions D-1…D-9 approved by Rajesh, 27 Sep 2026 (all as recommended; D-2 clarified — see §9).** **Spike run 10 Oct 2026 (§12): D-1 stands — SW streaming download byte-exact in Safari macOS (100 GiB), Firefox, iOS Safari (5 GiB); D-8 may relax.** Pixel/Vanadium and iOS screen-lock still to run.
 > Load alongside `CLAUDE.md`, `docs/Share-6-spec-v1.md` (upload + B9-3 download verify), `merkle-spec-v1.md` §3, `docs/B12-SR-spec-v1.md` (X1 KV rule).

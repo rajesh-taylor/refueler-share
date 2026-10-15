@@ -4,23 +4,25 @@
 #
 #   bin/ship-app.sh            preflight → build → check → deploy (Pages, direct upload) → prove live
 #   bin/ship-app.sh --check    build + check only, no git preflight, no deploy (safe anywhere)
+#   bin/ship-app.sh --ci       --check without Satoshi (GitHub CI: the font is never committed;
+#                              an empty stand-in fills its slot, and nothing is deployed)
 #   bin/ship-app.sh --prove    prove only: is share.refueler.io serving exactly dist/?
 #
 # What gets deployed is dist/, and dist/ is exactly what is hashed:
 #   dist/*.html, dist/signin/, dist/manifest.webmanifest   (Eleventy, eleventy.app.js)
-#   dist/v/<sha>/      every frontend/ asset in SM_ASSETS + blake3/, then frontend/app/ over it
+#   dist/v/<sha>/      every frontend/ asset in AA_ASSETS + blake3/, then frontend/app/ over it
 #   dist/v/<prev>/     the release live before this one, rebuilt byte-for-byte from git, so a
 #                      tab opened before the ship can still lazy-load its own modules
 #   dist/_headers      CSP (bin/lib/app-csp.txt; Report-Only at X5-1, enforced since X5-2) + fixed headers
-# While refueler.io/share/ still runs (until X5-2), shared JS/CSS ships twice:
-# bin/ship-frontend.sh (refueler.io) and this script. The asset list is ONE list: share-mirror.sh.
+# Since X5-2 (15 Oct 2026) this is the only way Share's frontend reaches the public: the
+# refueler.io/share/ mirror is retired. The asset list lives in bin/lib/app-assets.sh.
 #
 # Written for macOS /bin/bash 3.2 (no associative arrays, no mapfile).
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/share-mirror.sh
-. "$ROOT/bin/lib/share-mirror.sh"
+# shellcheck source=lib/app-assets.sh
+. "$ROOT/bin/lib/app-assets.sh"
 
 MODE="${1:-ship}"
 APP_HOST="${APP_HOST:-https://share.refueler.io}"
@@ -43,15 +45,15 @@ step() { echo "▶ $*"; }
 copy_release() {
   local src="$1" dest="$2" n f
   mkdir -p "$dest"
-  for n in $SM_ASSETS; do
+  for n in $AA_ASSETS; do
     [ -f "$src/frontend/$n" ] || die "release asset missing: frontend/$n"
     cp "$src/frontend/$n" "$dest/$n"
   done
-  for f in $(sm_files_under "$src/frontend/blake3"); do
+  for f in $(aa_files_under "$src/frontend/blake3"); do
     mkdir -p "$(dirname "$dest/blake3/$f")"; cp "$src/frontend/blake3/$f" "$dest/blake3/$f"
   done
   [ -d "$src/frontend/app" ] || die "frontend/app/ missing in $src"
-  for f in $(sm_files_under "$src/frontend/app"); do
+  for f in $(aa_files_under "$src/frontend/app"); do
     mkdir -p "$(dirname "$dest/$f")"; cp "$src/frontend/app/$f" "$dest/$f"
   done
 }
@@ -80,12 +82,15 @@ live_release() {
 build() {
   local sha="$1" prev="$2" tmp
   step "build dist/ (release $sha${prev:+, keeping $prev})"
+  if [ "${CI_MODE:-0}" = "1" ]; then :; else
   [ -f "$SATOSHI" ] || die "Satoshi missing: $SATOSHI — download the Satoshi zip from fontshare.com and copy Fonts/WEB/fonts/Satoshi-Variable.woff2 there (never commit it)"
-  [ "$(sm_hash "$SATOSHI")" = "$SATOSHI_SHA256" ] || die "Satoshi-Variable.woff2 is not the official file (hash differs) — the licence forbids modified copies"
+  [ "$(aa_hash "$SATOSHI")" = "$SATOSHI_SHA256" ] || die "Satoshi-Variable.woff2 is not the official file (hash differs) — the licence forbids modified copies"
+  fi
   rm -rf "$DIST"
   ( cd "$ROOT" && APP_SHA="$sha" npx --no-install eleventy --config=eleventy.app.js --quiet ) >/dev/null \
     || die "Eleventy build failed: cd $ROOT && APP_SHA=$sha npx eleventy --config=eleventy.app.js"
   copy_release "$ROOT" "$DIST/v/$sha"
+  [ "${CI_MODE:-0}" = "1" ] && [ ! -f "$DIST/v/$sha/fonts/Satoshi-Variable.woff2" ] && : > "$DIST/v/$sha/fonts/Satoshi-Variable.woff2"
   if [ -n "$prev" ] && [ "$prev" != "$sha" ]; then
     git -C "$ROOT" cat-file -e "$prev^{commit}" 2>/dev/null || die "live release $prev is not a commit here — git fetch, or ship from the right checkout"
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/ship-app-prev.XXXXXX")"
@@ -101,43 +106,44 @@ build() {
 check() {
   local sha="$1" f n bad=0 ref csp_lines
   step "check dist/"
+  aa_check_listed "$ROOT/frontend"
   # §2.3 no inline code: every <script> has src; no on*= handlers; no style= attributes
   for f in $(find "$DIST" -name '*.html' | LC_ALL=C sort); do
-    if perl -0ne 'exit((/<script(?![^>]*\bsrc=)[^>]*>/i) ? 0 : 1)' "$f"; then sm_fail "inline <script> in ${f#$DIST/}"; fi
-    if perl -0ne 'exit((/<[a-z][^>]*\son[a-z]+\s*=/i) ? 0 : 1)' "$f"; then sm_fail "on*= handler in ${f#$DIST/}"; fi
-    if perl -0ne 'exit((/<[a-z][^>]*\sstyle\s*=/i) ? 0 : 1)' "$f"; then sm_fail "style= attribute in ${f#$DIST/}"; fi
-    if grep -q '{{\|{%' "$f"; then sm_fail "unrendered template tag in ${f#$DIST/}"; fi
+    if perl -0ne 'exit((/<script(?![^>]*\bsrc=)[^>]*>/i) ? 0 : 1)' "$f"; then aa_fail "inline <script> in ${f#$DIST/}"; fi
+    if perl -0ne 'exit((/<[a-z][^>]*\son[a-z]+\s*=/i) ? 0 : 1)' "$f"; then aa_fail "on*= handler in ${f#$DIST/}"; fi
+    if perl -0ne 'exit((/<[a-z][^>]*\sstyle\s*=/i) ? 0 : 1)' "$f"; then aa_fail "style= attribute in ${f#$DIST/}"; fi
+    if grep -q '{{\|{%' "$f"; then aa_fail "unrendered template tag in ${f#$DIST/}"; fi
     # every /v/... the page names must exist in this build
     for ref in $(grep -o '"/v/[^"?#]*"' "$f" | tr -d '"' | LC_ALL=C sort -u); do
-      [ -f "$DIST$ref" ] || sm_fail "${f#$DIST/} names $ref — not in dist/"
+      [ -f "$DIST$ref" ] || aa_fail "${f#$DIST/} names $ref — not in dist/"
     done
-    grep -q "/v/$sha/" "$f" || sm_fail "${f#$DIST/} does not load release $sha"
+    grep -q "/v/$sha/" "$f" || aa_fail "${f#$DIST/} does not load release $sha"
   done
   for ref in $(grep -o '"/v/[^"]*"' "$DIST/manifest.webmanifest" | tr -d '"'); do
-    [ -f "$DIST$ref" ] || sm_fail "manifest names $ref — not in dist/"
+    [ -f "$DIST$ref" ] || aa_fail "manifest names $ref — not in dist/"
   done
   # _headers: exactly one CSP, byte-equal to bin/lib/app-csp.txt
   csp_lines="$(grep -c 'Content-Security-Policy' "$DIST/_headers" || true)"
-  [ "$csp_lines" = "1" ] || sm_fail "_headers has $csp_lines CSP lines (want exactly 1)"
+  [ "$csp_lines" = "1" ] || aa_fail "_headers has $csp_lines CSP lines (want exactly 1)"
   [ "$(sed -n 's/^  Content-Security-Policy: //p' "$DIST/_headers")" = "$(tr -d '\n' < "$CSP_FILE")" ] \
-    || sm_fail "_headers CSP differs from bin/lib/app-csp.txt"
-  grep -q '^  ! Link$' "$DIST/_headers"      || sm_fail "_headers lacks '! Link'"
-  grep -q 'no-transform' "$DIST/_headers"    || sm_fail "_headers lacks no-transform"
-  # every mirrored asset, blake3 WASM, fonts, icons in this release
-  for n in $SM_ASSETS; do [ -f "$DIST/v/$sha/$n" ] || sm_fail "release lacks $n"; done
-  [ -f "$DIST/v/$sha/blake3/browser-async.js" ] || sm_fail "release lacks blake3/"
-  [ -n "$(find "$DIST/v/$sha/blake3" -name '*.wasm' | head -1)" ] || sm_fail "release lacks the BLAKE3 .wasm"
-  for f in $(sm_files_under "$APP_SRC"); do
-    cmp -s "$APP_SRC/$f" "$DIST/v/$sha/$f" || sm_fail "release $f is not frontend/app/$f"
+    || aa_fail "_headers CSP differs from bin/lib/app-csp.txt"
+  grep -q '^  ! Link$' "$DIST/_headers"      || aa_fail "_headers lacks '! Link'"
+  grep -q 'no-transform' "$DIST/_headers"    || aa_fail "_headers lacks no-transform"
+  # every listed asset, blake3 WASM, fonts, icons in this release
+  for n in $AA_ASSETS; do [ -f "$DIST/v/$sha/$n" ] || aa_fail "release lacks $n"; done
+  [ -f "$DIST/v/$sha/blake3/browser-async.js" ] || aa_fail "release lacks blake3/"
+  [ -n "$(find "$DIST/v/$sha/blake3" -name '*.wasm' | head -1)" ] || aa_fail "release lacks the BLAKE3 .wasm"
+  for f in $(aa_files_under "$APP_SRC"); do
+    cmp -s "$APP_SRC/$f" "$DIST/v/$sha/$f" || aa_fail "release $f is not frontend/app/$f"
   done
   git -C "$ROOT" ls-files --error-unmatch "frontend/app/fonts/Satoshi-Variable.woff2" >/dev/null 2>&1 \
-    && sm_fail "Satoshi is tracked by git — the licence forbids distributing it: git rm --cached frontend/app/fonts/Satoshi-Variable.woff2"
+    && aa_fail "Satoshi is tracked by git — the licence forbids distributing it: git rm --cached frontend/app/fonts/Satoshi-Variable.woff2"
   for f in $(find "$DIST/v/$sha" -maxdepth 1 \( -name '*.js' -o -name '*.css' \) | LC_ALL=C sort); do
-    if grep -q 'sourceMappingURL' "$f"; then sm_fail "${f#$DIST/} has a sourceMappingURL line"; fi
+    if grep -q 'sourceMappingURL' "$f"; then aa_fail "${f#$DIST/} has a sourceMappingURL line"; fi
   done
   # no third-party CSS/fonts in the app (CSP would block them; better to fail here)
-  if grep -rlq 'fonts.googleapis\|fontshare\|gstatic' "$DIST" --include='*.html' --include='*.css'; then sm_fail "third-party font reference in dist/"; fi
-  [ "$SM_FAILS" -eq 0 ] || die "check FAILED — $SM_FAILS problem(s) above; nothing deployed"
+  if grep -rlq 'fonts.googleapis\|fontshare\|gstatic' "$DIST" --include='*.html' --include='*.css'; then aa_fail "third-party font reference in dist/"; fi
+  [ "$AA_FAILS" -eq 0 ] || die "check FAILED — $AA_FAILS problem(s) above; nothing deployed"
   echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present"
 }
 
@@ -166,7 +172,7 @@ prove() {
     for f in $pending; do
       url="$APP_HOST$(url_for "$f")?v=$(date +%s)$RANDOM"
       if ! curl -sSL --max-time 30 -o "$tmp/got" "$url" 2>/dev/null; then still="$still $f"; continue; fi
-      got="$(sm_hash "$tmp/got")"; want="$(sm_hash "$DIST/$f")"
+      got="$(aa_hash "$tmp/got")"; want="$(aa_hash "$DIST/$f")"
       [ "$got" = "$want" ] || still="$still $f"
     done
     [ -z "$still" ] && break
@@ -186,19 +192,19 @@ prove() {
 
   csp="$(tr -d '\n' < "$CSP_FILE")"
   for url in "$APP_HOST/" "$APP_HOST/v/$SHA/share.js" "$APP_HOST/no-such-page-$RANDOM"; do
-    [ "$(header_of "$url" 'content-security-policy')" = "$csp" ] || sm_fail "CSP header not exact on $url"
-    [ -z "$(header_of "$url" 'content-security-policy-report-only')" ] || sm_fail "a Report-Only CSP is still on $url (enforced since X5-2)"
-    [ -z "$(header_of "$url" 'x-robots-tag')" ] || sm_fail "X-Robots-Tag on $url (dropped at X5-2)"
-    lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || sm_fail "Link header on $url: $lk"
+    [ "$(header_of "$url" 'content-security-policy')" = "$csp" ] || aa_fail "CSP header not exact on $url"
+    [ -z "$(header_of "$url" 'content-security-policy-report-only')" ] || aa_fail "a Report-Only CSP is still on $url (enforced since X5-2)"
+    [ -z "$(header_of "$url" 'x-robots-tag')" ] || aa_fail "X-Robots-Tag on $url (dropped at X5-2)"
+    lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || aa_fail "Link header on $url: $lk"
     cc="$(header_of "$url" 'cache-control' | tr 'A-Z' 'a-z')"
     # Pages answers a 404 with its own fixed "Cache-Control: no-store", ignoring _headers
     # (seen live 14 Oct). Harmless: nothing caches it, and the share.refueler.io Configuration
     # Rule turns the injections off anyway. Every 200 must carry no-transform.
-    case "$url:$cc" in *no-such-page-*:no-store) ;; *:*no-transform*) ;; *) sm_fail "no-transform missing on $url ($cc)" ;; esac
-    case "$cc" in *max-age=0*|*no-store*|*no-cache*) ;; *) sm_fail "browser-cacheable $url ($cc) — restore the Cache Rule: host share.refueler.io, Browser TTL = Respect origin" ;; esac
+    case "$url:$cc" in *no-such-page-*:no-store) ;; *:*no-transform*) ;; *) aa_fail "no-transform missing on $url ($cc)" ;; esac
+    case "$cc" in *max-age=0*|*no-store*|*no-cache*) ;; *) aa_fail "browser-cacheable $url ($cc) — restore the Cache Rule: host share.refueler.io, Browser TTL = Respect origin" ;; esac
   done
-  [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP_HOST/no-such-page-$RANDOM")" = "404" ] || sm_fail "unknown path is not a 404 (SPA fallback? 404.html missing?)"
-  [ "$SM_FAILS" -eq 0 ] || return 1
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP_HOST/no-such-page-$RANDOM")" = "404" ] || aa_fail "unknown path is not a 404 (SPA fallback? 404.html missing?)"
+  [ "$AA_FAILS" -eq 0 ] || return 1
   echo "  ✓ headers: CSP (enforced) exact · no Link · no-transform · max-age=0 · real 404"
 }
 
@@ -208,6 +214,14 @@ case "$MODE" in
     build "$SHA" ""
     check "$SHA"
     echo "✓ CHECKED (app) — dist/ built for $SHA, nothing deployed"
+    ;;
+
+  --ci)
+    CI_MODE=1
+    SHA="$(git -C "$ROOT" rev-parse --short=10 HEAD)"
+    build "$SHA" ""
+    check "$SHA"
+    echo "✓ CHECKED (app, CI — no Satoshi) — dist/ built for $SHA, nothing deployed"
     ;;
 
   --prove)
@@ -241,7 +255,7 @@ case "$MODE" in
     ;;
 
   *)
-    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

@@ -25,7 +25,7 @@
 //     test_credential: "v1.<uuid>.<cap_chunks>.<exp>.<mac>",  // send as X-Test-Credential
 //   }
 //
-// NEVER add this endpoint to bin/sync-share.sh.
+// Never link or serve this from a public page (X5-2: admin tooling stays off share.refueler.io).
 // NEVER serve /share/admin/test-upload.html via the public mirror.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,7 @@
 # B8-spec-v1.md — refueler-share NUT-11 Mode 2 (Locke) design lock
 
+> **X5-2 (15 Oct 2026):** Share moved to `https://share.refueler.io` (shipped by `bin/ship-app.sh`). Mentions below of `refueler.io/share/` as the app, `ship-frontend.sh`, `sync-share.sh`, `share-mirror.sh`, the pre-push hook or `mirror-check.yml` are historical. `refueler.io/share/` is now a landing page; Plans and Status stay on refueler.io.
+
 > **Session:** B8-Opus · 13 Sep 2026 · Opus · architecture + design, no code produced
 > **Status:** locked spec. Seven decisions (D-1…D-7) resolved in-session.
 > Load alongside `CLAUDE.md`, `Share-Master-Context.md`, `share-sessions.md`, `REFUELER-BRIDGE.md` (v9.5+), `merkle-spec-v1.md`.

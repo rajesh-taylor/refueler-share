@@ -3,9 +3,10 @@
   worker/src/share/admin/test-upload.html  (Share-Admin-2)
 
   Hidden admin soak-test page.
-  - In the mirror pipeline (bin/lib/share-mirror.sh SM_C_ADMIN → refueler.io
-    src/share/admin/), shipped by bin/ship-frontend.sh — never into src/share/assets/
-  - Served ONLY from refueler.io/share/admin/test-upload.html — never linked from a public page
+  - X5-2 (15 Oct 2026): no longer served anywhere. It was mirrored to refueler.io/share/admin/;
+    the mirror is retired and admin tooling stays off the public app origin (X5-plan §3 step 4).
+    Local use only — it still loads /share/assets/*.js, so it needs a local server that maps
+    /share/assets/ to frontend/ before it runs again (Tidy item).
   - No third-party code: BLAKE3 and Cashu blinding come from the vendored files the
     Share page uses (/share/assets/noble-blake3.js, cashu-crypto.js) (Share-Upload-7, F-25)
   - Uploads random bytes, unencrypted; makes no share link

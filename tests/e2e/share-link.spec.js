@@ -3,7 +3,7 @@
 // Smoke test: upload a file → share link contains ?uuid= and # fragment →
 // pasting that link shows the receiver card, not the upload drop zone.
 //
-// Runs against the live site: https://refueler.io/share/
+// Runs against the live site: https://share.refueler.io/
 // Runs headed (visible browser) so Cloudflare Turnstile can solve itself.
 //
 // Run:
@@ -21,7 +21,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-const BASE_URL = 'https://refueler.io/share/';
+const BASE_URL = 'https://share.refueler.io/';
 
 function makeTempFile(name = 'refueler-e2e-test.txt') {
   const p = path.join(os.tmpdir(), name);

@@ -1,0 +1,37 @@
+# X5-2 · 15 Oct 2026 — replaces mirror-check.yml (the refueler.io/share/ mirror is retired).
+# Builds the app exactly as bin/ship-app.sh does and runs its checks: no inline code, the CSP in
+# dist/_headers byte-equal to bin/lib/app-csp.txt, ! Link, no-transform, every asset present,
+# every frontend/*.js|css listed in bin/lib/app-assets.sh. Satoshi is never committed (licence),
+# so --ci puts an empty stand-in in its slot; nothing is deployed from here.
+# The live byte check (share.refueler.io serves dist/ exactly) runs from Rajesh's Mac inside
+# ship-app.sh until Share-Release-1's public watchdog.
+# Sits alongside ci.yml (tests, audit, vendored code, route inventory) — it does not replace it.
+name: App — build + header checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies (Eleventy)
+        run: npm ci
+
+      - name: Build and check the app (no deploy)
+        run: bin/ship-app.sh --ci

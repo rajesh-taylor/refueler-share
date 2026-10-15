@@ -56,7 +56,7 @@ const credExpiry  = parseInt(args['cred-expiry'] ?? '28800', 10);
 const expiryDays  = parseFloat(args['expiry-days'] ?? '6');
 const encryptMode = args.encrypt === true;
 const linkDir     = args['link-dir'] || join(homedir(), '.refueler-soak');
-const shareBase   = 'https://refueler.io/share/';
+const shareBase   = 'https://share.refueler.io/';
 
 if (!adminKey) {
   console.error('✗ admin key required: export SOAK_ADMIN_KEY (preferred) or --admin-key=');

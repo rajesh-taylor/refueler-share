@@ -1,7 +1,6 @@
 {#- share-body.njk — the Share sheets (upload + receiver), X5-1 · 14 Oct 2026.
-    Included by BOTH src/index.njk (refueler.io/share/, rendered inline by
-    bin/lib/share-mirror.sh sm_render_njk) and src/app/index.njk (share.refueler.io).
-    One copy of the markup while both surfaces run. Page variables:
+    Included by src/app/index.njk (share.refueler.io). Until X5-2 (15 Oct 2026) the old
+    refueler.io/share/ page included it too; that page is now a landing page. Page variables:
       sendHref — the "Send a file" page: /share/ (old) · / (app)
       ioBase   — refueler.io-owned pages (status, plans): "" (old) · https://refueler.io (app)
     No inline script, no on*= and no style= here: the app's CSP forbids them. -#}
@@ -19,7 +18,7 @@
          use is kept: drop-zone is the slip, file-btn "Choose a file", folder-btn
          "or a folder". -->
     <section class="rx-sheet up-sheet" id="upload-sheet" data-view="empty">
-      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="up-eyebrow">New transfer</p><span class="stage-chip"></span></div>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="up-eyebrow">New transfer</p><a class="stage-chip" href="https://refueler.io/share/#alpha" target="_blank" rel="noopener" aria-label="Alpha: what this means"></a></div>
       <h1 class="rx-head" id="up-head">Send a file.</h1>
 
       <!-- Resume: shown on arrival when this browser has an unfinished upload -->
@@ -165,7 +164,7 @@
 
     <!-- Ready card: also password, folder and timed-window variants -->
     <section class="rx-sheet" id="receiver-card" hidden>
-      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="rc-eyebrow">A file for you</p><span class="stage-chip"></span></div>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="rc-eyebrow">A file for you</p><a class="stage-chip" href="https://refueler.io/share/#alpha" target="_blank" rel="noopener" aria-label="Alpha: what this means"></a></div>
       <h1 class="rx-head" id="rc-head">Someone sent you a file.</h1>
       <dl class="rx-ledger">
         <div class="rx-row">
@@ -187,7 +186,7 @@
 
     <!-- Password screen -->
     <section class="rx-sheet" id="unlock-screen" hidden>
-      <div class="rx-eyebrow-row"><p class="rx-eyebrow">Password needed</p><span class="stage-chip"></span></div>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow">Password needed</p><a class="stage-chip" href="https://refueler.io/share/#alpha" target="_blank" rel="noopener" aria-label="Alpha: what this means"></a></div>
       <h1 class="rx-head">This file has a password.</h1>
       <p class="rx-lede">The sender gives you this separately from the link.</p>
       <div class="rx-field">
@@ -203,7 +202,7 @@
 
     <!-- Downloading -->
     <section class="rx-sheet" id="download-card" hidden>
-      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="dl-stage-tag">Downloading</p><span class="stage-chip"></span></div>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="dl-stage-tag">Downloading</p><a class="stage-chip" href="https://refueler.io/share/#alpha" target="_blank" rel="noopener" aria-label="Alpha: what this means"></a></div>
       <h1 class="rx-head">Downloading.</h1>
       <div class="rx-measure">
         <div class="rx-pct"><span id="dl-pct">0</span><sup>%</sup></div>
@@ -215,7 +214,7 @@
 
     <!-- Finished -->
     <section class="rx-sheet" id="rx-done" hidden>
-      <div class="rx-eyebrow-row"><p class="rx-eyebrow">Complete</p><span class="stage-chip"></span></div>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow">Complete</p><a class="stage-chip" href="https://refueler.io/share/#alpha" target="_blank" rel="noopener" aria-label="Alpha: what this means"></a></div>
       <h1 class="rx-head">Downloaded.</h1>
       <dl class="rx-ledger">
         <div class="rx-row"><dt id="rx-done-name-label">File</dt><dd><span class="rx-fname"><span id="rx-done-name">Encrypted file</span></span></dd></div>
@@ -230,7 +229,7 @@
 
     <!-- Closed window, dead link, stopped download. Send line: dead link only (item 11). -->
     <section class="rx-sheet" id="rx-notice" hidden>
-      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="rx-notice-eyebrow"></p><span class="stage-chip"></span></div>
+      <div class="rx-eyebrow-row"><p class="rx-eyebrow" id="rx-notice-eyebrow"></p><a class="stage-chip" href="https://refueler.io/share/#alpha" target="_blank" rel="noopener" aria-label="Alpha: what this means"></a></div>
       <h1 class="rx-head" id="rx-notice-head"></h1>
       <p class="rx-lede" id="rx-notice-lede"></p>
       <p class="rx-send-wrap" id="rx-notice-send" hidden><a class="rx-send" href="{{ sendHref }}"><span>Send your own file, free up to 4 GB →</span></a></p>

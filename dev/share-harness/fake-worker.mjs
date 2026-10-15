@@ -47,7 +47,7 @@ http.createServer(async (req, res) => {
       if (p[1] === 'magic') {
         const t = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
         auth.tokens.add(t);
-        console.log(`[fake] sign-in link for ${b.email}: http://localhost:8765/share/signin/#t=${t}`);
+        console.log(`[fake] sign-in link for ${b.email}: http://localhost:8765/signin/#t=${t}`);
         return cjson(req, res, 202, { ok: true });
       }
       if (p[1] === 'verify') {
