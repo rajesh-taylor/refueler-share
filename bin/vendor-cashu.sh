@@ -87,3 +87,7 @@ EOF
 
 mv "$tmp/final.js" "$OUT"
 echo "  ✓ wrote $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes, sha256 $(hash256 "$OUT"))"
+
+# Vuln-Watch-1: keep frontend/VENDORED.md's row in step (CI fails on a stale hash).
+# After a version change, also edit that row's Version column by hand.
+node "$ROOT/bin/check-vendored.mjs" --update frontend/cashu-crypto.js || die "could not update frontend/VENDORED.md"

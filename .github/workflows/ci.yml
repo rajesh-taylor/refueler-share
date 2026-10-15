@@ -39,6 +39,27 @@ jobs:
         working-directory: worker
         run: npm ci
 
+      # ── Vulnerability scan (Vuln-Watch-1) ────────────────────────────────
+      # Blocks on high/critical advisories in what the Worker ships (prod deps).
+      # Dev tools (wrangler, vitest…) are listed but never block: they don't ship,
+      # and Dependabot's weekly PRs move them. Open findings → refueler-share-private.
+      - name: Audit Worker production dependencies (blocks on high/critical)
+        working-directory: worker
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit dev tools (report only)
+        working-directory: worker
+        run: npm audit --audit-level=high || echo "::warning::dev-tool advisories above (report only)"
+
+      # Vendored browser + Worker bundles: hashes still match frontend/VENDORED.md,
+      # and OSV has no high/critical advisory for each name + version.
+      - name: Vendored code — hashes + OSV
+        run: node bin/check-vendored.mjs
+
+      # Every Worker route has a row in docs/ROUTES.md (and every row a route).
+      - name: Route inventory
+        run: node bin/route-inventory.mjs --check
+
       # ── ESLint — worker/src/ only ────────────────────────────────────────
       - name: Lint worker/src/
         working-directory: worker

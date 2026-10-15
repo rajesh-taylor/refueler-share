@@ -195,7 +195,7 @@ Rule: **no security fix ships in future blocks without a row added to this table
 
 | Level | Sessions | Gate |
 |-------|----------|------|
-| **Level 1** | S70–S71 (B6) | On every push: Eleventy build check, `wrangler deploy --dry-run`, lint, full unit suite. Red = do not deploy. |
+| **Level 1** | S70–S71 (B6) · Vuln-Watch-1 | On every push: Eleventy build check, `wrangler deploy --dry-run`, lint, full unit suite; `npm audit --omit=dev` (high/critical blocks), vendored-code hashes + OSV (`bin/check-vendored.mjs`), route inventory vs `docs/ROUTES.md` (`bin/route-inventory.mjs --check`). Red = do not deploy. |
 | **Level 2** | B7–B8 | Integration suite (wrangler dev --local inside GitHub Actions) as pre-deploy gate, including `security.test.js`. |
 | **Level 3** | B9–B10 | Deploy to staging → automated smoke test → JSON reporter results POSTed to Worker KV → dashboard card. Manual promote to production. |
 

@@ -1,0 +1,47 @@
+# Vuln-Watch-1 · 15 Oct 2026 — weekly, grouped dependency update PRs.
+# Security *alerts* (instant, on advisory publication) are a repo setting, not this file:
+# Settings → Code security → Dependabot alerts.
+#
+# Not watched here, on purpose:
+#   bin/vendor-cashu/  — its @cashu/cashu-ts pin moves only together with worker/package.json,
+#                        via bin/vendor-cashu.sh. frontend/VENDORED.md + bin/check-vendored.mjs
+#                        watch the vendored browser/Worker bundles instead.
+# A cashu-ts PR from the worker/ entry below is a signal to run that upgrade, never to merge alone.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /worker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    groups:
+      worker-prod:
+        dependency-type: production
+      worker-dev:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    open-pull-requests-limit: 3
+    groups:
+      site-build:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    groups:
+      actions:
+        patterns: ["*"]
