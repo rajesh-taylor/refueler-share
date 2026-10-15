@@ -22,10 +22,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout refueler-share (canonical)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout refueler-io (mirror, public)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: rajesh-taylor/refueler-io
           ref: main
