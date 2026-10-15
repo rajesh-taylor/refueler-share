@@ -48,7 +48,7 @@ SHARE_SEAL_CURRENT         = "1"
 AUTH_API_HOST              = "api.share.refueler.io"
 AUTH_ORIGINS               = "https://refueler.io,https://share.refueler.io"
 APP_ORIGINS                = "https://refueler.io,https://share.refueler.io"
-AUTH_SIGNIN_URL            = "https://refueler.io/share/signin/"
+AUTH_SIGNIN_URL            = "https://share.refueler.io/signin/"
 AUTH_MAIL_FROM             = "signin@mail.refueler.io"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md

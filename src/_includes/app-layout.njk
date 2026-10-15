@@ -11,7 +11,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>{{ title }}</title>
 <meta name="description" content="{{ description }}" />
+{%- if canonical %}
+<link rel="canonical" href="https://share.refueler.io{{ canonical }}" />
+{%- endif %}
+{%- if not indexable %}
 <meta name="robots" content="noindex, nofollow" />
+{%- endif %}
 <meta name="referrer" content="no-referrer" />
 <meta name="color-scheme" content="dark light" />
 <meta name="theme-color" content="#1A1917" />

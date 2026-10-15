@@ -11,7 +11,7 @@
 #   dist/v/<sha>/      every frontend/ asset in SM_ASSETS + blake3/, then frontend/app/ over it
 #   dist/v/<prev>/     the release live before this one, rebuilt byte-for-byte from git, so a
 #                      tab opened before the ship can still lazy-load its own modules
-#   dist/_headers      CSP (bin/lib/app-csp.txt, Report-Only at X5-1) + fixed headers
+#   dist/_headers      CSP (bin/lib/app-csp.txt; Report-Only at X5-1, enforced since X5-2) + fixed headers
 # While refueler.io/share/ still runs (until X5-2), shared JS/CSS ships twice:
 # bin/ship-frontend.sh (refueler.io) and this script. The asset list is ONE list: share-mirror.sh.
 #
@@ -61,14 +61,13 @@ write_headers() {
   csp="$(tr -d '\n' < "$CSP_FILE")"
   cat > "$DIST/_headers" <<EOF
 /*
-  Content-Security-Policy-Report-Only: $csp
+  Content-Security-Policy: $csp
   Cache-Control: public, max-age=0, must-revalidate, no-transform
   ! Link
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
-  X-Robots-Tag: noindex
 EOF
 }
 
@@ -120,7 +119,7 @@ check() {
   # _headers: exactly one CSP, byte-equal to bin/lib/app-csp.txt
   csp_lines="$(grep -c 'Content-Security-Policy' "$DIST/_headers" || true)"
   [ "$csp_lines" = "1" ] || sm_fail "_headers has $csp_lines CSP lines (want exactly 1)"
-  [ "$(sed -n 's/^  Content-Security-Policy-Report-Only: //p' "$DIST/_headers")" = "$(tr -d '\n' < "$CSP_FILE")" ] \
+  [ "$(sed -n 's/^  Content-Security-Policy: //p' "$DIST/_headers")" = "$(tr -d '\n' < "$CSP_FILE")" ] \
     || sm_fail "_headers CSP differs from bin/lib/app-csp.txt"
   grep -q '^  ! Link$' "$DIST/_headers"      || sm_fail "_headers lacks '! Link'"
   grep -q 'no-transform' "$DIST/_headers"    || sm_fail "_headers lacks no-transform"
@@ -187,8 +186,9 @@ prove() {
 
   csp="$(tr -d '\n' < "$CSP_FILE")"
   for url in "$APP_HOST/" "$APP_HOST/v/$SHA/share.js" "$APP_HOST/no-such-page-$RANDOM"; do
-    [ "$(header_of "$url" 'content-security-policy-report-only')" = "$csp" ] || sm_fail "CSP header not exact on $url"
-    [ -z "$(header_of "$url" 'content-security-policy')" ] || sm_fail "an ENFORCED CSP is on $url (X5-1 is Report-Only)"
+    [ "$(header_of "$url" 'content-security-policy')" = "$csp" ] || sm_fail "CSP header not exact on $url"
+    [ -z "$(header_of "$url" 'content-security-policy-report-only')" ] || sm_fail "a Report-Only CSP is still on $url (enforced since X5-2)"
+    [ -z "$(header_of "$url" 'x-robots-tag')" ] || sm_fail "X-Robots-Tag on $url (dropped at X5-2)"
     lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || sm_fail "Link header on $url: $lk"
     cc="$(header_of "$url" 'cache-control' | tr 'A-Z' 'a-z')"
     # Pages answers a 404 with its own fixed "Cache-Control: no-store", ignoring _headers
@@ -199,7 +199,7 @@ prove() {
   done
   [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP_HOST/no-such-page-$RANDOM")" = "404" ] || sm_fail "unknown path is not a 404 (SPA fallback? 404.html missing?)"
   [ "$SM_FAILS" -eq 0 ] || return 1
-  echo "  ✓ headers: CSP (Report-Only) exact · no Link · no-transform · max-age=0 · real 404"
+  echo "  ✓ headers: CSP (enforced) exact · no Link · no-transform · max-age=0 · real 404"
 }
 
 case "$MODE" in

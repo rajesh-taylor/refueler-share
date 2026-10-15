@@ -81,7 +81,7 @@ function makeEnv(over = {}) {
   return {
     SUPABASE_URL: 'https://sb.test', SUPABASE_SERVICE_KEY: 'svc', TURNSTILE_SECRET_KEY: 'x',
     AUTH_PEPPER: PEPPER, AUTH_API_HOST: 'api.share.refueler.io', AUTH_ORIGINS: ORIGIN,
-    AUTH_SIGNIN_URL: 'https://refueler.io/share/signin/', AUTH_MAIL_FROM: 'signin@mail.refueler.io',
+    AUTH_SIGNIN_URL: 'https://share.refueler.io/signin/', AUTH_MAIL_FROM: 'signin@mail.refueler.io',
     STATUS_KV: makeKv(),
     EMAIL: { send: vi.fn(async (m) => { sent.push(m); return { messageId: 'm' }; }) },
     ...over,
@@ -179,7 +179,7 @@ describe('POST /auth/magic (S6.2, S6.3)', () => {
   });
   it('the link carries the token in the fragment; only BLAKE3(token) is stored', async () => {
     const { token } = await magicToken();
-    expect(sent[0].text).toContain(`https://refueler.io/share/signin/#t=${token}`);
+    expect(sent[0].text).toContain(`https://share.refueler.io/signin/#t=${token}`);
     expect(sent[0].text).not.toMatch(/\?t=/);
     expect(db.tokens.has(secretHash(token))).toBe(true);
     expect([...db.tokens.keys()]).not.toContain(token);
@@ -309,10 +309,10 @@ describe('session, sign-out, sign-out-everywhere (S6.6, S6.7)', () => {
 
 describe('mailer + logs', () => {
   it('email text: plain, 15-minute expiry, ignore line, no-reply line', () => {
-    const t = signInEmailText([{ kind: 'citizen', url: 'https://refueler.io/share/signin/#t=abc' }]);
+    const t = signInEmailText([{ kind: 'citizen', url: 'https://share.refueler.io/signin/#t=abc' }]);
     expect(t).toContain('expires in 15 minutes');
     expect(t).toContain("If you didn't ask for this, ignore this email.");
-    expect(t).toContain('https://refueler.io/share/signin/#t=abc');
+    expect(t).toContain('https://share.refueler.io/signin/#t=abc');
     expect(t).not.toMatch(/<|http:\/\//);
   });
   it('nothing logged contains the email, token or session id', async () => {

@@ -1296,7 +1296,7 @@ function paymentRequired402(response402, cost) {
       payment: {
         method:        'out_of_band_v1',
         instructions:  'Request a credit top-up (or wait for your monthly reset) from your Refueler account.',
-        dashboard_url: 'https://refueler.io/share/',
+        dashboard_url: 'https://share.refueler.io/',
         offer:         null,
       },
     }),
