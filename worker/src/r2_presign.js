@@ -170,7 +170,7 @@ export async function makePresigner({
 // One-shot presign (tests / single-URL smoke). Prefer makePresigner for batches.
 export async function presignPutObject(opts) {
   const presign = await makePresigner(opts);
-  return presign(opts.key, { contentLength: opts.contentLength });
+  return await presign(opts.key, { contentLength: opts.contentLength });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

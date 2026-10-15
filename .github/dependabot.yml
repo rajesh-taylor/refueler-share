@@ -1,4 +1,5 @@
-# Vuln-Watch-1 · 15 Oct 2026 — weekly, grouped dependency update PRs.
+# Vuln-Watch-1 · 15 Oct 2026 — weekly, grouped dependency update PRs, Tuesday 07:00 so the
+# Tue 11:00 advisory check (scheduled Claude task) sees them the same morning.
 # Security *alerts* (instant, on advisory publication) are a repo setting, not this file:
 # Settings → Code security → Dependabot alerts.
 #
@@ -13,10 +14,20 @@ updates:
     directory: /worker
     schedule:
       interval: weekly
-      day: monday
+      day: tuesday
       time: "07:00"
       timezone: Europe/London
     open-pull-requests-limit: 5
+    # Crypto libraries: a major version changes APIs the Worker and the vendored browser
+    # bundle share (@noble/hashes 2.x broke the test imports, PR #3, 15 Oct 2026). Majors
+    # are planned sessions, never a weekly merge. Security alerts still fire for them.
+    ignore:
+      - dependency-name: "@noble/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@cashu/cashu-ts"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "blake3-wasm"
+        update-types: ["version-update:semver-major"]
     groups:
       worker-prod:
         dependency-type: production
@@ -27,7 +38,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-      day: monday
+      day: tuesday
       time: "07:00"
       timezone: Europe/London
     open-pull-requests-limit: 3
@@ -39,7 +50,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-      day: monday
+      day: tuesday
       time: "07:00"
       timezone: Europe/London
     groups:
