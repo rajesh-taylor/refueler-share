@@ -24,6 +24,6 @@
     "@eslint/js": "^9.0.0",
     "eslint": "^9.0.0",
     "vitest": "^2.1.9",
-    "wrangler": "^4.113.0"
+    "wrangler": "^4.151.0"
   }
 }
