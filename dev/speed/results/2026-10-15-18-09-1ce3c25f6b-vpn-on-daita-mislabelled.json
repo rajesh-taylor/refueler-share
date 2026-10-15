@@ -1,0 +1,256 @@
+{
+  "base": "https://share.refueler.io",
+  "when": "2026-10-15T18:09:28.922Z",
+  "label": "vpn-on-daita-mislabelled",
+  "runs": 3,
+  "slow": false,
+  "release": "1ce3c25f6b",
+  "engines": {
+    "chromium": {
+      "/": {
+        "median": {
+          "ttfb": 400.69999998807907,
+          "fcp": 804,
+          "lcp": 804,
+          "dcl": 885.0999999940395,
+          "ready": 981.4000000059605,
+          "requests": 34,
+          "bytes": 371052
+        },
+        "samples": [
+          {
+            "ttfb": 472.09999999403954,
+            "fcp": 912,
+            "lcp": 912,
+            "dcl": 1066.300000011921,
+            "ready": 1075.0999999940395,
+            "requests": 34,
+            "bytes": 371052
+          },
+          {
+            "ttfb": 388.40000000596046,
+            "fcp": 764,
+            "lcp": 764,
+            "dcl": 885.0999999940395,
+            "ready": 981.4000000059605,
+            "requests": 34,
+            "bytes": 371052
+          },
+          {
+            "ttfb": 400.69999998807907,
+            "fcp": 804,
+            "lcp": 804,
+            "dcl": 821.4000000059605,
+            "ready": 948.6999999880791,
+            "requests": 34,
+            "bytes": 371052
+          }
+        ]
+      },
+      "/signin/": {
+        "median": {
+          "ttfb": 402.90000000596046,
+          "fcp": 788,
+          "lcp": 1196,
+          "dcl": 875.2000000178814,
+          "ready": 952.7000000178814,
+          "requests": 16,
+          "bytes": 192840
+        },
+        "samples": [
+          {
+            "ttfb": 467.7000000178814,
+            "fcp": 828,
+            "lcp": 1300,
+            "dcl": 912.1000000238419,
+            "ready": 1067.7000000178814,
+            "requests": 16,
+            "bytes": 192840
+          },
+          {
+            "ttfb": 349.09999999403954,
+            "fcp": 712,
+            "lcp": 1196,
+            "dcl": 875.2000000178814,
+            "ready": 902.2000000178814,
+            "requests": 16,
+            "bytes": 192840
+          },
+          {
+            "ttfb": 402.90000000596046,
+            "fcp": 788,
+            "lcp": 1168,
+            "dcl": 790.2000000178814,
+            "ready": 952.7000000178814,
+            "requests": 16,
+            "bytes": 192840
+          }
+        ]
+      }
+    },
+    "webkit": {
+      "/": {
+        "median": {
+          "ttfb": 279,
+          "fcp": 925,
+          "lcp": 925,
+          "dcl": 923,
+          "ready": 1099,
+          "requests": 36,
+          "bytes": 372033
+        },
+        "samples": [
+          {
+            "ttfb": 379,
+            "fcp": 925,
+            "lcp": 925,
+            "dcl": 1027,
+            "ready": 1099,
+            "requests": 36,
+            "bytes": 372036
+          },
+          {
+            "ttfb": 241,
+            "fcp": 782,
+            "lcp": 782,
+            "dcl": 872,
+            "ready": 970,
+            "requests": 36,
+            "bytes": 372033
+          },
+          {
+            "ttfb": 279,
+            "fcp": 1173,
+            "lcp": 1173,
+            "dcl": 923,
+            "ready": 1162,
+            "requests": 36,
+            "bytes": 372033
+          }
+        ]
+      },
+      "/signin/": {
+        "median": {
+          "ttfb": 263,
+          "fcp": 942,
+          "lcp": 1164,
+          "dcl": 816,
+          "ready": 929,
+          "requests": 18,
+          "bytes": 193741
+        },
+        "samples": [
+          {
+            "ttfb": 263,
+            "fcp": 1090,
+            "lcp": 1399,
+            "dcl": 1099,
+            "ready": 1100,
+            "requests": 18,
+            "bytes": 193756
+          },
+          {
+            "ttfb": 229,
+            "fcp": 937,
+            "lcp": 1097,
+            "dcl": 799,
+            "ready": 927,
+            "requests": 18,
+            "bytes": 193738
+          },
+          {
+            "ttfb": 273,
+            "fcp": 942,
+            "lcp": 1164,
+            "dcl": 816,
+            "ready": 929,
+            "requests": 18,
+            "bytes": 193741
+          }
+        ]
+      }
+    },
+    "firefox": {
+      "/": {
+        "median": {
+          "ttfb": 376,
+          "fcp": 762,
+          "lcp": 762,
+          "dcl": 787,
+          "ready": 890,
+          "requests": 36,
+          "bytes": 375884
+        },
+        "samples": [
+          {
+            "ttfb": 368,
+            "fcp": 779,
+            "lcp": 779,
+            "dcl": 784,
+            "ready": 993,
+            "requests": 36,
+            "bytes": 375884
+          },
+          {
+            "ttfb": 421,
+            "fcp": 762,
+            "lcp": 762,
+            "dcl": 838,
+            "ready": 890,
+            "requests": 36,
+            "bytes": 375884
+          },
+          {
+            "ttfb": 376,
+            "fcp": 694,
+            "lcp": 694,
+            "dcl": 787,
+            "ready": 872,
+            "requests": 36,
+            "bytes": 375884
+          }
+        ]
+      },
+      "/signin/": {
+        "median": {
+          "ttfb": 309,
+          "fcp": 572,
+          "lcp": 934,
+          "dcl": 680,
+          "ready": 766,
+          "requests": 18,
+          "bytes": 197551
+        },
+        "samples": [
+          {
+            "ttfb": 309,
+            "fcp": 558,
+            "lcp": 1014,
+            "dcl": 803,
+            "ready": 804,
+            "requests": 18,
+            "bytes": 197551
+          },
+          {
+            "ttfb": 361,
+            "fcp": 661,
+            "lcp": 878,
+            "dcl": 668,
+            "ready": 766,
+            "requests": 18,
+            "bytes": 197551
+          },
+          {
+            "ttfb": 276,
+            "fcp": 572,
+            "lcp": 934,
+            "dcl": 680,
+            "ready": 680,
+            "requests": 18,
+            "bytes": 197551
+          }
+        ]
+      }
+    }
+  }
+}

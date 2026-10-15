@@ -46,3 +46,6 @@ frontend/signin/
 # distributed through a repository or other public channel. Kept on Rajesh's Mac only;
 # bin/ship-app.sh copies it into each release and checks its hash (official file, unmodified).
 frontend/app/fonts/Satoshi-*
+
+# Playwright run output (never commit)
+test-results/

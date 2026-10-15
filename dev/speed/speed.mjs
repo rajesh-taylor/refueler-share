@@ -1,6 +1,6 @@
 // dev/speed/speed.mjs — page speed of share.refueler.io, measured from this Mac (X5-1a · 14 Oct 2026).
 // No user telemetry: the site carries no measuring script. This opens real browser engines
-// (Chromium, WebKit = Safari's engine, Firefox) headless, loads each page several times as a
+// (Chromium, WebKit = Safari's engine, Firefox, and the installed Brave app) headless, loads each page several times as a
 // fresh visitor, and reads the timings the browser itself records. Pages only: it never
 // uploads, so it creates no transfers and stores nothing.
 //
@@ -19,7 +19,7 @@
 // real-device checks at each gate.
 
 import { chromium, webkit, firefox } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const arg = (name, dflt) => {
   const a = process.argv.find(x => x.startsWith(`--${name}=`));
@@ -30,8 +30,12 @@ const RUNS    = Number(arg('runs', '3'));
 const PAGES   = arg('pages', '/,/signin/').split(',');
 const SLOW    = process.argv.includes('--slow');
 const LABEL   = arg('label', '').replace(/[^a-z0-9-]/gi, '').slice(0, 24);
-const ENGINES = { chromium, webkit, firefox };
-const wanted  = arg('engines', 'chromium,webkit,firefox').split(',');
+// Brave (X5-2, Rajesh 15 Oct): the installed Brave app, driven through Playwright's Chromium
+// driver. Brave Shields stay at their defaults, as a Brave user would have them.
+const BRAVE_APP = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
+const brave = { launch: () => existsSync(BRAVE_APP) ? chromium.launch({ executablePath: BRAVE_APP }) : Promise.reject(new Error('no Brave')) };
+const ENGINES = { chromium, webkit, firefox, brave };
+const wanted  = arg('engines', 'chromium,webkit,firefox,brave').split(',');
 
 // Collected inside the page after load: navigation timing, paints, LCP where supported, bytes.
 const COLLECT = () => new Promise((resolve) => {
@@ -71,7 +75,7 @@ for (const name of wanted) {
   if (!engine) continue;
   let browser;
   try { browser = await engine.launch(); }
-  catch { console.log(`· ${name}: not installed (npx playwright install ${name}) — skipped`); continue; }
+  catch { console.log(`· ${name}: not installed (${name === 'brave' ? 'no Brave app in /Applications' : `npx playwright install ${name}`}) — skipped`); continue; }
   results.engines[name] = {};
   for (const path of PAGES) {
     const samples = [];

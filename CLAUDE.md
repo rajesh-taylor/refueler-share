@@ -1,6 +1,6 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.23 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** X5-2 · 15 Oct 2026
-> Load alongside `share-sessions.md` at the start of every session on this repo.
+> **Version:** 2.24 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** X5-2 · 15 Oct 2026
+> Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
 ---
@@ -9,8 +9,6 @@
 
 `refueler-share` is an anonymous, encrypted peer-to-peer file transfer system.
 Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and access is gated by Cashu blind-signature tokens settled via Lightning (BOLT11).
-
-**Fastest path to market.** Likely R&D funding source for the wider Refueler ecosystem.
 
 **Local path:** `/Users/rajeshtaylor/Documents/refueler-share/`
 **GitHub:** `rajesh-taylor/refueler-share` (public)
@@ -26,7 +24,7 @@ Files are chunked, BLAKE3-hashed for integrity, stored on Cloudflare R2, and acc
 | Existence proof | SHA-256 (OTS) | Client-side only — Bitcoin-anchored permanent record. Never touches Worker. |
 | Anonymous authentication | Cashu blind signatures | Access tokens, payment gate |
 | Storage | Cloudflare R2 | Egress-free object store |
-| Payment | phoenixd on Hetzner CAX21, one node per product (B7+) | Upload capacity settled via Lightning |
+| Payment | Self-hosted Lightning node (B7+; details in the private half) | Upload capacity settled via Lightning |
 
 **Three hashes, three jobs — never conflate:**
 - **BLAKE3** → chunk integrity (internal, Worker + browser)
@@ -52,105 +50,13 @@ All five are `type="module"`. Do not collapse back into a single file.
 
 ---
 
-## Locked decisions
+## Private half (strategy, pricing, locks, session queue)
 
-- **Lightning node: self-hosted phoenixd on Hetzner, one node per product (Research-Review-2 · 11 Oct 2026; was "LNbits on CAX21", locked pre-Opus-2 · 28 Aug 2026).** Own seed, channel and passwords per product; Share's node first, on the CAX21; later products may share the box while floats are small. Low float, automatic sweep to the Silent Payments address on a threshold (two steps: splice-out to own single-sig wallet, then SP). **LNbits is optional per product and not on Share's path** — the Worker talks to phoenixd directly through a tunnel and an allowlist proxy (`createinvoice` + `payments/incoming/{hash}` only; the limited password can read the full payment history). phoenixd webhooks fire once: crediting works from webhook OR polling into one idempotent Supabase function. Payments belonging to merchants or creators never pass through our node (custody). Blink discontinued custodial accounts UK Aug 31 2026 — dead as a provider. Voltage eliminated (US company, invoice metadata visible to third party, incompatible with compulsion-resistance framing). Strike eliminated (custodial, FCA-dependent). No other candidates. **Payment-path rule (Research-Review-4 · 11 Oct 2026; replaces nationality as the test):** no party we choose in a user payment path may see per-payment details or have the power to refuse; for our own funds, no operator that can refuse to co-sign them. Ark operators (Second / TwoND Inc., Lightning Labs) fail both today — no `barkd` receiver, no Ark credits, no Wavelength. ACINQ as our only channel peer sees amount, time and hash per payment — not payer, purpose or invoice text; the minimum any Lightning receive gives a peer, accepted. Customers paying from Ark wallets is their choice and needs no work. Rail-Opus-1 closed (`docs/research/research-ark-wavelength-2026-10.md` review box).
-- **Boltz submarine swaps: dead.** Boltz suspended all swap operations Aug 3 2026. Liquidation destination is a Silent Payments address, which receives on-chain BTC directly. No swap service required.
-- **Node bootstrap is B7 pre-work, not B9.** No dark provisioning — instance goes live only when runbook is ready and test suite passes.
-- No custodial wallet. Payment settled via self-hosted phoenixd.
-- **Mint: the Worker stays the mint (Research-Review-2 · 11 Oct 2026; closes the CDK question).** The Worker holds `k` for every keyset, so uploads never depend on Hetzner; the node only sells credits. No CDK/Nutshell (no phoenixd backend; a sat mint with melt = custody). Reopen only for sat-denominated ecash, a maintained phoenixd processor for CDK, or a move to an LDK node. Credits are one-way vouchers: no melt, no swap endpoint.
-- **The whole `dleq` field never reaches the server** (NUT-12: `e,s` link a proof to its signature as well as `r`). The browser strips it; `verifyProofV2` refuses unknown fields — keep it so.
-- Cloudflare Worker receives and stores encrypted noise — it cannot read file content.
-- **No analytics script on any refueler.io host (Rajesh, X5-1a · 14 Oct 2026).** Cloudflare Web Analytics / RUM is **disabled** for the whole zone (the free plan has no per-host rules; automatic setup injected a beacon into refueler.io/share/). Traffic numbers come only from Cloudflare's server-side HTTP Traffic analytics, which the proxy sees anyway. Never re-enable it. **Share pages (`share.refueler.io`, and the `refueler.io/share/` landing page) load no analytics or session-replay script of any kind** — not even refueler.io's own first-party `analytics.js` (`analytics.refueler.io`, loaded on refueler.io's homepage/Notes/Privacy/Support pages; kept — Rajesh, 14 Oct: site pages aren't a product; analytics is decided per product, Legend when its time comes). `ship-app.sh` fails if anything is injected into the app's HTML.
-- **No upload-time file-type (MIME) check exists.** The Content-Type denylist lived only on the Worker-relay chunk path, retired at Share-6-6b; direct-to-R2 uploads never sent a type. Retired as a claim (Rajesh, Cred-Fix-1 · 26 Sep 2026) — do not assert it in any copy. The Worker never learns or stores the file type. `MIME_DENYLIST` in `utils.js` is unused; Share-MIME-1 removes it and re-checks public copy.
-- **Transfer commitment is HMAC'd under Worker secret `COMMITMENT_KEY` (Cred-Fix-1 · 26 Sep 2026).** `X-Email` no longer read anywhere. Resume-issue path removed. Missing key fails closed (issue 500, initiate 503) — never an unkeyed fallback.
-- **Upload credential = credential format v2, a standard Cashu proof `{id, amount: 1, secret, C}` (Cred-Fix-2 · 5 Oct 2026).** Worker `verifyProofV2` (`worker/src/nut00.js`): `Y = hash_to_curve(utf8(secret))`, `k·Y == C`, serial `hex(Y)`; anything else 401, nothing spent. Browser and Worker both use `@cashu/cashu-ts` (exact pin) — the browser via vendored `frontend/cashu-crypto.js`, rebuilt only by `bin/vendor-cashu.sh`. Upgrade both pins together. No hand-rolled curve maths. Browser checks the NUT-12 DLEQ proof; key not pinned until the anonymous rail. Note: `docs/Cred-verification-note-v1.md`.
-- Pricing/unit economics are never published in this repo (stripped CC-64).
-- Apache 2.0 licence — contributors grant a patent licence, and publishing the design puts the BLAKE3 + Cashu combination on the public record (prior art). Never claim the licence "protects" or "patents" the combination (matches README; decided Article-Rewrite-1 · 10 Oct 2026).
-- DO NOT edit inline CSS/JS in `src/index.njk` — edit `frontend/share.css`, `frontend/crypto.js`, `frontend/upload.js`, `frontend/download.js`, `frontend/timestamp.js` only.
-- DO NOT put `share.js` as a regular script — must remain `type="module"`.
-- **Sovereign storage cap: 100 GB. Locked TH-Opus-1.**
-- **API tier storage cap: 250 GB + pay-per-GB overage (invoiced). Locked SW-Opus-1.** Live since B12-4a-2 (13 Oct 2026): an HMAC-authenticated Chartered initiate resolves to tier `api` with `TIER_CAPS.api` = 250 GiB = `CHARTERED_CAP_BYTES` (`manifest.js`), which API issue and capabilities report. Overage billing is not built.
-- **Permanent record (Tower Hill) — Worker is a blind byte-relay only.** No OTS library in Worker. All OTS logic is client-side. Worker relay endpoints forward opaque bytes to calendar servers. The Worker sees a nonced 32-byte SHA-256 digest only — never the plaintext, never the file.
-- **`seal_nonce` lives in URL fragment only** — never transmitted to Worker, never stored in manifest.
-- **`date-seal.ots.enc` is load-bearing on all deletion paths** — expiry, destroy-after-download, Execution Dock grace sweep, owner delete. Never omit.
-- **Own origin + served-code integrity (Served-Code-Opus · 10 Oct 2026).** Share moves to `share.refueler.io` with its own Pages project and no mirror into refueler.io (X5 = Block A, Master Context row 16a). **X5-2 shipped 15 Oct 2026:** the app is `src/app/*.njk` + `frontend/` (+ `frontend/app/`) → `dist/`, shipped by `bin/ship-app.sh` only (Rajesh runs it; ends `✓ SHIPPED (app)`); the refueler.io mirror and its pipeline are gone; CSP **enforced** = `bin/lib/app-csp.txt` only; stage chip reads **Alpha** and links to `refueler.io/share/#alpha`. The sheets live once in `src/_includes/share-body.njk` / `signin-body.njk`. X5-2b (22 Oct) drops `https://refueler.io` from `AUTH_ORIGINS`, `APP_ORIGINS`, R2 CORS and the Turnstile hostnames. **Header (Rajesh, 14 Oct):** one refueler.io-style row on the app — "Refueler / Share" in Satoshi, refueler.io site links, account slot, CARBON / PAPER pill (the stage chip stays in each sheet's eyebrow row, never the header); no Send · Plans · Status pill (Plans + Status in the footer; footer = links then © line on phones, matching refueler.io's footer type since 14 Oct); phones: links + pill in the menu, receiver keeps the pill. **Satoshi** (ITF Free Font License v2.0): self-hosted on the app only, the official `Satoshi-Variable.woff2` unmodified, **never committed or published** (no redistribution via repo or release) — gitignored at `frontend/app/fonts/`, hash-checked by `ship-app.sh`. **Speed:** `node dev/speed/speed.mjs` (Playwright from the Mac; no user telemetry) at each release. Every key-handling product gets its own origin; no master app. WEBCAT/app = Block B (V2). Never claim "verified"; the Verify page explains how to check, it never "proves".
-- **No OHTTP — Nostr relays for private requests and notifications (Served-Code-Opus · 10 Oct 2026).** Third-party relays only, never our own; one key per job (per transfer / per Quay, never a personal npub); sender notification key random, never derived from the link key; notification never control flow; relay login (NIP-42) only ever with a per-job key, never an identity key (Research-Review-3 · 11 Oct 2026). Copy says "collected" — never "delivered", "opened" or "proof of delivery"; a notice "expires", never "deleted" (relays ignored NIP-09/NIP-62 in the live test). Rules + features: Master Context row 19.
+Everything else this file used to hold — locked decisions, tier and pricing model, API/MCP locks, integrity-claim rulings, B12 security locks, session queue, context-file hygiene, file delivery, editorial voice — lives in the private repo since X5-2 (15 Oct 2026) and is imported here:
 
-**Tier model (locked SW-Opus-1 · 7 Sep 2026):**
-- **Three tiers: Citizen / Sovereign / API.** Business and Enterprise demolished entirely.
-- **Sovereign** ships in two SKUs: single-seat and Teams (N-seat, shared pool, one bill, UI-only). Sovereign Teams sizing → SW-Teams-1 (cross-product Opus in `refueler.io` project).
-- **API ⊃ UI** (one-directional): an API key holder may also use the web interface. **Sovereign ⊅ API**: a Sovereign subscriber never gets API access. Price-enforced — API sits clearly above Sovereign.
-- **Tier logic keys ≠ display names (Share-1, 11 Sep 2026).** Gate on `worker/src/tiers.js` — never on display strings. Live wire vocabulary: consumer `free`/`creative`/`max` (Stripe axis, `EXPIRY_WINDOWS`/`TIER_CAPS`), Chartered axis `'api'`. `TIERS.CHARTERED === 'api'` — wire value kept, `'chartered'` rename deferred. `citizen`/`sovereign` appear in **no** source module — display-layer and S89 rename narrative only. Helpers: `isPaidTier`, `isBearerTier`, `isCharteredTier`, `displayName`. Do not reintroduce literal `'api'`/`'citizen'`/`'sovereign'` comparisons in gating.
-- **API tier is invoiceable** — preserves the PO/invoice path for firms that cannot pay by card or Lightning.
-- **The rail model extends to the API tier.** Identity rail (Stripe/invoice) and anonymous rail (Lightning/prepaid sats) are mutually exclusive per credential relationship.
-- **Rail is declared, not inferred from payment.** The client's principal declares the rail at onboarding; the permitted payment method follows.
-- **Mandatory pre-payment disclosure of both irreversibles** (aimed at the principal, before AP handoff): wording locked SW-Opus-3, four surfaces.
-- **DO NOT add an identity row or email field to the anonymous-rail credential path** (consumer Lightning and API alike) — no email, account, IP or customer id. Payment records only (quote, payment hash, `B'`, spent `Y`) in Supabase via service-role functions — never KV (X1) — with timestamps rounded to the hour and a retention limit (Research-Review-2 · 11 Oct 2026; was "no Supabase row"). Load-bearing for the anonymous rail's identity promises.
+@../refueler-share-private/strategy/CLAUDE-strategy.md
 
-**Pricing model (locked SW-Opus-1/2 · 7 Sep 2026):**
-- **Model B (platform credit pool).** Models A and C rejected.
-- **Rate card v1.0:** 10 credits/transfer + 100 credits/GB + 20 credits/permanent-record. OTS webhook and capability discovery free. Reference peg £50k BTC at publication. Governance: first review at £100k BTC 30-day trailing; ±40% GBP drift = re-version.
-- **1 credit = 1 sat** (internal canonical unit — user-facing copy always says "credits", never "sats").
-- **Identity rail:** server-held recovering ledger, auditable, invoiceable. Monthly allocation included (see MCP spec §7.4). Metered overage above allocation = abuse ceiling, not billing meter.
-- **Anonymous rail:** client-held bearer Cashu credits. Balance is the client's local stack — server is blind to it. Non-recoverable.
-- **Term protection is an identity-rail feature.** Annual prepay rate-locked 12 months; monthly gets 30 days' notice. Anonymous rail: current rate card always.
-
-**API / white-label locked decisions (AP-2/AP-3a + SW-Opus-1 · 7 Sep 2026):**
-- HMAC signing: every API request signed with HMAC-SHA256 over `method + path + timestamp + body_hash`.
-- Three credentials per commercial relationship: `rfs_live_{32b base58}` (identification) + `rfs_sign_{32b base58}` (request integrity) + `rfs_whsec_{32b base58}` (webhook signing, API tier only).
-- Test/sandbox credentials use `rfs_test_` prefix — never `rfs_live_` or `rfs_sign_` in test files. GitHub scanner pattern-matches these prefixes.
-- One API keypair per commercial relationship. No sub-keys. Rotation via `POST /api/v1/keys/rotate` (24h grace window).
-- Webhooks are notification, never control flow. Credential issuance and transfer completion proceed identically whether the client webhook endpoint is up or down.
-- DO NOT use Cloudflare Queues, Durable Objects, or D1 for webhook delivery or any other purpose. `ctx.waitUntil` + KV dead-letter only.
-- Badge links to `refueler.io/share/` (the landing page, since X5-2).
-- **CF for SaaS enabled on `refueler.io` zone (SW1 · 8 Sep 2026).** Fallback origin: `fallback.share.refueler.io`. Custom hostname: `api.share.refueler.io`. hostname_id: `d1d04abe-854c-48a0-8afe-bca47dfb0c3b`. ssl_id: `a3bd125f-f48c-4226-9e7c-d26e77fbaa90`. API token: `refueler-share-saas` (Zone → SSL and Certificates → Edit, scoped to `refueler.io`). Worker route: `api.share.refueler.io/*` in `wrangler.toml`. `wl_config.js` is the host-lookup module — add new client hostnames to `WL_CONFIGS` there.
-- API tier invoiced manually via Stripe invoice template. No subscription price object for API tier — invoice template only, managed manually in Stripe dashboard, off-repo.
-- `X-Email` header dropped from upload path entirely.
-- **The app is `src/app/*.njk` + `src/_includes/{app-layout,share-body,signin-body}.njk` + `frontend/` → `dist/`** (X5-2, 15 Oct 2026). The old `src/index.njk` / `src/signin.njk` mirror pages, `.eleventy.js` and `src/blake3/` were deleted. refueler.io owns Status, Plans, `/upgrade.html` and the `/share/` landing page (`refueler-io/src/share/index.njk`, `permalink: /share/index.html`, edited in that repo directly).
-
-**API feature gates (locked SW-Opus-1 · 7 Sep 2026):**
-- **v1 (ships in SW block):** capability discovery (`GET /api/v1/capabilities`), OTS-confirmation webhook, acceptance receipts + collection receipts. "Proof of delivery" retired — unprovable, never claim it.
-- **v2 (each with explicit gate):** Silent Drop provisioning via API (gate: SD-block shipped); agent-to-agent transfers (gate: SD provisioning live); verifiable agent identity NUT-11 Mode 2 (gate: B8, `bind_pubkey` reserved in voucher now); batch credential issuance (gate: Pass API Q4); composable receipts (v1 if free off credit-token work, else v2).
-- **Forward commitments (document, do not build):** policy-encoded transfers via Nutroot three-product flow (gates: Nutroot PR #421 ✓ merged 10 Sep 2026 — read the merged text at B8 planning — + B8 + Pass + B12). BOLT12/MCP inline payment: B9+, phoenixd-native.
-- **MCP v1 tools:** `refueler_capabilities`, `refueler_send_file`, `refueler_check_transfer`, `refueler_quote`. Full contracts in `refueler-mcp-spec-v2.md`. Each ships the day its backing product is live.
-- **MCP architectural constraint (invariant):** MCP server runs in the agent's trust domain, handles ciphertext only. Never a Refueler-hosted plaintext endpoint.
-- **Sandbox:** credential-limited, no time cap. Model-B test-credits, both rails walkable with `rfs_test_` prefix. Non-anonymous by design — "do not send real cargo to the sandbox" stated plainly.
-
-**MCP spec v2 — locked decisions (Share-MCP-Opus-2 · 10 Sep 2026):**
-Full contracts in `refueler-mcp-spec-v2.md`. Worker-contract items that affect every build session:
-
-- **`GET /api/v1/capabilities` response shape:** locked in spec §7.1. Emits `schema_version: "cap.v1"`, `rate_card_version`, `credit_unit: "sat"`, `rails_available` (live state only — `["identity"]` until B7/NB-4), `features` map, `rate_card` (integer credits), `daily_reference_rate` block, `limits`. **SW-MCP-W1** implements this shape; do not emit the old illustrative shape from v1.
-- **Daily reference-rate KV key:** `btc_ref_rate:current` in `STATUS_KV`. Schema: `{ gbp_per_btc, source, last_updated, set_by, previous }`. No TTL — staleness derived from `last_updated`. Tier 1 (pre-node): manual override + 3am CoinGecko fallback + ±20% guard. Tier 2 (post-B7): 15-minute node feed + CoinGecko fallback. **SW-MCP-W1.**
-- **Monthly allocation pool (Supabase since KV-Fix-2, 9 Oct 2026):** `api_credit_pools`, one row per `org_account_id`, columns `plan`, `allocation`, `remaining`, `overage_credits`, `overage_ceiling`, `period_start`, `period_end`, `status`; spent only by the atomic `api_credits_spend` (rules = `applyQuotaSpend` in `quota.js` — change both together). Keys in `api_keys` (hashes only). Never a key or balance in KV. Reset is lazy (on next spend). Identity-API: 50,000 credits/mo, metered overage to ceiling. Personal API (`plan: "personal_api"`): 10,000 credits/mo, hard stop. **SW-MCP-W2.**
-- **Personal Sovereign API path (unlisted):** £49/mo, 10,000 credits/mo, hard stop, no webhook, no AM, DPA on request. KV plan value: `personal_api`. Not on public pricing page.
-- **Fragment grammar — link format v2 (D-1 filename fix; v2 Share-Crypto-1 · 7 Oct 2026):** `X-File-Name` to Worker is always the constant placeholder `"encrypted-payload"`. Real filename travels in the URL fragment only, inside a versioned base64url-JSON blob: `{ v: 2, k: "<key-b64url, 32 B>", n: "<real-filename>", s: "<seal-nonce-b64url>", z: <plaintext-bytes> }` (s present only for permanent-record transfers; key order v, k, n, s?, z). v2 has no `i`: parts use a key derived from `k` (`frontend/crypto.js` `derivePartKey`/`encryptPart`); the seal stays on `k`. **`z` is required in v2**; the receiver checks `ceil(z / CHUNK_SIZE) == total_chunks` before any download request. Senders make only v2. v1 (`{ v: 1, k, i, n, s?, z? }`) and v0 links still open the old way until the removal date in the Master Context backlog. Strict parse: a malformed v2 blob throws, never read as a legacy key. MCP-Fix-1 adopts v2 exactly. The Worker sees `X-Total-Bytes` at `/initiate` (cap, cost, tail URL) and stores nothing: no `total_bytes` in new manifests, `/meta` keeps the key (null), receipts `size_bytes: null`. Never claim the size is hidden — `total_chunks` gives it to within 32 MiB, and R2 object sizes give it **exactly** (ciphertext = plaintext + 16 B per chunk) to anyone with storage access. Applies to **both** MCP send tool and consumer `upload.js`/`download.js` in the same session (SW-MCP-4). Verify `hashSecret()` in `nut11.js` construction (bare SHA-256 vs domain-tagged) at SW-MCP-2 before shipping agent-to-agent passphrase protocol.
-- **Vocabulary rule (user-facing):** "credits" / "Share credits" everywhere a human reads. Never "sats", "ecash", "tokens" in any output string, tool schema value, or pitch copy. Internal technical docs: precise terms permitted.
-- **Transfers persist until `expiry_timestamp`** regardless of account cancellation status — explicit policy, not assumed behaviour.
-- **No Anthropic marketplace.** Distribution: `refueler.io` and AMs only. MCP server ships as Apache 2.0 npm package; operator installs in their own infrastructure.
-
-**BLAKE3 server-side integrity — VERIFIED S34, AUDITED S42e:**
-Server verifies every chunk via BLAKE3 WASM (`worker/blake3-wasm/`), imported statically via
-`blake3_worker.js`. 400 on hash mismatch. Full Merkle root verification (assembled file vs BLAKE3 tree root)
-remains unimplemented — do not claim end-to-end file integrity until B9 build is complete (B9-3).
-
-**Integrity/audit marketing claims — current ruling (S42e + TH-series + B9-Opus · 12 Sep 2026):**
-- ✅ **Safe to assert:** Server-side BLAKE3 chunk integrity. Double-spend detection via Supabase ledger. Rate limiting on all public endpoints. UUID-bound credential issuance. Standard Cashu proof verification (`k·Y == C`) on every upload credential (Cred-Fix-2, 5 Oct 2026).
-- ✅ **Safe to assert (TH-series+):** Permanent record (Bitcoin-anchored existence proof) for Sovereign+ transfers where sender opts in. Honest scope: proves bytes existed on or before a block date. Does not prove authorship, truth, or delivery.
-- ✅ **Safe to assert after B9-3 ships:** Ciphertext storage integrity — Worker verifies assembled ciphertext Merkle root on every download. Use: "ciphertext storage integrity" or "the encrypted object served equals the encrypted object stored." Never "end-to-end."
-- 🔒 **Still blocked (until B9 build):** Full Merkle tree verification at download. Receipt `merkle_root`/`verified` fields (gate: B9-3). NUT-11 Mode 2 (keypair auth). "Audit-certified" or "security-audited". ML-KEM key wrapping. Any "end-to-end" integrity claim. Journalist/source-protection copy (gate: SD shipped + VPN scope stated).
-- 🔒 **Blocked until the anonymous rail (B7/SD):** crediting blind signatures for unlinkability. On the consumer path the Worker sees the same UUID at issue and upload; anonymity = no account / no email, never "blinding".
-- 🔒 **Permanently blocked:** Plaintext `blake3PlaintextRoot` in any receipt or in the Worker. "End-to-end file integrity" as a Refueler-side claim (the Worker never verifies plaintext — the recipient does).
-- 📅 **Blocked items resolve:** B8 (NUT-11 Mode 2) → B9 build B9-1…B9-3 (ciphertext Merkle root verification) → B9-4 (receipt upgrade) → B10 (ML-KEM).
-
-**Merkle / MMR / SMT — locked B9-Opus · 12 Sep 2026 (full spec: `merkle-spec-v1.md` in repo root):**
-- Tree construction: RFC 6962 unbalanced, domain-separated (`0x00` leaf / `0x01` node), BLAKE3 node hash, sequential big-endian leaf ordering (matches AAD convention), `chunk_count` committed. `tree_algo: "rfc6962-unbalanced-blake3-v1"`. Duplicate-last-leaf rejected (CVE-2012-2459).
-- Chunk hashes persisted in R2 sidecar `{uuid}/hashes` (raw 32-byte concat). Never inline in manifest (64 KB `safeGetManifest()` ceiling). Download = sidecar-root check + verify-then-flush per chunk + 409 on mismatch. Full reconstruction only basis for `verified`.
-- Receipt `merkle_root`/`verified` unblocked post-B9-3, ciphertext root only. Plaintext root barred from receipts forever.
-- MMR roots anchor via Share OTS relay, never a "smart contract". AES-256-GCM leaf encryption, on-device key (Deed→HKDF).
-- SMT complements Supabase double-spend guard (public verifiability); never the live arbiter; no build slot without design partner.
-- ZK build slot only where (a) use case hides which set member satisfied a predicate; (b) no NUT-22/nutroot primitive covers it; (c) buyer committed.
-- Due-diligence proof = FCA SYSC 6.3 / MLR 2017 reg. 40 record-keeping evidence — NOT FATF travel rule compliance. MLRO confirmation required before marketing copy.
+If that import is missing (another machine, a cloud session), stop and ask Rajesh for the private repo before changing anything.
 
 ---
 
@@ -164,62 +70,6 @@ Applies to every repo: product, hackathon, test or throwaway. Check any new encr
 - **Independent messages → a fresh random nonce per message** (96-bit for AES-GCM), or a scheme that handles it for you (XChaCha20, NIP-44).
 - **Re-encrypting is only safe when the bytes are identical** (same key, same nonce, same plaintext — e.g. resume). If they could differ, compare before sending.
 - **No hand-rolled ciphers.** WebCrypto or an audited library; add known-answer test vectors for any new scheme.
-
----
-
-## B12 / B12-SR security locks (24 Sep 2026)
-
-Full specs: `docs/B12-spec-v1.1.md` (design) + `docs/B12-SR-spec-v1.md` (security review; **wins on any conflict**). Build sessions read B12-SR §C first. B8 and Share-6 specs also live in `docs/` (moved 25 Sep 2026).
-
-- **KV is compromised for write, not just read (X1).** Nothing in KV may authorise access, lift a limit, or select a privileged branch unless MAC'd under a Worker secret. Auth sessions and magic-link tokens live in Supabase, never KV.
-  - **KV-Audit-Opus (8 Oct 2026, `docs/KV-Audit-v1.md`):** ask three questions of any KV value — forge, roll back, delete. Forge → MAC under a `KV_MAC_KEY` HKDF subkey (`refueler.share.kvmac.<purpose>.v1`), KV key name inside the MAC. Roll back or delete matters → Supabase (or R2 `etagMatches`). A KV rate counter is a courtesy throttle, never a security gate. KV-sourced text is untrusted wherever it renders. API keys + credit pools live in Supabase (KV-Fix-2 ✓ 9 Oct): `requireApiAuth` reads `api_keys` (≤ 60 s isolate cache = revocation bound), Supabase down → 503, never a KV fallback; sandbox keys pass only `/api/v1/sandbox/*` and are refused at credential issue.
-- **API client routing (API-Repair-1 · 9 Oct 2026):** the manifest carries `cref_ct` = org_account_id + transfer_ref sealed under `SHARE_SEAL_KEY_<kid>` (`worker/src/seal.js`, the shared seal helper B12-3 reuses for `qref_ct`); never a raw key, org or ref. Chartered initiate is HMAC-only (`requireApiAuth`); the pool is the signer's. Webhooks, receipts and DLQ route manifest → org → `wh_config_{orgtag}`, every KV record MAC'd with its key name inside; URL re-validated per send. Receipts v2 are signed with the client's `rfs_whsec_` and pulled owner-only. Live checks use `bin/lib/wh-sink.mjs` (named tunnel `wh-sink.refueler.io`).
-- **Presigned PUTs sign `content-length`** (full chunks `CHUNK_SIZE + 16`; tail URL minted at initiate only, so tail length is never stored). Session token, URL expiry and quota reservation share one clock: `UPLOAD_WINDOW = 6 days`.
-- **B12-3 locks (11 Oct 2026):** upload session = MAC'd token `v1.<exp>.<chunks>.<mac>` under `UPLOAD_SESSION_KEY` — **no KV session record**; spent/deleted are read from the R2 manifest. Initiate writes the manifest **create-if-absent**; every other manifest write goes through `latch.js` `updateManifest` (conditional on etag) — never a bare `putManifest` except the tombstone after the latch. Every deletion path latches via `latchConsumed`; only the winner calls the one `releaseHeld`. Storage quota (chunks) and credits are separate meters; `quota_ref` only from an authenticated principal (Chartered org today, Citizen at B12-4a); manifests carry sealed `qref_ct`, never a raw ref.
-- **Deletion latch = R2 conditional put** (`onlyIf etagMatches`) on the manifest. All five deletion paths (DAD, owner-delete, strike-off, grace sweep, orphan sweep) call the same release with the same args; tombstones are identical and strip `qref_ct`.
-- **No raw `quota_ref` at rest in R2 or KV.** Manifests carry sealed `qref_ct`; `org_dock` is one sealed KV entry per transfer under `SHARE_SEAL_KEY_<kid>` (per-dock HKDF subkey, AAD binds org + entry + kid).
-- **Lodgement refs:** `LR-` + 6 Crockford chars is display only; every action uses the 128-bit handle.
-- **Names (X3 · 9 Oct 2026):** Harbourmaster = Silent Drop Quay owner (Locke sign-in) only; Chartered org admin = Custom House; Navy Office live-transfer view = Execution Dock.
-- **Auth follows rail, not surface name.** Registered → magic link (15-min, single-use, fragment + click) + `__Host-rfs_session` cookie + CSRF + exact-origin credentialed CORS. Bearer → Locke (B8). No magic link ever reaches a Bearer principal. The `localhost` CORS echo is never combined with `Allow-Credentials`.
-- **B12-4a-1 locks (13 Oct 2026):** sign-in tokens + sessions live in Supabase `auth_tokens` / `auth_sessions` (BLAKE3 hashes only, no IP/UA, functions only) — never KV, never cached. Auth routes (`/auth/*`, `/chambers/session`) are served on `AUTH_API_HOST` only and use `authCors()` (exact `AUTH_ORIGINS`, credentials) — never `corsHeaders()`. Public CORS (`corsHeaders()`, `auth_ping.js`) echoes only var `APP_ORIGINS`, set once per request by `setAppOrigins(env)` (X5-1a); X5-2 moves `AUTH_SIGNIN_URL`, X5-2b drops `https://refueler.io` from `AUTH_ORIGINS`, `APP_ORIGINS` and R2 CORS (`docs/X5-plan-v1.md` §2.7, §3). `AUTH_PEPPER` is never used directly: HKDF subkeys `refueler.share.csrf.v1` / `refueler.share.rl.v1`. New authenticated routes gate on `requireSession()` (`handlers/auth.js`). Email = **Cloudflare Email Sending** (binding `EMAIL`, from `signin@mail.refueler.io`, own DMARC `p=reject`; email preview **off** — it would store live links). **workers.dev is off — keep it off** (cookie must never be valid there). Stripe webhook = `https://api.share.refueler.io/webhook/stripe`. **Stripe lookup keys stay `share-max-*`**: the webhook derives the tier from them (wire `max`; display "Citizen").
-- **B12-4a-2 locks (13 Oct 2026):** the tier at initiate is **resolved, never declared**: `api` only after `requireApiAuth`; `max` only from a Citizen S6 session (cookie + `X-CSRF` + exact Origin, on `AUTH_API_HOST`) whose `citizen_entitlement` is paid (status active **and** `current_period_end` in the future — null = unpaid); everything else `free`. `TIER_CAPS` = one wire name per tier: `free` 4 GiB · `max` 100 GiB · `api` 250 GiB. Citizen quota = own account-of-one (`kind 'registered'`, 3,200 chunks = 100 GiB held), `quota_ref` tag `refueler.share.quotaref.citizen.v1` ‖ 0x00 ‖ utf8(`cus_…`), provisioned only on `quota_not_provisioned` (provision overwrites the limit). Citizen 402 = exact figures; Chartered 402 = band. The browser sends the cookie on **initiate only** (`credentials: 'include'` there and on `/auth/*` + `/chambers/session`; nowhere else), and only while "Uploading as Citizen" is chosen; "Send without my account" = Pro Bono, no cookie, no `X-CSRF`. Initiate credentials CORS only for exact `AUTH_ORIGINS` on `AUTH_API_HOST` (`initiateCors`). Rate-limit KV keys are `rl:{endpoint}:{rlId}` — never a raw IP/email/UUID. Sign-in page = `src/app/signin.njk` + `frontend/signin.js` at `share.refueler.io/signin/` (= `AUTH_SIGNIN_URL` since X5-2; `refueler.io/share/signin/` forwards there until 12 Jan 2027); one button **"Sign in"** under "Welcome." — no "Chambers" on any button (the one-click rule is the lock, not the word).
-- **Bearer-rail Chartered follows Sovereign (X2):** no Supabase row, no `org_dock`, no `qref_ct`.
-- **Sovereign ledger never leaves the user's control.** Refueler never stores a Chambers blob. Portability = Deed + user-held backup file, or QR pairing with a 6-digit check code (ephemeral secp256k1 ECDH via `@noble/secp256k1` — no new curve lib). Domain tags `refueler.share.chambers.*` — never shared with the refueler.io merchant implementation of the same protocol.
-- **Chambers + lodge page move to a dedicated origin with strict CSP (X5)** before the Sovereign ledger ships.
-- **Custom House aggregates:** daily 5 % bands of quota; no hourly GiB; no "<3" floor; dates day-granular. Chartered 402 bodies return the band too.
-- **Encoding rule for every HMAC/HKDF input:** `utf8(tag) ‖ 0x00 ‖ fixed-length binary fields`; UUID 16 raw bytes; `quota_ref` 32 raw bytes; big-endian integers; variable-length field last. BLAKE3 unkeyed for high-entropy secrets, BLAKE3 keyed for low-entropy identifiers.
-
----
-
-## Session queue
-
-See `share-sessions.md` for log. Full roadmap lives in `Share-Master-Context.md` §Roadmap.
-Session count is a guide not a constraint — split early, never overload. Planning sessions uncounted.
-
-**Current order (Served-Code-Opus · 10 Oct 2026; Master Context §Roadmap wins):** B12-3 ✓ → B12-4a-1 ✓ → B12-4a-2 ✓ → Design-Theory-Opus-1/-2 (PreAlpha chip folded in) → Block A (X5-Plan ✓ → X5-1 ✓ → X5-2 ✓ 15 Oct → X5-2b 22 Oct → Tester-Programme-Opus → Share-Release-1) → Design-Nav-Opus sessions (no limit) → Chambers-Design → B12-4b → B12-6 → B12-5 → B12-Audit → Tidy → DL track → Pricing-v2 → Nostr-Opus → B8 → B7-Opus → Hetzner/NB → B7 → SD-block + Block B → B9.
-
-**TH-block ✓ complete (6 Sep 2026):**
-- TH-Opus-1 ✓ — Tower Hill / Permanent Record scoped
-- TH-Opus-2 ✓ — Legend price locked. Cross-product entitlement architecture locked. BRIDGE v8.0.
-- TH-1 ✓ — Worker OTS relay. Deployed `a71f12fe`.
-- TH-2 ✓ — Permanent-record toggle UI, `seal_nonce`, `blake3PlaintextRoot`. Deployed `53e3c7fb`.
-- Share-JS-Refactor ✓ — 5-module split. Deployed `45a4d3b3`. 324 tests passing.
-
-**SW-block ✓ complete (11 Sep 2026):**
-- SW1–SW9 ✓ — CF for SaaS, HMAC auth, credential issuance, badge, webhooks, receipts, dashboard, sandbox, hostname health. 484 tests passing.
-
-**SW-MCP block ✓ (prep complete):**
-- SW-MCP-1–6 ✓ — MCP server scaffold through demo hardening. 228 tests passing (`refueler-mcp` repo).
-- SW-MCP-8 ✓ — package prepared; `npm publish --access public` is a manual one-liner Rajesh runs from `~/Documents/refueler-mcp`. **Not published yet (npm 404, 28 Sep) — hold until MCP-Fix-1 ships.**
-- SW-MCP-7 gates on B7/NB-4 (anonymous rail send).
-
-**B9-Opus ✓ complete (12 Sep 2026):** Merkle / MMR / SMT / ZK design locked. `merkle-spec-v1.md` produced (repo root).
-
-**B12 block (opened 24 Sep 2026):** B12 design ✓ (`cc14d21`) · B12-SR security review ✓ (`4564730`). B12-1 ✓. **B12-1b and B12-2 moved post-Berlin (decided 25 Sep): only small ad hoc sessions until back 4 Oct.** B12-1b is the first session back.
-
-Locked block sequence (updated Share-B12-SR · 24 Sep 2026):
-`B12-1 ✓ → [Berlin 30 Sep–3 Oct; back Sun 4 Oct; small ad hoc sessions only until then] → B12-1b → B12-2 → KV-Audit-Opus + fixes · X3 naming · X5 app origin → B12-3 · B12-4a · B12-4b · B12-6 · B12-Audit → B8 build → [Hetzner] → NB-2–NB-4 → B7 → SD-block (+ B12-4c) → B9 build (B9-4…B9-8) → B10+`
-B12-5 (Custom House org admin) slots in when a Chartered client is in sight.
 
 ---
 
@@ -289,8 +139,9 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
 - Versioned assets: every release lives at `/v/<sha>/` and the previous one is kept, so a tab open
   across a ship still loads its own modules.
 - **Browser cache:** Cloudflare Cache Rule `http.host eq "share.refueler.io"` → Browser TTL = Respect
-  origin (dashboard, off-repo); `ship-app.sh` fails if responses become browser-cacheable. The old
-  refueler.io `/share/assets/` Cache Rule was removed at X5-2 (nothing is served there now).
+  origin (dashboard, off-repo); `ship-app.sh` fails if responses become browser-cacheable. The refueler.io
+  Cache Rule "Share assets — respect origin browser TTL" (`/share/assets/` + `/share/admin/`) **stays**:
+  Navy Office (`/share/admin/navy-office.js`, unversioned) and Plans/Status CSS still live there (X5-2).
 - Local preview of every state: `dev/share-harness/` (builds the real app, fake Worker, stub Turnstile).
 - Admin tooling never goes on share.refueler.io. `worker/src/share/admin/test-upload.html` is local-only.
 
@@ -303,72 +154,6 @@ DO NOT introduce a NEW request header the browser sends to the Worker without ad
 NOTE (browser + hostname, Share-6 live-test 21 Sep): download "CORS/ERR_FAILED/503" failures were **Brave** + the api.share.refueler.io custom hostname (6-6b cutover not done) intermittently 503-ing; a 503 carries no CORS header so the browser mislabels it "CORS". Safari downloads the same link cleanly, and curl shows the Worker DOES send CORS on the failing chunk. DO NOT edit Worker CORS or finalise token logic for this — both are correct. Real fix lives in 6-6b (or revert frontend/crypto.js WORKER_URL to https://refueler-share.rt-fc4.workers.dev). Test downloads in Safari before assuming a code fault.
 NOTE (verifying R2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
 Claude must ask for all relevant files before writing any fix — never assume and code blind.
-
----
-
-## Context file hygiene — mandatory at every B-close session
-
-Every block-close session must include a trim pass on both context files before the git commit.
-This is not optional.
-
-**`share-sessions.md`:**
-- Sessions more than two blocks old: convert full narrative entries to compact one-row table format
-  (session number · commit · one-line summary). Do-not-retry blocks are permanent — never trim.
-- Target: ≤ 700 lines (raised 13 Oct 2026, Rajesh — compaction costs more than the extra lines). Compact at **block close only**: last ~4 sessions in full, older ones one row each.
-
-**`Share-Master-Context.md`:**
-- §Current state table: drop rows older than two blocks. Block summaries in §Roadmap carry the history.
-- §Known broken / do not retry: remove entries that duplicate `CLAUDE.md` locked decisions.
-- §B-n snag list: remove fully resolved items. Carried items only.
-- Target: ≤ 500 lines (raised 13 Oct 2026). Trim at block close only.
-
-**Applies to:** SW-MCP-8 (next B-close) · then B8, B9, B10, B11, B12 close sessions.
-Also apply at any session where either file exceeds its target line count mid-block.
-
-
----
-## File delivery protocol — mandatory for all Refueler sessions
-
-**Root causes (B10-1 · 23 Sep 2026):**
-- Bare `.js` `SendUserFile` → desktop app blocks download ("This file type cannot be opened").
-- Desktop app folder-save icon → drops files into `Claude outputs/` inside the repo; collisions get `-1` suffix. Never use it.
-- `device_commit_files` once silently no-op'd — reported success, bytes unchanged. Byte-verify is mandatory.
-
-**Code files** (`.js`, `.ts`, `.json`, config, worker scripts):
-1. Write directly to the exact repo path via `device_commit_files`.
-2. Immediately byte-verify: `device_bash "wc -c <path> && shasum -a 256 <path>"` — must match expected size/hash.
-3. Show `git -C <repo> diff HEAD -- <file>` so Rajesh reviews the exact change.
-4. Never auto-commit, never auto-push. Rajesh commits manually with `git commit && git push`.
-
-**Docs and text files** (`.md`, `.html`, `.css`):
-- `SendUserFile` only — these download fine. Rajesh places manually.
-
-**Escape hatch when repos not connected:**
-- Wrap code in a `.zip` and `SendUserFile`. Never a bare `.js` via `SendUserFile`.
-
-**Never use the desktop app folder-save / "Show in Folder" icon** — always drops into `Claude outputs/` with `-1` collision suffixes.
-
----
-
----
-
-## Editorial voice — Notes articles
-
-Articles (e.g. refueler.io/notes/) must read as honest and human, not polished or suave. Rules:
-
-- **No stacked aphorisms.** One punchy line per piece, maximum. Two in a row reads as a founder workshopping their elevator pitch.
-- **No performative openings.** "Most X are written by Y to protect Z, not you" is a cliché. Start with what the article does, plainly.
-- **Let the tables persuade.** The prose sets context and handles nuance. The tables do the comparison. Don't duplicate the table's job in the prose.
-- **Dry wit is earned, not scheduled.** One well-placed dry observation lands. The same observation every other paragraph kills it.
-- **Honest about gaps.** "B10 (upcoming)" in a comparison table is better than a footnote hedge. Self-hostable ❌ gets acknowledged, not buried.
-- **Plain declarative sentences.** "Architecture protects your content. Jurisdiction shapes the paperwork" is one sentence too many — "Architecture is what protects you; jurisdiction just determines how long the paperwork takes" is one, and it's doing the same work.
-
-
-## Deferred experiments
-
-- **refueler-ecash-lab** — separate repo for NUT-11 Mode 2 and ML-KEM key wrapping
-  experimentation before wiring into production. Flagged S20. Scope decision at B8 (S88+)
-  and B10 (S111+). Do not start until NUT-11 Mode 2 design is locked.
 
 ---
 
