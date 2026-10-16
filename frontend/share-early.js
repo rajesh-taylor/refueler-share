@@ -21,7 +21,7 @@ if (location.hash.length > 1) document.documentElement.classList.add('rx-pending
   }
   // X5-1b (page weight): share.js imports the receiver code only for a link, so fetch it now.
   if (location.hash.length > 1 && document.currentScript) {
-    ['download.js', 'download-fetch.js', 'download-save.js', 'download-sheets.js', 'download-notes.js']
+    ['download.js', 'download-fetch.js', 'download-save.js', 'download-sheets.js', 'download-notes.js', 'download-program.js']
       .forEach(function (f) { preload(f); });
   }
   if (location.hash.length <= 1 && document.currentScript) {

@@ -8,6 +8,7 @@ import { IntegrityError, DECRYPT_FAILED_FSAA, DECRYPT_FAILED_BLOB, _decryptPart,
 import { $, _showSheet, _showNotice, _showProgress, _setBar, _makeDlProgress, _showLinkInactive,
          _showDownloadError } from './download-sheets.js';
 import { _showNotesCard } from './download-notes.js';
+import { makeProgramCheck, PROGRAM_NOTE } from './download-program.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // _showIntegrityFailure — the honest, user-facing integrity failure state.
@@ -58,6 +59,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
 
   const prog = _makeDlProgress(domRefs, totalBytes, totalChunks, 1);
   const DECRYPT_STOP = {};
+  const program = makeProgramCheck(fileName);   // Share-MIME-1: reads only, browser only
 
   try {
     let bytesWritten = 0;
@@ -70,6 +72,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
           reportError('decrypt', e?.name || 'Error', `uuid:${uuid.slice(0,8)} chunk:${i}`);
           throw DECRYPT_STOP;
         }
+        program.see(plaintext);
         await writable.write(new Uint8Array(plaintext));
         bytesWritten += plaintext.byteLength;   // the bar counts bytes as they arrive (prog)
       }, willSelfDestruct);
@@ -87,7 +90,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
       return;
     }
     await writable.close();
-    _finish(willSelfDestruct, domRefs);
+    _finish(willSelfDestruct, domRefs, program.verdict());
 
   } catch (e) {
     try { await writable.abort(); } catch {}
@@ -126,10 +129,12 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
   domRefs.dlStageTag.textContent = 'Preparing file';
   const decrypted = [];
   let plainBytes = 0;
+  const program = makeProgramCheck(fileName);   // Share-MIME-1: reads only, browser only
   for (let i = 0; i < chunks.length; i++) {
     try {
       const plain = await _decryptPart(state, chunks[i], i, totalChunks);
       decrypted.push(plain);
+      program.see(plain);
       plainBytes += plain.byteLength;
     } catch (e) {
       reportError('decrypt', e?.name || 'Error', `uuid:${uuid.slice(0,8)} chunk:${i}`);
@@ -152,15 +157,20 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 
-  _finish(willSelfDestruct, domRefs);
+  _finish(willSelfDestruct, domRefs, program.verdict());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Finished (item 9, R-10): "Downloaded." + File/Size, DAD line, Notes card, send line.
+// Finished (item 9, R-10): "Downloaded." + File/Size, program line, DAD line, Notes card, send line.
 // No date seal (item 10, R-9), so the Notes card is always tried.
+// program: 'file' | 'folder' | null from download-program.js (Share-MIME-1) — one calm line, never a block.
 // ─────────────────────────────────────────────────────────────────────────────
-function _finish(willSelfDestruct, domRefs) {
-  if (willSelfDestruct) $('rx-done-deleted').hidden = false;   // before the sheet shows: it joins the arrival
+function _finish(willSelfDestruct, domRefs, program) {
+  if (program && PROGRAM_NOTE[program]) {                      // before the sheet shows: it joins the arrival
+    $('rx-done-program').textContent = PROGRAM_NOTE[program];
+    $('rx-done-program').hidden = false;
+  }
+  if (willSelfDestruct) $('rx-done-deleted').hidden = false;
   _showSheet('rx-done');
 
   _showNotesCard(domRefs.dlSignoff);

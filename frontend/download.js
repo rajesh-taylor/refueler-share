@@ -20,7 +20,7 @@
 // Split by job at Share-JS-Split-2 (9 Oct 2026), no behaviour change:
 //   download-fetch.js  parts in order, retries, decrypt   download-save.js   stream or blob, finish
 //   download-sheets.js one sheet at a time, progress bar  download-time.js   dates and countdowns
-//   download-notes.js  the Notes card
+//   download-notes.js  the Notes card                    download-program.js  "is this a program?" (Share-MIME-1)
 //
 // Exports:
 //   enterDownloadMode(detected, domRefs, state, helpers)

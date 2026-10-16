@@ -7,7 +7,7 @@
 # Every top-level frontend/*.js and *.css must be listed here: an unlisted file fails the
 # check (aa_check_listed), so a new module can never be left out of a release by accident.
 # frontend/app/ (app-only files: header, tokens, fonts, icons) is copied over these after.
-AA_JS="share.js share-early.js signin.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js upload-account.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js timestamp.js refueler-badge.js fragment.js merkle.js"
+AA_JS="share.js share-early.js signin.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js upload-account.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js download-program.js timestamp.js refueler-badge.js fragment.js merkle.js"
 AA_CSS="share.css"
 AA_VENDOR="fflate.min.js qr-creator.min.js noble-blake3.js cashu-crypto.js"   # see frontend/VENDORED.md
 
