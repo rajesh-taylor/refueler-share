@@ -92,6 +92,7 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/admin/r2-presign-test` | admin | — | `handleAdminR2PresignTest` |
 | POST | `/api/v1/admin/quota/provision` | admin | — | `handleAdminQuotaProvision` |
 | POST | `/admin/quota-reconcile` | admin | — | `handleQuotaReconcile` |
+| POST | `/admin/nightly-sweep` | admin | — | `handleNightlySweep` |
 | POST | `/api/v1/admin/storage-quota` | admin | — | `handleAdminStorageQuota` |
 | POST | `/api/v1/admin/quota/cancel` | admin | — | `handleAdminQuotaCancel` |
 | POST | `/api/v1/admin/api-client` | admin | — | `handleAdminApiClientCreate` |
