@@ -681,8 +681,12 @@ export default {
       } catch (e) {
         console.error('scheduled/quota_reconcile: unhandled error:', e);
       }
+    }
 
-      // Task 5 — sign-in tokens and sessions past expiry (B12-4a, S6.4)
+    // Sign-in tokens and sessions past expiry (B12-4a, S6.4). Hourly since
+    // Tombstone-30 (was Task 5 at 03:00): a dead record is gone within the hour,
+    // so "24 hours at most" holds. Deletes only rows already unusable.
+    if (event.cron === '15 * * * *') {
       try {
         await sweepAuth(env);
       } catch {
