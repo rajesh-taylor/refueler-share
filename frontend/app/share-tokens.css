@@ -99,7 +99,8 @@
   --d-arrive: 500ms;
   --stagger:  170ms;   /* must equal RX_STAGGER_MS in download-sheets.js */
 
-  --dial-img: none;    /* §12.1: Paper stays flat */
+  --dial-img:  none;   /* §12.1: Paper stays flat */
+  --dial-lift: none;
 
   /* Names share.css (shared with the old page) still reads. Mapped onto the
      tokens above so there is one source; no status colours behind them (§4.6). */
@@ -135,9 +136,13 @@
   --attention:    #C9A227;
   --slip-bg:      #201F1C;   /* one tone step above the ground */
   --slip-edge:    var(--rule);
-  /* §12.1: Dial 1 % — the ground lifts toward the centre; a fine noise tile on top
-     breaks up the banding (dither.png, built by dev/dither/make-dither.mjs). */
-  --dial-img:     url(./dither.png), radial-gradient(ellipse at 50% 40%, rgba(245,240,232,.01), rgba(245,240,232,0) 70%);
+  /* §12.1: Dial 1 % — the ground lifts toward the centre. Carbon-Band-1 (16 Oct): the lift is
+     made of noise, not a gradient. A 1 % gradient is only 2–3 shades on an 8-bit screen, and
+     Safari rounds it before the grain lands, so the grain couldn't hide the rings. Now the
+     noise tile (dither.png, dev/dither/make-dither.mjs) is faded by a smooth mask (html::before),
+     so each pixel is rounded once, with its own noise: no rings. The flat grain stays (body::before). */
+  --dial-img:     url(./dither.png);
+  --dial-lift:    url(./dither.png);
   color-scheme: dark;
 }
 
@@ -153,7 +158,15 @@ html {
   transition: background-color .35s var(--ease), color .35s var(--ease);   /* the theme turn */
 }
 body { min-height: 100vh; background: transparent; }
-body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--dial-img); background-size: 64px 64px, 100% 100%; }
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--dial-img); background-size: 64px 64px; }
+/* The lift: the same tile, shifted so its grain doesn't line up with body::before's, faded
+   from the centre out as the gradient was (ellipse at 50% 40%, gone by 70%). The tile's mean
+   is 3/255 ink; .85 brings the centre to the old 1 %. */
+html::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--dial-lift); background-size: 64px 64px; background-position: 29px 41px; opacity: .85;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000, transparent 70%); mask-image: radial-gradient(ellipse at 50% 40%, #000, transparent 70%); }
+/* Retina: one tile pixel per screen pixel. Scaled up, the grain was smoothed away. */
+@media (min-resolution: 2dppx) { body::before, html::before { background-size: 32px 32px; } }
+@media (min-resolution: 3dppx) { body::before, html::before { background-size: 21.333px 21.333px; } }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 a { color: inherit; }
 [hidden] { display: none !important; }
