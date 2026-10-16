@@ -42,7 +42,7 @@ Vendored third-party code is listed with hashes in [`frontend/VENDORED.md`](fron
 
 - Open your browser's developer tools on [share.refueler.io](https://share.refueler.io) and look at the network panel while you send a file: the key and filename never leave the page.
 - Share's own JavaScript is served as plain, unminified ES modules; compare it with `frontend/` in this repository. The few third-party libraries are listed, with hashes, in `frontend/VENDORED.md`.
-- A step-by-step page for checking the served files against a published release is planned.
+- Every deploy of share.refueler.io is a GitHub release named `app-<commit>`. It carries `SHA256SUMS` (the SHA-256 of every file that deploy serves), the same hashes in [WEBCAT](https://webcat.tech/)'s manifest format (unsigned, also served at `/release.json`), and `release-extra.json`. The release is published only after the deploy is live. GitHub's machines then rebuild the files from this repository and compare them; see the Release rebuild workflow. One file is not rebuilt there: the Satoshi font, whose licence lets us serve it but not publish it, so the release lists the official file's hash. To compare yourself: `curl -s https://share.refueler.io/v/<commit>/share.js | shasum -a 256`, or rebuild with `bin/ship-app.sh --rebuild <commit> <previous release>` (both named in `release-extra.json`) and compare `build/release/SHA256SUMS`. A matching check covers our files only (not Cloudflare's bot check), and says nothing about what another visitor's browser received.
 
 ## Security
 
