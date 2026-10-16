@@ -7,6 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import worker from '../src/index.js';
 import { corsHeaders, setAppOrigins, parseOrigins } from '../src/utils.js';
 import { handleAuthPingOptions } from '../src/auth_ping.js';
+import { env as shipped } from 'cloudflare:test';
 
 const OLD = 'https://refueler.io';
 const APP = 'https://share.refueler.io';
@@ -100,5 +101,22 @@ describe('auth_ping — same allowlist, no localhost echo', () => {
     expect(handleAuthPingOptions(req(APP)).headers.get('Access-Control-Allow-Origin')).toBe(APP);
     expect(handleAuthPingOptions(req('https://evil.example')).headers.get('Access-Control-Allow-Origin')).toBe(OLD);
     expect(handleAuthPingOptions(req('http://localhost:8181')).headers.get('Access-Control-Allow-Origin')).toBe(OLD);
+  });
+});
+
+// X5-2b (16 Oct 2026): the shipped wrangler.toml vars. Sign-in only on the app's origin;
+// refueler.io stays a public page origin (Plans + Status /status, Navy Office /admin/*),
+// after share.refueler.io so unknown origins are answered with the app.
+
+describe('X5-2b — shipped origins', () => {
+  it('AUTH_ORIGINS is share.refueler.io only', () => {
+    expect(parseOrigins(shipped.AUTH_ORIGINS)).toEqual([APP]);
+  });
+
+  it('APP_ORIGINS answers unknown origins with the app, and keeps refueler.io for Plans, Status, Navy Office', () => {
+    expect(parseOrigins(shipped.APP_ORIGINS)).toEqual([APP, OLD]);
+    setAppOrigins(shipped);
+    expect(acao(corsHeaders(req('https://evil.example')))).toBe(APP);
+    expect(acao(corsHeaders(req(OLD)))).toBe(OLD);
   });
 });

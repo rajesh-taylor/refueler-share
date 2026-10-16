@@ -2,7 +2,7 @@
   "rules": [
     {
       "allowed": {
-        "origins": ["https://refueler.io", "https://share.refueler.io"],
+        "origins": ["https://share.refueler.io"],
         "methods": ["PUT"],
         "headers": ["content-type", "content-md5", "content-length"]
       },

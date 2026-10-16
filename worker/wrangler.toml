@@ -42,12 +42,13 @@ PRICE_MAX_YEARLY_GBP       = "288"
 SHARE_SEAL_CURRENT         = "1"
 # B12-4a sign-in (B12-SR S6). AUTH_ORIGINS = exact origins allowed credentialed
 # calls (comma-separated, https only, never localhost). Secret AUTH_PEPPER set via
-# wrangler secret. X5-1: both origins during the parallel run; X5-2 moves
-# AUTH_SIGNIN_URL; X5-2b drops https://refueler.io from both lists.
-# APP_ORIGINS = page origins the public CORS (corsHeaders, auth_ping) echoes.
+# wrangler secret. X5-2b (16 Oct 2026): sign-in lives only on share.refueler.io.
+# APP_ORIGINS = page origins the public CORS (corsHeaders, auth_ping) echoes; the
+# first entry answers unknown origins. refueler.io stays: Plans + Status (/status)
+# and Navy Office (/admin/*) still run there until they move (Plans-Design-Opus).
 AUTH_API_HOST              = "api.share.refueler.io"
-AUTH_ORIGINS               = "https://refueler.io,https://share.refueler.io"
-APP_ORIGINS                = "https://refueler.io,https://share.refueler.io"
+AUTH_ORIGINS               = "https://share.refueler.io"
+APP_ORIGINS                = "https://share.refueler.io,https://refueler.io"
 AUTH_SIGNIN_URL            = "https://share.refueler.io/signin/"
 AUTH_MAIL_FROM             = "signin@mail.refueler.io"
 
