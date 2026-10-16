@@ -310,9 +310,10 @@ main, .rx-mode main { max-width: var(--sheet); }
 .up-track { border-color: var(--input-border); transition: background-color var(--d-touch) var(--ease), border-color var(--d-touch) var(--ease); }
 .up-track::after { transition: transform var(--d-touch) var(--ease), background-color var(--d-touch) var(--ease); }
 
-/* ── Notice (§9): one sentence, a hairline on the left; gold only on the irreversible line. */
+/* ── Notice (§9): one sentence, a hairline on the left; gold only on a line with a consequence:
+   the irreversible delete, and a program (Share-MIME-2, Rajesh 16 Oct: the grey rule was missed). */
 .rx-once { font: var(--t-body); border-left-color: var(--rule-strong); }
-#destroy-notice { border-left-color: var(--accent); }
+#destroy-notice, #up-program, #rc-program, #rx-done-program { border-left-color: var(--accent); }
 
 /* ── Link box (§9): Plex Mono, two lines then an ellipsis. The clamp is on the inner
    span, so a third line never shows in the box's padding. Copy copies all of it. */

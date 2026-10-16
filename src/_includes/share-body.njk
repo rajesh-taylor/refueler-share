@@ -98,8 +98,6 @@
             </dd>
           </div>
         </dl>
-        <!-- Share-MIME-2: worked out in this browser from the name, first 4 KiB or folder entries; never sent. -->
-        <p class="rx-once up-for-chosen" id="up-program" hidden></p>
         <!-- R-12: "Free up to 4 GB" is FREE_CAP in frontend/config.js -->
         <p class="up-facts"><span>No account or email needed</span> <span>Encrypted in your browser</span> <span>Free up to 4 GB</span></p>
       </div>
@@ -113,6 +111,9 @@
           <p class="rx-fine up-left">A quick check by Cloudflare that you’re a person.</p>
           <div id="cf-turnstile"></div>
         </div>
+        <!-- Share-MIME-2: worked out in this browser from the name, first 4 KiB or folder entries; never sent.
+             Directly above the button, as on the receiver card. -->
+        <p class="rx-once" id="up-program" hidden></p>
         <div class="rx-actions">
           <button class="rx-btn" id="upload-btn" type="button" disabled>Encrypt and upload</button>
         </div>
