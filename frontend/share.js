@@ -17,7 +17,7 @@
 
 import { WORKER_URL, FREE_EXPIRY }                     from './config.js';
 import { setCalmText }                                 from './progress.js';
-import { parseFragment }                                from './fragment.js';
+import { classifyLink, LINK_INCOMPLETE }               from './fragment.js';
 import { _countdown }                                  from './download-time.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -356,46 +356,32 @@ domRefs.newUploadBtn.addEventListener('click', () => location.reload());
 domRefs.upRestartBtn.addEventListener('click', () => location.reload());
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode detection — fragment grammar v1 (SW-MCP-4) + legacy fallback
+// Mode detection — fragment.js classifyLink (Share-Copy-2: was detectMode here)
 //
-// v1 URL:     https://share.refueler.io/?uuid=<uuid>#<base64url-JSON-blob>
+// v2/v1 URL:  https://share.refueler.io/?uuid=<uuid>#<base64url-JSON-blob>
 // Legacy URL: https://share.refueler.io/#uuid=<uuid>&key=<hex>&iv=<hex>[&sn=<hex>]
 //
-// Detection order:
-//   1. Fragment present + parseable as v1 JSON blob → download mode (v1)
-//   2. Fragment contains uuid= and key= (ampersand format) → download mode (legacy)
-//   3. Otherwise → upload mode
+// A whole link → download mode. Half a link (?uuid= with no usable # part, or a
+// v2/v1 # part with no ?uuid=) → the "Link incomplete" notice, not the upload page.
+// Anything else → upload mode.
 // ─────────────────────────────────────────────────────────────────────────────
-function detectMode() {
-  const raw = location.hash.slice(1);
-  if (!raw) return null;
+const link = classifyLink(location.search, location.hash);
 
-  // ── Attempt a v2 / v1 fragment parse first ───────────────────────────────
-  try {
-    const parsed = parseFragment(raw);
-    if (!parsed.legacy) {
-      // v2 and v1: uuid lives in query string
-      const uuid = new URLSearchParams(location.search).get('uuid');
-      if (!uuid) return null; // malformed link — no uuid in query
-      return { v: parsed.v, uuid, keyBytes: parsed.keyBytes, ivBytes: parsed.ivBytes, filename: parsed.filename, sealNonce: parsed.sealNonce, sizeBytes: parsed.sizeBytes };
-    }
-  } catch {
-    // not a v2/v1 blob — fall through to legacy check
-  }
-
-  // ── Legacy: #uuid=X&key=Y&iv=Z[&sn=W] ───────────────────────────────────
-  const params = Object.fromEntries(raw.split('&').map(p => {
-    const idx = p.indexOf('=');
-    return idx === -1 ? [p, ''] : [p.slice(0, idx), p.slice(idx + 1)];
-  }));
-  if (params.uuid && params.key) {
-    return { v: 0, uuid: params.uuid, key: params.key, iv: params.iv || null, sn: params.sn || null };
-  }
-
-  return null;
+if (link.mode === 'incomplete') {
+  // Share-Copy-2: a cut link used to land on "Send a file." with no word. The report
+  // carries the case only — never the fragment, never the uuid.
+  reportError('link_incomplete', link.code, '');
+  document.documentElement.classList.add('rx-mode');
+  $('rx-notice-eyebrow').textContent = LINK_INCOMPLETE.eyebrow;
+  $('rx-notice-head').textContent    = LINK_INCOMPLETE.head;
+  $('rx-notice-lede').textContent    = LINK_INCOMPLETE.lede;
+  $('rx-notice-send').hidden = true;
+  $('rx-notice').hidden = false;
+  document.documentElement.classList.remove('rx-pending');
+  history.replaceState(null, '', location.pathname);   // what's left of the key leaves the address bar, as on a whole link
 }
 
-const detected = detectMode();
+const detected = link.mode === 'download' ? link.detected : null;
 
 if (detected) {
   // X5-1b (page weight): the receiver code loads only for a Share link; share-early.js
@@ -413,7 +399,7 @@ if (detected) {
     // F-23: the mode is known; share-early.js's mark has done its job.
     document.documentElement.classList.remove('rx-pending');
   });
-} else {
+} else if (link.mode === 'upload') {
   // Safari-Slow-Link-1: the upload code loads only here, so a receiver never waits
   // on it (share-early.js has already started fetching it on the upload page).
   import('./upload.js').then(({ enterUploadMode, checkResumeState }) => {
@@ -425,4 +411,4 @@ if (detected) {
   });
 }
 // F-23 (upload page): the mode is known; share-early.js's mark has done its job.
-if (!detected) document.documentElement.classList.remove('rx-pending');
+if (link.mode === 'upload') document.documentElement.classList.remove('rx-pending');

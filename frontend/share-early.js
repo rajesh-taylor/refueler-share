@@ -4,7 +4,9 @@
 // modules decide the mode. Without it a link showed the upload page for ~½ s.
 // share.js removes the mark once it knows the mode (a fragment that isn't a
 // Share link falls back to the upload page). A file, not inline: CSP-ready.
-if (location.hash.length > 1) document.documentElement.classList.add('rx-pending');
+// Share-Copy-2: a ?uuid= with no # part is a cut link; share.js shows "Link incomplete",
+// so keep the upload screen hidden for it too.
+if (location.hash.length > 1 || /[?&]uuid=[^&]/.test(location.search)) document.documentElement.classList.add('rx-pending');
 
 // Safari-Slow-Link-1: start the work the page will wait on, before the modules load.
 // Receiver: ask /meta now; download.js takes the answer from window.__rfsMeta. The

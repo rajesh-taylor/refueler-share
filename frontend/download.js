@@ -53,7 +53,8 @@
 // so the card never waits on them (and never fails on a browser without WASM, F-20).
 import { hexToBuf, derivePartKey } from './crypto.js';
 import { WORKER_URL, CHUNK_SIZE } from './config.js';
-import { DECRYPT_FAILED_FSAA, _resolveSize } from './download-fetch.js';
+import { DL_TEXT, _resolveSize } from './download-fetch.js';
+import { LINK_INCOMPLETE } from './fragment.js';
 import { _startDownloadStream, _startDownload } from './download-save.js';
 import { $, _showSheet, _showNotice, _showWindowClosed, _setUnlockError, _showPreDownloadModal,
          _renderHiddenFileName, _showLinkInactive, _showDownloadError } from './download-sheets.js';
@@ -113,8 +114,14 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
     const metaRes = (early && early.uuid === uuid && await early.res) || await fetch(`${WORKER_URL}/meta/${uuid}`);
     if (metaRes.ok) meta = await metaRes.json();
     else if (metaRes.status === 404 || metaRes.status === 410) { _showLinkInactive(domRefs); return; }
+    else {
+      // Share-Copy-2: an outage used to read as "Link closed" (meta stayed {}).
+      helpers.reportError('meta', `HTTP ${metaRes.status}`, `uuid:${uuid.slice(0,8)}`);
+      _showDownloadError(DL_TEXT.metaError, domRefs);
+      return;
+    }
   } catch {
-    _showDownloadError('Network error — could not reach server.', domRefs);
+    _showDownloadError(DL_TEXT.unreachable, domRefs);
     return;
   }
 
@@ -132,8 +139,9 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
 
   // ── v2: the stored part count must match the link's size, before any download ──
   if (isV2 && meta.total_chunks !== Math.ceil(detected.sizeBytes / CHUNK_SIZE)) {
+    // Share-Copy-2: the link is damaged (its size and the stored parts disagree), not the file.
     helpers.reportError('part_count', 'mismatch', `uuid:${uuid.slice(0,8)}`);
-    _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
+    _showNotice(LINK_INCOMPLETE.eyebrow, LINK_INCOMPLETE.head, LINK_INCOMPLETE.lede);
     return;
   }
 
@@ -260,7 +268,7 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
       outcome = await _startDownloadGated(uuid, meta, fileName, willSelfDestruct, domRefs, state, helpers);
     } catch (e) {
       helpers.reportError('download_unhandled', e?.name || 'Error', `uuid:${uuid.slice(0,8)}`);
-      _showDownloadError('Download failed. Please try again.', domRefs);
+      _showDownloadError(DL_TEXT.browser, domRefs);
       return;
     }
     // Save dialog cancelled: back to the card, button still live (it used to go dead).
@@ -280,9 +288,10 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passphrase }),
       });
+      if (authRes.status === 404 || authRes.status === 410) { _showLinkInactive(domRefs); return; }   // Share-Copy-2
       if (!authRes.ok) {
         _setUnlockError(unlockInput, unlockError,
-          authRes.status === 401 ? 'That password doesn’t open this file.' : 'Something went wrong.',
+          authRes.status === 401 ? 'That password doesn’t open this file.' : DL_TEXT.unlockFailed,
           authRes.status === 401);
         if (authRes.status === 401) unlockInput.select();   // §9: value kept, selected for retyping
         unlockBtn.disabled = false;
@@ -291,7 +300,7 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
       const { token } = await authRes.json();
       state.downloadToken = token;
     } catch {
-      _setUnlockError(unlockInput, unlockError, 'Network error. Try again.', false);
+      _setUnlockError(unlockInput, unlockError, DL_TEXT.unlockUnreachable, false);
       unlockBtn.disabled = false;
       return;
     }

@@ -40,8 +40,22 @@ async function _parse409Body(res) {
 // transfer fails here); every part but the last must be exactly CHUNK_SIZE.
 // v1/v0: the old path (K + the link's IV). Throws on any failure.
 // ─────────────────────────────────────────────────────────────────────────────
-export const DECRYPT_FAILED_FSAA = 'Decryption failed — wrong key or corrupted data. No partial file was saved.';
-export const DECRYPT_FAILED_BLOB = 'Decryption failed — wrong key or corrupted data.';
+// Share-Copy-2 (16 Oct 2026, approved by Rajesh): the receiver's stop lines, in the upload
+// side's voice. The address bar is cleared once a link opens, so a reload shows the upload
+// page: lines on the Stopped sheet say "Open the link again", never "Try again". The
+// password screen has a button, so its lines do say "Try again".
+export const DL_TEXT = {
+  decrypt:          'The file couldn’t be decrypted. The link may be damaged; ask the sender to send it again. Nothing was saved.',
+  incomplete:       'Refueler’s answer was incomplete. Open the link again; if it keeps happening, check the Status page.',
+  metaError:        'Refueler couldn’t open this transfer just now. Open the link again in a minute; if it keeps happening, check the Status page.',
+  unreachable:      'Refueler couldn’t be reached. Check your connection, then open the link again.',
+  unreachableTried: 'Refueler couldn’t be reached after several tries. Nothing was saved. Check your connection, then open the link again.',
+  refused:          'Refueler didn’t accept this download. Open the link again to start over.',
+  saveSpot:         'The file couldn’t be saved there. Open the link again and choose another place.',
+  browser:          'Something went wrong in this browser. Open the link again; if it keeps happening, try another browser.',
+  unlockFailed:     'Refueler couldn’t check the password. Try again.',
+  unlockUnreachable:'Refueler couldn’t be reached. Try again.',
+};
 
 export async function _decryptPart(state, ct, i, n) {
   if (state.linkVersion !== 2) return decryptPartV1(state.sessionAesKey, state.sessionIv, ct, i);

@@ -4,6 +4,7 @@
 // rate: chunk PUTs and downloads move at that speed, so byte progress shows (Share-Progress-1).
 // drop:N: part N's PUT or download is cut halfway once, then works (Chrome re-sends a cut PUT by itself).
 // down:N: part N's PUT and download answer 503 until fail changes — the page's retry line shows.
+// Share-Copy-2 (receiver stop lines): meta503 · meta_incomplete (no part count) · dl401 · auth500 · auth410 · auth_cut (socket cut).
 import http from 'node:http';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
 import { blake3 } from '../../worker/node_modules/@noble/hashes/blake3.js';
@@ -41,6 +42,14 @@ http.createServer(async (req, res) => {
   try {
     if (p[0] === '_ctl') { if (u.searchParams.get('tier')) auth.tier = u.searchParams.get('tier'); if (u.searchParams.get('signout')) auth.session = null; ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0), rate: +(u.searchParams.get('rate') || 0) }; return json(res, 200, ctl); }
     if (p[0] === '_last') return json(res, 200, auth.last);
+    // The receiver's password check, POST /auth/:uuid (any password opens it).
+    if (p[0] === 'auth' && /^[0-9a-f-]{36}$/.test(p[1] || '')) {
+      await body(req);
+      if (ctl.fail === 'auth500') return json(res, 500, { error: 'boom' });
+      if (ctl.fail === 'auth410') return json(res, 410, { error: 'Transfer expired' });
+      if (ctl.fail === 'auth_cut') { req.socket.destroy(); return; }
+      return json(res, 200, { token: 'dl-token' });
+    }
     if (p[0] === 'auth' || p[0] === 'chambers') {
       const b = req.method === 'POST' ? JSON.parse((await body(req)) || '{}') : {};
       const ok = () => auth.session && hasCookie(req);
@@ -135,14 +144,17 @@ http.createServer(async (req, res) => {
       t.done = true; return json(res, 200, { ok: true, merkle_root: fb.merkle_root });
     }
     if (p[0] === 'meta') {
-      const t = T.get(p[1]); if (!t || !t.done) return json(res, 404, { error: 'not found' });
+      if (ctl.fail === 'meta503') return json(res, 503, { error: 'unavailable' });
+      const t = T.get(p[1]);
+      if (t && ctl.fail === 'meta_incomplete') return json(res, 200, { total_chunks: 0, expiry_timestamp: t.expiry, passphrase_protected: !!t.pw, pending_destruction: null });
+      if (!t || !t.done) return json(res, 404, { error: 'not found' });
       return json(res, 200, { total_chunks: t.total, total_bytes: null, expiry_timestamp: t.expiry, file_name: 'encrypted-payload',
         passphrase_protected: !!t.pw, pending_destruction: t.dad ? false : null });
     }
-    if (p[0] === 'auth') { await body(req); return json(res, 200, { token: 'dl-token' }); }
     if (p[0] === 'download') {
       const t = T.get(p[1]); if (!t) return json(res, 410, { error: 'gone' });
       if (ctl.fail === 'down:' + +p[2]) return json(res, 503, { error: 'unavailable' });
+      if (ctl.fail === 'dl401') return json(res, 401, { error: 'Invalid or expired download token' });
       console.log(`GET part ${p[2]} ${Date.now() % 100000}`);
       if (ctl.slow) await sleep(ctl.slow);   // like the Worker: whole part read and checked before the first byte
       const b = t.chunks[+p[2]]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,

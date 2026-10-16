@@ -16,6 +16,9 @@
 // a tick never starts an upload, the sender presses the button after it (Rajesh, 7 Oct).
 // ─────────────────────────────────────────────────────────────────────────────
 export const UPLOAD_LABEL = 'Encrypt and upload';
+// Share-Copy-2 (approved by Rajesh): Cloudflare's script never arrived. Shown only to a
+// sender who pressed the button; the next press tries loading it again.
+export const CHECK_BLOCKED = 'The security check couldn’t load. A content blocker or VPN may be stopping it; allow challenges.cloudflare.com, or try once without it.';
 let turnstileWidgetId = null;
 let turnstilePolling  = false;
 let turnstileFailed   = false;
@@ -29,6 +32,7 @@ const CHECK_WAIT_MS   = 2000;
 
 const TURNSTILE_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 let turnstileLoading = false;
+let turnstileScript  = null;
 
 export function renderTurnstile(state, domRefs, helpers) {
   const container = document.getElementById('cf-turnstile');
@@ -40,6 +44,7 @@ export function renderTurnstile(state, domRefs, helpers) {
       s.src = TURNSTILE_SRC;
       s.async = true;
       document.head.appendChild(s);
+      turnstileScript = s;
     }
     if (!turnstilePolling) {
       turnstilePolling = true;
@@ -53,6 +58,14 @@ export function renderTurnstile(state, domRefs, helpers) {
           clearInterval(poll);
           turnstilePolling = false;
           helpers.reportError('turnstile_load', 'timeout', '');
+          // Share-Copy-2: say so, and give the button back. Was silent: "Checking…" for good.
+          turnstileScript?.remove();
+          turnstileScript  = null;
+          turnstileLoading = false;   // the next press loads it afresh
+          if (startWhenChecked) {
+            _cancelQueuedStart(state, domRefs);
+            helpers.setDropMsg(CHECK_BLOCKED);
+          }
         }
       }, 200);
     }

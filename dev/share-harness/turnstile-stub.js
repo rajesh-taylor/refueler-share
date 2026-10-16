@@ -1,7 +1,9 @@
 // Harness stand-in for Cloudflare Turnstile. ?ts=click makes it ask for a click; ?ts=slow passes
-// after 4 s; ?ts=fail fails the first check (error-callback) and passes after reset().
+// after 4 s; ?ts=fail fails the first check (error-callback) and passes after reset();
+// ?ts=blocked never defines window.turnstile, like a blocked script (Share-Copy-2).
 (function () {
   const mode = new URLSearchParams(location.search).get('ts') || 'pass';
+  if (mode === 'blocked') return;
   let n = 0, failed = false;
   const widgets = {};
   function run(id) {

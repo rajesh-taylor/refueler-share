@@ -13,7 +13,8 @@ Open http://localhost:8765/. The fake Worker signs credentials with `worker/src/
 
 - Fail a step: `curl 'http://localhost:8766/_ctl?fail=issue|initiate|chunk:N|finalise|finalise409|wrong_size|none'`
 - Slow chunks: `curl 'http://localhost:8766/_ctl?slow=2500'` (ms per chunk PUT)
-- Turnstile: append `?ts=click` (asks for a click) or `?ts=slow` (passes after 4 s)
+- Receiver stops (Share-Copy-2): `?fail=meta503|meta_incomplete|dl401|auth500|auth410|auth_cut` (`down:N` + 127 s for the retry line)
+- Turnstile: append `?ts=click` (asks for a click), `?ts=slow` (passes after 4 s), `?ts=fail` or `?ts=blocked` (never loads; the line shows 15 s after a press)
 
 Design specimen (Design-Theory-Opus-1): `specimen/` is a standalone page, no build step —
 `python3 -m http.server 8093 --directory dev/share-harness/specimen`, open http://localhost:8093/ (Safari).

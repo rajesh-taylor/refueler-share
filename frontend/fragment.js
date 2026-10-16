@@ -214,3 +214,55 @@ export function parseFragment(fragmentString) {
     throw new Error(`Malformed fragment: cannot parse as v2, v1 or legacy key — ${err.message}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// classifyLink — which page an address opens (Share-Copy-2, 16 Oct 2026)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wording for a link that arrived cut short (Share-Copy-2, approved by Rajesh).
+ * Also used when a v2 link's size doesn't match the stored parts: the link is damaged.
+ */
+export const LINK_INCOMPLETE = {
+  eyebrow: 'Link incomplete',
+  head:    'This link isn’t complete.',
+  lede:    'Part of it was lost on the way. Ask the sender to send it again, in full.',
+};
+
+/**
+ * classifyLink(search, hash) → one of
+ *   { mode: 'download', detected }  — a whole Share link (v2, v1, or legacy #uuid=&key=)
+ *   { mode: 'incomplete', code }    — half a link: code 'no_fragment' | 'bad_fragment' | 'no_uuid'
+ *   { mode: 'upload' }              — a plain visit (or a # part that isn't ours, with no ?uuid=)
+ *
+ * The fragment is only parsed here; nothing from it is returned on the incomplete path,
+ * so the caller can't report it by mistake.
+ */
+export function classifyLink(search, hash) {
+  const raw  = String(hash || '').replace(/^#/, '');
+  const uuid = new URLSearchParams(search || '').get('uuid');
+
+  if (raw) {
+    let parsed = null;
+    try { parsed = parseFragment(raw); } catch { /* not v2/v1 — legacy check below */ }
+    if (parsed && !parsed.legacy) {
+      if (!uuid) return { mode: 'incomplete', code: 'no_uuid' };
+      return { mode: 'download', detected: {
+        v: parsed.v, uuid, keyBytes: parsed.keyBytes, ivBytes: parsed.ivBytes,
+        filename: parsed.filename, sealNonce: parsed.sealNonce, sizeBytes: parsed.sizeBytes,
+      } };
+    }
+
+    // Legacy: #uuid=X&key=Y&iv=Z[&sn=W]
+    const params = Object.fromEntries(raw.split('&').map(p => {
+      const idx = p.indexOf('=');
+      return idx === -1 ? [p, ''] : [p.slice(0, idx), p.slice(idx + 1)];
+    }));
+    if (params.uuid && params.key) {
+      return { mode: 'download', detected: { v: 0, uuid: params.uuid, key: params.key, iv: params.iv || null, sn: params.sn || null } };
+    }
+  }
+
+  if (uuid) return { mode: 'incomplete', code: raw ? 'bad_fragment' : 'no_fragment' };
+  return { mode: 'upload' };
+}

@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { setCalmText } from './progress.js';
-import { IntegrityError, DECRYPT_FAILED_FSAA, DECRYPT_FAILED_BLOB, _decryptPart,
+import { IntegrityError, DL_TEXT, _decryptPart,
          _eachPartInOrder } from './download-fetch.js';
 import { $, _showSheet, _showNotice, _showProgress, _setBar, _makeDlProgress, _showLinkInactive,
          _showDownloadError } from './download-sheets.js';
@@ -45,7 +45,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
   const totalChunks = meta.total_chunks;
   const totalBytes  = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
 
-  if (!totalChunks || totalChunks < 1) { _showDownloadError('Transfer metadata is incomplete. Please try again.', domRefs); return; }
+  if (!totalChunks || totalChunks < 1) { _showDownloadError(DL_TEXT.incomplete, domRefs); return; }
 
   _showProgress(domRefs, 'Downloading', totalBytes);
 
@@ -53,7 +53,7 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
   try {
     writable = await fileHandle.createWritable();
   } catch {
-    _showDownloadError('Could not open the save location. Please try again.', domRefs);
+    _showDownloadError(DL_TEXT.saveSpot, domRefs);
     return;
   }
 
@@ -79,14 +79,14 @@ export async function _startDownloadStream(uuid, meta, fileHandle, fileName, wil
     } catch (e) {
       if (e !== DECRYPT_STOP) throw e;
       await writable.abort();
-      _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
+      _showDownloadError(DL_TEXT.decrypt, domRefs);
       return;
     }
 
     if (state.linkVersion === 2 && bytesWritten !== totalBytes) {
       reportError('decrypt', 'size_mismatch', `uuid:${uuid.slice(0,8)}`);
       await writable.abort();
-      _showDownloadError(DECRYPT_FAILED_FSAA, domRefs);
+      _showDownloadError(DL_TEXT.decrypt, domRefs);
       return;
     }
     await writable.close();
@@ -110,7 +110,7 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
   const { reportError } = helpers;
   const totalChunks = meta?.total_chunks;
 
-  if (!totalChunks || totalChunks < 1) { _showDownloadError('Transfer metadata is incomplete. Please try again.', domRefs); return; }
+  if (!totalChunks || totalChunks < 1) { _showDownloadError(DL_TEXT.incomplete, domRefs); return; }
 
   const totalBytes = (meta.total_bytes && meta.total_bytes > 0) ? meta.total_bytes : 0;
   _showProgress(domRefs, 'Downloading', totalBytes);
@@ -138,7 +138,7 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
       plainBytes += plain.byteLength;
     } catch (e) {
       reportError('decrypt', e?.name || 'Error', `uuid:${uuid.slice(0,8)} chunk:${i}`);
-      _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
+      _showDownloadError(DL_TEXT.decrypt, domRefs);
       return;
     }
     _setBar(domRefs, 90 + ((i + 1) / chunks.length) * 10);
@@ -146,7 +146,7 @@ export async function _startDownload(uuid, meta, fileName, willSelfDestruct, dom
   }
   if (state.linkVersion === 2 && plainBytes !== totalBytes) {
     reportError('decrypt', 'size_mismatch', `uuid:${uuid.slice(0,8)}`);
-    _showDownloadError(DECRYPT_FAILED_BLOB, domRefs);
+    _showDownloadError(DL_TEXT.decrypt, domRefs);
     return;
   }
 
@@ -184,8 +184,8 @@ function _downloadFailed(e, uuid, domRefs, reportError) {
     return;
   }
   reportError('download_chunk_retry_exhausted', e?.name || 'Error', `uuid:${uuid.slice(0,8)}`);
-  if (e.status === 401)       _showDownloadError('Access denied. This transfer may have expired or the link is incorrect.', domRefs);
+  if (e.status === 401)       _showDownloadError(DL_TEXT.refused, domRefs);
   else if (e.status === 410)  _showLinkInactive(domRefs);
-  else if (e.retryExhausted)  _showDownloadError('Download failed after several attempts. Check your connection and try again.', domRefs);
-  else                        _showDownloadError('Download failed. Please try again.', domRefs);
+  else if (e.retryExhausted)  _showDownloadError(DL_TEXT.unreachableTried, domRefs);
+  else                        _showDownloadError(DL_TEXT.browser, domRefs);
 }
