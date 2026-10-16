@@ -26,12 +26,14 @@ wrangler r2 bucket lifecycle set refueler-share-dev --rule '{"id":"abort-incompl
 
 ## Rule 2 — Object expiry backstop (92 days)
 
-Deletes all objects that have not been requested for 92 days.
+Deletes every object 92 days after it was written.
 92 = Production Max maximum link duration (90 days) + 2-day buffer.
 
-Free tier links expire at 5 days — these objects will be deleted by the Worker on next access
-attempt (returns 410). The R2 rule provides a hard deletion backstop for objects
-no one ever re-requests.
+Since Tombstone-30 (16 Oct 2026) the Worker deletes expired transfers itself: the 03:30 cron
+(`worker/src/nightly_sweep.js`) purges a finalised transfer 48 h after it expires and deletes
+the leftover record `{consumed, consumed_at}` 30 days after any transfer ends. This rule is
+the backstop for anything that sweep misses (R2 expires by age since the object was written,
+not since it was last requested).
 
 ```
 wrangler r2 bucket lifecycle set refueler-share-prod --rule '{"id":"expiry-backstop","status":"Enabled","filter":{},"expiration":{"days":92}}'

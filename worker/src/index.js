@@ -37,6 +37,7 @@ import { quotaRefFor, citizenQuotaRefFor, reserveQuota, releaseQuota, provisionQ
 import { putManifestIfAbsent } from './latch.js';                               // B12-3: X6
 import { makeSessionToken, verifySessionToken, sessionHash, sessionExpiry, hasUploadSessionKey, MAX_TRANSFER_CHUNKS } from './upload_session.js'; // B12-3
 import { handleQuotaReconcile, runQuotaReconcile } from './handlers/quota_reconcile.js';                    // B12-3
+import { handleNightlySweep, runNightlySweep } from './nightly_sweep.js';                                  // Tombstone-30
 // SW5: acceptance + collection receipts
 import { handleApiReceipt } from './receipts.js';
 import { handleAuthPing, handleAuthPingOptions } from './auth_ping.js';
@@ -568,6 +569,10 @@ export default {
       if (request.method === 'POST' && path === '/admin/quota-reconcile') {
         return timed('admin_quota_reconcile', () => handleQuotaReconcile(request, env).then(r => addCors(r, request)));
       }
+      // ── Tombstone-30: the 03:30 nightly sweep on demand (dry run unless dry_run=false) ─
+      if (request.method === 'POST' && path === '/admin/nightly-sweep') {
+        return timed('admin_nightly_sweep', () => handleNightlySweep(request, env).then(r => addCors(r, request)));
+      }
       if (request.method === 'POST' && path === '/api/v1/admin/storage-quota') {
         return timed('admin_storage_quota', () => handleAdminStorageQuota(request, env).then(r => addCors(r, request)));
       }
@@ -682,6 +687,16 @@ export default {
         await sweepAuth(env);
       } catch {
         console.error('scheduled/auth_sweep: unhandled error');
+      }
+    }
+
+    // Tombstone-30: after a transfer ends — expired purge, residue, and the
+    // leftover record deleted 30 days on. Own cron, so its own request budget.
+    if (event.cron === '30 3 * * *') {
+      try {
+        await runNightlySweep(env, Math.floor(Date.now() / 1000));
+      } catch (e) {
+        console.error('scheduled/nightly_sweep: unhandled error:', e?.message ?? e);
       }
     }
   },

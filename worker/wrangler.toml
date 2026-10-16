@@ -77,7 +77,7 @@ dataset  = "share_events"
 
 # SW4b: daily dead-letter webhook retry — 03:00 UTC
 [triggers]
-crons = ["0 3 * * *"]
+crons = ["0 3 * * *", "30 3 * * *"]  # 03:30 = nightly_sweep.js (Tombstone-30)
 
 # SW1: custom hostname routing — api.share.refueler.io → this Worker
 [[routes]]
