@@ -5,6 +5,9 @@
 # so --ci puts an empty stand-in in its slot; nothing is deployed from here.
 # The live byte check (share.refueler.io serves dist/ exactly) runs from Rajesh's Mac inside
 # ship-app.sh until Share-Release-1's public watchdog.
+# Share-Release-1a (17 Oct 2026): --ci also builds a second time from `git archive HEAD` and
+# refuses on any difference; then the release-file tests run, and --rebuild HEAD (git alone)
+# must give the same dist/ and SHA256SUMS as --ci. Node comes from .nvmrc.
 # Sits alongside ci.yml (tests, audit, vendored code, route inventory) — it does not replace it.
 name: App — build + header checks
 
@@ -26,7 +29,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
@@ -35,3 +38,14 @@ jobs:
 
       - name: Build and check the app (no deploy)
         run: bin/ship-app.sh --ci
+
+      - name: Release-file tests (bin/lib/release-manifest.mjs)
+        run: node --test bin/test/*.test.mjs
+
+      - name: Rebuild from git alone gives the same files (--rebuild HEAD = --ci)
+        run: |
+          cp -R dist "$RUNNER_TEMP/dist-ci"
+          cp build/release/SHA256SUMS "$RUNNER_TEMP/sums-ci"
+          bin/ship-app.sh --rebuild HEAD
+          diff -r "$RUNNER_TEMP/dist-ci" dist
+          cmp "$RUNNER_TEMP/sums-ci" build/release/SHA256SUMS

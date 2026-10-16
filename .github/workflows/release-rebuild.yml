@@ -1,0 +1,107 @@
+# Share-Release-1a · 17 Oct 2026 — refueler-share-private plan Share-Release-1 v1 §2.5.
+# Rebuilds a published app release (app-<sha10>) from its tag on GitHub's machines, from the
+# public source alone (bin/ship-app.sh --rebuild), and compares the SHA-256 of every file with
+# the release's SHA256SUMS. The Satoshi font can't be rebuilt here (licence: self-host, never
+# redistribute): an empty stand-in fills its slot, and the release's Satoshi lines must equal the
+# pinned official hash (SATOSHI_SHA256 in bin/ship-app.sh). Green/red is the public record;
+# nothing is written back to the release (releases are immutable once published).
+# Dispatched on a commit with no release, it rebuilds and shows its SHA256SUMS to compare by hand.
+name: Release rebuild
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Release tag (app-<sha10>) or commit'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      REF: ${{ github.event.release.tag_name || inputs.ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Which release
+        run: |
+          [[ "$REF" =~ ^[0-9A-Za-z._/-]{1,100}$ ]] || { echo "::error::bad ref: $REF"; exit 1; }
+          echo "Rebuilding $REF"
+
+      - name: Checkout (full history, for the kept previous release)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REF }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies (Eleventy, from the release's own lock file)
+        run: npm ci
+
+      - name: Fetch the release's published files
+        id: published
+        run: |
+          if gh release view "$REF" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "$REF" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/published" \
+              --pattern SHA256SUMS --pattern manifest.json --pattern release-extra.json
+            commit="$(node -p "require('$RUNNER_TEMP/published/release-extra.json').commit")"
+            prev="$(node -p "require('$RUNNER_TEMP/published/release-extra.json').previous_release || ''")"
+            [ "$commit" = "$(git rev-parse HEAD)" ] || { echo "::error::$REF names commit $commit, but the tag is on $(git rev-parse HEAD)"; exit 1; }
+            echo "release=1" >> "$GITHUB_OUTPUT"
+            echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          else
+            echo "No published release named $REF: rebuilding the commit only."
+            echo "release=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild from git alone
+        env:
+          PREV: ${{ steps.published.outputs.prev }}
+        run: bin/ship-app.sh --rebuild "$(git rev-parse HEAD)" "${PREV:-none}"
+
+      - name: Compare with the release
+        if: steps.published.outputs.release == '1'
+        run: |
+          pin="$(sed -n 's/^SATOSHI_SHA256="\([0-9a-f]*\)"$/\1/p' bin/ship-app.sh)"
+          node bin/lib/release-manifest.mjs compare --expected "$RUNNER_TEMP/published/SHA256SUMS" \
+            --got build/release/SHA256SUMS --satoshi-sha "$pin"
+          cmp "$RUNNER_TEMP/published/manifest.json" build/release/manifest.json
+          cmp "$RUNNER_TEMP/published/release-extra.json" build/release/release-extra.json
+          {
+            echo "### $REF rebuilt from source: every file matches the release"
+            echo ""
+            echo "Commit \`$(git rev-parse HEAD)\` · Node $(node -v) · $(grep -c . build/release/SHA256SUMS) files."
+            echo "The Satoshi font is not rebuilt here (licence); the release lists its pinned official hash."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show the rebuilt SHA256SUMS (no release to compare with)
+        if: steps.published.outputs.release == '0'
+        run: |
+          {
+            echo "### $REF rebuilt from source (no published release to compare with)"
+            echo ""
+            echo "Commit \`$(git rev-parse HEAD)\` · Node $(node -v). Compare with \`bin/ship-app.sh --rebuild $(git rev-parse HEAD)\` on another machine."
+            echo ""
+            echo '```'
+            cat build/release/SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the rebuilt release files
+        if: steps.published.outputs.release == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rebuilt-release-files
+          path: build/release/
