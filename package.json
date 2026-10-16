@@ -2,12 +2,15 @@
   "name": "refueler-share-site",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22 <27"
+  },
   "scripts": {
     "build": "APP_SHA=dev eleventy --config=eleventy.app.js",
     "dev": "APP_SHA=dev eleventy --config=eleventy.app.js --serve --port=8080"
   },
   "devDependencies": {
-    "@11ty/eleventy": "^3.0.0",
+    "@11ty/eleventy": "3.1.6",
     "@playwright/test": "^1.64.0"
   }
 }
