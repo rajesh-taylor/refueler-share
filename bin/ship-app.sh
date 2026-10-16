@@ -41,11 +41,13 @@ die()  { echo "" >&2; echo "✗ $*" >&2; exit 1; }
 step() { echo "▶ $*"; }
 
 # ── release dir: build one release's assets from a git tree into DEST ────────
-# copy_release SRC_ROOT DEST — SRC_ROOT has frontend/ (working tree or git archive)
+# copy_release SRC_ROOT DEST [ASSETS] — SRC_ROOT has frontend/ (working tree or git archive).
+# ASSETS defaults to today's list; the kept previous release passes its own (Share-MIME-1:
+# a module added since the live release is not in that release's tree).
 copy_release() {
-  local src="$1" dest="$2" n f
+  local src="$1" dest="$2" assets="${3:-$AA_ASSETS}" n f
   mkdir -p "$dest"
-  for n in $AA_ASSETS; do
+  for n in $assets; do
     [ -f "$src/frontend/$n" ] || die "release asset missing: frontend/$n"
     cp "$src/frontend/$n" "$dest/$n"
   done
@@ -95,7 +97,11 @@ build() {
     git -C "$ROOT" cat-file -e "$prev^{commit}" 2>/dev/null || die "live release $prev is not a commit here — git fetch, or ship from the right checkout"
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/ship-app-prev.XXXXXX")"
     git -C "$ROOT" archive --format=tar "$prev" -- frontend | tar -x -C "$tmp"
-    copy_release "$tmp" "$DIST/v/$prev"
+    # That release's own asset list (from its bin/lib/app-assets.sh), today's if it had none.
+    local prev_assets
+    prev_assets="$(git -C "$ROOT" show "$prev:bin/lib/app-assets.sh" 2>/dev/null \
+      | sed -En 's/^AA_(JS|CSS|VENDOR)="([^"]*)".*/\2/p' | tr '\n' ' ')"
+    copy_release "$tmp" "$DIST/v/$prev" "${prev_assets:-$AA_ASSETS}"
     cp "$SATOSHI" "$DIST/v/$prev/fonts/Satoshi-Variable.woff2"   # gitignored: not in the archive
     rm -rf "$tmp"
   fi
