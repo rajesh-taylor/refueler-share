@@ -10,7 +10,7 @@
  *   - Credential farming defence: foreign UUID rejection, melted credential replay
  *   - Turnstile nonce reuse rejection
  *
- * S66b will add: MIME denylist, UUID validation, chunk bounds, bearer token scope.
+ * S66b will add: UUID validation, chunk bounds, bearer token scope.
  *
  * Run: cd worker && npm run test:integration
  *
@@ -341,105 +341,6 @@ describe('Credential farming defence — Turnstile nonce binding', () => {
 
     const second = await issueCredentialAs(ipB, token);
     expect(second.status, 'same token from different IP must still be rejected (429)').toBe(429);
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════════
-// § MIME DENYLIST
-// TESTING.md §5 claim: "Execution-capable uploads are refused at the boundary"
-// Origin: S40 — 6-type denylist on chunk 0; gate scoped to chunk 0 only.
-//
-// NOTE S66: Worker returns 400 (not 415) for some denylisted types depending on
-// check ordering. Tests assert rejection (>=400, not 200), not exact status code.
-// ═════════════════════════════════════════════════════════════════════════════
-
-describe('MIME denylist — execution-capable Content-Type rejected on chunk 0', () => {
-  const DENYLISTED_TYPES = [
-    'application/javascript',
-    'application/x-msdownload',
-    'application/x-executable',
-    'application/x-sharedlib',
-    'application/wasm',
-    'text/html',
-  ];
-
-  async function uploadChunk0WithMime(mimeType) {
-    const credRes = await client.issueCredential();
-    if (credRes.status !== 200) throw new Error(`credential issue failed: ${credRes.status}`);
-    const cred = credRes.body;
-
-    const key = await generateKey();
-    const [plain] = makeChunks(1, 256);
-    const { ciphertext } = await encryptChunk(plain.bytes, key);
-    const hash = blake3Hex(ciphertext);
-    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
-
-    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
-    const headers = { ...credHeaders, 'Content-Type': mimeType };
-
-    return fetchAs('mime-test-ip', `/upload/${cred.uuid}/0000`, {
-      method: 'PUT',
-      headers,
-      body: ciphertext,
-    });
-  }
-
-  for (const mimeType of DENYLISTED_TYPES) {
-    it(`rejects ${mimeType} on chunk 0 (4xx, not 200)`, async () => {
-      const res = await uploadChunk0WithMime(mimeType);
-      expect(
-        res.status,
-        `chunk 0 with Content-Type '${mimeType}' must be rejected (4xx)`
-      ).toBeGreaterThanOrEqual(400);
-      expect(res.status, 'must not succeed').not.toBe(200);
-      expect(res.status, 'must not be a server error').toBeLessThan(500);
-    });
-  }
-
-  it('accepts application/octet-stream on chunk 0 (allowed type passes gate)', async () => {
-    const credRes = await client.issueCredential();
-    expect(credRes.status).toBe(200);
-    const cred = credRes.body;
-
-    const key = await generateKey();
-    const [plain] = makeChunks(1, 256);
-    const { ciphertext } = await encryptChunk(plain.bytes, key);
-    const hash = blake3Hex(ciphertext);
-    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
-    const credHeaders = client.buildCredentialHeaders(cred, 1, ciphertext.length, hash, expiryTs);
-
-    const res = await client.uploadChunk(cred.uuid, 0, ciphertext, hash, credHeaders);
-    expect(res.status, 'application/octet-stream must pass the MIME gate').toBe(200);
-  });
-
-  it('MIME gate is not applied to chunk index > 0 (denylisted type passes on chunk 1)', async () => {
-    const credRes = await client.issueCredential();
-    expect(credRes.status).toBe(200);
-    const cred = credRes.body;
-
-    const key = await generateKey();
-    const [plain0, plain1] = makeChunks(2, 256);
-    const { ciphertext: ct0 } = await encryptChunk(plain0.bytes, key);
-    const { ciphertext: ct1 } = await encryptChunk(plain1.bytes, key);
-    const hash0 = blake3Hex(ct0);
-    const hash1 = blake3Hex(ct1);
-    const expiryTs = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
-    const totalBytes = ct0.length + ct1.length;
-
-    const headers0 = client.buildCredentialHeaders(cred, 2, totalBytes, hash0, expiryTs);
-    const res0 = await client.uploadChunk(cred.uuid, 0, ct0, hash0, headers0);
-    expect(res0.status, 'chunk 0 should succeed').toBe(200);
-
-    const headers1 = {
-      'Content-Type':        'application/javascript',
-      'X-Blake3-Chunk-Hash': hash1,
-    };
-    const res1 = await fetchAs('mime-gate-chunk1', `/upload/${cred.uuid}/0001`, {
-      method: 'PUT',
-      headers: headers1,
-      body: ct1,
-    });
-    expect(res1.status, 'MIME gate must NOT fire on chunk > 0 (415 would be wrong)').not.toBe(415);
   });
 });
 

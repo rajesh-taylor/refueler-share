@@ -69,7 +69,7 @@ import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp
 import { handleDeleteTransfer, handleOwnerDelete }    from './handlers/delete_transfer.js';
 
 
-// MIME_DENYLIST, UUID_RE, corsHeaders — imported from ./utils.js
+// UUID_RE, corsHeaders — imported from ./utils.js
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Analytics Engine

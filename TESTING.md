@@ -46,7 +46,7 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 | Suite | Tests | Covers |
 |-------|-------|--------|
 | `round-trip.test.js` | 3 | Full upload→download, passphrase-protected transfer, double-spend rejection |
-| `security.test.js` | 21 | Rate limits, credential farming, nonce binding, MIME denylist, UUID validation, chunk bounds, tier cap, Stripe webhook auth (all 5 passing including valid-sig → 200) |
+| `security.test.js` | 13 | Rate limits, credential farming, nonce binding, UUID validation, chunk bounds, tier cap, Stripe webhook auth (all 5 passing including valid-sig → 200) |
 | `tg-round-trip.test.js` | 16 | TG full lifecycle: destroy-after-download (open + passphrase), tidal windows (available_from past/future, available_until open/elapsed, Citizen rejection → 403, available_until > expiry → 400), combined tidal window, owner DELETE (admin key, idempotency, tombstone gate on all chunk indices), DELETE auth boundaries (no-auth 401, cross-transfer bearer 403, bad-admin-key 401), POST /confirm (open transfer, idempotency) |
 
 **Honest assessment:** the pure logic of each module is correct in isolation (unit), and the full Worker runtime enforces it correctly against real workerd with real KV/R2 simulation (integration). All five original seams are closed. No skipped tests.
@@ -145,7 +145,6 @@ Fixtures are shared between Vitest integration tests and k6 load scripts. k6 run
 | Double-spend rejection | S20/B4 | `rejects reuse of melted credential; logs attempt` — `round-trip.test.js` | Supabase serial ledger blocks replay; attempt is recorded |
 | Credential farming defence | S42c/S42d | `rejects credential for foreign UUID` · `rejects reused Turnstile nonce` | UUID binding + nonce binding close cross-transfer farming |
 | Rate limit enforcement | S36/S42b | `returns 429 at limit+1 on credential_issue` | KV limits hold at exact boundaries; 429s emitted |
-| MIME denylist | S40 | `rejects denylisted Content-Type on chunk 0 (415)` · `ignores gate on chunk >0` | Execution-capable types blocked at chunk-0 boundary |
 | UUID validation | S41 | `rejects non-RFC4122 UUID in upload path` | Path traversal / key-forgery via malformed UUIDs closed |
 | Chunk bounds | S41/S42b | `rejects chunk index beyond declared total` | Storage-stuffing beyond manifest bounds closed |
 | Bearer token scope | S58 | `bearer token exp equals manifest expiry; expired token rejected` | Token lifetime bound to transfer, not hardcoded |
@@ -326,7 +325,7 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 | 3 | A credential cannot be spent twice | `integration/security.test.js` | `rejects reuse of melted credential; logs attempt` | Supabase serial ledger enforces single-use |
 | 4 | All public endpoints are rate-limited | `unit/ratelimit.test.js` + `integration/security.test.js` | boundary tests per endpoint · `returns 429 at limit+1` | Limits hold at exact boundaries under real KV path |
 | 5 | Credentials are bound to a Worker-generated UUID | `integration/security.test.js` | `rejects credential for foreign UUID` | Cross-transfer credential farming is closed |
-| 6 | Execution-capable uploads are refused at the boundary | `integration/security.test.js` | `rejects denylisted Content-Type on chunk 0 (415)` | MIME gate enforced, correctly scoped to chunk 0 |
+| 6 | *(retired Share-MIME-1, 16 Oct 2026: no upload-time file-type check; the Worker never learns the type. The recipient's browser notes a program after download.)* | — | — | — |
 | 7 | Webhook payloads are authenticated and replay-protected | `unit/stripe.test.js` + `integration/security.test.js` | all five Stripe webhook auth tests | Forge and replay rejected; positive case proven in real Worker |
 | 8 | Incident response plan exists and has been rehearsed | `docs/incident-response.md` + tabletop simulation log | tabletop simulation completed pre-alpha | Response protocol exists, is known, and has been tested before being needed |
 | 9 | Destroy-after-download transfers are permanently consumed after recipient confirmation | `integration/tg-round-trip.test.js` | `POST /confirm returns 200 and destroyed: true` · `re-download after confirm returns 410` · `second POST /confirm returns 410 (already consumed)` | Tombstone gate enforced end-to-end in real Worker runtime; consumed state is permanent |

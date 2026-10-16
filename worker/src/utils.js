@@ -5,7 +5,7 @@
  * inline in index.js and used across multiple handlers. No behaviour changes.
  *
  * Exports (constants):
- *   UUID_RE, CHUNK_SIZE_MAX, MANIFEST_SIZE_MAX, MIME_DENYLIST
+ *   UUID_RE, CHUNK_SIZE_MAX, MANIFEST_SIZE_MAX
  *
  * Exports (functions):
  *   corsHeaders(request) → headers object (allowlist: setAppOrigins(env), X5-1)
@@ -24,38 +24,6 @@ import { getManifest } from './manifest.js';
 // ─────────────────────────────────────────────────────────────────────────────
 export const CHUNK_SIZE_MAX    = 10 * 1024 * 1024; // 10 MB hard cap per chunk
 export const MANIFEST_SIZE_MAX = 64 * 1024;        // 64 KB manifest ceiling (S42)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MIME type denylist (S40)
-//
-// Rejects upload requests whose Content-Type header declares an
-// execution-capable file type with no legitimate anonymous transfer use.
-//
-// This gate checks declared intent only — the Worker receives AES-GCM
-// ciphertext and cannot inspect payload content. A cooperative client
-// sets Content-Type correctly via the browser File API. A malicious client
-// can declare any header; the denylist is a signal gate, not a sandbox.
-//
-// Denylisted types:
-//   application/x-msdownload   — Windows PE executables (.exe, .dll)
-//   application/x-executable   — ELF binaries (Linux/macOS native executables)
-//   application/x-sh           — Shell scripts (.sh) — execution-capable on any Unix host
-//   application/x-bat          — Windows batch files (.bat, .cmd)
-//   text/x-shellscript         — Shell scripts (alternate MIME, same risk)
-//   application/x-php          — PHP source — execution-capable on any PHP host
-//
-// Permitted by deliberate decision:
-//   application/java-archive (.jar) — legitimate developer artefact;
-//   requires JVM invocation, not passive execution.
-// ─────────────────────────────────────────────────────────────────────────────
-export const MIME_DENYLIST = new Set([
-  'application/x-msdownload',
-  'application/x-executable',
-  'application/x-sh',
-  'application/x-bat',
-  'text/x-shellscript',
-  'application/x-php',
-]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UUID validation (S41)
