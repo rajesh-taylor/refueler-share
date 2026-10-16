@@ -57,6 +57,7 @@ import { DECRYPT_FAILED_FSAA, _resolveSize } from './download-fetch.js';
 import { _startDownloadStream, _startDownload } from './download-save.js';
 import { $, _showSheet, _showNotice, _showWindowClosed, _setUnlockError, _showPreDownloadModal,
          _renderHiddenFileName, _showLinkInactive, _showDownloadError } from './download-sheets.js';
+import { PROGRAM_NOTE, programBeforeDownload } from './download-program.js';
 import { _at, _fmtTime, _fmtDateTime, _sameDay, _countdown, _untilOpen } from './download-time.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,6 +202,13 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
   $('rx-done-size').textContent = sizeText;
 
   if (isPassphraseProtected) rcPassphraseRow.hidden = false;
+
+  // Share-MIME-2: a program by name says so above Download (also on the timed-window
+  // card; renderCard never touches it). The Downloaded sheet keeps its own line.
+  if (programBeforeDownload(fileName)) {
+    $('rc-program').textContent = PROGRAM_NOTE.file;
+    $('rc-program').hidden = false;
+  }
 
   // ── Card state: ready, or timed window not yet open (items 2, 3, 6) ───────
   // phase: card → (unlock) → download. The clock only changes the page before a download starts.

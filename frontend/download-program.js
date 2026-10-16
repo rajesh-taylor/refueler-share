@@ -12,11 +12,21 @@
 //   3. A .zip whose list of contents (read from the last decrypted bytes)
 //      holds a name from rule 1 or a macOS .app bundle                     → 'folder'
 // Anything else, or anything that can't be read, → null (no line).
+//
+// Share-MIME-2 (16 Oct 2026): the same rule, earlier, on both cards.
+//   Receiver card, above Download: rule 1 only (bytes and zip contents aren't known yet).
+//   Send card: rules 1–3 on the sender's own plaintext (name, first 4 KiB, folder entries).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const PROGRAM_NOTE = {
-  file:   'This file is a program. Open it only if you were expecting it.',
-  folder: 'This folder holds a program. Open it only if you were expecting it.',
+  file:   'This file is a program. Open only if you were expecting it.',
+  folder: 'This folder holds a program. Open only if you were expecting it.',
+};
+
+// Share-MIME-2: the sender's line. "The link will say so" makes no promise about when.
+export const SEND_NOTE = {
+  file:   'This file is a program. The link will say so.',
+  folder: 'This folder holds a program. The link will say so.',
 };
 
 // Extensions a double-click (or one tap) runs or installs. .js is left out on purpose:
@@ -117,6 +127,24 @@ export function zipHoldsProgram(names) {
     programByName(n.replace(/\/+$/, '')) ||
     n.split('/').some((seg) => seg.toLowerCase().endsWith('.app') && seg.length > 4));
 }
+
+// Share-MIME-2, receiver card: what the page knows before Download is the name.
+// A .zip never matches (its contents come with the download).
+export function programBeforeDownload(fileName) {
+  return programByName(fileName);
+}
+
+// Share-MIME-2, send card. `name` = the picked file's name, `head` = its first bytes,
+// `entryNames` = a folder's entry paths (null for a single file). 'file' | 'folder' | null.
+export function programOnPick({ name, head = null, entryNames = null } = {}) {
+  try {
+    if (entryNames) return zipHoldsProgram(entryNames) ? 'folder' : null;
+    if (programByName(name) || programByBytes(head)) return 'file';
+  } catch {}
+  return null;
+}
+
+export const PICK_HEAD_BYTES = HEAD_BYTES;
 
 // Watches decrypted parts go by, in order, and keeps only what the rule needs:
 // the first HEAD_BYTES, and (for a .zip) the last TAIL_BYTES for the contents list.

@@ -30,6 +30,7 @@ import { _injectTransferOptions } from './upload-options.js';
 import { FOLDER_MAX_FILES, readDirectoryEntry, zipAndSelect, _folderTooMany,
          _folderEntries } from './upload-folder.js';
 import { startUpload } from './upload-start.js';
+import { SEND_NOTE, PICK_HEAD_BYTES, programOnPick } from './download-program.js';   // Share-MIME-2
 import { setPressUpload } from './upload-send.js';
 
 export { checkResumeState, resumeUpload } from './upload-resume.js';
@@ -169,7 +170,12 @@ export function enterUploadMode(domRefs, state, helpers) {
 // ─────────────────────────────────────────────────────────────────────────────
 // File selection
 // ─────────────────────────────────────────────────────────────────────────────
-function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folderFiles = 0) {
+// folderNames: a zipped folder's entry paths (Share-MIME-2), null for a single file.
+// Kept with the zip so a re-check (account switch, line 50) still knows them.
+const _folderNamesOf = new WeakMap();
+function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folderFiles = 0, folderNames = null) {
+  if (folderNames) _folderNamesOf.set(file, folderNames);
+  else folderNames = _folderNamesOf.get(file) || null;
   const { capWarning, fileNameTag, fileSizeTag } = domRefs;
   const { formatBytes, formatWhen, setView } = helpers;
 
@@ -181,6 +187,7 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   domRefs.upFileLabel.textContent = folderFiles ? 'Folder' : 'File';
   domRefs.upFileNote.hidden = !folderFiles;
   domRefs.upFileNote.textContent = folderFiles ? `${folderFiles.toLocaleString()} files, zipped in your browser` : '';
+  _showProgramNote(file, folderNames, state);
   fileSizeTag.textContent = formatBytes(file.size);
   domRefs.upFileSize.textContent = formatBytes(file.size);
   fileSizeTag.classList.remove('up-dim');
@@ -204,11 +211,26 @@ function _handleFileSelection(file, domRefs, state, helpers, transferOpts, folde
   domRefs.uploadBtn.disabled = _uploadBtnDisabled(state, domRefs);
 }
 
+// Share-MIME-2: one calm line on the send card when the pick is a program — by name,
+// first 4 KiB, or a folder's entry names. Reads only, sends nothing, never holds the button.
+function _showProgramNote(file, folderNames, state) {
+  const line = document.getElementById('up-program');
+  const show = (v) => { line.textContent = v ? SEND_NOTE[v] : ''; line.hidden = !v; };
+  const now = programOnPick({ name: file.name, entryNames: folderNames });
+  show(now);
+  if (now || folderNames) return;
+  file.slice(0, PICK_HEAD_BYTES).arrayBuffer().then((buf) => {
+    if (state.selectedFile !== file) return;          // another file was chosen meanwhile
+    show(programOnPick({ name: file.name, head: new Uint8Array(buf) }));
+  }).catch(() => {});
+}
+
 // Back to the empty ledger ("—", "7 days after upload").
 function _resetRows(domRefs) {
   domRefs.upFileLabel.textContent = 'File';
   domRefs.fileNameTag.textContent = '';
   domRefs.upFileNote.hidden = true;
+  document.getElementById('up-program').hidden = true;
   domRefs.fileSizeTag.textContent = '—';
   domRefs.upFileSize.textContent = '';
   domRefs.fileSizeTag.classList.add('up-dim');
@@ -257,7 +279,8 @@ async function _handleFolderDrop(directoryEntry, domRefs, state, helpers, transf
 
   const folderName = directoryEntry.name || 'folder';
   _startZipView(folderName, files.length, domRefs, helpers);
-  _setFolder(state, await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n), resetRows: () => _resetRows(domRefs) }));
+  const names = files.map(e => e.relativePath);
+  _setFolder(state, await zipAndSelect(files, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n, names), resetRows: () => _resetRows(domRefs) }));
 }
 
 // Set AFTER zipAndSelect: _handleFileSelection (called inside it) resets to 'file'.
@@ -285,5 +308,6 @@ async function _handleFolderFiles(fileList, domRefs, state, helpers, transferOpt
   showZipStage('Gathering', 0, '');
 
   // Over 2 GB is refused inside zipAndSelect (before reading), with the folder copy.
-  _setFolder(state, await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n), resetRows: () => _resetRows(domRefs) }));
+  const names = entries.map(e => e.relativePath);
+  _setFolder(state, await zipAndSelect(entries, folderName, domRefs, { ...helpers, handleFileSelection: (f, n) => _handleFileSelection(f, domRefs, state, helpers, transferOpts, n, names), resetRows: () => _resetRows(domRefs) }));
 }

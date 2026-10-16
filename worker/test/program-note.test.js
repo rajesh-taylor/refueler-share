@@ -4,7 +4,8 @@
  * Imports the browser's own frontend/download-program.js, as part-crypto.test.js does.
  */
 import { describe, it, expect } from 'vitest';
-import { programByName, programByBytes, zipNames, zipHoldsProgram, makeProgramCheck, PROGRAM_NOTE }
+import { programByName, programByBytes, zipNames, zipHoldsProgram, makeProgramCheck, PROGRAM_NOTE,
+         SEND_NOTE, PICK_HEAD_BYTES, programBeforeDownload, programOnPick }
   from '../../frontend/download-program.js';
 
 const enc = new TextEncoder();
@@ -146,8 +147,56 @@ describe('makeProgramCheck', () => {
   });
   it('copy: one calm line each, no warning words', () => {
     for (const t of Object.values(PROGRAM_NOTE)) {
-      expect(t).toMatch(/^This (file is|folder holds) a program\. Open it only if you were expecting it\.$/);
+      expect(t).toMatch(/^This (file is|folder holds) a program\. Open only if you were expecting it\.$/);
       expect(t).not.toMatch(/warning|danger|malware|virus|!/i);
+    }
+  });
+});
+
+// ── Share-MIME-2: the same rule, earlier ────────────────────────────────────
+describe('programBeforeDownload (receiver card, name only)', () => {
+  it('says program for a program name', () => {
+    expect(programBeforeDownload('hello.sh')).toBe(true);
+    expect(programBeforeDownload('Setup.EXE')).toBe(true);
+  });
+  it('says nothing for a document, a folder or no extension', () => {
+    expect(programBeforeDownload('hello.txt')).toBe(false);
+    expect(programBeforeDownload('fix-it.zip')).toBe(false);   // contents come with the download
+    expect(programBeforeDownload('run')).toBe(false);          // bytes unknown before download
+  });
+});
+
+describe('programOnPick (send card)', () => {
+  it('file by name', () => {
+    expect(programOnPick({ name: 'hello.sh' })).toBe('file');
+  });
+  it('file by its first bytes, whatever the name', () => {
+    expect(programOnPick({ name: 'notes', head: enc.encode('#!/bin/sh\necho hi\n') })).toBe('file');
+    expect(programOnPick({ name: 'photo.jpg', head: bytes(0x7f, 0x45, 0x4c, 0x46) })).toBe('file');
+  });
+  it('a document says nothing', () => {
+    expect(programOnPick({ name: 'hello.txt', head: enc.encode('hello\n') })).toBe(null);
+    expect(programOnPick({ name: 'hello.txt' })).toBe(null);
+  });
+  it('folder by entry names: a script or an .app bundle', () => {
+    expect(programOnPick({ name: 'tools.zip', entryNames: ['readme.txt', 'bin/fix.command'] })).toBe('folder');
+    expect(programOnPick({ name: 'apps.zip', entryNames: ['Thing.app/Contents/Info.plist'] })).toBe('folder');
+  });
+  it('folder of documents says nothing, even though the zip itself starts "PK"', () => {
+    expect(programOnPick({ name: 'docs.zip', entryNames: ['a.txt', 'b/c.pdf'] })).toBe(null);
+    expect(programOnPick({ name: 'docs.zip', entryNames: [] })).toBe(null);
+  });
+  it('empty or odd input never throws', () => {
+    expect(programOnPick()).toBe(null);
+    expect(programOnPick({ name: '', head: new Uint8Array(0) })).toBe(null);
+  });
+  it('reads 4 KiB, as the receiver does', () => {
+    expect(PICK_HEAD_BYTES).toBe(4096);
+  });
+  it('copy: one calm line each, no timing promise, no role word', () => {
+    for (const t of Object.values(SEND_NOTE)) {
+      expect(t).toMatch(/^This (file is|folder holds) a program\. The link will say so\.$/);
+      expect(t).not.toMatch(/before|after|person|receiver|recipient|warning|!/i);
     }
   });
 });
