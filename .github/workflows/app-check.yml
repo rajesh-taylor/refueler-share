@@ -4,7 +4,7 @@
 # every frontend/*.js|css listed in bin/lib/app-assets.sh. Satoshi is never committed (licence),
 # so --ci puts an empty stand-in in its slot; nothing is deployed from here.
 # The live byte check (share.refueler.io serves dist/ exactly) runs from Rajesh's Mac inside
-# ship-app.sh until Share-Release-1's public watchdog.
+# ship-app.sh at ship time, and every six hours from watchdog.yml (Share-Release-1b).
 # Share-Release-1a (17 Oct 2026): --ci also builds a second time from `git archive HEAD` and
 # refuses on any difference; then the release-file tests run, and --rebuild HEAD (git alone)
 # must give the same dist/ and SHA256SUMS as --ci. Node comes from .nvmrc.

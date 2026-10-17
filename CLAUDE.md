@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.24 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** X5-2 · 15 Oct 2026
+> **Version:** 2.25 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-Release-1b · 17 Oct 2026
 > Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -111,9 +111,11 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
 `src/_includes/`, `eleventy.app.js` or `bin/lib/app-csp.txt`.
 
 1. Commit and push (`git commit -m "…" && git push`), then ship with ONE command — build → check →
-   deploy → prove: `/Users/rajeshtaylor/Documents/refueler-share/bin/ship-app.sh`
-   It must end `✓ SHIPPED (app)`. Anything else = not shipped, whatever GitHub or wrangler says.
-   (`--check` = build + checks only, safe anywhere; `--prove` = is the live site serving `dist/`?)
+   draft release → deploy → prove → publish: `/Users/rajeshtaylor/Documents/refueler-share/bin/ship-app.sh`
+   It must end `✓ SHIPPED (app) — release app-<sha> published`. Anything else = not shipped,
+   whatever GitHub or wrangler says. It builds twice (working tree + `git archive HEAD`) and refuses
+   on any difference or untracked file. (`--check` = build + checks only, safe anywhere; `--prove` =
+   is the live site serving `dist/`?; `--rebuild <commit> [<prev>]` = one release from git alone.)
 2. Then eyeball behaviour at **https://share.refueler.io/** (the script proves bytes, not behaviour) —
    Safari on the Mac with Mullvad on first:
    a. Share URL contains `?uuid=` and a non-empty `#` fragment
@@ -123,6 +125,9 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
       rendered text/UI directly — do not infer correctness from the diff alone
    e. Console: no `Content-Security-Policy` errors from our own files (errors inside Cloudflare's
       Turnstile frame, `flexible?lang=auto`, are Turnstile's own CSP and not ours)
+   f. **https://share.refueler.io/verify/** names the release just published, and its links open
+      that release, its rebuild run and the watchdog runs. If the copy changed, read it against plan
+      §8 (never proves / verified / guaranteed / tamper-proof / trustless / certified).
 3. If the change touches the password flow: verify the unlock screen appears on paste.
 4. Speed: `node dev/speed/speed.mjs` (`--label=vpn-off`, then `--label=vpn-on-daita`) from Rajesh's Terminal.
 
@@ -134,8 +139,15 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
   `no-transform`; Satoshi tracked by git. Live: CSP exact, no Report-Only, no `X-Robots-Tag`, no
   `Link`, `max-age=0`, real 404.
 - CI: `.github/workflows/app-check.yml` runs `bin/ship-app.sh --ci` (same build + checks, an empty
-  stand-in for the never-committed Satoshi, no deploy) alongside `ci.yml`. The live byte check runs
-  only from the Mac (in `ship-app.sh`) until Share-Release-1's public watchdog.
+  stand-in for the never-committed Satoshi, no deploy) alongside `ci.yml`, plus the release-file tests
+  (`node --test bin/test/*.test.mjs`) and `--rebuild HEAD` = `--ci`. Beside it,
+  `.github/workflows/release-rebuild.yml` rebuilds every published release from its tag and compares
+  its `SHA256SUMS`.
+- Live: `ship-app.sh` proves the live bytes from the Mac at ship time; between ships the public
+  watchdog (`.github/workflows/watchdog.yml`, every six hours at :17) runs `bin/verify-live.mjs`,
+  which compares every served file and the headers with the release on GitHub (never with the site's
+  own `/release.json`). Red = failed run + GitHub email; re-run once (fetch failures are listed apart),
+  then `--prove` from the Mac. `node bin/verify-live.mjs` works from any checkout too.
 - Versioned assets: every release lives at `/v/<sha>/` and the previous one is kept, so a tab open
   across a ship still loads its own modules.
 - **Browser cache:** Cloudflare Cache Rule `http.host eq "share.refueler.io"` → Browser TTL = Respect
