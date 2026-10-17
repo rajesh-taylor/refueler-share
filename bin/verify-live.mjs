@@ -12,7 +12,7 @@
 //    published yet → wait 10 min and try once more (a ship publishes a few minutes after its
 //    deploy), then red. The two files must agree with each other.
 // 3  fetch every listed path from the host (URL as bin/ship-app.sh url_for), hash, compare
-// 4  headers on /, one asset and an unknown path: CSP = the manifest's default_csp, no
+// 4  headers on /, one asset and an unknown path: CSP = the manifest's default_csp, HSTS, no
 //    Report-Only, no X-Robots-Tag, no Link, no-transform, not browser-cacheable, a real 404
 // 5  the live release is GitHub's latest published release
 // Exit 0 = everything matches. Exit 1 = anything else; failed fetches (network, 5xx) are listed
@@ -137,6 +137,7 @@ function headerProblems(url, r, csp, { notFound }) {
   if (h('content-security-policy') !== csp) p.push(`${url}: CSP differs from the release's default_csp (served: ${h('content-security-policy') ?? 'none'})`);
   if (h('content-security-policy-report-only') !== null) p.push(`${url}: a Report-Only CSP is present`);
   if (h('x-robots-tag') !== null) p.push(`${url}: X-Robots-Tag present`);
+  if (!/^max-age=31536000\b/.test(h('strict-transport-security') || '')) p.push(`${url}: HSTS (max-age=31536000) missing`);
   if (h('link') !== null) p.push(`${url}: Link header present: ${h('link')}`);
   const cc = (h('cache-control') || '').toLowerCase();
   // Pages answers a 404 with its own "no-store", ignoring _headers (ship-app.sh prove()).

@@ -27,7 +27,7 @@ after(async () => {
 });
 
 function headers(csp = CSP) {
-  return `/*\n  Content-Security-Policy: ${csp}\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  ! Link\n  X-Content-Type-Options: nosniff\n`;
+  return `/*\n  Content-Security-Policy: ${csp}\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  Strict-Transport-Security: max-age=31536000; includeSubDomains\n  ! Link\n  X-Content-Type-Options: nosniff\n`;
 }
 
 // A deploy of release `sha` + its three release files (as bin/lib/release-manifest.mjs writes them).
@@ -128,6 +128,13 @@ test('a Link header or a cacheable response → red', async () => {
   assert.equal(r.ok, false);
   assert.equal(r.found.headers.filter((l) => l.includes('Link header present')).length, 3);
   assert.ok(r.found.headers.some((l) => l.includes('browser-cacheable')));
+});
+
+test('HSTS missing → red on every checked URL', async () => {
+  const t = await setup({ tamper: (d) => writeFileSync(join(d, '_headers'), headers().replace(/  Strict-Transport-Security:.*\n/, '')) });
+  const r = await t.run();
+  assert.equal(r.ok, false);
+  assert.equal(r.found.headers.filter((l) => l.includes('HSTS')).length, 3);
 });
 
 test('live is behind the latest published release → red', async () => {
