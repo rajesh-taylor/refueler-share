@@ -136,8 +136,10 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
   or `*.css` not listed fails `ship-app.sh` and CI (the merkle.js / Share-6-3d trap). Add it there, same session.
 - `ship-app.sh` refuses: inline `<script>`, `on*=` or `style=` in built HTML; a `_headers` CSP that
   isn't byte-equal to `bin/lib/app-csp.txt` (**enforced** since X5-2); a missing `! Link` or
-  `no-transform`; Satoshi tracked by git. Live: CSP exact, no Report-Only, no `X-Robots-Tag`, no
-  `Link`, `max-age=0`, real 404.
+  `no-transform` or HSTS; Satoshi tracked by git. Live: CSP exact, HSTS (`max-age=31536000;
+  includeSubDomains`, from `_headers`), no Report-Only, no `X-Robots-Tag`, no `Link`, `max-age=0`,
+  real 404. `/.well-known/security.txt` (`src/app/security-txt.njk`) has a fixed `Expires`
+  (17 Apr 2027) — renew it before then (calendar).
 - CI: `.github/workflows/app-check.yml` runs `bin/ship-app.sh --ci` (same build + checks, an empty
   stand-in for the never-committed Satoshi, no deploy) alongside `ci.yml`, plus the release-file tests
   (`node --test bin/test/*.test.mjs`) and `--rebuild HEAD` = `--ci`. Beside it,

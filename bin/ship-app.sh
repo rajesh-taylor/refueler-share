@@ -117,6 +117,7 @@ write_headers() {
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
 EOF
 }
 
@@ -227,6 +228,7 @@ check() {
     || aa_fail "_headers CSP differs from bin/lib/app-csp.txt"
   grep -q '^  ! Link$' "$DIST/_headers"      || aa_fail "_headers lacks '! Link'"
   grep -q 'no-transform' "$DIST/_headers"    || aa_fail "_headers lacks no-transform"
+  grep -q '^  Strict-Transport-Security: max-age=31536000; includeSubDomains$' "$DIST/_headers" || aa_fail "_headers lacks Strict-Transport-Security"
   # every listed asset, blake3 WASM, fonts, icons in this release
   for n in $AA_ASSETS; do [ -f "$DIST/v/$sha/$n" ] || aa_fail "release lacks $n"; done
   [ -f "$DIST/v/$sha/blake3/browser-async.js" ] || aa_fail "release lacks blake3/"
@@ -292,6 +294,7 @@ prove() {
     [ "$(header_of "$url" 'content-security-policy')" = "$csp" ] || aa_fail "CSP header not exact on $url"
     [ -z "$(header_of "$url" 'content-security-policy-report-only')" ] || aa_fail "a Report-Only CSP is still on $url (enforced since X5-2)"
     [ -z "$(header_of "$url" 'x-robots-tag')" ] || aa_fail "X-Robots-Tag on $url (dropped at X5-2)"
+    case "$(header_of "$url" 'strict-transport-security')" in max-age=31536000*) ;; *) aa_fail "HSTS (max-age=31536000) missing on $url" ;; esac
     lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || aa_fail "Link header on $url: $lk"
     cc="$(header_of "$url" 'cache-control' | tr 'A-Z' 'a-z')"
     # Pages answers a 404 with its own fixed "Cache-Control: no-store", ignoring _headers
@@ -302,7 +305,7 @@ prove() {
   done
   [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP_HOST/no-such-page-$RANDOM")" = "404" ] || aa_fail "unknown path is not a 404 (SPA fallback? 404.html missing?)"
   [ "$AA_FAILS" -eq 0 ] || return 1
-  echo "  ✓ headers: CSP (enforced) exact · no Link · no-transform · max-age=0 · real 404"
+  echo "  ✓ headers: CSP (enforced) exact · HSTS · no Link · no-transform · max-age=0 · real 404"
 }
 
 # GitHub must refuse to move or delete app-* tags, and lock published releases.
