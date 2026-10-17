@@ -149,6 +149,7 @@ const closers = [today.close, immut.close];
 const results = { schema: 1, when: new Date().toISOString(), warm: WARM, release: readFileSync(join(DIST, 'release.json'), 'utf8').match(/"version":\s*"([^"]+)"/)?.[1] ?? null, conditions, targets: {} };
 try {
   if (flag('tunnel')) {
+    console.log('· starting two quick tunnels (up to ~2 min)…');
     const [t1, t2] = await Promise.all([tunnel(today.port), tunnel(immut.port)]);
     closers.push(t1.close, t2.close);
     await Promise.all([ready(t1.url), ready(t2.url)]);
@@ -158,6 +159,7 @@ try {
   for (const name of wanted) {
     if (!ENGINES[name] || (name === 'brave' && !existsSync(BRAVE_APP))) continue;
     for (const t of targets) {
+      console.log(`· ${name} · ${t.name}: 1 cold + ${WARM} return visits…`);
       const dir = mkdtempSync(join(tmpdir(), `cache-ab-${name}-`));
       let ctx;                                                // one profile: cold, then returning visits
       try { ctx = await profile(name, dir); } catch { console.log(`· ${name}: not installed — skipped`); rmSync(dir, { recursive: true, force: true }); break; }
