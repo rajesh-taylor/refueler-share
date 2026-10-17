@@ -354,3 +354,26 @@ main, .rx-mode main { max-width: var(--sheet); }
 @media (max-width: 360px) {
   .up-pick { flex-direction: column; align-items: stretch; }
 }
+
+/* ══ Share-Release-1b — /verify/ "Check the code" (plan Share-Release-1 v1 §4) ══════════════ */
+/* Wider than the 480 px sheet so the Terminal lines mostly fit; a long line scrolls inside its
+   own box, never the page. */
+.app-verify main { max-width: 640px; }
+.vf-part { margin-top: var(--s7); }
+.vf h2 { font: var(--t-title); color: var(--fg); margin: 0 0 var(--s3); }
+.vf p, .vf-list { font: var(--t-body); color: var(--fg-muted); margin: 0 0 var(--s3); max-width: 62ch; }
+.vf a { color: var(--fg); }
+.vf code { font-family: var(--mono); font-size: 13px; color: var(--fg); overflow-wrap: anywhere; }
+.vf-links { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
+.vf-cmd {
+  margin: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
+  background: var(--surface);
+  border-radius: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.vf-cmd code { display: block; white-space: pre; overflow-wrap: normal; line-height: 1.6; }
+.vf-list { padding-left: 1.1em; }
+.vf-list li { margin-bottom: var(--s3); }
+.vf-list li::marker { color: var(--fg-subtle); }

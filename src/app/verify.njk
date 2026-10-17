@@ -1,0 +1,79 @@
+---
+title: "Check the code — Refueler Share"
+description: "How to compare the code this site sends with the release published on GitHub."
+permalink: /verify/index.html
+bodyClass: "app-verify"
+canonical: "/verify/"
+indexable: true
+---
+{#- verify.njk — Share-Release-1b · 17 Oct 2026 · plan Share-Release-1 v1 §4 + §8 (copy approved by
+    Rajesh 17 Oct). Never "proves / proof / verified / guaranteed / tamper-proof / trustless /
+    certified" here: check, compare, matches, the same files, published. release.sha / release.prev
+    come from eleventy.app.js (APP_SHA / APP_PREV, set by bin/ship-app.sh). -#}
+{%- set gh = "https://github.com/rajesh-taylor/refueler-share" -%}
+{%- set tag = "app-" + release.sha -%}
+{%- set sums = gh + "/releases/download/" + tag + "/SHA256SUMS" -%}
+{% extends "app-layout.njk" %}
+{% block main %}
+    <article class="vf">
+      <h1 class="rx-head">Check the code</h1>
+
+      <section class="vf-part">
+        <h2>What this checks</h2>
+        <p>Share runs in your browser, so the code that encrypts your files comes from this site. Each time that code changes, we publish a release on GitHub with the SHA-256 fingerprint of every file the site serves. You can compare what this site sends with what was published.</p>
+        <p>Two jobs on GitHub’s machines do the same in public. One rebuilds each release from the source code and compares the fingerprints. The other fetches every file from this site every six hours and compares it with the latest release.</p>
+      </section>
+
+      <section class="vf-part">
+        <h2>This release</h2>
+        <p>This page is part of release <code>{{ tag }}</code>.</p>
+        <p class="vf-links">
+          <a href="{{ gh }}/releases/tag/{{ tag }}">The release on GitHub</a>
+          <a href="{{ gh }}/actions/workflows/release-rebuild.yml?query=branch%3A{{ tag }}">Its rebuild</a>
+          <a href="{{ gh }}/actions/workflows/watchdog.yml">The six-hourly checks</a>
+        </p>
+      </section>
+
+      <section class="vf-part">
+        <h2>Check one file</h2>
+        <p>On a Mac or Linux, in Terminal. The published fingerprint, from GitHub:</p>
+        <pre class="vf-cmd"><code>curl -sL {{ sums }} | grep ' v/{{ release.sha }}/share.js$'</code></pre>
+        <p>The file this site sends, fingerprinted on your machine:</p>
+        <pre class="vf-cmd"><code>curl -s https://share.refueler.io/v/{{ release.sha }}/share.js | shasum -a 256</code></pre>
+        <p>The two long numbers should be the same. Any file in the list works in place of <code>share.js</code>.</p>
+      </section>
+
+      <section class="vf-part">
+        <h2>Check every file</h2>
+        <p>With Node.js 22 or later:</p>
+        <pre class="vf-cmd"><code>git clone --depth 1 {{ gh }}.git
+cd refueler-share
+node bin/verify-live.mjs</code></pre>
+        <p>It reads the release name from this site, takes the fingerprints from GitHub, fetches every listed file from here and compares them, then checks the security headers. It’s the same check the six-hourly job runs, and it needs nothing else installed.</p>
+      </section>
+
+      <section class="vf-part">
+        <h2>Rebuild it yourself</h2>
+        <pre class="vf-cmd"><code>git clone {{ gh }}.git
+cd refueler-share
+git checkout {{ tag }}
+npm ci
+bin/ship-app.sh --rebuild {{ tag }} {{ release.prev }}
+curl -sL {{ sums }} | diff - build/release/SHA256SUMS</code></pre>
+        <p>No output means every file matches. One file isn’t in the source: the Satoshi font in the header, which its licence lets us serve but not publish. The rebuild leaves an empty file in its place and lists the official file’s fingerprint, which you can check against the copy in Fontshare’s own download.</p>
+      </section>
+
+      <section class="vf-part">
+        <h2>What this doesn’t show</h2>
+        <ul class="vf-list">
+          <li>That <em>your</em> browser got these files. A server can send different files to different people, and a check from your Terminal is a separate request. Browsers don’t make this check for you yet. WEBCAT and WAICT are being built for that, and we’ll use them when they’re ready.</li>
+          <li>That the code is safe. Matching fingerprints mean the files are the published ones, not that the published ones are free of mistakes. Reading the source and an external audit answer that.</li>
+          <li>Cloudflare’s security check (Turnstile). Its script comes from Cloudflare and isn’t ours to list.</li>
+          <li>Refueler’s server, which stores files and handles payments. It never runs in your browser, and it only ever receives your files already encrypted.</li>
+          <li>The Share pages on refueler.io (the landing page, Plans, Status). They come from a different site.</li>
+          <li>That GitHub and this site are run by different people. We publish to both.</li>
+          <li>This page itself. It comes from the server it asks you to check, so the fingerprints come from GitHub, not from here.</li>
+        </ul>
+      </section>
+    </article>
+{% endblock %}

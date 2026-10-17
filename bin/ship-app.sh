@@ -129,8 +129,8 @@ build_into() {
   local src="$1" out="$2" sha="$3" prev="$4" assets="${5:-$AA_ASSETS}" tmp prev_assets
   rm -rf "$out"
   [ "$src" = "$ROOT" ] || [ -e "$src/node_modules" ] || ln -s "$ROOT/node_modules" "$src/node_modules"
-  ( cd "$src" && APP_SHA="$sha" "$ELEVENTY" --config=eleventy.app.js --output="$out" --quiet ) >/dev/null \
-    || die "Eleventy build failed: cd $src && APP_SHA=$sha npx eleventy --config=eleventy.app.js"
+  ( cd "$src" && APP_SHA="$sha" APP_PREV="$([ "$prev" = "$sha" ] || echo "$prev")" "$ELEVENTY" --config=eleventy.app.js --output="$out" --quiet ) >/dev/null \
+    || die "Eleventy build failed: cd $src && APP_SHA=$sha APP_PREV=$prev npx eleventy --config=eleventy.app.js"
   copy_release "$src" "$out/v/$sha" "$assets"
   [ -f "$out/v/$sha/fonts/Satoshi-Variable.woff2" ] || place_satoshi "$out/v/$sha"
   if [ -n "$prev" ] && [ "$prev" != "$sha" ]; then
@@ -330,6 +330,7 @@ Release $tag of https://share.refueler.io.
 - Commit: [$full](https://github.com/$REPO/commit/$full)
 - Previous release: $prev_line
 - Files: \`SHA256SUMS\` lists the SHA-256 of every file this deploy serves; \`manifest.json\` holds the same hashes in WEBCAT's manifest format (unsigned) and is also served at /release.json; \`release-extra.json\` holds the commit, the previous release and the build pins.
+- How to check these files against https://share.refueler.io yourself: https://share.refueler.io/verify/
 - Rebuild from source on GitHub's machines: [runs for this tag](https://github.com/$REPO/actions/workflows/release-rebuild.yml?query=branch%3A$tag)
 - Not rebuilt there: the Satoshi font, whose licence lets us serve it but not publish it. Its listed hash is the official Fontshare file's.
 EOF
