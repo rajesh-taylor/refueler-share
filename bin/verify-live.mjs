@@ -41,6 +41,8 @@ export const DEFAULTS = {
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 const b64urlToHex = (s) => Buffer.from(s, 'base64url').toString('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Named, so the host's logs and any bot rules can tell this check apart from a browser.
+const UA = 'refueler-share-verify-live/1 (+https://github.com/rajesh-taylor/refueler-share/blob/main/bin/verify-live.mjs)';
 const bust = () => `v=${Date.now()}${Math.floor(Math.random() * 1e6)}`;
 
 // URL path for a SHA256SUMS path (no leading slash), as Pages serves it — bin/ship-app.sh url_for.
@@ -56,7 +58,10 @@ async function get(url, o, init = {}) {
   let last = '';
   for (let i = 1; i <= o.attempts; i++) {
     try {
-      const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(o.timeoutMs), ...init });
+      const res = await fetch(url, {
+        redirect: 'follow', signal: AbortSignal.timeout(o.timeoutMs), ...init,
+        headers: { 'user-agent': UA, ...(init.headers || {}) },
+      });
       const body = Buffer.from(await res.arrayBuffer());
       if (res.status < 500) return { status: res.status, headers: res.headers, body };
       last = `HTTP ${res.status}`;
@@ -66,6 +71,12 @@ async function get(url, o, init = {}) {
     if (i < o.attempts) await sleep(o.backoffMs * i);
   }
   return { error: `${last} after ${o.attempts} tries` };
+}
+
+// "HTTP 403" plus, when Cloudflare stopped the request, its challenge marker and ray id.
+function why(r) {
+  const cf = r.headers.get('cf-mitigated'), ray = r.headers.get('cf-ray');
+  return `HTTP ${r.status}${cf ? ` (Cloudflare ${cf}: the host challenged this request — a host setting, not a file problem)` : ''}${ray ? ` ray ${ray}` : ''}`;
 }
 
 async function pool(items, n, fn) {
@@ -79,7 +90,7 @@ async function pool(items, n, fn) {
 async function liveRelease(o) {
   const r = await get(`${o.host}/?${bust()}`, o, { cache: 'no-store' });
   if (r.error) return { error: `${o.host}/: ${r.error}` };
-  if (r.status !== 200) return { error: `${o.host}/: HTTP ${r.status}` };
+  if (r.status !== 200) return { error: `${o.host}/: ${why(r)}` };
   const m = /src="\/v\/([0-9a-f]{4,40})\/share-early\.js"/.exec(r.body.toString('utf8'));
   return m ? { sha: m[1] } : { none: true };
 }
@@ -169,7 +180,7 @@ export async function verifyLive(opts = {}) {
     const r = await get(`${url}?${bust()}`, o, { cache: 'no-store' });
     if (r.error) found.fetch.push(`${p.slice(1)}: ${r.error}`);
     else if (r.status === 404) found.missing.push(`${p.slice(1)}: not served (404 at ${url})`);
-    else if (r.status !== 200) found.fetch.push(`${p.slice(1)}: HTTP ${r.status} at ${url}`);
+    else if (r.status !== 200) found.fetch.push(`${p.slice(1)}: ${why(r)} at ${url}`);
     else {
       const got = sha256(r.body), want = rel.sums.get(p);
       if (got === want) same++;
