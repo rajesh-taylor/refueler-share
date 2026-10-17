@@ -43,6 +43,9 @@ MODE="${1:-ship}"
 APP_HOST="${APP_HOST:-https://share.refueler.io}"
 PROJECT="refueler-share-app"
 REPO="rajesh-taylor/refueler-share"
+# Every `gh` call names the repo, whatever directory the script is run from (Share-Release-1b:
+# run from ~, `gh release create` looked for a git repo in ~ and failed).
+export GH_REPO="$REPO"
 CSP_FILE="$ROOT/bin/lib/app-csp.txt"
 DIST="$ROOT/dist"
 RELEASE_OUT="$ROOT/build/release"
