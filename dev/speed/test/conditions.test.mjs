@@ -128,24 +128,24 @@ const run = (when, ready, bytes, extra = {}) => ({
   ...extra,
 });
 
-test('summary: rows per engine × page, digest only, competitor/slow runs left out', () => {
-  const s = buildSummary([
+test('summary rows (for the flags): per engine × page, digest only, competitor/slow runs left out', () => {
+  const rows = [
     run('2026-10-17T10:00:00.000Z', 900, 386000),
     { ...run('2026-10-17T11:00:00.000Z', 1, 1), base: 'https://wetransfer.com' },
     run('2026-10-17T12:00:00.000Z', 1, 1, { slow: true }),
-  ], 'G');
-  assert.equal(s.rows.length, 1);
-  assert.deepEqual(s.rows[0].cond, { down_mbps: 287.6, up_mbps: 18, rpm: 99, link: 'wifi', power: 'battery', vpn: 'multihop+daita', exit_city: 'London' });
-  assert.equal(s.rows[0].median.ttfb, 200);
-  assert.equal(s.rows[0].engine_version, '26.0');
+  ].flatMap(rowsFromRun);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].cond, { down_mbps: 287.6, up_mbps: 18, rpm: 99, link: 'wifi', power: 'battery', vpn: 'multihop+daita', exit_city: 'London' });
+  assert.equal(rows[0].median.ttfb, 200);
+  assert.equal(rows[0].engine_version, '26.0');
 });
 
 test('summary: old runs without place or conditions still summarise', () => {
   const old = run('2026-10-16T23:49:00.000Z', 900, 386000);
   delete old.place; delete old.conditions; delete old.versions;
-  const [row] = buildSummary([old]).rows;
-  assert.equal(row.place, null);
-  assert.equal(row.cond, null);
+  const [r] = buildSummary([old]).runs;
+  assert.equal(r.place, null);
+  assert.equal(r.cond, null);
 });
 
 test('flags: > 20 % rise in ready or bytes against the previous comparable run only', () => {

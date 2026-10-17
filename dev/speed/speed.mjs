@@ -5,7 +5,10 @@
 // fresh visitor, and reads the timings the browser itself records. Pages only: it never
 // uploads, so it creates no transfers and stores nothing.
 //
-//   node dev/speed/speed.mjs --place=L1                  # routine: all engines, 5 cold loads each
+//   node dev/speed/speed.mjs --weekly --place=L1         # the weekly routine: VPN off, then asks for
+//                                                        #   Mullvad on, VPN on, --summarise, Finder
+//   node dev/speed/speed.mjs --weekly --with-others --place=L1   # monthly: + the other sites each time
+//   node dev/speed/speed.mjs --place=L1                  # one run, Mullvad as it is now
 //   node dev/speed/speed.mjs --place=L1 --note="backup running"
 //   node dev/speed/speed.mjs --summarise                 # rebuild summary.json for Navy Office's Speed view
 //   node dev/speed/speed.mjs --targets=<list.json>       # one-off: other sites' public landing pages
@@ -30,12 +33,13 @@
 
 import { chromium, webkit, firefox } from '@playwright/test';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { collect, version } from './conditions.mjs';
 import {
-  checkOut, cleanNote, buildSummary, flags, PLACE, RUNS_DIR, COMPETITORS_DIR, SUMMARY, SHARE,
+  checkOut, cleanNote, buildSummary, rowsFromRun, flags, writeAtomic, PLACE, RUNS_DIR, COMPETITORS_DIR, CACHE_AB_DIR, SUMMARY, SHARE,
 } from './summary.mjs';
+import { weekly } from './weekly.mjs';
 import { releaseFromPage } from '../../bin/verify-live.mjs';
 
 const argv = process.argv.slice(2);
@@ -54,14 +58,25 @@ const readRuns = (dir) => (existsSync(dir) ? readdirSync(dir) : [])
   .filter(Boolean);
 const pct = (x) => `${x > 0 ? '+' : ''}${Math.round(x * 100)} %`;
 
+// A run saves whole or not at all (writeAtomic); Ctrl-C waits for a save in progress, then stops.
+process.on('SIGINT', () => { console.log('\n· stopped — runs already saved are whole; nothing half-written'); process.exit(130); });
+
+// ── --weekly: VPN off, then on, then --summarise (weekly.mjs; never toggles Mullvad itself) ──
+if (flag('weekly')) {
+  const place = arg('place', null);
+  if (!PLACE.test(place || '')) die('--weekly needs --place=<code>, e.g. --place=L1');
+  process.exit(await weekly({ place, note: cleanNote(arg('note', null)), withOthers: flag('with-others') }));
+}
+
 // ── --summarise ────────────────────────────────────────────────────────────────────────────
 if (flag('summarise') || flag('summarize')) {
   const runsDir = safeOut(arg('runs-dir', RUNS_DIR));
   const out = safeOut(arg('summary', SUMMARY));
-  const s = buildSummary(readRuns(runsDir));
-  writeFileSync(out, JSON.stringify(s, null, 2) + '\n');
-  const f = flags(s.rows);
-  console.log(`summary: ${s.rows.length} rows from ${runsDir} → ${out}`);
+  const runFiles = readRuns(runsDir);
+  const s = buildSummary(runFiles, { competitors: readRuns(safeOut(arg('competitors-dir', COMPETITORS_DIR))), cacheAb: readRuns(safeOut(arg('cache-ab-dir', CACHE_AB_DIR))) });
+  writeAtomic(out, JSON.stringify(s, null, 2) + '\n');
+  const f = flags(runFiles.flatMap(rowsFromRun));
+  console.log(`summary: ${s.runs.length} runs, ${s.competitors.length} other-site runs, ${s.cache_ab.length} cache A/B → ${out}`);
   for (const x of f) console.log(`  ⚑ ${x.row.when.slice(0, 16)} ${x.row.engine} ${x.row.page} ${x.row.label ?? ''} ${x.row.place ?? ''}: ${x.metric} ${pct(x.rise)}`);
   console.log('Open it in Navy Office → Speed (refueler.io/share/admin/navy-office).');
   process.exit(0);
@@ -75,6 +90,7 @@ const PAGES   = String(arg('pages', '/,/signin/')).split(',');
 const SLOW    = flag('slow');
 const PLACE_  = arg('place', null);
 const NOTE    = cleanNote(arg('note', null));
+const KIND    = arg('kind', null) === 'weekly' ? 'weekly' : null;   // set by --weekly
 let   LABEL   = arg('label', '');
 LABEL = LABEL ? String(LABEL).replace(/[^a-z0-9-]/gi, '').slice(0, 24) : '';
 if (!(RUNS >= 1 && RUNS <= 50)) die('--runs must be 1–50');
@@ -205,7 +221,7 @@ if (TARGETS) {
     table(`${t.name} · ${t.url} · ${RUNS} cold loads each · ${vpnLabel ?? ''} (medians)`, engines);
     const slug = String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const file = join(OUT, `${stamp(when)}-${slug}${vpnLabel ? `-${vpnLabel}` : ''}.json`);
-    writeFileSync(file, JSON.stringify(results, null, 2) + '\n');
+    writeAtomic(file, JSON.stringify(results, null, 2) + '\n');
     console.log(`saved ${file}`);
   }
   process.exit(0);
@@ -215,19 +231,19 @@ if (TARGETS) {
 const when = new Date().toISOString();
 const release = await releaseOf(BASE);
 const engines = await measure(BASE, PAGES, true);
-const results = { schema: 2, base: BASE, when, label: LABEL || null, place: PLACE_, note: NOTE, runs: RUNS, slow: SLOW, release, versions, conditions, engines };
+const results = { schema: 2, base: BASE, when, label: LABEL || null, place: PLACE_, note: NOTE, kind: KIND, runs: RUNS, slow: SLOW, release, versions, conditions, engines };
 
 const c = conditions;
 table(`share speed · ${BASE} · release ${release ?? '?'} · ${RUNS} cold loads each${SLOW ? ' · Chromium throttled' : ''}${LABEL ? ` · ${LABEL}` : ''}${PLACE_ ? ` · ${PLACE_}` : ''} (medians)`, engines);
 console.log(`\nconditions: ${c.network ? `${c.network.down_mbps} ↓ / ${c.network.up_mbps} ↑ Mbps, ${c.network.rpm} RPM` : 'network not measured'} · ${c.link ?? 'link ?'} · ${c.power?.source ?? 'power ?'}${c.power?.source === 'battery' ? ` ${c.power.battery_pct}%` : ''} · ${vpn.connected ? `Mullvad ${[vpn.multihop && 'multihop', vpn.daita && 'DAITA'].filter(Boolean).join(' + ') || 'on'}${vpn.exit_city ? `, exit ${vpn.exit_city}` : ''}` : 'no VPN'}`);
 
 const file = join(OUT, `${stamp(when)}-${release ?? 'unknown'}${SLOW ? '-slow' : ''}${LABEL ? `-${LABEL}` : ''}${PLACE_ ? `-${PLACE_}` : ''}.json`);
-writeFileSync(file, JSON.stringify(results, null, 2) + '\n');
+writeAtomic(file, JSON.stringify(results, null, 2) + '\n');
 console.log(`saved ${file}`);
 
 if (ROUTINE) {
-  const f = flags(buildSummary([...readRuns(OUT)]).rows).filter((x) => x.row.when === when);
+  const f = flags(readRuns(OUT).flatMap(rowsFromRun)).filter((x) => x.row.when === when);
   if (f.length) for (const x of f) console.log(`⚑ ${x.row.engine} ${x.row.page}: ${x.metric} ${pct(x.rise)} vs ${x.prev.when.slice(0, 10)} (release ${x.prev.release}) — worth a look`);
   else console.log('no rise over 20 % against the previous comparable run');
-  console.log('then: node dev/speed/speed.mjs --summarise');
+  if (!KIND) console.log('then: node dev/speed/speed.mjs --summarise');
 }

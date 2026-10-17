@@ -30,7 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, normalize, resolve, sep } from 'node:path';
 import { readHeaders } from '../../bin/test/static-site.mjs';
 import { collect } from './conditions.mjs';
-import { checkOut, PRIVATE, REPO, SHARE } from './summary.mjs';
+import { checkOut, writeAtomic, PRIVATE, REPO, SHARE } from './summary.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (n, d) => { const a = argv.find((x) => x.startsWith(`--${n}=`)); return a ? a.split('=').slice(1).join('=') : d; };
@@ -191,6 +191,6 @@ const v = conditions.vpn;
 const label = v.connected ? (v.multihop && v.daita ? 'vpn-on-daita' : 'vpn-on') : 'vpn-off';
 mkdirSync(OUT, { recursive: true });
 const file = join(OUT, `${results.when.slice(0, 16).replace(/[:T]/g, '-')}-cache-ab-${label}.json`);
-writeFileSync(file, JSON.stringify({ ...results, label }, null, 2) + '\n');
+writeAtomic(file, JSON.stringify({ ...results, label }, null, 2) + '\n');
 console.log(`\n${label} · saved ${file}`);
 process.exit(0);

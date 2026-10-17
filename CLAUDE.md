@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.26 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Share-Release-1c · 17 Oct 2026
+> **Version:** 2.27 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Speed-View-Opus · 17 Oct 2026
 > Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -129,9 +129,10 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
       that release, its rebuild run and the watchdog runs. If the copy changed, read it against plan
       §8 (never proves / verified / guaranteed / tamper-proof / trustless / certified).
 3. If the change touches the password flow: verify the unlock screen appears on paste.
-4. Speed (Terminal.app, Mullvad off, then on): `node dev/speed/speed.mjs --place=<code>` — label set from
-   Mullvad's state, conditions allowlisted, results only in `../refueler-share-private/speed/` (refuses this
-   repo) — then `--summarise` and open `summary.json` in Navy Office → Speed.
+4. Speed (Terminal.app, start with Mullvad off): `node dev/speed/speed.mjs --weekly --place=<code>` — runs VPN
+   off, asks you to switch Mullvad on (multihop + DAITA; it never toggles it), runs VPN on, then `--summarise`
+   and shows `summary.json` in Finder: drag it (with `speed/places.md`) onto Navy Office → Speed. Monthly:
+   add `--with-others`. Conditions allowlisted; results only in `../refueler-share-private/speed/` (refuses this repo).
 
 **Enforced, not remembered:**
 - The release asset list lives in ONE place: `bin/lib/app-assets.sh`. A top-level `frontend/*.js`
