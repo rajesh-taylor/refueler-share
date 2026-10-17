@@ -45,6 +45,9 @@ jobs:
       - name: Release-file tests (bin/lib/release-manifest.mjs)
         run: node --test bin/test/*.test.mjs
 
+      - name: Speed recorder tests (dev/speed — allowlisted conditions, private-only output)
+        run: node --test dev/speed/test/*.test.mjs
+
       - name: Rebuild from git alone gives the same files (--rebuild HEAD = --ci)
         run: |
           cp -R dist "$RUNNER_TEMP/dist-ci"

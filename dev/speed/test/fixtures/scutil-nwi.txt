@@ -1,0 +1,15 @@
+Network information
+
+IPv4 network interface information
+     en0 : flags      : 0x5 (IPv4,DNS)
+           address    : 192.0.2.44
+           reach      : 0x00000002 (Reachable)
+
+   REACH : flags 0x00000002 (Reachable)
+
+IPv6 network interface information
+     en0 : flags      : 0x6 (IPv6,DNS)
+           address    : 2001:db8::44
+           reach      : 0x00000002 (Reachable)
+
+Network interfaces: utun4 en0

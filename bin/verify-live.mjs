@@ -86,13 +86,19 @@ async function pool(items, n, fn) {
   }));
 }
 
+// The release a Share page's HTML loads (its /v/<sha>/share-early.js), or null. Also used by
+// dev/speed/speed.mjs to name the release it measured.
+export function releaseFromPage(html) {
+  return /src="\/v\/([0-9a-f]{4,40})\/share-early\.js"/.exec(html)?.[1] ?? null;
+}
+
 // The release the live page loads, or { error } / { none }.
 async function liveRelease(o) {
   const r = await get(`${o.host}/?${bust()}`, o, { cache: 'no-store' });
   if (r.error) return { error: `${o.host}/: ${r.error}` };
   if (r.status !== 200) return { error: `${o.host}/: ${why(r)}` };
-  const m = /src="\/v\/([0-9a-f]{4,40})\/share-early\.js"/.exec(r.body.toString('utf8'));
-  return m ? { sha: m[1] } : { none: true };
+  const sha = releaseFromPage(r.body.toString('utf8'));
+  return sha ? { sha } : { none: true };
 }
 
 // SHA256SUMS + manifest.json for app-<sha>: { sums, manifest } | { missing } | { error }.

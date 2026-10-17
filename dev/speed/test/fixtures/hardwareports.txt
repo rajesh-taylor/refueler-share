@@ -1,0 +1,19 @@
+
+Hardware Port: Ethernet Adapter (en4)
+Device: en4
+Ethernet Address: 02:00:00:aa:bb:01
+
+Hardware Port: Thunderbolt Bridge
+Device: bridge0
+Ethernet Address: 02:00:00:aa:bb:02
+
+Hardware Port: Wi-Fi
+Device: en0
+Ethernet Address: 02:00:00:aa:bb:03
+
+Hardware Port: iPhone USB
+Device: en8
+Ethernet Address: 02:00:00:aa:bb:04
+
+VLAN Configurations
+===================
