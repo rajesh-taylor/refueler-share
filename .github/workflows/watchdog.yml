@@ -1,0 +1,77 @@
+# Share-Release-1b · 17 Oct 2026 — refueler-share-private plan Share-Release-1 v1 §5 (D1, P5, P6).
+# Every six hours, from GitHub's machines: does share.refueler.io serve exactly the release
+# published here? bin/verify-live.mjs reads the live release from the page, takes the hashes from
+# that release's SHA256SUMS + manifest.json on GitHub (never from the site), fetches and hashes
+# every listed file, checks the headers, and checks the live release is the latest one.
+# Red = the run fails and GitHub emails Rajesh. No issue is opened (D1). The log shows only what
+# anyone can fetch: path, published hash, served hash. Failed fetches are listed apart from
+# mismatches: re-run once before treating a red as real; then bin/ship-app.sh --prove from the Mac.
+# A ship publishes its release a few minutes after the deploy; the script waits 10 min and
+# retries once when the live release isn't published yet.
+# Dispatch can point it at another host (the deliberate-red test: a tampered copy served through
+# a tunnel). The host only ever comes in through env, never into the script text.
+# GitHub turns scheduled workflows off after 60 days with no repo activity — watch quiet periods.
+name: Watchdog
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # off the hour: GitHub delays :00 schedules
+  workflow_dispatch:
+    inputs:
+      host:
+        description: 'Host to check (https://…); leave empty for https://share.refueler.io'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOST: ${{ inputs.host }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Which host
+        run: |
+          HOST="${HOST:-https://share.refueler.io}"
+          [[ "$HOST" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || { echo "::error::host must be https://<name> with no path: $HOST"; exit 1; }
+          echo "HOST=$HOST" >> "$GITHUB_ENV"
+          echo "Checking $HOST"
+
+      - name: Checkout (the checker only)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/verify-live.mjs
+            bin/lib/release-manifest.mjs
+            .nvmrc
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Live site vs the published release
+        run: |
+          set -o pipefail
+          node bin/verify-live.mjs --host "$HOST" 2>&1 | tee "$RUNNER_TEMP/watchdog.log"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Watchdog — $HOST"
+            echo ""
+            echo '```'
+            tail -n 40 "$RUNNER_TEMP/watchdog.log" 2>/dev/null || echo "(no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
