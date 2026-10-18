@@ -10,6 +10,7 @@
 
 import { verifyStripeWebhook, createCheckoutSession } from '../stripe.js';
 import { supabaseFetch, json, err }                   from '../utils.js';
+import { verifyTurnstileToken }                     from '../turnstile.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stripe webhook — POST /webhook/stripe
@@ -66,6 +67,12 @@ export async function handleStripeWebhook(request, env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Checkout — POST /subscription/checkout
+//
+// Plans-Stripe-1 (18 Oct 2026): runs only after the person presses "Continue to
+// payment" on Plans, and only with a Turnstile token. A missing or failed token
+// is refused before any Stripe call, so no Stripe customer or subscription
+// exists until a person has pressed (row 26). Token in the JSON body — no new
+// request header.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleCheckout(request, env) {
   let body;
@@ -91,6 +98,10 @@ export async function handleCheckout(request, env) {
     'price_1TtnETGlctwiB9U3UJH3uaA',
   ];
   if (!validPriceIds.includes(price_id)) return err(400, 'Invalid price_id');
+
+  if (!(await verifyTurnstileToken(body.turnstile_token, env.TURNSTILE_SECRET_KEY))) {
+    return err(403, 'Check failed. Please try again.');
+  }
 
   try {
     const { clientSecret } = await createCheckoutSession(

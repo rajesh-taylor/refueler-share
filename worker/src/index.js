@@ -465,7 +465,14 @@ const worker = {
       // KV-Fix-1a: Lightning create / status / webhook routes removed (dormant;
       // trusted KV `settled` state). B7 rebuilds on LNbits-verified settlement.
 
+      // Plans-Stripe-1: courtesy throttle; the gate itself is Turnstile in handleCheckout.
       if (request.method === 'POST' && path === '/subscription/checkout') {
+        const ip = getClientIp(request);
+        const rl = await checkRateLimit(env, ip, 'subscription_checkout', 5, 600);
+        if (rl.limited) {
+          logEvent(env, { endpoint: 'subscription_checkout', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
+          return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        }
         return timed('subscription_checkout', () => handleCheckout(request, env).then(r => addCors(r, request)));
       }
 
