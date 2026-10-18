@@ -26,7 +26,8 @@ preview_bucket_name = "refueler-share-dev"
 
 # Secrets (set via `wrangler secret put <NAME>`)
 # MINT_PRIVATE_KEY     — secp256k1 private key hex (32 bytes). Never logged. Never exposed.
-# TURNSTILE_SECRET_KEY — Cloudflare Turnstile secret key
+# TURNSTILE_SECRET_KEY — Cloudflare Turnstile secret key (app widget, share.refueler.io)
+# TURNSTILE_PLANS_SECRET_KEY — Plans widget secret (Plans-Stripe-1; checkout only)
 # SUPABASE_URL         — https://<project>.supabase.co
 # SUPABASE_SERVICE_KEY — service_role JWT (spent_tokens write)
 # R2_S3_ACCESS_KEY_ID     — R2 API token Access Key ID  (Share-6-1, presigning). Worker secret only.
@@ -63,6 +64,9 @@ AUTH_ORIGINS               = "https://share.refueler.io"
 APP_ORIGINS                = "https://share.refueler.io,https://refueler.io"
 AUTH_SIGNIN_URL            = "https://share.refueler.io/signin/"
 AUTH_MAIL_FROM             = "signin@mail.refueler.io"
+# Plans-Stripe-1: the page host a checkout Turnstile token must come from.
+# Becomes "pay.refueler.io" when Plans moves (Plans-Design-Opus).
+PLANS_TURNSTILE_HOSTNAME   = "refueler.io"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
