@@ -27,7 +27,7 @@ after(async () => {
 });
 
 function headers(csp = CSP) {
-  return `/*\n  Content-Security-Policy: ${csp}\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  Strict-Transport-Security: max-age=31536000; includeSubDomains\n  ! Link\n  X-Content-Type-Options: nosniff\n`;
+  return `/*\n  Content-Security-Policy: ${csp}\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  Strict-Transport-Security: max-age=31536000; includeSubDomains\n  Cross-Origin-Resource-Policy: same-origin\n  ! Link\n  X-Content-Type-Options: nosniff\n`;
 }
 
 // A deploy of release `sha` + its three release files (as bin/lib/release-manifest.mjs writes them).
@@ -135,6 +135,14 @@ test('HSTS missing → red on every checked URL', async () => {
   const r = await t.run();
   assert.equal(r.ok, false);
   assert.equal(r.found.headers.filter((l) => l.includes('HSTS')).length, 3);
+});
+
+test('CORP missing, or interest-cohort present → red on every checked URL', async () => {
+  const t = await setup({ tamper: (d) => writeFileSync(join(d, '_headers'), headers().replace(/  Cross-Origin-Resource-Policy:.*\n/, '  Permissions-Policy: interest-cohort=()\n')) });
+  const r = await t.run();
+  assert.equal(r.ok, false);
+  assert.equal(r.found.headers.filter((l) => l.includes('Cross-Origin-Resource-Policy')).length, 3);
+  assert.equal(r.found.headers.filter((l) => l.includes('interest-cohort')).length, 3);
 });
 
 test('live is behind the latest published release → red', async () => {

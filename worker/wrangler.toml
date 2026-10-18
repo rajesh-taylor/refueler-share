@@ -6,6 +6,18 @@ compatibility_flags = ["nodejs_compat"]
 [limits]
 cpu_ms = 300000
 
+# H1 (18 Oct 2026): Workers Logs and traces stay OFF — no request log, so no IP is kept
+# by us. Pinned here so a deploy cannot turn them on; worker/test/h1-headers.test.js
+# fails if this block is removed or enabled.
+[observability]
+enabled = false
+
+[observability.logs]
+enabled = false
+
+[observability.traces]
+enabled = false
+
 # R2 bucket binding
 [[r2_buckets]]
 binding = "BUCKET"

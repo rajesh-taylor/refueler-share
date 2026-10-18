@@ -88,7 +88,7 @@ export async function handlePurgeTestTransfers(request, env) {
       const obj = await env.BUCKET.get(`${uuid}/manifest.json`);
       if (obj) manifest = await obj.json();
     } catch (e) {
-      console.error(`purge_test_transfers: manifest read failed for ${uuid}:`, e);
+      console.error(`purge_test_transfers: manifest read failed for ${String(uuid).slice(0, 8)}:`, e);
       continue;
     }
 
@@ -118,7 +118,7 @@ export async function handlePurgeTestTransfers(request, env) {
           deletedHere = r?.destroyed ? before : 0;
         }
       } catch (e) {
-        console.error(`purge_test_transfers: destroy failed for ${uuid}:`, e);
+        console.error(`purge_test_transfers: destroy failed for ${String(uuid).slice(0, 8)}:`, e);
       }
       totalDeleted += deletedHere;
     }

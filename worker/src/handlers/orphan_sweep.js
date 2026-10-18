@@ -150,7 +150,7 @@ export async function handleOrphanSweep(request, env) {
       const obj = await env.BUCKET.get(`${uuid}/manifest.json`);
       if (obj) manifest = await obj.json();
     } catch (err_) {
-      console.error(`orphan_sweep: manifest read failed for ${uuid}:`, err_);
+      console.error(`orphan_sweep: manifest read failed for ${String(uuid).slice(0, 8)}:`, err_);
       continue;
     }
     if (!manifest) continue;

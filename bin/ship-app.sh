@@ -116,7 +116,8 @@ write_headers() {
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Resource-Policy: same-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 EOF
 }
@@ -229,6 +230,8 @@ check() {
   grep -q '^  ! Link$' "$DIST/_headers"      || aa_fail "_headers lacks '! Link'"
   grep -q 'no-transform' "$DIST/_headers"    || aa_fail "_headers lacks no-transform"
   grep -q '^  Strict-Transport-Security: max-age=31536000; includeSubDomains$' "$DIST/_headers" || aa_fail "_headers lacks Strict-Transport-Security"
+  grep -q '^  Cross-Origin-Resource-Policy: same-origin$' "$DIST/_headers" || aa_fail "_headers lacks Cross-Origin-Resource-Policy: same-origin"
+  ! grep -q 'interest-cohort' "$DIST/_headers" || aa_fail "_headers still has the obsolete interest-cohort"
   # every listed asset, blake3 WASM, fonts, icons in this release
   for n in $AA_ASSETS; do [ -f "$DIST/v/$sha/$n" ] || aa_fail "release lacks $n"; done
   [ -f "$DIST/v/$sha/blake3/browser-async.js" ] || aa_fail "release lacks blake3/"
@@ -295,6 +298,8 @@ prove() {
     [ -z "$(header_of "$url" 'content-security-policy-report-only')" ] || aa_fail "a Report-Only CSP is still on $url (enforced since X5-2)"
     [ -z "$(header_of "$url" 'x-robots-tag')" ] || aa_fail "X-Robots-Tag on $url (dropped at X5-2)"
     case "$(header_of "$url" 'strict-transport-security')" in max-age=31536000*) ;; *) aa_fail "HSTS (max-age=31536000) missing on $url" ;; esac
+    [ "$(header_of "$url" 'cross-origin-resource-policy')" = "same-origin" ] || aa_fail "Cross-Origin-Resource-Policy: same-origin missing on $url"
+    case "$(header_of "$url" 'permissions-policy')" in *interest-cohort*) aa_fail "obsolete interest-cohort in Permissions-Policy on $url" ;; esac
     lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || aa_fail "Link header on $url: $lk"
     cc="$(header_of "$url" 'cache-control' | tr 'A-Z' 'a-z')"
     # Pages answers a 404 with its own fixed "Cache-Control: no-store", ignoring _headers

@@ -83,16 +83,16 @@ export async function releaseHeld(env, uuid, manifest) {
   if (!Number.isInteger(chunks) || chunks < 1) return { released: 'none', skipped: 'no_chunks' };
   const q = await openQref(env, uuid, manifest.qref_ct);
   if (!q) {
-    console.error(`quota release: qref_ct would not open for ${uuid} (reconcile corrects)`);
+    console.error(`quota release: qref_ct would not open for ${String(uuid).slice(0, 8)} (reconcile corrects)`);
     return { released: 'none', error: 'seal_open_failed' };
   }
   try {
     const r = await releaseQuota(env, q.quotaRef, q.sessionHash, chunks, manifest.upload_complete === true);
-    if (r?.clamped) console.error(`quota release: used clamped at 0 for one account (${uuid})`);
+    if (r?.clamped) console.error(`quota release: used clamped at 0 for one account (${String(uuid).slice(0, 8)})`);
     return { released: r?.released ?? 'none' };
   } catch (e) {
     // Missed credit-back: over-count, user's disfavour, ≤ 24 h until reconcile (S1 drift).
-    console.error(`quota release failed for ${uuid}:`, e?.message ?? e);
+    console.error(`quota release failed for ${String(uuid).slice(0, 8)}:`, e?.message ?? e);
     return { released: 'none', error: 'store_unavailable' };
   }
 }

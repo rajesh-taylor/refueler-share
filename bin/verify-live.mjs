@@ -144,6 +144,8 @@ function headerProblems(url, r, csp, { notFound }) {
   if (h('content-security-policy-report-only') !== null) p.push(`${url}: a Report-Only CSP is present`);
   if (h('x-robots-tag') !== null) p.push(`${url}: X-Robots-Tag present`);
   if (!/^max-age=31536000\b/.test(h('strict-transport-security') || '')) p.push(`${url}: HSTS (max-age=31536000) missing`);
+  if (h('cross-origin-resource-policy') !== 'same-origin') p.push(`${url}: Cross-Origin-Resource-Policy: same-origin missing (${h('cross-origin-resource-policy') ?? 'none'})`);
+  if (/interest-cohort/i.test(h('permissions-policy') || '')) p.push(`${url}: obsolete interest-cohort in Permissions-Policy`);
   if (h('link') !== null) p.push(`${url}: Link header present: ${h('link')}`);
   const cc = (h('cache-control') || '').toLowerCase();
   // Pages answers a 404 with its own "no-store", ignoring _headers (ship-app.sh prove()).

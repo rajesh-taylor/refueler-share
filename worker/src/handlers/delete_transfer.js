@@ -42,7 +42,7 @@ export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
     const latch = await latchConsumed(env, uuid, nowSeconds);
     if (latch.reason === 'gone') return { destroyed: false, gone: true };
     if (latch.reason === 'contended') {
-      console.error(`${logTag}: manifest latch contended for ${uuid}; left for retry`);
+      console.error(`${logTag}: manifest latch contended for ${String(uuid).slice(0, 8)}; left for retry`);
       return { destroyed: false, partial: true, remaining: null };
     }
     consumedAt = latch.consumedAt ?? consumedAt;
@@ -59,7 +59,7 @@ export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
 
   const deleted = await deleteKeys(env.BUCKET, keys);
   if (deleted < keys.length) {
-    console.error(`${logTag}: ${keys.length - deleted} object(s) not deleted for ${uuid}; left in-progress for retry`);
+    console.error(`${logTag}: ${keys.length - deleted} object(s) not deleted for ${String(uuid).slice(0, 8)}; left in-progress for retry`);
     return { destroyed: false, consumed_at: consumedAt, partial: true, remaining: keys.length - deleted };
   }
 

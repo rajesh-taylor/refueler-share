@@ -153,7 +153,7 @@ export async function purgeExpiredTransfer(env, uuid, groups, nowSeconds) {
   try {
     latch = await latchConsumed(env, uuid, nowSeconds, { eligible: (m) => isPurgeableExpired(m, nowSeconds) });
   } catch (e) {
-    console.error(`sweep: latch failed for ${uuid}:`, e);
+    console.error(`sweep: latch failed for ${String(uuid).slice(0, 8)}:`, e);
     return { status: 'guard_failed', deleted: 0, dock: null };
   }
   if (latch.reason === 'gone') return { status: 'gone', deleted: 0, dock: null };
@@ -169,7 +169,7 @@ export async function purgeExpiredTransfer(env, uuid, groups, nowSeconds) {
   catch (e) { console.error('sweep: root_verified KV delete failed:', e); }
 
   try { await putManifest(env.BUCKET, uuid, buildTombstone(nowSeconds)); }
-  catch (e) { console.error(`sweep: tombstone write failed for ${uuid}:`, e); }
+  catch (e) { console.error(`sweep: tombstone write failed for ${String(uuid).slice(0, 8)}:`, e); }
 
   const dock = await settleDockEntry(env.STATUS_KV, uuid, { mark: true, nowSeconds });
   return { status: 'purged', deleted, dock };

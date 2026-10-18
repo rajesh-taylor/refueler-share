@@ -100,7 +100,7 @@ export async function safeGetManifest(bucket, uuid, env) {
   if (!obj) return { manifest: null, oversize: false };
 
   if ((obj.size ?? 0) > MANIFEST_SIZE_MAX) {
-    console.error(`Manifest oversize: ${obj.size} bytes for ${uuid}`);
+    console.error(`Manifest oversize: ${obj.size} bytes for ${String(uuid).slice(0, 8)}`);
     return { manifest: null, oversize: true };
   }
 

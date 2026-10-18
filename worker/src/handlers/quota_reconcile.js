@@ -72,7 +72,7 @@ export async function runQuotaReconcile(env) {
       const o = await env.BUCKET.get(`${uuid}/manifest.json`);
       if (o) m = JSON.parse(await o.text());
     } catch (e) {
-      console.error(`quota_reconcile: manifest read failed for ${uuid}; not written:`, e);
+      console.error(`quota_reconcile: manifest read failed for ${String(uuid).slice(0, 8)}; not written:`, e);
       ae(env, 'quota_reconcile_aborted', [uuids.length, 1, 0, 0, 0]);
       return { ok: false, error: 'read_failed' };
     }
@@ -80,7 +80,7 @@ export async function runQuotaReconcile(env) {
     if (!Number.isInteger(m.total_chunks) || m.total_chunks < 1) continue;
     const q = await openQref(env, uuid, m.qref_ct);
     if (!q) {
-      console.error(`quota_reconcile: qref_ct would not open for ${uuid}; not written`);
+      console.error(`quota_reconcile: qref_ct would not open for ${String(uuid).slice(0, 8)}; not written`);
       ae(env, 'quota_reconcile_aborted', [uuids.length, 2, 0, 0, 0]);
       return { ok: false, error: 'seal_open_failed' };
     }

@@ -69,7 +69,7 @@ const enc = new TextEncoder();
 export async function clientForManifest(env, uuid, manifest) {
   if (!hasCref(manifest)) return null;
   const client = await openCref(env, uuid, manifest.cref_ct);
-  if (!client) console.error('webhook_delivery: cref_ct did not open for', uuid);
+  if (!client) console.error('webhook_delivery: cref_ct did not open for', String(uuid).slice(0, 8));
   return client;
 }
 

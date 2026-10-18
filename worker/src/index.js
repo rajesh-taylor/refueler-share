@@ -111,7 +111,7 @@ function logEvent(env, {
 // ─────────────────────────────────────────────────────────────────────────────
 // Router
 // ─────────────────────────────────────────────────────────────────────────────
-export default {
+const worker = {
     async fetch(request, env, ctx) {
     setAppOrigins(env);   // X5-1: corsHeaders() allowlist from var APP_ORIGINS
     // B12-4a: auth routes have their own credentialed, exact-origin CORS and are
@@ -703,6 +703,29 @@ export default {
         console.error('scheduled/nightly_sweep: unhandled error:', e?.message ?? e);
       }
     }
+  },
+};
+
+// H1 (18 Oct 2026): every JSON response leaves with the same four hardening headers,
+// applied here once instead of at each `new Response(JSON…)` site. Only
+// application/json is touched — chunk downloads, text/plain and CORS are not.
+// CORP is same-site, never same-origin: the app on share.refueler.io reads api.share.
+// Cache-Control is set only where the route set none.
+export function hardenJson(res) {
+  const ct = res.headers.get('Content-Type') || '';
+  if (!/^application\/json\b/i.test(ct)) return res;
+  const out = new Response(res.body, res);
+  out.headers.set('X-Content-Type-Options', 'nosniff');
+  out.headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  out.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+  if (!out.headers.has('Cache-Control')) out.headers.set('Cache-Control', 'no-store');
+  return out;
+}
+
+export default {
+  ...worker,
+  async fetch(request, env, ctx) {
+    return hardenJson(await worker.fetch(request, env, ctx));
   },
 };
 
@@ -1713,7 +1736,7 @@ async function handleInitiate(request, env, ctx, uuid) {
       console.error('handleInitiate: testcred flag write failed:', e);
       return err(502, 'Session store unavailable');
     }
-    console.log(`handleInitiate: test credential bypass uuid=${uuid} cap_chunks=${testCred.capChunks}`);
+    console.log(`handleInitiate: test credential bypass uuid=${String(uuid).slice(0, 8)} cap_chunks=${testCred.capChunks}`);
   } else {
     const meltRes = await supabaseFetch(env, 'POST', '/rest/v1/spent_tokens', { serial });
     if (meltRes.status === 409) {
