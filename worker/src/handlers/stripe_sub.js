@@ -42,7 +42,9 @@ export async function handleStripeWebhook(request, env) {
       const sub        = event.data.object;
       const customerId = sub.customer;
       const tier       = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
-      const status     = (sub.status === 'active' || sub.status === 'incomplete') ? 'active' : 'inactive';
+      // Plans-Stripe-1: an unpaid (incomplete) subscription is not a subscriber — pressing
+      // Continue must not count as a paying Citizen in Navy Office's figures.
+      const status     = (sub.status === 'active' || sub.status === 'trialing') ? 'active' : 'inactive';
       const periodEnd  = sub.current_period_end;
       let email = null;
       try {

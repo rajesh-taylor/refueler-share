@@ -82,6 +82,9 @@ export async function createCheckoutSession(priceId, customerEmail, successUrl, 
     'items[0][price]': priceId,
     'payment_behavior': 'default_incomplete',
     'payment_settings[save_default_payment_method]': 'on_subscription',
+    // Plans-Stripe-1: card only — no Link ("Onelink" / "Save my information"), which follows
+    // buyers across shops. Apple Pay still works (a card wallet); Google Pay is off on the page.
+    'payment_settings[payment_method_types][0]': 'card',
     'expand[0]': 'latest_invoice.payment_intent',
   });
 
