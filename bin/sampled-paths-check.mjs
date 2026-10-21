@@ -5,7 +5,11 @@
 //   1. every distinct path seen since --since (default: the last hour) — fails if any
 //      holds a UUID (none should after deploy 2);
 //   2. which request fields the dataset offers at all — any field for a query string
-//      or a request header is printed (OSA risk assessment §2).
+//      or a request header is printed (OSA risk assessment §2);
+//   3. the query strings recorded for share.refueler.io (a link's ?uuid=) and the
+//      referers recorded for the API host.
+// Requests with the test UUID 00000000-0000-4000-8000-000000000001 are our own probes
+// (curl checks of the old shapes): shown as {test-uuid}, never a failure.
 // Read-only. Token: an API token with Zone → Analytics → Read on refueler.io, typed at
 // a hidden prompt (never a placeholder, never saved):
 //
@@ -18,6 +22,9 @@ const HOST = 'api.share.refueler.io';
 const i = process.argv.indexOf('--since');
 const since = i > 0 ? process.argv[i + 1] : new Date(Date.now() - 3600_000).toISOString().replace(/\.\d+Z$/, 'Z');
 const UUIDISH = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const TEST_UUID = '00000000-0000-4000-8000-000000000001';
+const mask = (v) => String(v ?? '').replaceAll(TEST_UUID, '{test-uuid}').replace(new RegExp(UUIDISH, 'gi'), '{uuid}');
+const realUuid = (v) => UUIDISH.test(String(v ?? '').replaceAll(TEST_UUID, ''));
 
 async function cf(path, init = {}) {
   const r = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
@@ -40,14 +47,34 @@ const d = await gql(`query ($zone: string!, $since: Time!, $host: string!) {
       count dimensions { clientRequestPath } } } } }`, { zone, since, host: HOST });
 const rows = d.viewer.zones[0]?.httpRequestsAdaptiveGroups ?? [];
 console.log(`${HOST} — sampled paths since ${since}:`);
-for (const r of rows) console.log(`  ${String(r.count).padStart(6)}  ${r.dimensions.clientRequestPath.replace(UUIDISH, '{uuid}')}`);
-const bad = rows.filter((r) => UUIDISH.test(r.dimensions.clientRequestPath));
+for (const r of rows) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestPath)}`);
+const bad = rows.filter((r) => realUuid(r.dimensions.clientRequestPath));
 
 // 2. Fields the dataset offers: anything for a query string or a header?
 const t = await gql(`{ __type(name: "ZoneHttpRequestsAdaptiveGroupsDimensions") { fields { name } } }`);
 const fields = (t.__type?.fields ?? []).map((f) => f.name);
 const flagged = fields.filter((n) => /query|header|uri|args|cookie|referer|useragent/i.test(n));
 console.log(`\nfields offered: ${fields.length}; query/header-like: ${flagged.length ? flagged.join(', ') : 'none'}`);
+
+// 3. Query strings on the app host (a link's ?uuid=), referers on the API host.
+const q = await gql(`query ($zone: string!, $since: Time!) {
+  viewer { zones(filter: { zoneTag: $zone }) {
+    app: httpRequestsAdaptiveGroups(limit: 200, orderBy: [count_DESC],
+      filter: { datetime_geq: $since, clientRequestHTTPHost: "share.refueler.io", clientRequestQuery_neq: "" }) {
+      count dimensions { clientRequestPath clientRequestQuery } }
+    ref: httpRequestsAdaptiveGroups(limit: 200, orderBy: [count_DESC],
+      filter: { datetime_geq: $since, clientRequestHTTPHost: "api.share.refueler.io" }) {
+      count dimensions { clientRequestReferer } } } } }`, { zone, since });
+const app = q.viewer.zones[0]?.app ?? [];
+const ref = q.viewer.zones[0]?.ref ?? [];
+console.log(`\nshare.refueler.io — requests with a query string since ${since}: ${app.length ? '' : 'none'}`);
+for (const r of app) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestPath)}?${mask(r.dimensions.clientRequestQuery)}`);
+console.log(`\n${HOST} — referers recorded:`);
+for (const r of ref) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestReferer) || '(none)'}`);
+const linkQueries = app.filter((r) => realUuid(r.dimensions.clientRequestQuery));
+const refUuid = ref.filter((r) => realUuid(r.dimensions.clientRequestReferer));
+if (linkQueries.length) console.log(`\n⚠ ${linkQueries.reduce((n, r) => n + r.count, 0)} sampled page load(s) on share.refueler.io kept the link's ?uuid= (query string recorded) — decision D1`);
+if (refUuid.length) console.log(`⚠ ${refUuid.length} API referer(s) hold a UUID`);
 
 if (bad.length) { console.error(`\n✗ ${bad.length} path(s) with a UUID since ${since}`); process.exit(1); }
 console.log(rows.length ? `\n✓ no UUID in any sampled ${HOST} path since ${since}` : `\n⚠ no sampled rows since ${since} — open a link, wait a few minutes, run again`);
