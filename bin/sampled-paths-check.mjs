@@ -56,25 +56,33 @@ const fields = (t.__type?.fields ?? []).map((f) => f.name);
 const flagged = fields.filter((n) => /query|header|uri|args|cookie|referer|useragent/i.test(n));
 console.log(`\nfields offered: ${fields.length}; query/header-like: ${flagged.length ? flagged.join(', ') : 'none'}`);
 
-// 3. Query strings on the app host (a link's ?uuid=), referers on the API host.
-const q = await gql(`query ($zone: string!, $since: Time!) {
-  viewer { zones(filter: { zoneTag: $zone }) {
-    app: httpRequestsAdaptiveGroups(limit: 200, orderBy: [count_DESC],
-      filter: { datetime_geq: $since, clientRequestHTTPHost: "share.refueler.io", clientRequestQuery_neq: "" }) {
-      count dimensions { clientRequestPath clientRequestQuery } }
-    ref: httpRequestsAdaptiveGroups(limit: 200, orderBy: [count_DESC],
-      filter: { datetime_geq: $since, clientRequestHTTPHost: "api.share.refueler.io" }) {
-      count dimensions { clientRequestReferer } } } } }`, { zone, since });
-const app = q.viewer.zones[0]?.app ?? [];
-const ref = q.viewer.zones[0]?.ref ?? [];
-console.log(`\nshare.refueler.io — requests with a query string since ${since}: ${app.length ? '' : 'none'}`);
-for (const r of app) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestPath)}?${mask(r.dimensions.clientRequestQuery)}`);
-console.log(`\n${HOST} — referers recorded:`);
-for (const r of ref) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestReferer) || '(none)'}`);
-const linkQueries = app.filter((r) => realUuid(r.dimensions.clientRequestQuery));
-const refUuid = ref.filter((r) => realUuid(r.dimensions.clientRequestReferer));
-if (linkQueries.length) console.log(`\n⚠ ${linkQueries.reduce((n, r) => n + r.count, 0)} sampled page load(s) on share.refueler.io kept the link's ?uuid= (query string recorded) — decision D1`);
-if (refUuid.length) console.log(`⚠ ${refUuid.length} API referer(s) hold a UUID`);
+// 3. Query strings on the app host (a link's ?uuid=), referers on the API host. Each is
+// asked alone: a field the zone's plan can't read answers "authz" — reported, not fatal.
+async function tryGroups(label, host, extraFilter, dims) {
+  try {
+    const r = await gql(`query ($zone: string!, $since: Time!, $host: string!) {
+      viewer { zones(filter: { zoneTag: $zone }) {
+        httpRequestsAdaptiveGroups(limit: 200, orderBy: [count_DESC],
+          filter: { datetime_geq: $since, clientRequestHTTPHost: $host${extraFilter} }) {
+          count dimensions { ${dims} } } } } }`, { zone, since, host });
+    return r.viewer.zones[0]?.httpRequestsAdaptiveGroups ?? [];
+  } catch (e) {
+    console.log(`\n${label}: not readable on this zone's plan (${/authz|access/i.test(e.message) ? 'authz' : e.message.slice(0, 120)})`);
+    return null;
+  }
+}
+const app = await tryGroups('share.refueler.io query strings', 'share.refueler.io', ', clientRequestQuery_neq: ""', 'clientRequestPath clientRequestQuery');
+if (app) {
+  console.log(`\nshare.refueler.io — requests with a query string since ${since}: ${app.length ? '' : 'none'}`);
+  for (const r of app) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestPath)}?${mask(r.dimensions.clientRequestQuery)}`);
+  const n = app.filter((r) => realUuid(r.dimensions.clientRequestQuery)).reduce((k, r) => k + r.count, 0);
+  if (n) console.log(`⚠ ${n} sampled page load(s) kept the link's ?uuid= (query string recorded) — decision D1`);
+}
+const ref = await tryGroups(`${HOST} referers`, HOST, '', 'clientRequestReferer');
+if (ref) {
+  console.log(`\n${HOST} — referers recorded:`);
+  for (const r of ref) console.log(`  ${String(r.count).padStart(6)}  ${mask(r.dimensions.clientRequestReferer) || '(none)'}`);
+}
 
 if (bad.length) { console.error(`\n✗ ${bad.length} path(s) with a UUID since ${since}`); process.exit(1); }
 console.log(rows.length ? `\n✓ no UUID in any sampled ${HOST} path since ${since}` : `\n⚠ no sampled rows since ${since} — open a link, wait a few minutes, run again`);
