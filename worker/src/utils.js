@@ -36,6 +36,12 @@ export const MANIFEST_SIZE_MAX = 64 * 1024;        // 64 KB manifest ceiling (S4
 // ─────────────────────────────────────────────────────────────────────────────
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Error-Notes-1 (21 Oct 2026): nothing kept longer than a day may name a transfer.
+// Analytics Engine keeps every row for three months and can't delete one, so any
+// text bound for it (thrown messages can carry an R2 key) goes through this first.
+const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+export const scrubUuids = s => String(s ?? '').replace(UUID_ANYWHERE, '{uuid}');
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS
 // ─────────────────────────────────────────────────────────────────────────────

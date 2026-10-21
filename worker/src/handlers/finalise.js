@@ -39,7 +39,7 @@
  *        key set is built locally; missing indices computed in O(N).
  */
 
-import { UUID_RE, safeGetManifest, json, err } from '../utils.js';
+import { UUID_RE, safeGetManifest, json, err, scrubUuids } from '../utils.js';
 import { updateManifest } from '../latch.js';
 import { verifySessionToken, sessionHash } from '../upload_session.js';
 import { finaliseQuota } from '../quota_store.js';
@@ -70,7 +70,7 @@ function aeLog(env, { endpoint = '', tier = 'free', status = 200, errorMsg = '' 
   if (!env.AE) return;
   try {
     env.AE.writeDataPoint({
-      blobs:   [endpoint, tier, errorMsg, ''],
+      blobs:   [endpoint, tier, scrubUuids(errorMsg), ''],
       doubles: [0, status, -1, 0, 0],
       indexes: [endpoint],
     });

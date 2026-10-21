@@ -73,7 +73,7 @@
  *   preserved UNCHANGED and does NOT gain a verified field.
  */
 
-import { UUID_RE, safeGetManifest, json, err, parseRange } from '../utils.js';
+import { UUID_RE, safeGetManifest, json, err, parseRange, scrubUuids } from '../utils.js';
 import { isDownloadBlocked, requiresPassphrase } from '../manifest.js';
 import { verifyDownloadToken } from '../nut11.js';
 import { checkTransferStatus, flipPendingDestruction } from '../manifest_tg.js';
@@ -106,7 +106,7 @@ function logEvent(env, {
   if (!env.AE) return;
   try {
     env.AE.writeDataPoint({
-      blobs:   [endpoint, tier, errorMsg, httpProtocol],
+      blobs:   [endpoint, tier, scrubUuids(errorMsg), httpProtocol],
       doubles: [latency, status, chunkIndex, totalChunks, totalBytes],
       indexes: [endpoint],
     });

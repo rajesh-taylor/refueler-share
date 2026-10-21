@@ -248,7 +248,7 @@ describe('admin onboarding + revocation (no KV)', () => {
     expect(stored).not.toContain(b.live_key);
     expect(stored).not.toContain(b.sign_key);
     expect(sb.keys.get(await sha256Hex(b.live_key)).org).toBe(b.org_account_id);
-    expect(kvPut.mock.calls.filter(([k]) => !k.startsWith('rl:') && k !== 'admin:client_errors_log')).toHaveLength(0);
+    expect(kvPut.mock.calls.filter(([k]) => !k.startsWith('rl:') && !k.startsWith('errlog:'))).toHaveLength(0);
     // and the new key authenticates
     const { client } = await requireApiAuth(await signedRequest('GET', '/api/v1/capabilities', { live: b.live_key, sign: b.sign_key }), new ArrayBuffer(0), env);
     expect(client.org_account_id).toBe(b.org_account_id);
@@ -329,7 +329,7 @@ describe('sandbox on Supabase', () => {
     const rs = await worker.fetch(admin('/api/v1/sandbox/reset', { live_key: a.live_key }), env, ctx);
     expect(rs.status).toBe(200);
     expect(sb.pools.get(org).remaining).toBe(25);
-    expect(kvPut.mock.calls.filter(([k]) => !k.startsWith('rl:') && k !== 'admin:client_errors_log')).toHaveLength(0);
+    expect(kvPut.mock.calls.filter(([k]) => !k.startsWith('rl:') && !k.startsWith('errlog:'))).toHaveLength(0);
   });
 
   it('a sandbox key is refused on a production API route', async () => {

@@ -8,10 +8,25 @@
 
 export function makeKv() {
   const store = new Map();
+  const meta  = new Map();   // key → { metadata, expirationTtl } (put options)
 
   return {
     // Expose the underlying store for test assertions
     _store: store,
+    _meta:  meta,
+
+    // list({ prefix, limit, cursor }) — lexicographic, as KV; metadata included.
+    async list({ prefix = '', limit = 1000, cursor } = {}) {
+      const names = [...store.keys()].filter(k => k.startsWith(prefix)).sort();
+      const start = cursor ? Number(cursor) : 0;
+      const page  = names.slice(start, start + limit);
+      const done  = start + limit >= names.length;
+      return {
+        keys: page.map(name => ({ name, metadata: meta.get(name)?.metadata })),
+        list_complete: done,
+        cursor: done ? undefined : String(start + limit),
+      };
+    },
 
     async get(key, opts = {}) {
       const entry = store.get(key);
@@ -27,14 +42,16 @@ export function makeKv() {
       return entry;
     },
 
-    async put(key, value, _opts = {}) {
-      // expirationTtl is noted but not enforced in tests — we control time via
-      // Date manipulation rather than actual TTL expiry.
+    async put(key, value, opts = {}) {
+      // expirationTtl is noted (in _meta) but not enforced in tests — we control
+      // time via Date manipulation rather than actual TTL expiry.
       store.set(key, typeof value === 'string' ? value : JSON.stringify(value));
+      meta.set(key, { metadata: opts.metadata, expirationTtl: opts.expirationTtl });
     },
 
     async delete(key) {
       store.delete(key);
+      meta.delete(key);
     },
 
     // Simulate a KV read failure for error-path tests

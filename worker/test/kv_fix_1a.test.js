@@ -239,7 +239,8 @@ describe('client-error log — no UUIDs', () => {
     const env = { STATUS_KV: makeKv() };
     const id = '6F1C2A3B-4d5e-4f60-8a7b-9c0d1e2f3a4b';
     await appendClientError(env, { status: 404, endpoint: 'meta', path: `/meta/${id}`, method: 'GET', errorMsg: `no ${id}` });
-    const [e] = JSON.parse(env.STATUS_KV._store.get('admin:client_errors_log'));
+    const [key] = [...env.STATUS_KV._store.keys()].filter(k => k.startsWith('errlog:'));
+    const e = env.STATUS_KV._meta.get(key).metadata;
     expect(e.path).toBe('/meta/{uuid}');
     expect(e.msg).toBe('no {uuid}');
   });

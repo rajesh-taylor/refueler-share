@@ -12,7 +12,7 @@ import { handleExecutionDock } from './handlers/execution_dock.js';
 import { handleAdminStorage } from './handlers/storage.js';                // B12-2: Storage & Billing
 import { handleFinalise } from './handlers/finalise.js';                       // Share-Dash-2 fold
 import { handleDownload } from './handlers/download.js';                       // Share-6-5a full extraction
-import { handleClientErrorsLog, appendClientError } from './handlers/client_errors_kv.js'; // Share-Dash-2
+import { handleClientErrorsLog, appendClientError, appendErrorNote, stripTransferId } from './handlers/client_errors_kv.js'; // Share-Dash-2, Error-Notes-1
 import { handleApiStats } from './handlers/api_stats.js';                      // Share-Dash-2
 import { handleNewsEvents } from './handlers/news_events.js';                  // Share-Dash-2
 import { handleOrphanSweep } from './handlers/orphan_sweep.js';               // Share-6-6a
@@ -50,7 +50,7 @@ import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleS
 import {
   UUID_RE, MANIFEST_SIZE_MAX,
   corsHeaders, safeGetManifest, supabaseFetch,
-  json, err, addCors, parseRange, requireAdmin, setAppOrigins } from './utils.js';
+  json, err, addCors, parseRange, requireAdmin, setAppOrigins, scrubUuids } from './utils.js';
 
 import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
@@ -99,7 +99,7 @@ function logEvent(env, {
   if (!env.AE) return;
   try {
     env.AE.writeDataPoint({
-      blobs:   [endpoint, tier, errorMsg, httpProtocol],
+      blobs:   [endpoint, tier, scrubUuids(errorMsg), httpProtocol],
       doubles: [latency, status, chunkIndex, totalChunks, totalBytes],
       indexes: [endpoint],
     });
@@ -485,7 +485,7 @@ const worker = {
       }
 
       if (request.method === 'POST' && path === '/log/error') {
-        return handleLogError(request, env).then(r => addCors(r, request));
+        return handleLogError(request, env, ctx).then(r => addCors(r, request));
       }
 
       if (request.method === 'GET' && path === '/admin/metrics') {
@@ -858,7 +858,7 @@ async function handleAdminHostnameHealth(request, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Client error reporting — POST /log/error (S36b)
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleLogError(request, env) {
+async function handleLogError(request, env, ctx) {
   const ip = getClientIp(request);
   const rl = await checkRateLimit(env, ip, 'log_error', 20, 60);
   if (rl.limited) return new Response('Too Many Requests', { status: 429 });
@@ -886,9 +886,13 @@ async function handleLogError(request, env) {
     return new Response('OK', { status: 200 });
   }
 
+  // Error-Notes-1: the note as sent (with its uuid:xxxxxxxx) lives one day in KV;
+  // Analytics Engine, which keeps three months and can't delete, gets it without
+  // the transfer ID — enough to count failures by step, not to name a transfer.
+  ctx.waitUntil(appendErrorNote(env, { context, message, detail }));
   try {
     env.AE.writeDataPoint({
-      blobs:   ['client_error', context, message, detail],
+      blobs:   ['client_error', context, scrubUuids(message), stripTransferId(detail)],
       doubles: [Date.now()],
       indexes: ['client_error'],
     });

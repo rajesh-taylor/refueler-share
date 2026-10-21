@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { requireAdmin } from '../utils.js';
+import { readErrorNotes } from './client_errors_kv.js';
 import { cleanStatus, isShapeError } from '../status_shape.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,18 +336,9 @@ async function fetchAeMetricsData(env) {
       AND timestamp > NOW() - INTERVAL '1' DAY
     `),
 
-    aeQuery(`
-      SELECT
-        blob2 AS context,
-        blob3 AS message,
-        blob4 AS detail,
-        double1 AS ts_ms
-      FROM share_events
-      WHERE blob1 = 'client_error'
-      AND timestamp > NOW() - INTERVAL '1' DAY
-      ORDER BY ts_ms DESC
-      LIMIT 100
-    `),
+    // Error-Notes-1: the detail rows (with their uuid:xxxxxxxx) come from KV, kept
+    // one day; Analytics Engine's copy carries no transfer ID.
+    readErrorNotes(env, 100),
   ]);
 
   let credentialIssuancesByTier = null;
@@ -433,13 +425,7 @@ async function fetchAeMetricsData(env) {
 
   let clientErrorsDetail = null;
   if (clientErrorsDetailResult.status === 'fulfilled') {
-    const rows = clientErrorsDetailResult.value?.data ?? [];
-    clientErrorsDetail = rows.map(r => ({
-      ts:      r.ts_ms ? new Date(r.ts_ms).toISOString() : null,
-      context: r.context ?? '',
-      message: r.message ?? '',
-      detail:  r.detail  ?? '',
-    }));
+    clientErrorsDetail = clientErrorsDetailResult.value;
   }
 
   return {
