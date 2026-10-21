@@ -12,7 +12,7 @@
 //   read -s "CF_ANALYTICS_TOKEN?Analytics token: " && export CF_ANALYTICS_TOKEN && node bin/sampled-paths-check.mjs
 //   node bin/sampled-paths-check.mjs --since 2026-10-21T17:20:00Z
 
-const TOKEN = process.env.CF_ANALYTICS_TOKEN;
+const TOKEN = (process.env.CF_ANALYTICS_TOKEN ?? '').trim();
 if (!TOKEN) { console.error('Set CF_ANALYTICS_TOKEN first (hidden prompt — see the top of this file).'); process.exit(1); }
 const HOST = 'api.share.refueler.io';
 const i = process.argv.indexOf('--since');
