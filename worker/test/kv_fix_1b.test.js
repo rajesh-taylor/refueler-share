@@ -20,6 +20,7 @@ import {
   TESTCRED_MAX_CHUNKS, TESTCRED_USED_PREFIX,
 } from '../src/testcred.js';
 import { makeBucket, makeKV } from './_r2_mock.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const MINT_PRIVKEY_HEX = '7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f';
 const TC_KEY     = 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA='; // bytes 0x01…0x20
@@ -77,7 +78,7 @@ async function initiate(env, { uuid = UUID, header, tier = 'api', bytes = CHUNK_
     'X-Issued-Tier':           tier,
   };
   if (header !== undefined) headers['X-Test-Credential'] = header;
-  const res = await worker.fetch(new Request(`https://api.share.test/upload/${uuid}/initiate`, { method: 'POST', headers }), env, ctx());
+  const res = await worker.fetch(transferRequest(`https://api.share.test/upload/initiate`, uuid, { method: 'POST', headers }), env, ctx());
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 

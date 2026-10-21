@@ -98,7 +98,8 @@ let fatal = null;
 // ─── One part: GET → length → BLAKE3 (→ sidecar) (→ decrypt → compare) → write → fsync → record
 async function fetchChunk(i, ctx) {
   const { n, okLen, fh, sidecar, hashes, partKey, seed } = ctx;
-  const url = `${workerUrl}/download/${uuid}/${String(i).padStart(4, '0')}`;
+  const url = `${workerUrl}/download`;   // UUID-Out-Of-Path-1: UUID + part travel as headers
+  const dlHeaders = { 'Cache-Control': 'no-store', 'X-Transfer-UUID': uuid, 'X-Part': String(i).padStart(4, '0') };
   let lastErr = '';
   for (let attempt = 0; attempt <= BACKOFFS.length; attempt++) {
     if (fatal) return false;
@@ -107,7 +108,7 @@ async function fetchChunk(i, ctx) {
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     let waitMs = BACKOFFS[attempt] ?? 0;
     try {
-      const res = await fetch(url, { signal: ctl.signal, headers: { 'Cache-Control': 'no-store' } });
+      const res = await fetch(url, { signal: ctl.signal, headers: dlHeaders });
       if (res.status === 404 || res.status === 410 || res.status === 401 || res.status === 425) {
         fatal = `chunk ${i} → HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`;
         return false;
@@ -202,7 +203,7 @@ try {
   }
 
   // 1. Preflight — /meta (public, read-only)
-  const metaRes = await fetch(`${workerUrl}/meta/${uuid}`);
+  const metaRes = await fetch(`${workerUrl}/meta`, { headers: { 'X-Transfer-UUID': uuid } });
   if (metaRes.status !== 200) throw new Error(`/meta → HTTP ${metaRes.status}: ${await metaRes.text()}`);
   const meta = await metaRes.json();
   log(`meta: ${JSON.stringify(meta)}`);

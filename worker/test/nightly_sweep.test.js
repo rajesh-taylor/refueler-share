@@ -13,6 +13,7 @@ import {
   TOMBSTONE_KEEP_SECONDS, MAX_NIGHTLY_READS,
 } from 'src/nightly_sweep.js';
 import { makeBucket, makeKV, NOW, DAY, U, transfer, complete, partial, dock } from './_r2_mock.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(NOW * 1000));
 afterEach(() => vi.restoreAllMocks());
@@ -122,7 +123,7 @@ describe('leftover record — 30 days', () => {
     const bucket = makeBucket(tomb(T, NOW - 31 * DAY));
     await runNightlySweep(env(bucket), NOW);
     const { default: worker } = await import('src/index.js');
-    const res = await worker.fetch(new Request(`https://w.test/meta/${T}`), env(bucket), { waitUntil() {} });
+    const res = await worker.fetch(transferRequest(`https://w.test/meta`, T), env(bucket), { waitUntil() {} });
     expect(res.status).toBe(404);
   });
 });

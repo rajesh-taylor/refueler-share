@@ -36,6 +36,7 @@ import { handleDeleteTransfer, handleOwnerDelete }    from '../src/handlers/dele
 import { handleFinalise }                             from '../src/handlers/finalise.js';
 import { handleExecutionDock }                        from '../src/handlers/execution_dock.js';
 import { makeSessionToken } from '../src/upload_session.js';
+import { transferRequest } from './helpers/transfer-request.js';
 // B12-3: upload sessions are MAC'd tokens (upload_session.js); no KV record.
 const SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
 const sessionTok = (uuid, n) => makeSessionToken({ UPLOAD_SESSION_KEY: SESSION_KEY }, uuid, n, Math.floor(Date.now() / 1000) + 3600);
@@ -149,7 +150,7 @@ describe('every deletion path leaves the same trace in dock_index: absence', () 
 
   it('owner delete', async () => {
     const { bucket, kv } = setup();
-    const req = new Request(`https://w.test/transfer/${UUID}`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_x', 'X-Admin-Key': 'k' } });
+    const req = transferRequest(`https://w.test/transfer`, UUID, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_x', 'X-Admin-Key': 'k' } });
     const res = await handleOwnerDelete(req, { BUCKET: bucket, STATUS_KV: kv, ADMIN_KEY: 'k' }, UUID);
     expect(res.status).toBe(200);
     await new Promise(r => setTimeout(r, 0));
@@ -158,7 +159,7 @@ describe('every deletion path leaves the same trace in dock_index: absence', () 
 
   it('recipient (bearer) delete — was missing before B12-1', async () => {
     const { bucket, kv } = setup();
-    const req = new Request(`https://w.test/transfer/${UUID}`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_recipient_token' } });
+    const req = transferRequest(`https://w.test/transfer`, UUID, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_recipient_token' } });
     const res = await handleDeleteTransfer(req, { BUCKET: bucket, STATUS_KV: kv, MINT_PRIVATE_KEY: 'x' }, UUID);
     expect(res.status).toBe(200);
     await new Promise(r => setTimeout(r, 0));
@@ -173,7 +174,7 @@ describe('finalise — X4: no plaintext size in dock_index', () => {
                    [`${UUID}/0000`]: { size: FULL, uploaded: NOW }, [`${UUID}/0001`]: { size: 10, uploaded: NOW } };
     const bucket = makeBucket(seed);
     const kv = makeKV({ [`dock_index:${UUID}`]: existingDock });
-    const req = new Request(`https://w.test/upload/${UUID}/finalise`, {
+    const req = transferRequest(`https://w.test/upload/finalise`, UUID, {
       method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 2) },
       body: JSON.stringify({ hashes: [B32, B32], merkle_root: B32 }),
     });

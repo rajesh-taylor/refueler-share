@@ -253,7 +253,9 @@ export async function signedRequest(method, path, { live, sign }, body = '', ext
   const ts = String(Math.floor(Date.now() / 1000));
   const bodyHash = await sha256Hex(new TextEncoder().encode(body));
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(sign), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${method}\n${path}\n${ts}\n${bodyHash}`)));
+  // Canonical v2 (UUID-Out-Of-Path-1): the transfer UUID on its own line, "" when none.
+  const uuidLine = String(extra['X-Transfer-UUID'] ?? '').trim().toLowerCase();
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${method}\n${path}\n${ts}\n${bodyHash}\n${uuidLine}`)));
   return new Request(`${ORIGIN}${path}`, {
     method,
     headers: {
@@ -287,9 +289,10 @@ export async function charteredInitiate(env, uuid, { credential, commitment, cli
     'X-Total-Chunks':          String(Math.ceil(bytes / (32 * 1024 * 1024))),
     'X-Total-Bytes':           String(bytes),
     'X-Expiry-Timestamp':      String(now + 3600),
+    'X-Transfer-UUID':         uuid,
     ...extra,
   };
-  const path = `/upload/${uuid}/initiate`;
+  const path = '/upload/initiate';
   const req = unsigned
     ? new Request(`${ORIGIN}${path}`, { method: 'POST', headers })
     : await signedRequest('POST', path, client, '', headers);

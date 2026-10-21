@@ -4,7 +4,8 @@
 // Lists every route the Worker answers (method + path) by reading the router source,
 // and checks docs/ROUTES.md has exactly one row for each, with a known gate.
 // CI fails on: a route with no row, a row with no route, an unknown gate, an /admin
-// path not gated by the admin key, or a path check in the router this script can't read
+// path not gated by the admin key, a {uuid} in a route path (UUID-Out-Of-Path-1),
+// or a path check in the router this script can't read
 // (a new route shape — teach it here rather than let a route slip past).
 //
 //   node bin/route-inventory.mjs           print the routes found
@@ -84,6 +85,9 @@ function routes() {
       add(m[1], `${m[2]}*`, at); used++;
     }
 
+    // The OPTIONS preflight picks initiate's credentialed CORS by path — not a route of its own.
+    for (const _ of line.matchAll(/if \(path\s*===\s*INITIATE_PATH\)/g)) used++;
+
     // Safety net: every path test in the router must have been read above.
     const tests = (line.match(/path\s*===|path\.match\(|path\.startsWith\(|path\.endsWith\(|path\.includes\(/g) ?? []).length;
     if (tests > used) die(`${at}: path check this script can't read — add its shape to bin/route-inventory.mjs\n    ${idx[i].trim()}`);
@@ -141,6 +145,8 @@ for (const r of list) {
   if (!GATES.has(row.gate)) problems.push(`unknown gate "${row.gate}" for ${r.method} ${r.path}`);
   if (ADMIN_PATH.test(r.path) && row.gate !== 'admin') problems.push(`${r.method} ${r.path} is an admin path but its gate is "${row.gate}"`);
 }
+// UUID-Out-Of-Path-1: no transfer UUID in any path — it travels in X-Transfer-UUID.
+for (const r of list) if (r.path.includes('{uuid}')) problems.push(`${r.method} ${r.path} (${r.where}) takes the transfer UUID in its path — use X-Transfer-UUID`);
 const live = new Set(list.map((r) => `${r.method} ${r.path}`));
 for (const k of rows.keys()) if (!live.has(k)) problems.push(`row with no route (stale?): ${k}`);
 

@@ -131,9 +131,9 @@ async function fetchBatch(batchStart) {
   if (!(batchStart in batchFetching)) {
     batchFetching[batchStart] = (async () => {
       const count = Math.min(URL_BATCH, urlLimit - batchStart);
-      const res = await fetchWithTimeout(`${workerUrl}/upload/${uuid}/urls`, {
+      const res = await fetchWithTimeout(`${workerUrl}/upload/urls`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+        headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken, 'X-Transfer-UUID': uuid },
         body: JSON.stringify({ from: batchStart, count }),
       });
       if (!res.ok) { delete batchFetching[batchStart]; throw new Error(`/urls batch ${batchStart} → ${res.status}`); }
@@ -277,10 +277,12 @@ function printFinalTally() {
 
     // Step 2: initiate
     const expiryTs = Math.floor(Date.now() / 1000) + Math.round(expiryDays * 24 * 3600);
-    const initiateRes = await fetchWithTimeout(`${workerUrl}/upload/${uuid}/initiate`, {
+    // UUID-Out-Of-Path-1: the UUID rides X-Transfer-UUID, never the path.
+    const initiateRes = await fetchWithTimeout(`${workerUrl}/upload/initiate`, {
       method: 'POST',
       headers: {
         'Content-Type':            'application/json',
+        'X-Transfer-UUID':         uuid,
         'X-Cashu-Credential':      cashuCredential,
         'X-Total-Chunks':          String(totalChunks),
         'X-Total-Bytes':           String(totalBytes),
@@ -334,9 +336,9 @@ function printFinalTally() {
     log(`Merkle root (ciphertext): ${merkleRoot}`);
 
     // Step 5: finalise
-    const finaliseRes = await fetchWithTimeout(`${workerUrl}/upload/${uuid}/finalise`, {
+    const finaliseRes = await fetchWithTimeout(`${workerUrl}/upload/finalise`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken, 'X-Transfer-UUID': uuid },
       body: JSON.stringify({ hashes: chunkHashes, merkle_root: merkleRoot }),
     }, 120000);
     if (!finaliseRes.ok) throw new Error(`finalise ${finaliseRes.status}: ${await finaliseRes.text()}`);

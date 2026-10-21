@@ -16,7 +16,7 @@ const ok  = (label, cond, extra = '') => { console.log(`${cond ? '✓' : '✗'} 
 
 function signed(method, path, live, sign, body = '') {
   const ts = String(Math.floor(Date.now() / 1000));
-  const sig = createHmac('sha256', sign).update(`${method}\n${path}\n${ts}\n${sha(body)}`).digest('hex');
+  const sig = createHmac('sha256', sign).update(`${method}\n${path}\n${ts}\n${sha(body)}\n`)   // canonical v2; these routes name no transfer.digest('hex');
   return fetch(B + path, {
     method,
     headers: { Authorization: `HMAC-SHA256 key=${live}, sig=${sig}, ts=${ts}`, 'X-Api-Sign-Key': sign, 'Content-Type': 'application/json' },

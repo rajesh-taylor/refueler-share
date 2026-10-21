@@ -50,7 +50,7 @@ import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleS
 import {
   UUID_RE, MANIFEST_SIZE_MAX,
   corsHeaders, safeGetManifest, supabaseFetch,
-  json, err, addCors, parseRange, requireAdmin, setAppOrigins, scrubUuids } from './utils.js';
+  json, err, addCors, parseRange, requireAdmin, setAppOrigins, scrubUuids, transferUuid } from './utils.js';
 
 import { TIERS, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
@@ -110,7 +110,39 @@ function logEvent(env, {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Router
+//
+// UUID-Out-Of-Path-1 (21 Oct 2026): no transfer UUID in any path on the API.
+// Cloudflare's sampled HTTP-request records keep client IP + host + path for at
+// least 31 days; headers are not in them. Transfer routes are fixed paths and read
+// the UUID from X-Transfer-UUID (transferUuid(), utils.js) and the part from X-Part.
+//
+// DEPLOY 1 ONLY: the old shapes below still answer, read into the same routes, so
+// the live app keeps working until ship-app moves it. Removed at deploy 2 (the old
+// shapes then fall to the 404 at the end of the router).
 // ─────────────────────────────────────────────────────────────────────────────
+const LEGACY_SHAPES = [   // [old path, new path, carries the part number]
+  [/^\/upload\/([0-9a-f-]{36})\/initiate$/i,               '/upload/initiate'],
+  [/^\/upload\/([0-9a-f-]{36})\/urls$/i,                   '/upload/urls'],
+  [/^\/upload\/([0-9a-f-]{36})\/finalise$/i,               '/upload/finalise'],
+  [/^\/auth\/([0-9a-f-]{36})$/i,                            '/unlock'],
+  [/^\/meta\/([0-9a-f-]{36})$/i,                            '/meta'],
+  [/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i,               '/download', true],
+  [/^\/transfer\/([0-9a-f-]{36})$/i,                        '/transfer'],
+  [/^\/confirm\/([0-9a-f-]{36})$/i,                         '/confirm'],
+  [/^\/timestamp\/seal\/([0-9a-f-]{36})$/i,                 '/timestamp/seal'],
+  [/^\/api\/v1\/receipt\/([0-9a-f-]{36})\/acceptance$/i,   '/api/v1/receipt/acceptance'],
+  [/^\/api\/v1\/receipt\/([0-9a-f-]{36})\/collection$/i,   '/api/v1/receipt/collection'],
+];
+function legacyShape(pathname) {
+  for (const [re, to, hasPart] of LEGACY_SHAPES) {
+    const m = pathname.match(re);
+    if (!m) continue;
+    const uuid = m[1].toLowerCase();
+    return { path: to, uuid: UUID_RE.test(uuid) ? uuid : null, part: hasPart ? m[2] : null };
+  }
+  return null;
+}
+
 const worker = {
     async fetch(request, env, ctx) {
     setAppOrigins(env);   // X5-1: corsHeaders() allowlist from var APP_ORIGINS
@@ -133,17 +165,22 @@ const worker = {
       }
     }
 
+    const url    = new URL(request.url);
+    const legacy = legacyShape(url.pathname);   // deploy 1 only
+    const path   = legacy?.path ?? url.pathname;
+    const t0     = performance.now();
+    // The transfer this request names: X-Transfer-UUID (or, deploy 1 only, the old path).
+    const uuidOf = () => (legacy ? legacy.uuid : transferUuid(request));
+    const noTransferId = (cors = corsHeaders(request)) =>
+      withHeaders(json({ error: 'missing_transfer_id' }, 400), cors);
+
     if (request.method === 'OPTIONS') {
       // B12-4a-2: initiate's preflight may carry a Citizen's credentials.
-      if (INITIATE_PATH_RE.test(new URL(request.url).pathname)) {
+      if (path === INITIATE_PATH) {
         return new Response(null, { status: 204, headers: initiateCors(request, env) });
       }
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
-
-    const url  = new URL(request.url);
-    const path = url.pathname;
-    const t0   = performance.now();
 
     async function timed(endpoint, handler, logExtra = {}) {
       try {
@@ -223,13 +260,13 @@ const worker = {
         return timed('webhook_reg', () => handleWebhookRegister(request, env).then(r => addCors(r, request)));
       }
 
-      // ── SW5: Receipt pull — GET /api/v1/receipt/:uuid/:type ───────────────
-      // HMAC-authenticated; 404 unless the caller owns the receipt (F4,
-      // API-Repair-1). Returns the stored { receipt, sig } from KV.
+      // ── SW5: Receipt pull — GET /api/v1/receipt/:type + X-Transfer-UUID ───
+      // HMAC-authenticated (canonical v2 signs the UUID line); 404 unless the caller
+      // owns the receipt (F4, API-Repair-1). Returns the stored { receipt, sig } from KV.
       // type: 'acceptance' | 'collection'
       // 7-day TTL — client can pull keepsake receipt at any time within TTL.
       // No re-computation: stored receipt is the canonical artefact.
-      const receiptMatch = path.match(/^\/api\/v1\/receipt\/([0-9a-f-]{36})\/(acceptance|collection)$/i);
+      const receiptMatch = path.match(/^\/api\/v1\/receipt\/(acceptance|collection)$/);
       if (request.method === 'GET' && receiptMatch) {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'api_receipt', 30, 60);
@@ -237,6 +274,8 @@ const worker = {
           logEvent(env, { endpoint: 'api_receipt', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
         return timed('api_receipt', async () => {
           // HMAC auth — reuse requireApiAuth (reads rawBody; GET has no body)
           let client;
@@ -246,7 +285,7 @@ const worker = {
             if (authErr instanceof Response) return addCors(authErr, request);
             return addCors(err(500, 'Authentication error'), request);
           }
-          const response = await handleApiReceipt(env, client, receiptMatch[1], receiptMatch[2]);
+          const response = await handleApiReceipt(env, client, uuid, receiptMatch[1]);
           return addCors(response, request);
         });
       }
@@ -340,52 +379,58 @@ const worker = {
       // presigned-URL path (/upload/:uuid/initiate → presigned PUT → /finalise).
       // Any client hitting this path is pre-6-2 and must re-upload.
 
-      // ── Share-6-1: initiate direct-to-R2 upload — POST /upload/:uuid/initiate ──
+      // ── Share-6-1: initiate direct-to-R2 upload — POST /upload/initiate ─────
       // Cashu verify+spend once here, size-cap
       // via resolvedTier, manifest create, first presigned-URL batch + session token.
-      const initiateMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/initiate$/i);
-      if (request.method === 'POST' && initiateMatch) {
+      if (request.method === 'POST' && path === '/upload/initiate') {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'upload_initiate', 20, 60);
         if (rl.limited) {
           logEvent(env, { endpoint: 'upload_initiate', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
           return rateLimitResponse(request, rl.resetAt, initiateCors(request, env));
         }
-        return timed('upload_initiate', () => handleInitiate(request, env, ctx, initiateMatch[1]).then(r => withHeaders(r, initiateCors(request, env))), {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId(initiateCors(request, env));
+        return timed('upload_initiate', () => handleInitiate(request, env, ctx, uuid).then(r => withHeaders(r, initiateCors(request, env))), {
           httpProtocol: request.cf?.httpProtocol ?? '',
         });
       }
 
-      // ── Share-6-1: next presigned-URL batch — POST /upload/:uuid/urls ──────────
+      // ── Share-6-1: next presigned-URL batch — POST /upload/urls ──────────────
       // Authed by the upload-session token (NOT by re-verifying/re-spending Cashu).
-      const uploadUrlsMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/urls$/i);
-      if (request.method === 'POST' && uploadUrlsMatch) {
+      if (request.method === 'POST' && path === '/upload/urls') {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'upload_urls', 60, 60);
         if (rl.limited) {
           logEvent(env, { endpoint: 'upload_urls', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
-        return timed('upload_urls', () => handleUploadUrls(request, env, uploadUrlsMatch[1]).then(r => addCors(r, request)));
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
+        return timed('upload_urls', () => handleUploadUrls(request, env, uuid).then(r => addCors(r, request)));
       }
 
-      // ── Share-6-3a: finalise direct-to-R2 upload — POST /upload/:uuid/finalise ──
+      // ── Share-6-3a: finalise direct-to-R2 upload — POST /upload/finalise ──────
       // Authed by the upload-session token (NOT a Cashu re-spend). HEAD completeness
       // check, write the {uuid}/hashes sidecar, set merkle_root + tree_algo +
       // upload_complete:true, then spend (delete) the session token.
-      const finaliseMatch = path.match(/^\/upload\/([0-9a-f-]{36})\/finalise$/i);
-      if (request.method === 'POST' && finaliseMatch) {
+      if (request.method === 'POST' && path === '/upload/finalise') {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'upload_finalise', 20, 60);
         if (rl.limited) {
           logEvent(env, { endpoint: 'upload_finalise', tier: 'rate_limited', status: 429, latency: performance.now() - t0 });
           return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
         }
-        return timed('upload_finalise', () => handleFinalise(request, env, finaliseMatch[1], ctx).then(r => addCors(r, request)));
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
+        return timed('upload_finalise', () => handleFinalise(request, env, uuid, ctx).then(r => addCors(r, request)));
       }
 
-      const authMatch = path.match(/^\/auth\/([0-9a-f-]{36})$/i);
-      if (request.method === 'POST' && authMatch) {
+      // ── Password unlock — POST /unlock (was /auth/:uuid; /auth/* is sign-in's) ──
+      // AE/log endpoint name stays 'auth' so the series carries on.
+      if (request.method === 'POST' && path === '/unlock') {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
         // Rate limit layer 1: 5 requests / 60s per IP — password brute-force protection
         const ip   = getClientIp(request);
         const rlIp = await checkRateLimit(env, ip, 'auth', 5, 60);
@@ -395,21 +440,27 @@ const worker = {
         }
         // Rate limit layer 2: 10 requests / 60s per UUID — distributed brute-force protection.
         // An attacker rotating IPs still hits this ceiling per transfer.
-        const rlUuid = await checkRateLimit(env, authMatch[1], 'auth_uuid', 10, 60);
+        const rlUuid = await checkRateLimit(env, uuid, 'auth_uuid', 10, 60);
         if (rlUuid.limited) {
           logEvent(env, { endpoint: 'auth', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_uuid' });
           return rateLimitResponse(request, rlUuid.resetAt, corsHeaders(request));
         }
-        return timed('auth', () => handleAuth(request, env, authMatch[1]).then(r => addCors(r, request)));
+        return timed('auth', () => handleAuth(request, env, uuid).then(r => addCors(r, request)));
       }
 
-      const metaMatch = path.match(/^\/meta\/([0-9a-f-]{36})$/i);
-      if (request.method === 'GET' && metaMatch) {
-        return timed('meta', () => handleMeta(request, env, metaMatch[1]).then(r => addCors(r, request)));
+      if (request.method === 'GET' && path === '/meta') {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
+        return timed('meta', () => handleMeta(request, env, uuid).then(r => addCors(r, request)));
       }
 
-      const downloadMatch = path.match(/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i);
-      if (request.method === 'GET' && downloadMatch) {
+      // GET /download + X-Transfer-UUID + X-Part: 0007 — every part shares one URL
+      // (and so one cached preflight).
+      if (request.method === 'GET' && path === '/download') {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
+        const part = legacy?.part ?? (request.headers.get('X-Part') ?? '').trim();
+        if (!/^\d{4}$/.test(part)) return withHeaders(json({ error: 'missing_part' }, 400), corsHeaders(request));
         // Rate limit: 300 requests / 60s per IP — generous for legitimate chunked downloads
         // (250 GB max transfer at 1 MB chunks = 250 chunks), blocks flood attacks.
         const ip   = getClientIp(request);
@@ -418,24 +469,22 @@ const worker = {
           logEvent(env, { endpoint: 'download', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_ip' });
           return rateLimitResponse(request, rlDl.resetAt, corsHeaders(request));
         }
-        const chunkIndex = parseInt(downloadMatch[2], 10);
+        const chunkIndex = parseInt(part, 10);
         return timed('download', async () => {
-          const response = await handleDownload(request, env, ctx, downloadMatch[1], chunkIndex);
+          const response = await handleDownload(request, env, ctx, uuid, chunkIndex);
           return addCors(response, request);
         }, { chunkIndex });
       }
 
-      const deleteMatch = path.match(/^\/transfer\/([0-9a-f-]{36})$/i);
-      if (request.method === 'DELETE' && deleteMatch) {
-        const uuid = deleteMatch[1];
-        if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
+      if (request.method === 'DELETE' && path === '/transfer') {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
         return timed('delete_transfer', () => handleDeleteTransfer(request, env, uuid).then(r => addCors(r, request)));
       }
 
-      const confirmMatch = path.match(/^\/confirm\/([0-9a-f-]{36})$/i);
-      if (request.method === 'POST' && confirmMatch) {
-        const uuid = confirmMatch[1];
-        if (!UUID_RE.test(uuid)) return err(400, 'Invalid transfer ID');
+      if (request.method === 'POST' && path === '/confirm') {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
         return timed('confirm_transfer', () => handleConfirmTransfer(request, env, ctx, uuid).then(r => addCors(r, request)));
       }
 
@@ -450,11 +499,10 @@ const worker = {
         return timed('timestamp_submit', () => handleTimestampSubmit(request, env, ctx).then(r => addCors(r, request)));
       }
 
-      // TH-2: GET /timestamp/seal/:uuid — fetch encrypted .ots blob for download-path offer
-      const sealMatch = path.match(/^\/timestamp\/seal\/([0-9a-f-]{36})$/i);
-      if (request.method === 'GET' && sealMatch) {
-        const uuid = sealMatch[1];
-        if (!UUID_RE.test(uuid)) return addCors(err(400, 'Invalid transfer ID'), request);
+      // TH-2: GET /timestamp/seal — fetch encrypted .ots blob for download-path offer
+      if (request.method === 'GET' && path === '/timestamp/seal') {
+        const uuid = uuidOf();
+        if (!uuid) return noTransferId();
         return timed('timestamp_seal', () => handleTimestampSeal(request, env, uuid).then(r => addCors(r, request)));
       }
 
@@ -1188,7 +1236,7 @@ async function handleCredentialIssue(request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Auth — POST /auth/:uuid
+// Password unlock — POST /unlock (X-Transfer-UUID)
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAuth(request, env, uuid) {
   let body;
@@ -1227,7 +1275,7 @@ async function handleAuth(request, env, uuid) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Meta — GET /meta/:uuid
+// Meta — GET /meta (X-Transfer-UUID)
 // Public, no auth. Returns filename, expiry, chunk count, passphrase flag from manifest.
 // total_bytes (Share-Size-1): new manifests don't store it, so it is null for them;
 // served only for manifests written before 6 Oct 2026 until they expire. Key kept
@@ -1260,7 +1308,7 @@ async function handleMeta(request, env, uuid) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Download — GET /download/:uuid/:chunk
+// Download — GET /download (X-Transfer-UUID + X-Part)
 //
 // SW5 additions:
 //   - Emits cargo.discharged receipt at first complete download (last chunk
@@ -1363,7 +1411,7 @@ function paymentRequired402(response402, cost) {
 // Citizen's cookie can travel on this one call (S6.6). The localhost echo in
 // corsHeaders() never gets Allow-Credentials: isAuthOrigin is an exact list.
 // ─────────────────────────────────────────────────────────────────────────────
-const INITIATE_PATH_RE = /^\/upload\/[0-9a-f-]{36}\/initiate$/i;
+const INITIATE_PATH = '/upload/initiate';
 
 function initiateCors(request, env) {
   const h = { ...corsHeaders(request), 'Vary': 'Origin' };

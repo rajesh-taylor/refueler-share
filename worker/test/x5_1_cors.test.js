@@ -70,21 +70,21 @@ describe('worker.fetch — origin per request', () => {
 
   it('initiate preflight: credentials for both AUTH_ORIGINS on the auth host', async () => {
     for (const o of [OLD, APP]) {
-      const r = await worker.fetch(req(o, '/upload/00000000-0000-4000-8000-000000000001/initiate', 'OPTIONS'), env(), ctx);
+      const r = await worker.fetch(req(o, '/upload/initiate', 'OPTIONS'), env(), ctx);
       expect(r.headers.get('Access-Control-Allow-Origin')).toBe(o);
       expect(r.headers.get('Access-Control-Allow-Credentials')).toBe('true');
     }
   });
 
   it('initiate preflight: an origin in APP_ORIGINS but not AUTH_ORIGINS gets no credentials', async () => {
-    const r = await worker.fetch(req(APP, '/upload/00000000-0000-4000-8000-000000000001/initiate', 'OPTIONS'),
+    const r = await worker.fetch(req(APP, '/upload/initiate', 'OPTIONS'),
       env({ AUTH_ORIGINS: OLD }), ctx);
     expect(r.headers.get('Access-Control-Allow-Origin')).toBe(APP);
     expect(r.headers.get('Access-Control-Allow-Credentials')).toBeNull();
   });
 
   it('initiate preflight from localhost never gets credentials', async () => {
-    const r = await worker.fetch(req('http://localhost:8181', '/upload/00000000-0000-4000-8000-000000000001/initiate', 'OPTIONS'), env(), ctx);
+    const r = await worker.fetch(req('http://localhost:8181', '/upload/initiate', 'OPTIONS'), env(), ctx);
     expect(r.headers.get('Access-Control-Allow-Credentials')).toBeNull();
   });
 

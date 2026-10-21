@@ -33,32 +33,32 @@ echo ""
 
 # 1. GET /meta — non-existent UUID → 404
 check "GET /meta non-existent → 404" "404" \
-  "curl -s -o /dev/null -w '%{http_code}' '$WORKER/meta/$FAKE_UUID'"
+  "curl -s -o /dev/null -w '%{http_code}' -H 'X-Transfer-UUID: $FAKE_UUID' '$WORKER/meta'"
 
 # 2. GET /download — non-existent UUID → 404
 check "GET /download non-existent → 404" "404" \
-  "curl -s -o /dev/null -w '%{http_code}' '$WORKER/download/$FAKE_UUID/0000'"
+  "curl -s -o /dev/null -w '%{http_code}' -H 'X-Transfer-UUID: $FAKE_UUID' -H 'X-Part: 0000' '$WORKER/download'"
 
 # 3. DELETE /transfer — no Authorization header → 401
 check "DELETE no auth → 401" "401" \
-  "curl -s -o /dev/null -w '%{http_code}' -X DELETE '$WORKER/transfer/$FAKE_UUID'"
+  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'X-Transfer-UUID: $FAKE_UUID' '$WORKER/transfer'"
 
 # 4. DELETE /transfer — invalid bearer, non-existent UUID → 404
 # Worker reads manifest before verifying bearer; 404 fires first.
 check "DELETE invalid-bearer non-existent → 404" "404" \
-  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'Authorization: Bearer faketoken' '$WORKER/transfer/$FAKE_UUID'"
+  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'Authorization: Bearer faketoken' -H 'X-Transfer-UUID: $FAKE_UUID' '$WORKER/transfer'"
 
 # 5. Owner DELETE — non-existent UUID with correct admin key → 404
 check "Owner DELETE non-existent → 404" "404" \
-  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'Authorization: Bearer rfs_owner_executiondock' -H 'X-Admin-Key: $ADMIN_KEY' '$WORKER/transfer/$FAKE_UUID'"
+  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'Authorization: Bearer rfs_owner_executiondock' -H 'X-Admin-Key: $ADMIN_KEY' -H 'X-Transfer-UUID: $FAKE_UUID' '$WORKER/transfer'"
 
 # 6. Owner DELETE — wrong admin key → 401
 check "Owner DELETE wrong key → 401" "401" \
-  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'Authorization: Bearer rfs_owner_executiondock' -H 'X-Admin-Key: wrongkey' '$WORKER/transfer/$FAKE_UUID'"
+  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'Authorization: Bearer rfs_owner_executiondock' -H 'X-Admin-Key: wrongkey' -H 'X-Transfer-UUID: $FAKE_UUID' '$WORKER/transfer'"
 
 # 7. POST /confirm — non-existent UUID → 404
 check "POST /confirm non-existent → 404" "404" \
-  "curl -s -o /dev/null -w '%{http_code}' -X POST '$WORKER/confirm/$FAKE_UUID'"
+  "curl -s -o /dev/null -w '%{http_code}' -X POST -H 'X-Transfer-UUID: $FAKE_UUID' '$WORKER/confirm'"
 
 # 8. GET /admin/execution-dock — no admin key → 401
 check "GET /admin/execution-dock no key → 401" "401" \
@@ -68,9 +68,9 @@ check "GET /admin/execution-dock no key → 401" "401" \
 check "GET /admin/execution-dock correct key → 200" "200" \
   "curl -s -o /dev/null -w '%{http_code}' -H 'X-Admin-Key: $ADMIN_KEY' '$WORKER/admin/execution-dock'"
 
-# 10. Malformed UUID — router rejects before UUID validation → 404
-check "DELETE malformed UUID → 404" "404" \
-  "curl -s -o /dev/null -w '%{http_code}' -X DELETE '$WORKER/transfer/not-a-uuid'"
+# 10. Malformed UUID — UUID-Out-Of-Path-1: X-Transfer-UUID checked first → 400
+check "DELETE malformed UUID → 400" "400" \
+  "curl -s -o /dev/null -w '%{http_code}' -X DELETE -H 'X-Transfer-UUID: not-a-uuid' '$WORKER/transfer'"
 
 echo ""
 echo "── Results ──────────────────────────────────────────────────────────────"

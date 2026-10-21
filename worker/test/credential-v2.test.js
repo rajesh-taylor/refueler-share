@@ -28,6 +28,7 @@ import {
   hashToCurve as cashuHashToCurve,
 } from '@cashu/cashu-ts';
 import { makeBucket, makeKV } from './_r2_mock.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const MINT_PRIVKEY_HEX  = '7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f';
 const OTHER_PRIVKEY_HEX = '1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f';
@@ -90,7 +91,7 @@ async function issueV2(env, secret = randomSecret()) {
 
 function initiate(env, uuid, credential, commitment) {
   const now = Math.floor(Date.now() / 1000);
-  return worker.fetch(new Request(`https://api.share.test/upload/${uuid}/initiate`, {
+  return worker.fetch(transferRequest(`https://api.share.test/upload/initiate`, uuid, {
     method: 'POST',
     headers: {
       'X-Cashu-Credential':      typeof credential === 'string' ? credential : JSON.stringify(credential),

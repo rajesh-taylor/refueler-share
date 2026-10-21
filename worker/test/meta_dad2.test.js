@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import worker from '../src/index.js';
 import { makeBucket, makeKV } from './_r2_mock.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const UUID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 const NOW  = Math.floor(Date.now() / 1000);
@@ -17,7 +18,7 @@ async function meta(manifest) {
     BUCKET:    makeBucket({ [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify(manifest) } }),
     STATUS_KV: makeKV(),
   };
-  const res = await worker.fetch(new Request(`https://api.share.test/meta/${UUID}`), env, ctx);
+  const res = await worker.fetch(transferRequest(`https://api.share.test/meta`, UUID), env, ctx);
   return { status: res.status, body: await res.json() };
 }
 

@@ -207,9 +207,9 @@ export async function _carryOn(job, domRefs, state, helpers) {
 
   let finRes;
   try {
-    finRes = await fetch(`${WORKER_URL}/upload/${job.uuid}/finalise`, {
+    finRes = await fetch(`${WORKER_URL}/upload/finalise`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': job.sessionToken },
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': job.sessionToken, 'X-Transfer-UUID': job.uuid },
       body: JSON.stringify(finaliseBody),
     });
   } catch (e) {

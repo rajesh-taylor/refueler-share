@@ -244,10 +244,12 @@ check() {
   for f in $(find "$DIST/v/$sha" -maxdepth 1 \( -name '*.js' -o -name '*.css' \) | LC_ALL=C sort); do
     if grep -q 'sourceMappingURL' "$f"; then aa_fail "${f#$DIST/} has a sourceMappingURL line"; fi
   done
+  # UUID-Out-Of-Path-1: no transfer UUID built into an API path (the sampled records keep paths)
+  node "$ROOT/bin/check-no-uuid-path.mjs" --only "$DIST" >/dev/null || aa_fail "a transfer UUID is built into an API path in dist/ (bin/check-no-uuid-path.mjs)"
   # no third-party CSS/fonts in the app (CSP would block them; better to fail here)
   if grep -rlq 'fonts.googleapis\|fontshare\|gstatic' "$DIST" --include='*.html' --include='*.css'; then aa_fail "third-party font reference in dist/"; fi
   [ "$AA_FAILS" -eq 0 ] || die "check FAILED — $AA_FAILS problem(s) above; nothing deployed"
-  echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present"
+  echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present · no UUID in a path"
 }
 
 # URL path for a dist file (Pages serves /x/index.html at /x/ and strips .html)

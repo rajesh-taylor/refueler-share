@@ -109,6 +109,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   // ── Direct-to-R2 upload path (Share-6-6b: only path) ─────────────────────
   // handleInitiate reads headers, not JSON body — matches legacy chunk-0 header schema.
   const initiateHeaders = {
+    'X-Transfer-UUID':         issuedUuid,   // UUID-Out-Of-Path-1: never in the path
     'X-Cashu-Credential':      credential,
     'X-Credential-Commitment': commitment,
     'X-Issued-Tier':           issuedTier,
@@ -126,7 +127,7 @@ async function _setUp(domRefs, state, helpers, transferOpts) {
   // B12-4a-2: the Citizen cookie + X-CSRF ride this one call, and only while the
   // account is chosen; "Send without my account" sends neither.
   const onAccount = usingAccount();
-  const initRes = await _send(`${WORKER_URL}/upload/${issuedUuid}/initiate`,
+  const initRes = await _send(`${WORKER_URL}/upload/initiate`,
     initiateOptions(initiateHeaders), 'initiate', reportError);
   if (!initRes.ok) {
     const txt = await initRes.text().catch(() => '');

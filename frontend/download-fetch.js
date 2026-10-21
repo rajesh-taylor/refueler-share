@@ -123,7 +123,8 @@ export async function _eachPartInOrder(uuid, n, state, prog, use, holdLast) {
 async function _fetchPart(uuid, idx, state, prog, onStart) {
   const { onBytes, onWait } = prog;
   const padded  = String(idx).padStart(4, '0');
-  const headers = {};
+  // UUID-Out-Of-Path-1: one URL for every part — UUID and part travel as headers.
+  const headers = { 'X-Transfer-UUID': uuid, 'X-Part': padded };
   if (state.downloadToken) headers['Authorization'] = `Bearer ${state.downloadToken}`;
   const tries = RETRY_DELAYS_MS.length + 1;
   let lastErr;
@@ -131,7 +132,7 @@ async function _fetchPart(uuid, idx, state, prog, onStart) {
     if (prog.stopped) throw new Error('stopped');
     let got = 0;
     try {
-      const res = await fetch(`${WORKER_URL}/download/${uuid}/${padded}`, { headers });
+      const res = await fetch(`${WORKER_URL}/download`, { headers });
       if (res.status === 400 || res.status === 401 || res.status === 410 || res.status === 416) {
         const err = new Error(`HTTP ${res.status}`); err.fatal = true; err.status = res.status; throw err;
       }

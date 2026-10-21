@@ -26,6 +26,7 @@ import worker from '../src/index.js';
 import { makeBucket, makeKV } from './_r2_mock.js';
 // Load order matters in the workerd pool: Worker modules before @cashu/cashu-ts.
 import { blindMessage, unblindSignature, pointFromHex } from '@cashu/cashu-ts';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const MINT_PRIVKEY_HEX = '7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f';
 const KEY   = 'test-commitment-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -85,7 +86,7 @@ async function issueViaWorker(env, extraBody = {}) {
 
 function initiate(env, uuid, { credential, commitment, tier = 'free', bytes = 1024, extra = {} }) {
   const now = Math.floor(Date.now() / 1000);
-  return worker.fetch(new Request(`https://api.share.test/upload/${uuid}/initiate`, {
+  return worker.fetch(transferRequest(`https://api.share.test/upload/initiate`, uuid, {
     method: 'POST',
     headers: {
       'X-Cashu-Credential':      credential,

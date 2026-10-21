@@ -238,9 +238,10 @@ export async function handleApiCapabilities(request, env) {
     endpoints: {
       capabilities:       'GET  /api/v1/capabilities',
       credential_issue:   'POST /api/v1/credential/issue',
-      transfer_status:    'GET  /api/v1/transfer/:uuid',
+      // UUID-Out-Of-Path-1: the transfer UUID travels in X-Transfer-UUID, never the path.
+      transfer_status:    'GET  /api/v1/transfer (X-Transfer-UUID)',
       webhook_register:   'POST /api/v1/webhook/register',
-      receipt:            'GET  /api/v1/receipt/:uuid/:type',
+      receipt:            'GET  /api/v1/receipt/:type (X-Transfer-UUID)',
       webhook_status:     'GET  /api/v1/webhooks/status',
       hostname_health:    'GET  /api/v1/hostname/health',
     },

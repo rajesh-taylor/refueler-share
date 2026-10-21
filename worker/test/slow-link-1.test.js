@@ -153,7 +153,7 @@ function fakeTransfer(N, { size = 4096, hooks = {} } = {}) {
 }
 
 const get = (t, i, headers = {}) =>
-  handleDownload(new Request(`https://w.test/download/${UUID}/${i}`, { headers }), t.env, t.ctx, UUID, i);
+  handleDownload(new Request('https://w.test/download', { headers }), t.env, t.ctx, UUID, i);
 
 describe('handleDownload — verify, then stream', () => {
   it('200: serves exactly the stored bytes, X-Integrity set, two reads (second pinned to the first etag)', async () => {

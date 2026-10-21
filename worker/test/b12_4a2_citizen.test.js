@@ -24,6 +24,7 @@ import { destroyTransfer } from '../src/handlers/delete_transfer.js';
 import {
   makeSupabase, makeEnv as baseEnv, seedClient as seed, apiIssue, charteredInitiate, ctx, ORIGIN, QUOTA_REF_KEY,
 } from './helpers/api-fake.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const CHUNK  = 32 * 1024 * 1024;
 const GIB    = 1024 ** 3;
@@ -102,7 +103,7 @@ async function initiate(env, cred, { bytes = CHUNK, expiry = nowS() + 3600, sess
   if (session) headers.Cookie = session.cookie;
   const c = csrf === undefined ? session?.csrf : csrf;
   if (c) headers['X-CSRF'] = c;
-  return worker.fetch(new Request(`${url}/upload/${cred.uuid}/initiate`, { method: 'POST', headers }), env, ctx);
+  return worker.fetch(transferRequest(`${url}/upload/initiate`, cred.uuid, { method: 'POST', headers }), env, ctx);
 }
 
 const manifestOf = (env, uuid) => JSON.parse(env.BUCKET._store.get(`${uuid}/manifest.json`).body);
@@ -240,7 +241,7 @@ describe('Citizen initiate (S6.10)', () => {
     const { session_token } = await r.json();
     for (let i = 0; i < 2; i++) env.BUCKET._store.set(`${cred.uuid}/${String(i).padStart(4, '0')}`, { size: CHUNK + 16, uploaded: new Date(), etag: `c${i}` });
     const pending = [];
-    const fin = await worker.fetch(new Request(`${ORIGIN}/upload/${cred.uuid}/finalise`, {
+    const fin = await worker.fetch(transferRequest(`${ORIGIN}/upload/finalise`, cred.uuid, {
       method: 'POST', headers: { 'X-Upload-Session': session_token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ hashes: [B32, B32], merkle_root: B32 }),
     }), env, { waitUntil: (p) => pending.push(p), passThroughOnException() {} });
@@ -255,7 +256,7 @@ describe('Citizen initiate (S6.10)', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('initiate CORS (S6.6)', () => {
-  const preflight = (env, origin, url = ORIGIN) => worker.fetch(new Request(`${url}/upload/00000000-0000-4000-8000-000000000001/initiate`, {
+  const preflight = (env, origin, url = ORIGIN) => worker.fetch(new Request(`${url}/upload/initiate`, {
     method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'x-csrf' },
   }), env, ctx);
 

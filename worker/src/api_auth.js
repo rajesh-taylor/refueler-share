@@ -19,7 +19,11 @@
 //
 // Signature construction (locked SW-Opus-1):
 //   HMAC-SHA256( rfs_sign_, canonical_string )
-//   canonical_string = METHOD + "\n" + PATH + "\n" + TIMESTAMP + "\n" + BODY_HASH
+//   canonical_string (v2, UUID-Out-Of-Path-1 · 21 Oct 2026) =
+//     METHOD + "\n" + PATH + "\n" + TIMESTAMP + "\n" + BODY_HASH + "\n" + TRANSFER_UUID
+//   TRANSFER_UUID = X-Transfer-UUID, trimmed + lower-case; "" when the request has none.
+//   The UUID left the path, so it is signed on its own line. One version, no v1
+//   fallback (no Chartered client exists; refueler-mcp changes in lockstep).
 //   BODY_HASH = hex( SHA-256( request_body ) )   — empty body → SHA-256("") hex
 //   TIMESTAMP = Unix seconds as decimal string, from X-Timestamp header
 //   Clock window: ±300 seconds
@@ -115,7 +119,7 @@ export function parseHmacCredentials(request) {
 //
 // Verifies the HMAC-SHA256 signature in the Authorization header.
 //
-// canonical_string = METHOD\nPATH\nTIMESTAMP\nBODY_HASH
+// canonical_string = METHOD\nPATH\nTIMESTAMP\nBODY_HASH\nTRANSFER_UUID   (v2)
 // BODY_HASH = hex( SHA-256( rawBody ) )  — rawBody is Uint8Array or ArrayBuffer
 //
 // Clock check fires first — cheap, no crypto.
@@ -136,7 +140,8 @@ export async function verifyHmacSignature(request, rawBody, presentedSignKey, ts
   const url       = new URL(request.url);
   const method    = request.method.toUpperCase();
   const path      = url.pathname;
-  const canonical = `${method}\n${path}\n${ts}\n${bodyHash}`;
+  const uuidLine  = (request.headers.get('X-Transfer-UUID') ?? '').trim().toLowerCase();
+  const canonical = `${method}\n${path}\n${ts}\n${bodyHash}\n${uuidLine}`;
 
   // ── HMAC-SHA256 ───────────────────────────────────────────────────────────
   const keyBytes = new TextEncoder().encode(presentedSignKey);

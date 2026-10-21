@@ -8,6 +8,7 @@
  *   UUID_RE, CHUNK_SIZE_MAX, MANIFEST_SIZE_MAX
  *
  * Exports (functions):
+ *   transferUuid(request) → lower-case UUID from X-Transfer-UUID | null
  *   corsHeaders(request) → headers object (allowlist: setAppOrigins(env), X5-1)
  *   safeGetManifest(bucket, uuid, env) → { manifest, oversize }
  *   supabaseFetch(env, method, path, body?, extraHeaders?) → Response
@@ -41,6 +42,20 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // text bound for it (thrown messages can carry an R2 key) goes through this first.
 const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 export const scrubUuids = s => String(s ?? '').replace(UUID_ANYWHERE, '{uuid}');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Transfer UUID from the request (UUID-Out-Of-Path-1 · 21 Oct 2026)
+//
+// No transfer UUID in any URL path or query on the API: Cloudflare's sampled
+// HTTP-request records keep client IP + host + path for at least 31 days, and
+// headers are not in them. Every transfer route reads X-Transfer-UUID here.
+// Returns the UUID in lower case, or null (the caller answers 400
+// missing_transfer_id).
+// ─────────────────────────────────────────────────────────────────────────────
+export function transferUuid(request) {
+  const v = (request.headers.get('X-Transfer-UUID') ?? '').trim().toLowerCase();
+  return UUID_RE.test(v) ? v : null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS
@@ -80,8 +95,12 @@ export function corsHeaders(request) {
     'Access-Control-Allow-Origin': allowOrigin,
     'Vary': 'Origin',   // X5-1: the answer now depends on Origin (two app origins)
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Upload-Session, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Api-Sign-Key, X-Transfer-Ref, X-Test-Credential, X-CSRF',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Cashu-Credential, X-Blake3-Root, X-Blake3-Chunk-Hash, X-Total-Chunks, X-Total-Bytes, X-Tier, X-Expiry-Timestamp, X-P2SH-Secret-Hash, X-File-Name, X-Admin-Key, X-Credential-Commitment, X-Issued-Tier, X-Resume-From-Chunk, X-Upload-Session, X-Destroy-After-Download, X-Available-From, X-Available-Until, X-Transfer-UUID, X-Part, X-Api-Sign-Key, X-Transfer-Ref, X-Test-Credential, X-CSRF',
     'Access-Control-Expose-Headers': 'X-File-Name, X-Total-Bytes, X-Expiry-Timestamp, X-Integrity, X-Chunk-Index',
+    // UUID-Out-Of-Path-1: every transfer route is now one fixed URL with custom
+    // headers, so one cached preflight covers every part. Browsers cap it (WebKit
+    // 10 min, Chromium 2 h).
+    'Access-Control-Max-Age': '7200',
   };
 }
 

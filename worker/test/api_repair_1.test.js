@@ -31,6 +31,7 @@ import { computeTransferCost } from '../src/r2_presign.js';
 import {
   makeSupabase, makeEnv, seedClient as seed, signedRequest, apiIssue, charteredInitiate, ctx, ORIGIN,
 } from './helpers/api-fake.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 // ── Known-answer vectors (scratch script, Node crypto.hkdfSync / createCipheriv / createHmac) ──
 //   SHARE_SEAL_KEY_1 = bytes 0x00..0x1f · KV_MAC_KEY = bytes 0x20..0x3f · master = 'test-master-key'
@@ -203,7 +204,7 @@ describe('end to end: initiate → finalise → cargo.accepted → pull', () => 
     await env.BUCKET.put(`${uuid}/0000`, 'x'.repeat(17)); // 1 byte + 16-byte tag
     const B32 = 'q'.repeat(43);
     const fctx = waitCtx();
-    const fin = await worker.fetch(new Request(`${ORIGIN}/upload/${uuid}/finalise`, {
+    const fin = await worker.fetch(transferRequest(`${ORIGIN}/upload/finalise`, uuid, {
       method: 'POST', headers: { 'X-Upload-Session': session_token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ hashes: [B32], merkle_root: B32 }),
     }), env, fctx);
@@ -221,10 +222,10 @@ describe('end to end: initiate → finalise → cargo.accepted → pull', () => 
     expect(JSON.stringify(r)).not.toContain('rfs_live_');
     expect(h.body.sig).toBe(`v1=${await hmacHex(whsec, `refueler.receipt.v2\n${JSON.stringify(r)}`)}`);
 
-    const mine = await worker.fetch(await signedRequest('GET', `/api/v1/receipt/${uuid}/acceptance`, c), env, ctx);
+    const mine = await worker.fetch(await signedRequest('GET', '/api/v1/receipt/acceptance', c, '', { 'X-Transfer-UUID': uuid }), env, ctx);
     expect(mine.status).toBe(200);
     expect(await mine.json()).toEqual({ receipt: r, sig: h.body.sig });
-    const theirs = await worker.fetch(await signedRequest('GET', `/api/v1/receipt/${uuid}/acceptance`, other), env, ctx);
+    const theirs = await worker.fetch(await signedRequest('GET', '/api/v1/receipt/acceptance', other, '', { 'X-Transfer-UUID': uuid }), env, ctx);
     expect(theirs.status).toBe(404);
   });
 });
@@ -298,7 +299,7 @@ describe('routing and KV forgery', () => {
     const { uuid, manifest } = await chartered(env, c.org);
     await issueReceipt(env, uuid, manifest, 'collection', { collected_at: T0 });
     expect([...env.STATUS_KV._store.keys()].some(k => k.startsWith('receipt_'))).toBe(false);
-    const res = await worker.fetch(await signedRequest('GET', `/api/v1/receipt/${uuid}/collection`, c), env, ctx);
+    const res = await worker.fetch(await signedRequest('GET', '/api/v1/receipt/collection', c, '', { 'X-Transfer-UUID': uuid }), env, ctx);
     expect(res.status).toBe(404);
   });
 
@@ -311,7 +312,7 @@ describe('routing and KV forgery', () => {
     const key = `receipt_${uuid}_collection`;
     const rec = JSON.parse(env.STATUS_KV._store.get(key));
     env.STATUS_KV._store.set(key, JSON.stringify({ ...rec, owner: await orgTag(env, thief.org) }));
-    const res = await worker.fetch(await signedRequest('GET', `/api/v1/receipt/${uuid}/collection`, thief), env, ctx);
+    const res = await worker.fetch(await signedRequest('GET', '/api/v1/receipt/collection', thief, '', { 'X-Transfer-UUID': uuid }), env, ctx);
     expect(res.status).toBe(404);
   });
 });

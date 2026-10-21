@@ -238,7 +238,6 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
       headers: {
         'Content-Type':    'application/octet-stream',
         'Cache-Control':   'private, no-store',
-        'X-Transfer-UUID': uuid,
         'X-Chunk-Index':   String(chunkIndex),
         'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
         'X-Integrity':     'ciphertext-storage-verified',
@@ -257,7 +256,6 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
   const headers = new Headers({
     'Content-Type':    'application/octet-stream',
     'Cache-Control':   'private, no-store',
-    'X-Transfer-UUID': uuid,
     'X-Chunk-Index':   String(chunkIndex),
     'X-File-Name':     manifest.file_name ?? `refueler-${uuid.slice(0, 8)}`,
   });

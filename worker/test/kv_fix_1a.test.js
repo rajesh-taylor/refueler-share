@@ -14,6 +14,7 @@ import { deriveKvMacKey, makeRootVerifiedValue, checkRootVerifiedValue } from '.
 import { readSidecarWithRootCheck } from '../src/handlers/download_verify.js';
 import { reconstructRoot } from '../src/merkle.js';
 import { makeSessionToken } from '../src/upload_session.js';
+import { transferRequest } from './helpers/transfer-request.js';
 // B12-3: upload sessions are MAC'd tokens (upload_session.js); no KV record.
 const SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
 const sessionTok = (uuid, n) => makeSessionToken({ UPLOAD_SESSION_KEY: SESSION_KEY }, uuid, n, Math.floor(Date.now() / 1000) + 3600);
@@ -143,7 +144,7 @@ describe('finalise — runs once', () => {
       [`${UUID}/0000`]: { size: FULL, uploaded: 1 },
     });
     const kv  = makeKV();
-    const req = new Request(`https://w.test/upload/${UUID}/finalise`, {
+    const req = transferRequest(`https://w.test/upload/finalise`, UUID, {
       method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 1) },   // a valid, replayed session
       body: JSON.stringify({ hashes: [B32], merkle_root: B32 }),
     });

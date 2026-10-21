@@ -19,6 +19,7 @@ import { CHUNK_SIZE, CHUNK_TAG_BYTES } from '../src/sweep_rules.js';
 import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 import { importTestCredKey, makeTestCredential, TESTCRED_USED_PREFIX } from '../src/testcred.js';
 import { makeSessionToken } from '../src/upload_session.js';
+import { transferRequest } from './helpers/transfer-request.js';
 // B12-3: upload sessions are MAC'd tokens (upload_session.js); no KV record.
 const SESSION_KEY = 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=';
 const sessionTok = (uuid, n) => makeSessionToken({ UPLOAD_SESSION_KEY: SESSION_KEY }, uuid, n, Math.floor(Date.now() / 1000) + 3600);
@@ -47,7 +48,7 @@ function env() {
 }
 
 async function initiate(e, totalBytes, totalChunks = Math.ceil(totalBytes / CHUNK_SIZE)) {
-  const req = new Request(`https://api.share.test/upload/${UUID}/initiate`, {
+  const req = transferRequest(`https://api.share.test/upload/initiate`, UUID, {
     method: 'POST',
     headers: {
       'X-Cashu-Credential':      '{}',
@@ -63,7 +64,7 @@ async function initiate(e, totalBytes, totalChunks = Math.ceil(totalBytes / CHUN
 }
 
 async function urls(e, token, from, count) {
-  const req = new Request(`https://api.share.test/upload/${UUID}/urls`, {
+  const req = transferRequest(`https://api.share.test/upload/urls`, UUID, {
     method: 'POST', headers: { 'X-Upload-Session': token }, body: JSON.stringify({ from, count }),
   });
   const res = await worker.fetch(req, e, ctx());
@@ -158,7 +159,7 @@ describe('Share-Size-1 — the Worker stores no size', () => {
     expect(m.total_chunks).toBe(4);
     expect('total_bytes' in m).toBe(false);
     expect(JSON.stringify(m)).not.toContain(String(bytes));
-    const res  = await worker.fetch(new Request(`https://api.share.test/meta/${UUID}`), e, ctx());
+    const res  = await worker.fetch(transferRequest(`https://api.share.test/meta`, UUID), e, ctx());
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.total_bytes).toBeNull();
@@ -212,7 +213,7 @@ describe('B12-1d — finalise exact-size check', () => {
     const bucket = makeBucket(seed);
     const kv  = makeKV();
     const c   = ctx();
-    const req = new Request(`https://w.test/upload/${UUID}/finalise`, {
+    const req = transferRequest(`https://w.test/upload/finalise`, UUID, {
       method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, sizes.length) },
       body: JSON.stringify({ hashes: sizes.map(() => B32), merkle_root: B32 }),
     });
@@ -256,7 +257,7 @@ describe('B12-1d — finalise exact-size check', () => {
                    [`${UUID}/0000`]: { size: 5, uploaded: 1 } }; // wrong size AND 0001/0002 missing
     const bucket = makeBucket(seed);
     const c   = ctx();
-    const req = new Request(`https://w.test/upload/${UUID}/finalise`, { method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 3) }, body: '{}' });
+    const req = transferRequest(`https://w.test/upload/finalise`, UUID, { method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 3) }, body: '{}' });
     const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: makeKV(), UPLOAD_SESSION_KEY: SESSION_KEY }, UUID, c);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'incomplete', missing: ['0001', '0002'] });

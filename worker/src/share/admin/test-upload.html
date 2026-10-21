@@ -12,7 +12,7 @@
   - Uploads random bytes, unencrypted; makes no share link
 
   Purpose: drive large dummy uploads through the full direct-to-R2 pipeline
-  (credential/issue → /upload/:uuid/initiate → /urls → presigned PUTs → /finalise)
+  (credential/issue → /upload/initiate → /urls → presigned PUTs → /finalise; UUID in X-Transfer-UUID)
   so listBasedCompleteness and the WASM BLAKE3 download-verify path can be
   validated end-to-end at scale.
 
@@ -365,11 +365,12 @@ $('btnStart').addEventListener('click', async () => {
     if (batchStart in urlCache) return;
     if (!(batchStart in batchFetching)) {
       batchFetching[batchStart] = (async () => {
-        const res = await fetch(`${workerUrl}/upload/${uuid}/urls`, {
+        const res = await fetch(`${workerUrl}/upload/urls`, {
           method: 'POST',
           signal,
           headers: {
             'Content-Type':     'application/json',
+            'X-Transfer-UUID':  uuid,
             'X-Upload-Session': sessionToken,
           },
           body: JSON.stringify({ from: batchStart, count: Math.min(URL_BATCH, urlLimit - batchStart) }),
@@ -460,11 +461,13 @@ $('btnStart').addEventListener('click', async () => {
     // KV-Fix-1b: test credentials obey the normal 7-day expiry ceiling; soaks use 2 days.
     const expiryTs = Math.floor(Date.now() / 1000) + 2 * 24 * 3600;
 
-    const initiateRes = await fetch(`${workerUrl}/upload/${uuid}/initiate`, {
+    // UUID-Out-Of-Path-1: the UUID rides X-Transfer-UUID, never the path.
+    const initiateRes = await fetch(`${workerUrl}/upload/initiate`, {
       method: 'POST',
       signal,
       headers: {
         'Content-Type':            'application/json',
+        'X-Transfer-UUID':         uuid,
         'X-Cashu-Credential':      cashuCredential,
         'X-Total-Chunks':          String(totalChunks),
         'X-Total-Bytes':           String(totalBytes),
@@ -637,10 +640,10 @@ $('btnStart').addEventListener('click', async () => {
     emit('\n[5/5] Finalising (listBasedCompleteness will page ' +
          `${Math.ceil(totalChunks / 1000)} × list(limit:1000))…`, 'head');
 
-    const finaliseRes = await fetch(`${workerUrl}/upload/${uuid}/finalise`, {
+    const finaliseRes = await fetch(`${workerUrl}/upload/finalise`, {
       method: 'POST',
       signal,
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken, 'X-Transfer-UUID': uuid },
       body: JSON.stringify({ hashes: chunkHashes, merkle_root: merkleRoot }),
     });
 
@@ -678,11 +681,11 @@ $('btnStart').addEventListener('click', async () => {
       for (const ci of verifyIndices) {
         if (signal.aborted) break;
         const chunkKey = String(ci).padStart(4, '0');
-        const dlUrl    = `${workerUrl}/download/${uuid}/${chunkKey}`;
-        emit(`   → GET /download/${uuid}/${chunkKey}…`, 'info');
+        const dlUrl    = `${workerUrl}/download`;
+        emit(`   → GET /download part ${chunkKey}…`, 'info');
 
         try {
-          const dlRes = await fetch(dlUrl, { signal });
+          const dlRes = await fetch(dlUrl, { signal, headers: { 'X-Transfer-UUID': uuid, 'X-Part': chunkKey } });
           const integrity = dlRes.headers.get('X-Integrity') ?? '(absent)';
           const chunkIdx  = dlRes.headers.get('X-Chunk-Index') ?? '?';
 

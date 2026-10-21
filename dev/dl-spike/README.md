@@ -2,6 +2,8 @@
 
 Service-worker streaming download test (spec `docs/Share-Download-spec-v1.md` §12). Never mirrored or shipped. The page decrypts with the browser's own `frontend/crypto.js`, served as-is.
 
+**Old routes (UUID-Out-Of-Path-1, 21 Oct 2026):** this spike still calls `/meta/{uuid}` and `/download/{uuid}/{NNNN}`, which the Worker stopped answering at deploy 2. Left as it was (a spike, kept for the record); a DL-track rebuild uses `GET /meta` / `GET /download` with `X-Transfer-UUID` + `X-Part`.
+
 **Mac browsers**
 
 ```bash

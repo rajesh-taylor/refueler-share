@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.27 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Speed-View-Opus · 17 Oct 2026
+> **Version:** 2.28 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** UUID-Out-Of-Path-1 · 21 Oct 2026
 > Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -167,7 +167,8 @@ target three times before reaching refueler.io. A green log on the wrong project
 DO NOT commit frontend JS based on code review alone — verify behaviour live after `✓ SHIPPED`.
 DO NOT assume manifest fields exist — `curl /meta/{uuid}` to verify before coding against them.
 DO NOT change fragment.js without verifying upload.js and download.js handle IV, key, and filename end-to-end.
-DO NOT introduce a NEW request header the browser sends to the Worker without adding it to Access-Control-Allow-Headers in worker/src/utils.js corsHeaders() — the CORS preflight blocks it (net::ERR_FAILED, "field x-… is not allowed"). X-Upload-Session hit this at Share-6-3d (now allowed; the 3,200-chunk soaks went through `/urls` with it).
+DO NOT introduce a NEW request header the browser sends to the Worker without adding it to Access-Control-Allow-Headers in worker/src/utils.js corsHeaders() — the CORS preflight blocks it (net::ERR_FAILED, "field x-… is not allowed"). X-Upload-Session hit this at Share-6-3d (now allowed; the 3,200-chunk soaks went through `/urls` with it). X-Part added with UUID-Out-Of-Path-1 (21 Oct).
+DO NOT put a transfer UUID in an API path or query: it travels in `X-Transfer-UUID` (download part: `X-Part`) — Cloudflare's sampled request records keep IP + path for ≥ 31 days (UUID-Out-Of-Path-1). Enforced by `bin/check-no-uuid-path.mjs` (CI + ship-app) and `bin/route-inventory.mjs`; API HMAC canonical v2 signs the UUID line.
 NOTE (browser + hostname, Share-6 live-test 21 Sep): download "CORS/ERR_FAILED/503" failures were **Brave** + the api.share.refueler.io custom hostname (6-6b cutover not done) intermittently 503-ing; a 503 carries no CORS header so the browser mislabels it "CORS". Safari downloads the same link cleanly, and curl shows the Worker DOES send CORS on the failing chunk. DO NOT edit Worker CORS or finalise token logic for this — both are correct. Real fix lives in 6-6b (or revert frontend/crypto.js WORKER_URL to https://refueler-share.rt-fc4.workers.dev). Test downloads in Safari before assuming a code fault.
 NOTE (verifying R2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
 Claude must ask for all relevant files before writing any fix — never assume and code blind.

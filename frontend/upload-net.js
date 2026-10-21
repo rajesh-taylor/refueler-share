@@ -44,9 +44,9 @@ export function _errCode(text) {
 export async function _fetchNextUrlBatch(uuid, sessionToken, from, count, reportError) {
   let res;
   try {
-    res = await fetch(`${WORKER_URL}/upload/${uuid}/urls`, {
+    res = await fetch(`${WORKER_URL}/upload/urls`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken },
+      headers: { 'Content-Type': 'application/json', 'X-Upload-Session': sessionToken, 'X-Transfer-UUID': uuid },
       body: JSON.stringify({ from, count }),
     });
   } catch (e) {

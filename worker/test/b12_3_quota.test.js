@@ -35,6 +35,7 @@ import {
   makeSupabase, makeEnv, seedClient as seed, apiIssue, charteredInitiate, ctx, ORIGIN,
   QUOTA_REF_KEY, UPLOAD_SESSION_KEY,
 } from './helpers/api-fake.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const CHUNK = 32 * 1024 * 1024;
 const B32 = 'q'.repeat(43);
@@ -75,14 +76,14 @@ async function start(env, c, chunks = 1, extra = {}) {
 async function finish(env, uuid, token, chunks) {
   for (let i = 0; i < chunks; i++) env.BUCKET._store.set(`${uuid}/${String(i).padStart(4, '0')}`, { size: CHUNK + 16, uploaded: new Date(), etag: `c${i}` });
   const c = waitCtx();
-  const res = await worker.fetch(new Request(`${ORIGIN}/upload/${uuid}/finalise`, {
+  const res = await worker.fetch(transferRequest(`${ORIGIN}/upload/finalise`, uuid, {
     method: 'POST', headers: { 'X-Upload-Session': token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ hashes: Array(chunks).fill(B32), merkle_root: B32 }),
   }), env, c);
   await c.settle();
   return res;
 }
-const urlsReq = (env, uuid, token, from, count = 10) => worker.fetch(new Request(`${ORIGIN}/upload/${uuid}/urls`, {
+const urlsReq = (env, uuid, token, from, count = 10) => worker.fetch(transferRequest(`${ORIGIN}/upload/urls`, uuid, {
   method: 'POST', headers: { 'X-Upload-Session': token, 'Content-Type': 'application/json' }, body: JSON.stringify({ from, count }),
 }), env, ctx);
 const manifestOf = (env, uuid) => JSON.parse(env.BUCKET._store.get(`${uuid}/manifest.json`).body);
@@ -282,7 +283,7 @@ describe('initiate (SR S1.4 / S1.5 / X6)', () => {
     const env = makeEnv();
     const uuid = '33333333-4444-4555-8666-777777777777';
     const exp = nowS() + 3600;
-    const res = await worker.fetch(new Request(`${ORIGIN}/upload/${uuid}/initiate`, {
+    const res = await worker.fetch(transferRequest(`${ORIGIN}/upload/initiate`, uuid, {
       method: 'POST', headers: {
         'X-Cashu-Credential': '{}', 'X-Total-Chunks': '1', 'X-Total-Bytes': '10', 'X-Expiry-Timestamp': String(exp),
         'X-Credential-Commitment': await computeCommitment(env.COMMITMENT_KEY, uuid, 'free', 7 * 86400),
@@ -441,7 +442,7 @@ describe('deletion latch (SR S1.8) — every path releases exactly once', () => 
       }
       return obj;
     };
-    const dl = await worker.fetch(new Request(`${ORIGIN}/download/${uuid}/0000`), env, ctx);
+    const dl = await worker.fetch(transferRequest(`${ORIGIN}/download`, uuid, {}, 0), env, ctx);
     expect(dl.status).toBe(410);
     expect(manifestOf(env, uuid).consumed).toBe(true);
     expect(manifestOf(env, uuid).download_initiated_at ?? null).toBeNull();

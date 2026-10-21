@@ -111,7 +111,7 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
   try {
     const early   = window.__rfsMeta;
     delete window.__rfsMeta;
-    const metaRes = (early && early.uuid === uuid && await early.res) || await fetch(`${WORKER_URL}/meta/${uuid}`);
+    const metaRes = (early && early.uuid === uuid && await early.res) || await fetch(`${WORKER_URL}/meta`, { headers: { 'X-Transfer-UUID': uuid } });
     if (metaRes.ok) meta = await metaRes.json();
     else if (metaRes.status === 404 || metaRes.status === 410) { _showLinkInactive(domRefs); return; }
     else {
@@ -283,9 +283,9 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
     _setUnlockError(unlockInput, unlockError, '', false);
     let authRes;
     try {
-      authRes = await fetch(`${WORKER_URL}/auth/${uuid}`, {
+      authRes = await fetch(`${WORKER_URL}/unlock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Transfer-UUID': uuid },
         body: JSON.stringify({ passphrase }),
       });
       if (authRes.status === 404 || authRes.status === 410) { _showLinkInactive(domRefs); return; }   // Share-Copy-2

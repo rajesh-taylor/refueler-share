@@ -17,6 +17,7 @@ vi.mock('../src/utils.js', async (importOriginal) => {
 });
 
 import { handleOwnerDelete, handleDeleteTransfer } from '../src/handlers/delete_transfer.js';
+import { transferRequest } from './helpers/transfer-request.js';
 
 const NOW  = 1_800_000_000;
 const UUID = '11111111-2222-4333-8444-555555555555';
@@ -29,7 +30,7 @@ function transfer(chunks, manifestExtra = {}) {
   for (let i = 0; i < chunks; i++) seed[`${UUID}/${pad(i)}`] = { size: 100, uploaded: NOW };
   return makeBucket(seed);
 }
-const ownerReq = () => new Request(`https://w.test/transfer/${UUID}`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_x', 'X-Admin-Key': 'k' } });
+const ownerReq = () => transferRequest(`https://w.test/transfer`, UUID, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_x', 'X-Admin-Key': 'k' } });
 const ownerEnv = (bucket, kv = makeKV()) => ({ BUCKET: bucket, STATUS_KV: kv, ADMIN_KEY: 'k' });
 const remaining = (b) => [...b._store.keys()].sort();
 
@@ -108,7 +109,7 @@ describe('owner delete — resume', () => {
 describe('recipient (bearer) delete uses the same sequence', () => {
   it('batches and clears the sidecar', async () => {
     const bucket = transfer(1200);
-    const req = new Request(`https://w.test/transfer/${UUID}`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_recipient_token' } });
+    const req = transferRequest(`https://w.test/transfer`, UUID, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_recipient_token' } });
     const res = await handleDeleteTransfer(req, { BUCKET: bucket, STATUS_KV: makeKV(), MINT_PRIVATE_KEY: 'x' }, UUID);
     expect(res.status).toBe(200);
     expect(bucket._log.deletes.length).toBe(2);

@@ -63,6 +63,10 @@ jobs:
       - name: Route inventory
         run: node bin/route-inventory.mjs --check
 
+      # UUID-Out-Of-Path-1: no transfer UUID in an API path (app, Worker, scripts).
+      - name: No transfer UUID in a path
+        run: node bin/check-no-uuid-path.mjs
+
       # ── ESLint — worker/src/ only ────────────────────────────────────────
       - name: Lint worker/src/
         working-directory: worker

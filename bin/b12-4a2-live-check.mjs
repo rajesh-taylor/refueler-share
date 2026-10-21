@@ -40,7 +40,7 @@ const ok = (label, cond, extra = '') => { console.log(`${cond ? '✓' : '✗'} $
 
 function signed(method, path, c, body = '', extra = {}) {
   const ts = String(Math.floor(Date.now() / 1000));
-  const sig = hmac(c.sign_key, `${method}\n${path}\n${ts}\n${sha(body)}`);
+  const sig = hmac(c.sign_key, `${method}\n${path}\n${ts}\n${sha(body)}\n${String(extra['X-Transfer-UUID'] ?? '').trim().toLowerCase()}`);
   return fetch(B + path, {
     method,
     headers: { Authorization: `HMAC-SHA256 key=${c.live_key}, sig=${sig}, ts=${ts}`, 'X-Api-Sign-Key': c.sign_key,
@@ -48,6 +48,10 @@ function signed(method, path, c, body = '', extra = {}) {
     ...(method === 'GET' || method === 'DELETE' && !body ? {} : { body }),
   });
 }
+// UUID-Out-Of-Path-1: transfer routes take the UUID as X-Transfer-UUID (part: X-Part), never in the path.
+const signedTx = (uuid, method, path, c, body = '', extra = {}) => signed(method, path, c, body, { ...extra, 'X-Transfer-UUID': uuid });
+const fetchTx = (uuid, url, init = {}, part) => fetch(url, { ...init, headers: { ...(init.headers ?? {}),
+  'X-Transfer-UUID': uuid, ...(part === undefined ? {} : { 'X-Part': String(part).padStart(4, '0') }) } });
 const admin = (path, body) => fetch(B + path, {
   method: 'POST', headers: { 'X-Admin-Key': ADMIN_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
@@ -103,12 +107,12 @@ try {
   };
 
   // ── Unsigned Chartered initiate → 401, nothing spent ─────────────────────
-  r = await fetch(`${B}/upload/${uuid}/initiate`, { method: 'POST', headers: { ...initHeaders, 'X-Api-Live-Key': A.live_key } });
+  r = await fetchTx(uuid, `${B}/upload/initiate`, { method: 'POST', headers: { ...initHeaders, 'X-Api-Live-Key': A.live_key } });
   ok('unsigned Chartered initiate (even naming the key) → 401', r.status === 401, String(r.status));
 
   // ── Signed initiate → 200 ─────────────────────────────────────────────────
   const before = await (await signed('GET', '/api/v1/auth/ping', A)).json();
-  r = await signed('POST', `/upload/${uuid}/initiate`, A, '', initHeaders);
+  r = await signedTx(uuid, 'POST', '/upload/initiate', A, '', initHeaders);
   const init = await r.json();
   ok('signed initiate → 200', r.status === 200, String(r.status));
   const after = await (await signed('GET', '/api/v1/auth/ping', A)).json();
@@ -119,7 +123,7 @@ try {
   ok('tail PUT → 200', r.status === 200, String(r.status));
 
   const digest = blake3(chunk);
-  r = await fetch(`${B}/upload/${uuid}/finalise`, {
+  r = await fetchTx(uuid, `${B}/upload/finalise`, {
     method: 'POST', headers: { 'X-Upload-Session': init.session_token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ hashes: [b64u(digest)], merkle_root: b64u(reconstructRoot([digest])) }),
   });
@@ -134,9 +138,9 @@ try {
     ok('  receipt names org + transfer_ref, no live key',
        b.receipt.org_account_id === A.org_account_id && b.receipt.transfer_ref === 'api-repair-1-live' && !acc.body.includes('rfs_live_'));
   }
-  r = await signed('GET', `/api/v1/receipt/${uuid}/acceptance`, A);
+  r = await signedTx(uuid, 'GET', '/api/v1/receipt/acceptance', A);
   ok('receipt pull, owner → 200', r.status === 200, String(r.status));
-  r = await signed('GET', `/api/v1/receipt/${uuid}/acceptance`, Bc);
+  r = await signedTx(uuid, 'GET', '/api/v1/receipt/acceptance', Bc);
   ok('receipt pull, other client → 404', r.status === 404, String(r.status));
 
   // ── B12-4a-2: permanent record on a Chartered (tier api) transfer ─────────
@@ -152,7 +156,7 @@ try {
   }
 
   // ── Download (DAD) → cargo.discharged + transfer.confirmed ────────────────
-  r = await fetch(`${B}/download/${uuid}/0000`);
+  r = await fetchTx(uuid, `${B}/download`, {}, '0000');
   const got = Buffer.from(await r.arrayBuffer());
   ok('download → 200, bytes match', r.status === 200 && got.equals(chunk), String(r.status));
   const dis = await waitFor('cargo.discharged');
@@ -162,7 +166,7 @@ try {
   }
   const conf = await waitFor('transfer.confirmed');
   ok('transfer.confirmed arrived, envelope verifies', !!conf && envelopeOk(conf, whsec));
-  r = await signed('GET', `/api/v1/receipt/${uuid}/collection`, A);
+  r = await signedTx(uuid, 'GET', '/api/v1/receipt/collection', A);
   ok('collection receipt pull, owner → 200 (after the tombstone)', r.status === 200, String(r.status));
 
   r = await signed('GET', '/api/v1/webhooks/status', A);

@@ -38,7 +38,7 @@ const now = () => Math.floor(Date.now() / 1000);
 
 function signed(method, path, c, body = '', extra = {}) {
   const ts = String(now());
-  const sig = hmac(c.sign_key, `${method}\n${path}\n${ts}\n${sha(body)}`);
+  const sig = hmac(c.sign_key, `${method}\n${path}\n${ts}\n${sha(body)}\n${String(extra['X-Transfer-UUID'] ?? '').trim().toLowerCase()}`);
   return fetch(B + path, {
     method,
     headers: { Authorization: `HMAC-SHA256 key=${c.live_key}, sig=${sig}, ts=${ts}`, 'X-Api-Sign-Key': c.sign_key,
@@ -46,6 +46,10 @@ function signed(method, path, c, body = '', extra = {}) {
     ...(method === 'GET' ? {} : { body }),
   });
 }
+// UUID-Out-Of-Path-1: transfer routes take the UUID as X-Transfer-UUID (part: X-Part), never in the path.
+const signedTx = (uuid, method, path, c, body = '', extra = {}) => signed(method, path, c, body, { ...extra, 'X-Transfer-UUID': uuid });
+const fetchTx = (uuid, url, init = {}, part) => fetch(url, { ...init, headers: { ...(init.headers ?? {}),
+  'X-Transfer-UUID': uuid, ...(part === undefined ? {} : { 'X-Part': String(part).padStart(4, '0') }) } });
 const admin = (path, body) => fetch(B + path, {
   method: 'POST', headers: { 'X-Admin-Key': ADMIN_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
@@ -66,7 +70,7 @@ const initHeaders = (iss, credential, chunks, bytes, extra = {}) => ({
 });
 async function finalise(uuid, token, chunk) {
   const d = blake3(chunk);
-  return fetch(`${B}/upload/${uuid}/finalise`, {
+  return fetchTx(uuid, `${B}/upload/finalise`, {
     method: 'POST', headers: { 'X-Upload-Session': token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ hashes: [b64u(d)], merkle_root: b64u(reconstructRoot([d])) }),
   });
@@ -86,7 +90,7 @@ try {
   // ── Initiate 1 chunk (DAD) → reserved 1 ──────────────────────────────────
   const a = await issue(client);
   const chunk = randomBytes(17);                                   // 1 byte + 16-byte tag
-  r = await signed('POST', `/upload/${a.iss.uuid}/initiate`, client, '', initHeaders(a.iss, a.credential, 1, 1, { 'X-Destroy-After-Download': '1' }));
+  r = await signedTx(a.iss.uuid, 'POST', '/upload/initiate', client, '', initHeaders(a.iss, a.credential, 1, 1, { 'X-Destroy-After-Download': '1' }));
   const init = await r.json();
   ok('signed initiate → 200', r.status === 200, String(r.status));
   ok('session token is MAC-shaped (v1.exp.chunks.mac)', /^v1\.\d+\.1\.[A-Za-z0-9_-]{43}$/.test(init.session_token ?? ''));
@@ -95,27 +99,27 @@ try {
 
   // ── Over quota → 402 band, credential not burnt ──────────────────────────
   const b = await issue(client);
-  r = await signed('POST', `/upload/${b.iss.uuid}/initiate`, client, '', initHeaders(b.iss, b.credential, 2, 32 * 1024 * 1024 + 1));
+  r = await signedTx(b.iss.uuid, 'POST', '/upload/initiate', client, '', initHeaders(b.iss, b.credential, 2, 32 * 1024 * 1024 + 1));
   const over = await r.json();
   ok('over-quota initiate → 402 quota_exceeded with band', r.status === 402 && over.code === 'quota_exceeded' && /^\d+–\d+%$/.test(over.band ?? ''),
      `${r.status} ${JSON.stringify(over)}`);
   ok('402 body carries no exact figures', !/used_chunks|limit_chunks|reserved_chunks/.test(JSON.stringify(over)));
 
   // ── Unsafe header → 400 ───────────────────────────────────────────────────
-  r = await signed('POST', `/upload/${b.iss.uuid}/initiate`, client, '', initHeaders(b.iss, b.credential, 1, '1e9'));
+  r = await signedTx(b.iss.uuid, 'POST', '/upload/initiate', client, '', initHeaders(b.iss, b.credential, 1, '1e9'));
   ok('X-Total-Bytes "1e9" → 400', r.status === 400, String(r.status));
 
   // Same (unburnt) credential now fits: proves the 402 spent nothing.
-  r = await signed('POST', `/upload/${b.iss.uuid}/initiate`, client, '', initHeaders(b.iss, b.credential, 1, 1));
+  r = await signedTx(b.iss.uuid, 'POST', '/upload/initiate', client, '', initHeaders(b.iss, b.credential, 1, 1));
   const initB = await r.json();
   ok('the refused credential still works (→ 200, reserved 2)', r.status === 200, String(r.status));
 
   // ── Forged session + bound ────────────────────────────────────────────────
-  r = await fetch(`${B}/upload/${a.iss.uuid}/urls`, { method: 'POST', headers: { 'X-Upload-Session': 'planted', 'Content-Type': 'application/json' }, body: '{"from":0,"count":1}' });
+  r = await fetchTx(a.iss.uuid, `${B}/upload/urls`, { method: 'POST', headers: { 'X-Upload-Session': 'planted', 'Content-Type': 'application/json' }, body: '{"from":0,"count":1}' });
   ok('forged session at /urls → 401', r.status === 401, String(r.status));
-  r = await fetch(`${B}/upload/${a.iss.uuid}/urls`, { method: 'POST', headers: { 'X-Upload-Session': initB.session_token, 'Content-Type': 'application/json' }, body: '{"from":0,"count":1}' });
+  r = await fetchTx(a.iss.uuid, `${B}/upload/urls`, { method: 'POST', headers: { 'X-Upload-Session': initB.session_token, 'Content-Type': 'application/json' }, body: '{"from":0,"count":1}' });
   ok("another transfer's session → 401", r.status === 401, String(r.status));
-  r = await fetch(`${B}/upload/${a.iss.uuid}/urls`, { method: 'POST', headers: { 'X-Upload-Session': init.session_token, 'Content-Type': 'application/json' }, body: '{"from":0,"count":1}' });
+  r = await fetchTx(a.iss.uuid, `${B}/upload/urls`, { method: 'POST', headers: { 'X-Upload-Session': init.session_token, 'Content-Type': 'application/json' }, body: '{"from":0,"count":1}' });
   ok('/urls for the tail index (≥ N−1) → 400', r.status === 400, String(r.status));
 
   // ── Upload + finalise A → used 1 ─────────────────────────────────────────
@@ -130,22 +134,22 @@ try {
   ok('finalise again → 409', r.status === 409, String(r.status));
 
   // ── Owner-delete B while in progress → its reservation is cancelled ──────
-  r = await fetch(`${B}/transfer/${b.iss.uuid}`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_live', 'X-Admin-Key': ADMIN_KEY } });
+  r = await fetchTx(b.iss.uuid, `${B}/transfer`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_live', 'X-Admin-Key': ADMIN_KEY } });
   ok('owner delete of in-progress B → 200', r.status === 200, String(r.status));
   q = await quota(client);
   ok('B reservation cancelled: used 1, reserved 0', q?.used_chunks === 1 && q?.reserved_chunks === 0, JSON.stringify(q));
 
   // ── DAD download → used 0 ────────────────────────────────────────────────
-  r = await fetch(`${B}/download/${a.iss.uuid}/0000`);
+  r = await fetchTx(a.iss.uuid, `${B}/download`, {}, '0000');
   const got = Buffer.from(await r.arrayBuffer());
   ok('download → 200, bytes match', r.status === 200 && got.equals(chunk), String(r.status));
   await sleep(3000);
   q = await quota(client);
   ok('DAD released once: used 0, reserved 0', q?.used_chunks === 0 && q?.reserved_chunks === 0, JSON.stringify(q));
-  r = await fetch(`${B}/transfer/${a.iss.uuid}`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_live', 'X-Admin-Key': ADMIN_KEY } });
+  r = await fetchTx(a.iss.uuid, `${B}/transfer`, { method: 'DELETE', headers: { Authorization: 'Bearer rfs_owner_live', 'X-Admin-Key': ADMIN_KEY } });
   q = await quota(client);
   ok('owner delete after DAD releases nothing (still 0, no clamp)', q?.used_chunks === 0, `${r.status} ${JSON.stringify(q)}`);
-  r = await fetch(`${B}/meta/${a.iss.uuid}`);
+  r = await fetchTx(a.iss.uuid, `${B}/meta`);
   ok('A is a tombstone (meta 404/410)', r.status === 404 || r.status === 410, String(r.status));
 
   // ── Reconcile on demand ───────────────────────────────────────────────────
@@ -161,7 +165,7 @@ try {
   ok('test credential issued', r.status === 200, String(r.status));
   const C = unblindSignature(pointFromHex(tc.signed_point), blind, pointFromHex(tc.mint_pubkey));
   const soakChunk = randomBytes(17);
-  r = await fetch(`${B}/upload/${tc.uuid}/initiate`, { method: 'POST', headers: {
+  r = await fetchTx(tc.uuid, `${B}/upload/initiate`, { method: 'POST', headers: {
     ...initHeaders(tc, JSON.stringify({ id: '00', amount: 1, secret, C: C.toHex(true) }), 1, 1),
     'X-Test-Credential': tc.test_credential, 'X-Destroy-After-Download': '1' } });
   const sInit = await r.json();
@@ -169,7 +173,7 @@ try {
   r = await fetch(sInit.tail_url.url, { method: 'PUT', body: soakChunk });
   r = await finalise(tc.uuid, sInit.session_token, soakChunk);
   ok('soak finalise → 200', r.status === 200, String(r.status));
-  r = await fetch(`${B}/download/${tc.uuid}/0000`);
+  r = await fetchTx(tc.uuid, `${B}/download`, {}, '0000');
   ok('soak download (DAD) → 200, bytes match', r.status === 200 && Buffer.from(await r.arrayBuffer()).equals(soakChunk), String(r.status));
   q = await quota(client);
   ok("soak touched no quota (client still 0/0)", q?.used_chunks === 0 && q?.reserved_chunks === 0, JSON.stringify(q));

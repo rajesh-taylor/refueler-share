@@ -5,6 +5,8 @@
 // drop:N: part N's PUT or download is cut halfway once, then works (Chrome re-sends a cut PUT by itself).
 // down:N: part N's PUT and download answer 503 until fail changes — the page's retry line shows.
 // Share-Copy-2 (receiver stop lines): meta503 · meta_incomplete (no part count) · dl401 · auth500 · auth410 · auth_cut (socket cut).
+// UUID-Out-Of-Path-1: as the real Worker, transfer routes are fixed paths; the UUID is
+// X-Transfer-UUID and the download part X-Part. An old /meta/{uuid}-style call 404s here.
 import http from 'node:http';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
 import { blake3 } from '../../worker/node_modules/@noble/hashes/blake3.js';
@@ -19,7 +21,7 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const auth = { session: null, tokens: new Set(), tier: 'max', last: null };
 const hasCookie = (req) => /(?:^|;\s*)rfs_session=1(?:;|$)/.test(req.headers.cookie || '');
 const credCors = (req) => req.headers.origin === 'http://localhost:8765'
-  ? { 'Access-Control-Allow-Origin': req.headers.origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type, X-CSRF, X-Cashu-Credential, X-Credential-Commitment, X-Issued-Tier, X-Total-Chunks, X-Total-Bytes, X-Expiry-Timestamp, X-File-Name, X-P2SH-Secret-Hash, X-Destroy-After-Download', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Vary': 'Origin' }
+  ? { 'Access-Control-Allow-Origin': req.headers.origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type, X-CSRF, X-Transfer-UUID, X-Cashu-Credential, X-Credential-Commitment, X-Issued-Tier, X-Total-Chunks, X-Total-Bytes, X-Expiry-Timestamp, X-File-Name, X-P2SH-Secret-Hash, X-Destroy-After-Download', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Vary': 'Origin' }
   : {};
 const cjson = (req, res, code, o, extra = {}) => { res.writeHead(code, { ...cors, ...credCors(req), 'Content-Type': 'application/json', ...extra }); res.end(JSON.stringify(o)); };
 const json = (res, code, o) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
@@ -35,15 +37,18 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const url = (u, i) => `http://localhost:8766/r2/${u}/${i}`;
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean);
+  const id = req.headers['x-transfer-uuid'] || '', part = req.headers['x-part'] || '';
+  const TRANSFER = ['/upload/initiate', '/upload/urls', '/upload/finalise', '/unlock', '/meta', '/download'];
   if (req.method === 'OPTIONS') {   // credentialed CORS only where the real Worker has it
-    const cred = ['auth', 'chambers'].includes(p[0]) || (p[0] === 'upload' && p[2] === 'initiate');
+    const cred = ['auth', 'chambers'].includes(p[0]) || u.pathname === '/upload/initiate';
     res.writeHead(204, { ...cors, ...(cred ? credCors(req) : {}) }); return res.end();
   }
   try {
     if (p[0] === '_ctl') { if (u.searchParams.get('tier')) auth.tier = u.searchParams.get('tier'); if (u.searchParams.get('signout')) auth.session = null; ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0), rate: +(u.searchParams.get('rate') || 0) }; return json(res, 200, ctl); }
     if (p[0] === '_last') return json(res, 200, auth.last);
-    // The receiver's password check, POST /auth/:uuid (any password opens it).
-    if (p[0] === 'auth' && /^[0-9a-f-]{36}$/.test(p[1] || '')) {
+    if (TRANSFER.includes(u.pathname) && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, { error: 'missing_transfer_id' });
+    // The receiver's password check, POST /unlock (any password opens it).
+    if (u.pathname === '/unlock') {
       await body(req);
       if (ctl.fail === 'auth500') return json(res, 500, { error: 'boom' });
       if (ctl.fail === 'auth410') return json(res, 410, { error: 'Transfer expired' });
@@ -95,7 +100,7 @@ http.createServer(async (req, res) => {
       return json(res, 200, { uuid: crypto.randomUUID(), issued_tier: 'free', commitment: 'c'.repeat(64),
         allocation_bytes: b.cap_bytes, signed_point: s.signedPoint, mint_pubkey: s.mintPubkey });
     }
-    if (p[0] === 'upload' && p[2] === 'initiate') {
+    if (u.pathname === '/upload/initiate') {
       await body(req);
       auth.last = { cookie: hasCookie(req), csrf: req.headers['x-csrf'] ?? null, bytes: +req.headers['x-total-bytes'] };
       console.log('[fake] initiate', JSON.stringify(auth.last));
@@ -107,16 +112,16 @@ http.createServer(async (req, res) => {
       if (auth.last.bytes > capOk) return cjson(req, res, 413, { error: 'over cap' });
       if (ctl.fail === 'initiate') return cjson(req, res, 401, { error: 'invalid credential' });
       const total = +req.headers['x-total-chunks'], bytes = +req.headers['x-total-bytes'];
-      T.set(p[1], { total, bytes, chunks: [], dad: !!req.headers['x-destroy-after-download'], pw: req.headers['x-p2sh-secret-hash'] || null,
+      T.set(id, { total, bytes, chunks: [], dad: !!req.headers['x-destroy-after-download'], pw: req.headers['x-p2sh-secret-hash'] || null,
         expiry: +req.headers['x-expiry-timestamp'], done: false });
       const full = total - 1, first = Math.min(full, 256);
-      return cjson(req, res, 200, { session_token: 'st-' + p[1], urls: [...Array(first)].map((_, i) => ({ index: i, url: url(p[1], i) })),
-        batch_next: first < full ? first : null, tail_url: { index: total - 1, url: url(p[1], total - 1), expires: Date.now() / 1000 + 518400 } });
+      return cjson(req, res, 200, { session_token: 'st-' + id, urls: [...Array(first)].map((_, i) => ({ index: i, url: url(id, i) })),
+        batch_next: first < full ? first : null, tail_url: { index: total - 1, url: url(id, total - 1), expires: Date.now() / 1000 + 518400 } });
     }
-    if (p[0] === 'upload' && p[2] === 'urls') {
-      const b = JSON.parse(await body(req)); const t = T.get(p[1]);
+    if (u.pathname === '/upload/urls') {
+      const b = JSON.parse(await body(req)); const t = T.get(id);
       if (!t) return json(res, 401, { error: 'session' });
-      return json(res, 200, { urls: [...Array(b.count)].map((_, k) => ({ index: b.from + k, url: url(p[1], b.from + k) })) });
+      return json(res, 200, { urls: [...Array(b.count)].map((_, k) => ({ index: b.from + k, url: url(id, b.from + k) })) });
     }
     if (p[0] === 'r2') {
       const i = +p[2];
@@ -127,8 +132,8 @@ http.createServer(async (req, res) => {
       if (ctl.fail === 'chunk:' + i) { req.socket.destroy(); return; }
       t.chunks[i] = b; res.writeHead(200, cors); return res.end();
     }
-    if (p[0] === 'upload' && p[2] === 'finalise') {
-      const fb = JSON.parse(await body(req)); const t = T.get(p[1]);
+    if (u.pathname === '/upload/finalise') {
+      const fb = JSON.parse(await body(req)); const t = T.get(id);
       if (!t) return json(res, 401, { error: 'session' });
       if (ctl.fail === 'finalise409') return json(res, 409, { error: 'incomplete', missing: [3] });
       if (ctl.fail === 'wrong_size') return json(res, 409, { error: 'wrong_size', segments: [2] });
@@ -143,24 +148,25 @@ http.createServer(async (req, res) => {
       if (b64(buildMerkleTree(leaves).root) !== fb.merkle_root) return json(res, 400, { error: 'root mismatch' });
       t.done = true; return json(res, 200, { ok: true, merkle_root: fb.merkle_root });
     }
-    if (p[0] === 'meta') {
+    if (u.pathname === '/meta') {
       if (ctl.fail === 'meta503') return json(res, 503, { error: 'unavailable' });
-      const t = T.get(p[1]);
+      const t = T.get(id);
       if (t && ctl.fail === 'meta_incomplete') return json(res, 200, { total_chunks: 0, expiry_timestamp: t.expiry, passphrase_protected: !!t.pw, pending_destruction: null });
       if (!t || !t.done) return json(res, 404, { error: 'not found' });
       return json(res, 200, { total_chunks: t.total, total_bytes: null, expiry_timestamp: t.expiry, file_name: 'encrypted-payload',
         passphrase_protected: !!t.pw, pending_destruction: t.dad ? false : null });
     }
-    if (p[0] === 'download') {
-      const t = T.get(p[1]); if (!t) return json(res, 410, { error: 'gone' });
-      if (ctl.fail === 'down:' + +p[2]) return json(res, 503, { error: 'unavailable' });
+    if (u.pathname === '/download') {
+      if (!/^\d{4}$/.test(part)) return json(res, 400, { error: 'missing_part' });
+      const t = T.get(id); if (!t) return json(res, 410, { error: 'gone' });
+      if (ctl.fail === 'down:' + +part) return json(res, 503, { error: 'unavailable' });
       if (ctl.fail === 'dl401') return json(res, 401, { error: 'Invalid or expired download token' });
-      console.log(`GET part ${p[2]} ${Date.now() % 100000}`);
+      console.log(`GET part ${part} ${Date.now() % 100000}`);
       if (ctl.slow) await sleep(ctl.slow);   // like the Worker: whole part read and checked before the first byte
-      const b = t.chunks[+p[2]]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,
-        'X-Integrity': 'ciphertext-storage-verified', 'X-Chunk-Index': p[2], 'Access-Control-Expose-Headers': 'X-Integrity, X-Chunk-Index' });
-      if (t.dad && +p[2] === t.total - 1) setTimeout(() => T.delete(p[1]), 2000);
-      return send(res, b, dropOnce(+p[2]));
+      const b = t.chunks[+part]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,
+        'X-Integrity': 'ciphertext-storage-verified', 'X-Chunk-Index': String(+part), 'Access-Control-Expose-Headers': 'X-Integrity, X-Chunk-Index' });
+      if (t.dad && +part === t.total - 1) setTimeout(() => T.delete(id), 2000);
+      return send(res, b, dropOnce(+part));
     }
     json(res, 404, { error: 'no route ' + u.pathname });
   } catch (e) { console.error(e); json(res, 500, { error: String(e) }); }

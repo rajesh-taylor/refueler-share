@@ -12,13 +12,15 @@ if (location.hash.length > 1 || /[?&]uuid=[^&]/.test(location.search)) document.
 // Receiver: ask /meta now; download.js takes the answer from window.__rfsMeta. The
 // UUID is the query string's (not secret; /meta gets it anyway); the fragment and
 // its key are never read here. Same host as config.js WORKER_URL.
+// UUID-Out-Of-Path-1: the UUID rides X-Transfer-UUID, never the API path.
 // Upload page: fetch the upload modules alongside the ones index.njk preloads.
 (function () {
   var q = /[?&]uuid=([0-9a-fA-F-]{36})(?:&|$)/.exec(location.search);
   if (location.hash.length > 1 && q && window.fetch) {
     window.__rfsMeta = {
       uuid: q[1],
-      res:  fetch('https://api.share.refueler.io/meta/' + q[1]).catch(function () { return null; }),
+      res:  fetch('https://api.share.refueler.io/meta', { headers: { 'X-Transfer-UUID': q[1] } })
+        .catch(function () { return null; }),
     };
   }
   // X5-1b (page weight): share.js imports the receiver code only for a link, so fetch it now.

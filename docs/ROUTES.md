@@ -19,7 +19,7 @@ Moving the admin surface behind Cloudflare Access is B12-Audit.
 | `turnstile` | Anyone, after a Cloudflare Turnstile check. |
 | `credential` | An upload credential. One of: a Cashu proof (`verifyProofV2`), a Citizen session (cookie + CSRF + exact Origin), or an API HMAC signature. Without one, the tier resolves to `free`. |
 | `upload-session` | MAC'd `X-Upload-Session` token from initiate (`UPLOAD_SESSION_KEY`). |
-| `link` | Anyone with the transfer UUID. For a password-protected transfer, a download token from `POST /auth/{uuid}` is also needed. |
+| `link` | Anyone with the transfer UUID. For a password-protected transfer, a download token from `POST /unlock` is also needed. |
 | `password` | Exchanges the transfer password for a download token. |
 | `link-or-owner` | A download token for that transfer, or an `rfs_owner_` bearer **plus** the admin key. |
 | `hmac` | API request signed with `rfs_sign_` (`requireApiAuth`). |
@@ -30,6 +30,8 @@ Moving the admin surface behind Cloudflare Access is B12-Audit.
 | `stripe-sig` | Stripe webhook signature (`STRIPE_WEBHOOK_SECRET`). |
 | `gone` | Answers 410 and does nothing else. |
 | `cf-challenge` | Cloudflare for SaaS hostname-ownership challenge. |
+
+**No transfer UUID in a path (UUID-Out-Of-Path-1 · 21 Oct 2026).** Cloudflare's sampled HTTP-request records keep the client IP, host and path for at least 31 days; request headers are not in them. So every route that names a transfer is a fixed path and takes the UUID in **`X-Transfer-UUID`** (400 `missing_transfer_id` without a valid one); `GET /download` takes the part number in **`X-Part`** (`0007`; 400 `missing_part`). API HMAC signatures sign the UUID on its own line (canonical v2). CI fails on a `{uuid}` in any route below (`bin/route-inventory.mjs`) and on a path built with a UUID anywhere in the app, Worker or scripts (`bin/check-no-uuid-path.mjs`, also run by `ship-app.sh` on the built app). The password route is `/unlock`: `/auth/*` is sign-in's.
 
 Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*`) are served only on `AUTH_API_HOST`.
 "Rate limit" means a per-IP (or per-UUID) KV throttle. That's a courtesy, never a security gate (KV-Audit).
@@ -50,7 +52,7 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/api/v1/webhook/register` | hmac | yes | `handleWebhookRegister` |
 | DELETE | `/api/v1/webhook/register` | hmac | yes | `handleWebhookRegister` |
 | GET | `/api/v1/webhook/register` | hmac | yes | `handleWebhookRegister` |
-| GET | `/api/v1/receipt/{uuid}/{acceptance\|collection}` | hmac | yes | `handleApiReceipt` |
+| GET | `/api/v1/receipt/{acceptance\|collection}` | hmac | yes | `handleApiReceipt` |
 | GET | `/api/v1/webhooks/status` | hmac | yes | `handleWebhookStatus` |
 | GET | `/api/v1/hostname/health` | hmac | yes | `handleHostnameHealth` |
 | POST | `/api/v1/sandbox/activate` | admin | yes | `handleSandboxActivate` |
@@ -58,16 +60,16 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | GET | `/api/v1/sandbox/status` | hmac-sandbox | yes | `handleSandboxStatus` |
 | POST | `/api/v1/sandbox/spend` | hmac-sandbox | yes | `handleSandboxSpend` |
 | POST | `/credential/issue` | turnstile | yes | `handleCredentialIssue` |
-| POST | `/upload/{uuid}/initiate` | credential | yes | `handleInitiate` |
-| POST | `/upload/{uuid}/urls` | upload-session | yes | `handleUploadUrls` |
-| POST | `/upload/{uuid}/finalise` | upload-session | yes | `handleFinalise` |
-| POST | `/auth/{uuid}` | password | yes (IP + UUID) | `handleAuth` |
-| GET | `/meta/{uuid}` | link | — | `handleMeta` |
-| GET | `/download/{uuid}/{part}` | link | yes | `handleDownload` |
-| DELETE | `/transfer/{uuid}` | link-or-owner | — | `handleDeleteTransfer` |
-| POST | `/confirm/{uuid}` | link | — | `handleConfirmTransfer` |
+| POST | `/upload/initiate` | credential | yes | `handleInitiate` |
+| POST | `/upload/urls` | upload-session | yes | `handleUploadUrls` |
+| POST | `/upload/finalise` | upload-session | yes | `handleFinalise` |
+| POST | `/unlock` | password | yes (IP + UUID) | `handleAuth` |
+| GET | `/meta` | link | — | `handleMeta` |
+| GET | `/download` | link | yes | `handleDownload` |
+| DELETE | `/transfer` | link-or-owner | — | `handleDeleteTransfer` |
+| POST | `/confirm` | link | — | `handleConfirmTransfer` |
 | POST | `/timestamp/submit` | public | yes | `handleTimestampSubmit` |
-| GET | `/timestamp/seal/{uuid}` | link | — | `handleTimestampSeal` |
+| GET | `/timestamp/seal` | link | — | `handleTimestampSeal` |
 | POST | `/webhook/stripe` | stripe-sig | — | `handleStripeWebhook` |
 | POST | `/subscription/checkout` | public | — | `handleCheckout` |
 | GET | `/subscription/status` | gone | — | (410) |
