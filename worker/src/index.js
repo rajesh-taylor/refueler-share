@@ -116,32 +116,9 @@ function logEvent(env, {
 // least 31 days; headers are not in them. Transfer routes are fixed paths and read
 // the UUID from X-Transfer-UUID (transferUuid(), utils.js) and the part from X-Part.
 //
-// DEPLOY 1 ONLY: the old shapes below still answer, read into the same routes, so
-// the live app keeps working until ship-app moves it. Removed at deploy 2 (the old
-// shapes then fall to the 404 at the end of the router).
+// The old shapes (/meta/{uuid}, /download/{uuid}/{part} …) were served alongside
+// for deploy 1 only and removed at deploy 2: they now fall to the 404.
 // ─────────────────────────────────────────────────────────────────────────────
-const LEGACY_SHAPES = [   // [old path, new path, carries the part number]
-  [/^\/upload\/([0-9a-f-]{36})\/initiate$/i,               '/upload/initiate'],
-  [/^\/upload\/([0-9a-f-]{36})\/urls$/i,                   '/upload/urls'],
-  [/^\/upload\/([0-9a-f-]{36})\/finalise$/i,               '/upload/finalise'],
-  [/^\/auth\/([0-9a-f-]{36})$/i,                            '/unlock'],
-  [/^\/meta\/([0-9a-f-]{36})$/i,                            '/meta'],
-  [/^\/download\/([0-9a-f-]{36})\/(\d{4})$/i,               '/download', true],
-  [/^\/transfer\/([0-9a-f-]{36})$/i,                        '/transfer'],
-  [/^\/confirm\/([0-9a-f-]{36})$/i,                         '/confirm'],
-  [/^\/timestamp\/seal\/([0-9a-f-]{36})$/i,                 '/timestamp/seal'],
-  [/^\/api\/v1\/receipt\/([0-9a-f-]{36})\/acceptance$/i,   '/api/v1/receipt/acceptance'],
-  [/^\/api\/v1\/receipt\/([0-9a-f-]{36})\/collection$/i,   '/api/v1/receipt/collection'],
-];
-function legacyShape(pathname) {
-  for (const [re, to, hasPart] of LEGACY_SHAPES) {
-    const m = pathname.match(re);
-    if (!m) continue;
-    const uuid = m[1].toLowerCase();
-    return { path: to, uuid: UUID_RE.test(uuid) ? uuid : null, part: hasPart ? m[2] : null };
-  }
-  return null;
-}
 
 const worker = {
     async fetch(request, env, ctx) {
@@ -166,11 +143,10 @@ const worker = {
     }
 
     const url    = new URL(request.url);
-    const legacy = legacyShape(url.pathname);   // deploy 1 only
-    const path   = legacy?.path ?? url.pathname;
+    const path   = url.pathname;
     const t0     = performance.now();
-    // The transfer this request names: X-Transfer-UUID (or, deploy 1 only, the old path).
-    const uuidOf = () => (legacy ? legacy.uuid : transferUuid(request));
+    // The transfer this request names: X-Transfer-UUID only.
+    const uuidOf = () => transferUuid(request);
     const noTransferId = (cors = corsHeaders(request)) =>
       withHeaders(json({ error: 'missing_transfer_id' }, 400), cors);
 
@@ -459,7 +435,7 @@ const worker = {
       if (request.method === 'GET' && path === '/download') {
         const uuid = uuidOf();
         if (!uuid) return noTransferId();
-        const part = legacy?.part ?? (request.headers.get('X-Part') ?? '').trim();
+        const part = (request.headers.get('X-Part') ?? '').trim();
         if (!/^\d{4}$/.test(part)) return withHeaders(json({ error: 'missing_part' }, 400), corsHeaders(request));
         // Rate limit: 300 requests / 60s per IP — generous for legitimate chunked downloads
         // (250 GB max transfer at 1 MB chunks = 250 chunks), blocks flood attacks.

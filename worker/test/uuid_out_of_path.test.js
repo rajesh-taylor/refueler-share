@@ -9,7 +9,7 @@
 //   • preflight: X-Part allowed, Max-Age 7200, one fixed URL per route
 //   • every moved route answers no-store; nothing uses caches.default
 //   • the error log records the fixed path, never a UUID
-//   • deploy 1 only: the old shapes still answer (this block goes at deploy 2)
+//   • the old path shapes 404 (removed at deploy 2)
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -242,38 +242,19 @@ describe('error log — the fixed path, never a UUID', () => {
   });
 });
 
-// ── DEPLOY 1 ONLY — remove this block at deploy 2 (old shapes then 404) ──────
-describe('deploy 1: old path shapes still answer, into the same routes', () => {
-  it('GET /meta/{uuid} → 200 for a live transfer, logged as "/meta"', async () => {
-    const env = plainEnv();
-    const waits = [];
-    const res = await worker.fetch(new Request(`${ORIGIN}/meta/${UUID}`), env, ctx);
-    expect(res.status).toBe(200);
-    const miss = await worker.fetch(new Request(`${ORIGIN}/meta/${OTHER}`), env, { waitUntil: (p) => waits.push(p), passThroughOnException() {} });
-    expect(miss.status).toBe(404);
-    await Promise.all(waits);
-    const logged = JSON.stringify(env.STATUS_KV._log.puts.map((p) => p.opts?.metadata));
-    expect(logged).toContain('"path":"/meta"');
-    expect(logged).not.toContain(OTHER);
-  });
-
-  it('GET /download/{uuid}/0000 streams', async () => {
-    const env = { ...plainEnv(), BUCKET: makeBucket({
-      [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify(liveManifest) },
-      [`${UUID}/0000`]: { uploaded: NOW, body: 'cipher' },
-    }) };
-    const res = await worker.fetch(new Request(`${ORIGIN}/download/${UUID}/0000`), env, ctx);
-    expect(res.status).toBe(200);
-  });
-
-  it('an old-shape path with a malformed UUID → 400', async () => {
-    const res = await worker.fetch(new Request(`${ORIGIN}/meta/${'-'.repeat(36)}`), plainEnv(), ctx);
-    expect(res.status).toBe(400);
-  });
-
-  it('old initiate preflight still gets initiate CORS', async () => {
-    const res = await worker.fetch(new Request(`${ORIGIN}/upload/${UUID}/initiate`, { method: 'OPTIONS', headers: { Origin: APP } }), plainEnv(), ctx);
-    expect(res.status).toBe(204);
-    expect(res.headers.get('Access-Control-Max-Age')).toBe('7200');
-  });
+// ── Deploy 2: the old path shapes are gone ───────────────────────────────────
+describe('old path shapes → 404, nothing read', () => {
+  const OLD = [
+    ['POST', `/upload/${UUID}/initiate`], ['POST', `/upload/${UUID}/urls`], ['POST', `/upload/${UUID}/finalise`],
+    ['POST', `/auth/${UUID}`], ['GET', `/meta/${UUID}`], ['GET', `/download/${UUID}/0000`],
+    ['DELETE', `/transfer/${UUID}`], ['POST', `/confirm/${UUID}`], ['GET', `/timestamp/seal/${UUID}`],
+    ['GET', `/api/v1/receipt/${UUID}/acceptance`], ['GET', `/api/v1/receipt/${UUID}/collection`],
+  ];
+  for (const [method, path] of OLD) {
+    it(`${method} ${path.replace(UUID, '{uuid}')} → 404`, async () => {
+      const res = await worker.fetch(new Request(`${ORIGIN}${path}`, init(method)), plainEnv(), ctx);
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('Not found');
+    });
+  }
 });
