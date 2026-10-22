@@ -502,6 +502,10 @@ a.stage-chip:hover, a.stage-chip:focus-visible { color: var(--fg); }
   margin-top: 3px;
 }
 @media (max-width: 440px) { .rx-row { grid-template-columns: 1fr; gap: 6px; } }
+/* OSA-Tools-2: the closed-link ledger — the address opens an email, the reference selects in one click. */
+.rx-mail { color: inherit; text-decoration: underline; text-decoration-color: var(--rx-rule); text-underline-offset: 4px; }
+.rx-mail:hover, .rx-mail:focus-visible { text-decoration-color: currentColor; }
+.rx-row dd.rx-ref { font-family: var(--rx-mono); letter-spacing: .04em; user-select: all; }
 
 .rx-fname { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
 /* Share-DAD-2: filename hidden until asked */

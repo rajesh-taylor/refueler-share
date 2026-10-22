@@ -36,11 +36,12 @@ function _arrive(sheet) {
   }, Math.max(0, lines.length - 1) * RX_STAGGER_MS + RX_SETTLE_MS + 100);
 }
 
-export function _showNotice(eyebrow, head, lede, { send = false } = {}) {
+export function _showNotice(eyebrow, head, lede, { send = false, ledger = false } = {}) {
   $('rx-notice-eyebrow').textContent = eyebrow;
   $('rx-notice-head').textContent    = head;
   $('rx-notice-lede').textContent    = lede;
   $('rx-notice-send').hidden         = !send;
+  $('rx-notice-ledger').hidden       = !ledger;   // closed-link email + reference (before the sheet arrives)
   _showSheet('rx-notice');
 }
 
@@ -158,16 +159,17 @@ export function _showLinkInactive(_domRefs) {
 
 // OSA-Tools-2: /meta said {"error":"removed"} — taken down after a report.
 // The reference is the transfer ID's first 8 characters (never the case
-// reference); no reason, no category, no "ask the sender". After the record is
+// reference); no reason, no category, no "ask the sender". Email + reference sit
+// in the receiver's ledger (one line each, easy to copy; the mailto fills the
+// subject "Reference <uuid8>"). After the record is
 // swept (30 days) the link reads as inactive instead. Wording chosen by Rajesh
 // 22 Oct (short, warm, no apology); final polish at OSA-Copy-1.
 export function _showLinkRemoved(uuid8) {
-  _showNotice('Link closed', 'This file is no longer available.', '');
-  const lede = $('rx-notice-lede');
-  const ref = document.createElement('strong');
-  ref.textContent = uuid8;
-  lede.append('We took the link down after a report. If you have a question, or think this was a mistake, write to report@refueler.io and mention ',
-    ref, '. We read every message.');
+  $('rx-notice-ref').textContent = uuid8;
+  $('rx-notice-mail').href = `mailto:report@refueler.io?subject=${encodeURIComponent(`Reference ${uuid8}`)}`;
+  _showNotice('Link closed', 'This file is no longer available.',
+    'We took the link down after a report. If you have a question, or think this was a mistake, write to us and give the reference. We read every message.',
+    { ledger: true });
 }
 
 // No progress figures on an error (DAD-ERROR-TEXT, Share-B10-3): the notice sheet has none.
