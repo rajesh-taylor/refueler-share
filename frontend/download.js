@@ -57,7 +57,7 @@ import { DL_TEXT, _resolveSize } from './download-fetch.js';
 import { LINK_INCOMPLETE } from './fragment.js';
 import { _startDownloadStream, _startDownload } from './download-save.js';
 import { $, _showSheet, _showNotice, _showWindowClosed, _setUnlockError, _showPreDownloadModal,
-         _renderHiddenFileName, _showLinkInactive, _showDownloadError } from './download-sheets.js';
+         _renderHiddenFileName, _showLinkInactive, _showLinkRemoved, _showDownloadError } from './download-sheets.js';
 import { PROGRAM_NOTE, programBeforeDownload } from './download-program.js';
 import { _at, _fmtTime, _fmtDateTime, _sameDay, _countdown, _untilOpen } from './download-time.js';
 
@@ -113,6 +113,9 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
     delete window.__rfsMeta;
     const metaRes = (early && early.uuid === uuid && await early.res) || await fetch(`${WORKER_URL}/meta`, { headers: { 'X-Transfer-UUID': uuid } });
     if (metaRes.ok) meta = await metaRes.json();
+    else if (metaRes.status === 410 && (await metaRes.json().catch(() => ({}))).error === 'removed') {
+      _showLinkRemoved(uuid.slice(0, 8)); return;   // OSA-Tools-2: only /meta tells "removed" apart
+    }
     else if (metaRes.status === 404 || metaRes.status === 410) { _showLinkInactive(domRefs); return; }
     else {
       // Share-Copy-2: an outage used to read as "Link closed" (meta stayed {}).

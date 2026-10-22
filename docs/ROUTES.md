@@ -111,6 +111,7 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | GET | `/admin/reports/export` | admin | yes | `handleReportsExport` |
 | GET | `/admin/reports/export-training` | admin | yes | `handleReportsExportTraining` |
 | POST | `/admin/reports/delete-training` | admin | yes | `handleReportsDeleteTraining` |
+| POST | `/admin/reports/takedown` | staff | yes | `handleReportsTakedown` |
 | POST | `/admin/test-credential` | admin | yes | `handleTestCredential` |
 | POST | `/auth/magic` | public | yes | `handleMagic` |
 | POST | `/auth/verify` | magic-link | yes | `handleVerify` |
@@ -119,6 +120,8 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/auth/signout-everywhere` | session | — | `handleSignout` |
 <!-- routes:end -->
 
-75 routes: 34 gated by the admin key alone (32 under `/admin` or `/api/v1/admin`, plus the sandbox activate/reset pair) and 5 by `staff` (admin or helper key). Anything not listed answers 404.
+76 routes: 34 gated by the admin key alone (32 under `/admin` or `/api/v1/admin`, plus the sandbox activate/reset pair) and 6 by `staff` (admin or helper key). Anything not listed answers 404.
 
 **Report route tools (OSA-Tools-1 · 22 Oct 2026).** `/admin/reports/*` serve the Online Safety report route: `whoami` → `{role}`; `lookup` reads the R2 manifest only and answers `state` (`live` · `expired` · `gone` · `removed` · `not_found`) and `consumed`, plus `tier`, `created_at`, `expires_at`, `upload_complete` for live/expired — nothing else; the register (`register`, `open`, `update`, `export`, `export-training`, `delete-training`) lives in Supabase (`supabase/migrations/20261022_osa_tools_1_reports.sql`, functions only), keyed by case reference `R-YYYY-NNN` (training `T-YYYY-NNN`) and holding uuid8 — never the full transfer ID, an email, or the key part after the `#`. A helper may update CSEA and terrorism rows only and never changes a category. All answer `no-store`; 30 requests / 60 s per IP. Design: private `docs/OSA-Tools-plan-v1.md`.
+
+**Take-down (OSA-Tools-2 · 22 Oct 2026).** `POST /admin/reports/takedown` — transfer ID in `X-Transfer-UUID`, body `{"case_ref":"R-2026-001","confirm":"<first 8 characters>"}`. The case must exist, be open and name this link's first 8 characters (else 409 `case_mismatch`, with `why`); `confirm` must equal them (400 `confirm_mismatch`). The helper key may take down only a case whose register category is `csea` or `terrorism` (403 `helper_category`). Then the usual deletion sequence runs with a `removed` mark: the leftover record is `{"consumed":true,"consumed_at":…,"removed":true}` (57 bytes, swept after 30 days like any other) and `/meta` answers 410 `{"error":"removed"}` so the page says "removed after a report" — the only route that tells it apart. Answers: 200 `{destroyed, removed_at, register_updated}` (destroy first, record second: `register_updated:false` = write the time in by hand); 200 `{already_removed}` (idempotent; the register is left alone); 410 `already_gone` (deleted for another reason; a deletion left part-way is finished as what it was); 202 `{partial}` (retry — it resumes and still ends removed); 404 no such link. The old `DELETE /transfer` with an owner bearer stays for test clean-up only.

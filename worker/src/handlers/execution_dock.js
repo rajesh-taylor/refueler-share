@@ -5,7 +5,10 @@
  * GET /admin/execution-dock
  * Auth: X-Admin-Key header (same as all /admin/* endpoints).
  *
- * KV schema (dock_index:{uuid}):
+ * KV schema (dock_index:{uuid}) — the same object is the value AND the key's
+ * metadata (OSA-Tools-2 §6), so the dock is read from list() alone, every page
+ * through the cursor. Legacy keys without metadata fall back to get() until
+ * their TTL ends; their transfer ID comes from the key name.
  *   {
  *     uuid:              string,
  *     file_name:         string | null,
@@ -36,8 +39,41 @@
  * Display cap: 200 most recent transfers by created_at desc.
  */
 
-// Badge elapsed-time thresholds in seconds, keyed by expiry window in seconds.
 import { requireAdmin } from '../utils.js';
+
+const PREFIX = 'dock_index:';
+const METADATA_MAX = 1000;   // KV allows 1,024 bytes of serialised metadata
+
+/** TTL the initiate write has always used: expiry + 48 h grace + 1 h, at least 1 h. */
+export function dockTtl(expiryTimestamp, nowSeconds) {
+  return Math.max((expiryTimestamp - nowSeconds) + 48 * 3600 + 3600, 3600);
+}
+
+/** One write of dock_index:{uuid}: value + metadata (metadata dropped if it would not fit). */
+export async function putDockEntry(kv, uuid, entry, expirationTtl) {
+  const value = JSON.stringify(entry);
+  await kv.put(`${PREFIX}${uuid}`, value,
+    value.length <= METADATA_MAX ? { expirationTtl, metadata: entry } : { expirationTtl });
+}
+
+/**
+ * The initiate write (F1): awaited, one retry after retryMs, then one log line
+ * naming uuid8 only. Never throws — initiate never fails because of the dock.
+ * → true when written.
+ */
+export async function writeDockEntry(kv, uuid, entry, nowSeconds, { retryMs = 250 } = {}) {
+  const ttl = dockTtl(entry.expiry_timestamp, nowSeconds);
+  let last;
+  for (const wait of [0, retryMs]) {
+    if (wait) await new Promise(r => setTimeout(r, wait));
+    try { await putDockEntry(kv, uuid, entry, ttl); return true; }
+    catch (e) { last = e; }
+  }
+  console.error(`Execution Dock: entry not written for ${String(uuid).slice(0, 8)}:`, last?.message ?? last);
+  return false;
+}
+
+// Badge elapsed-time thresholds in seconds, keyed by expiry window in seconds.
 
 const BADGE_THRESHOLDS = new Map([
   [86400,          null],          // 1 day  — no badge
@@ -81,13 +117,22 @@ export async function handleExecutionDock(request, env) {
 
   const nowSeconds = Math.floor(Date.now() / 1000);
 
-  // ── List dock_index: keys ─────────────────────────────────────────────────
-  // KV list() is eventually consistent — a just-collected transfer may briefly
-  // still appear. The dashboard [Destroy now] button handles 410 gracefully.
-  let keys;
+  // ── List dock_index: keys — every page (F3) ───────────────────────────────
+  // KV list() is eventually consistent: a new entry can take up to ~60 s to
+  // appear, and a just-deleted one may briefly still show.
+  const entries = [];
+  const legacy  = [];
   try {
-    const result = await env.STATUS_KV.list({ prefix: 'dock_index:' });
-    keys = result.keys ?? [];
+    let cursor;
+    do {
+      const page = await env.STATUS_KV.list(cursor ? { prefix: PREFIX, cursor } : { prefix: PREFIX });
+      for (const k of page.keys ?? []) {
+        const uuid = k.name.slice(PREFIX.length);
+        if (k.metadata && typeof k.metadata === 'object') entries.push({ ...k.metadata, uuid: k.metadata.uuid ?? uuid });
+        else legacy.push(k.name);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
   } catch (e) {
     console.error('Execution Dock: KV list failed:', e);
     return new Response(JSON.stringify({ error: 'Failed to list transfers' }), {
@@ -95,23 +140,22 @@ export async function handleExecutionDock(request, env) {
     });
   }
 
-  if (keys.length === 0) {
+  // ── Legacy entries (no metadata): one get() each, until they age out ──────
+  await Promise.all(legacy.map(async (name) => {
+    try {
+      const raw = await env.STATUS_KV.get(name, { type: 'json' });
+      if (raw && typeof raw === 'object') entries.push({ ...raw, uuid: raw.uuid ?? name.slice(PREFIX.length) });
+    } catch (e) {
+      console.error('Execution Dock: KV get failed for one legacy entry:', e?.message ?? e);
+      // Skip malformed entries silently — don't fail the whole request
+    }
+  }));
+
+  if (entries.length === 0) {
     return new Response(JSON.stringify({ transfers: [], badge_count: 0 }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
   }
-
-  // ── Fetch all entries in parallel ─────────────────────────────────────────
-  const entries = [];
-  await Promise.all(keys.map(async (keyMeta) => {
-    try {
-      const raw = await env.STATUS_KV.get(keyMeta.name, { type: 'json' });
-      if (raw && typeof raw === 'object') entries.push(raw);
-    } catch (e) {
-      console.error(`Execution Dock: KV get failed for ${keyMeta.name}:`, e);
-      // Skip malformed entries silently — don't fail the whole request
-    }
-  }));
 
   // ── Enrich with computed status ───────────────────────────────────────────
   const enriched = entries.map(entry => {

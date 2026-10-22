@@ -10,6 +10,7 @@
  */
 
 import { buildTombstone } from './manifest_tg.js';
+import { putDockEntry } from './handlers/execution_dock.js';
 import { putManifest }    from './manifest.js';
 import { latchConsumed }  from './latch.js';
 
@@ -127,7 +128,7 @@ export async function settleDockEntry(kv, uuid, { mark, nowSeconds }) {
     const existing = await kv.get(key, { type: 'json' });
     if (!existing || typeof existing !== 'object') return 'none';
     existing.purged_at = nowSeconds;
-    await kv.put(key, JSON.stringify(existing), { expirationTtl: PURGED_DISPLAY_TTL_SECONDS });
+    await putDockEntry(kv, uuid, { ...existing, uuid }, PURGED_DISPLAY_TTL_SECONDS);   // value + metadata (OSA-Tools-2)
     return 'marked';
   } catch (e) {
     console.error('sweep: dock_index settle failed:', e);

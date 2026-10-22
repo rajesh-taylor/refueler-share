@@ -41,6 +41,7 @@
 
 import { UUID_RE, safeGetManifest, json, err, scrubUuids } from '../utils.js';
 import { updateManifest } from '../latch.js';
+import { putDockEntry, dockTtl } from './execution_dock.js';
 import { verifySessionToken, sessionHash } from '../upload_session.js';
 import { finaliseQuota } from '../quota_store.js';
 import { wrongSizeSegments, DELETE_BATCH } from '../sweep_rules.js';
@@ -251,13 +252,14 @@ export async function handleFinalise(request, env, uuid, ctx) {
   // and converts nothing (the latch winner already cancelled the reservation).
   const upd = await updateManifest(env.BUCKET, uuid, (m) =>
     (m.consumed === true || m.upload_complete === true) ? null
-      : { ...m, merkle_root: merkleRoot, tree_algo: 'rfc6962-unbalanced-blake3-v1', upload_complete: true });
+      : { ...m, merkle_root: merkleRoot, tree_algo: 'rfc6962-unbalanced-blake3-v1', upload_complete: true, status: 'complete' });
   if (upd.status === 'gone' || upd.before?.consumed === true) return err(410, 'Transfer has been destroyed');
   if (upd.status === 'declined') return json({ error: 'already_complete' }, 409);
   if (upd.status !== 'written') return err(503, 'Transfer busy — please retry');
   manifest.merkle_root     = merkleRoot;                      // trusted b64url string
   manifest.tree_algo       = 'rfc6962-unbalanced-blake3-v1';  // pinned — never vary
   manifest.upload_complete = true;
+  manifest.status          = 'complete';   // OSA-Tools-2 F5 — same write as upload_complete
 
   // ── 5b. Quota: reserved → used (B12-SR S1.7) ───────────────────────────────
   // Idempotent in SQL. On error finalise still succeeds (the user's upload is
@@ -275,31 +277,36 @@ export async function handleFinalise(request, env, uuid, ctx) {
     ctx?.waitUntil?.(convert());
   }
 
-  // ── 6. Enrich the Execution Dock entry (Share-Dash-2) ──────────────────────
+  // ── 6. Enrich the Execution Dock entry (Share-Dash-2; OSA-Tools-2 §6) ─────
   // The dock_index:{uuid} entry was created at initiate with
-  // expiry_timestamp · tier · file_name · created_at. Add the two fields
+  // uuid · expiry_timestamp · tier · file_name · created_at. Add the two fields
   // known only now: rail (from the tier) and merkle_root (the ciphertext-chunk
   // root recorded at lodgement). size_bytes is NOT written (B12-SR X4) — legacy
   // entries that carry it age out on TTL; no backfill.
   //
-  // READ-THEN-MERGE — never clobber. collected / collected_at are written at
-  // collection by a different path; overwriting the whole key would erase them.
-  // KV put() drops the TTL unless re-specified, so recompute it from expiry
-  // using the same formula the initiate write used. Fire-and-forget: the
-  // transfer has already succeeded above — a dock miss must never fail finalise.
+  // READ-THEN-MERGE — never clobber; the uuid is kept (or added to a legacy
+  // entry). An entry the initiate write never made (F1, before OSA-Tools-2) is
+  // created here from the manifest. Value + metadata, TTL recomputed from expiry
+  // with the initiate formula. A dock miss must never fail finalise.
   try {
     const dockKey  = `dock_index:${uuid}`;
     const existing = await env.STATUS_KV.get(dockKey, { type: 'json' });
-    if (existing && typeof existing === 'object') {
-      delete existing.size_bytes;   // X4: never carry a plaintext size forward
-      existing.rail        = railForTier(existing.tier ?? manifest.tier);
-      existing.merkle_root = merkleRoot; // ciphertext-chunk root — never the plaintext root
+    const entry = existing && typeof existing === 'object' ? existing : {
+      expiry_timestamp: manifest.expiry_timestamp,
+      tier:             manifest.tier ?? 'free',
+      file_name:        'encrypted-payload',
+      created_at:       manifest.created_at,
+    };
+    delete entry.size_bytes;   // X4: never carry a plaintext size forward
+    entry.uuid        = uuid;
+    entry.rail        = railForTier(entry.tier ?? manifest.tier);
+    entry.merkle_root = merkleRoot; // ciphertext-chunk root — never the plaintext root
+    if (Number.isFinite(entry.expiry_timestamp)) {
       const now = Math.floor(Date.now() / 1000);
-      const ttl = Math.max((existing.expiry_timestamp - now) + 48 * 3600 + 3600, 3600);
-      await env.STATUS_KV.put(dockKey, JSON.stringify(existing), { expirationTtl: ttl });
+      await putDockEntry(env.STATUS_KV, uuid, entry, dockTtl(entry.expiry_timestamp, now));
     }
   } catch (e) {
-    console.error('Execution Dock enrich failed:', e); // non-fatal
+    console.error('Execution Dock enrich failed:', e?.message ?? e); // non-fatal
   }
 
   // ── 7. cargo.accepted (Share-6 spec §3③.4; API-Repair-1) ──────────────────

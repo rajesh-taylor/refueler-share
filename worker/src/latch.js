@@ -98,19 +98,21 @@ export async function releaseHeld(env, uuid, manifest) {
 }
 
 /**
- * latchConsumed(env, uuid, nowSeconds, { eligible }) →
+ * latchConsumed(env, uuid, nowSeconds, { eligible, removed }) →
  *   { won: true,  manifest: <pre-latch>, consumedAt, release }
  *   { won: false, reason: 'already_consumed', manifest, consumedAt }
  *   { won: false, reason: 'gone' | 'not_eligible' | 'contended', manifest? }
  * eligible(fresh) — optional extra condition checked on the fresh read (sweeps).
+ * removed — a take-down (OSA-Tools-2): the latched manifest carries removed:true,
+ * so a take-down that stops part-way still reads "removed" and finishes as one.
  * The winner releases quota before returning; a loser never does.
  */
-export async function latchConsumed(env, uuid, nowSeconds, { eligible } = {}) {
+export async function latchConsumed(env, uuid, nowSeconds, { eligible, removed = false } = {}) {
   let reason = null;
   const r = await updateManifest(env.BUCKET, uuid, (m) => {
     if (m.consumed === true)       { reason = 'already_consumed'; return null; }
     if (eligible && !eligible(m))  { reason = 'not_eligible';     return null; }
-    return { ...m, consumed: true, consumed_at: nowSeconds };
+    return { ...m, consumed: true, consumed_at: nowSeconds, ...(removed ? { removed: true } : {}) };
   });
   if (r.status === 'gone')      return { won: false, reason: 'gone' };
   if (r.status === 'contended') return { won: false, reason: 'contended', manifest: r.before };

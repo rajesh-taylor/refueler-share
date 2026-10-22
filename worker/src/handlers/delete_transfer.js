@@ -23,29 +23,36 @@ import { UUID_RE, safeGetManifest, json, err, requireAdmin } from '../utils.js';
 //                 is RESUMED, not refused.
 //   tombstone   — consumed === true, no total_chunks. Terminal → 410.
 //
+// OSA-Tools-2: a take-down passes { removed: true }. The latch then writes
+// removed:true into the manifest, and the tombstone keeps it. Once a manifest
+// says removed, every path that finishes the deletion keeps it (a resumed
+// take-down, a racing destroy-after-download, the nightly sweep's residue step).
+//
 // Everything under {uuid}/ except manifest.json is listed and deleted in R2
 // batches (1000 keys per call), so an 8,000-chunk transfer is 8 subrequests
 // and stray chunks / hashes / date-seal all go with it. The tombstone is written
 // LAST and only if every batch succeeded; otherwise the response is partial and
 // the manifest stays in-progress so a retry resumes.
 // ─────────────────────────────────────────────────────────────────────────────
-const isTombstone = (m) => m.consumed === true && !Number.isFinite(m.total_chunks);
+export const isTombstone = (m) => m.consumed === true && !Number.isFinite(m.total_chunks);
 
 // Also the DAD path (Share-DAD-2): finishDownload calls this inside waitUntil.
 // B12-3 (SR S1.8): the live → consumed step is the R2 conditional-put latch.
 // The winner releases quota (inside latchConsumed); a loser, or a resumed
 // partial delete, carries on destroying but never releases.
-export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
+export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag, { removed: removing = false } = {}) {
   let consumedAt = manifest.consumed === true ? (manifest.consumed_at ?? nowSeconds) : nowSeconds;
+  let removed = removing || manifest.removed === true;
 
   if (manifest.consumed !== true) {
-    const latch = await latchConsumed(env, uuid, nowSeconds);
+    const latch = await latchConsumed(env, uuid, nowSeconds, { removed: removing });
     if (latch.reason === 'gone') return { destroyed: false, gone: true };
     if (latch.reason === 'contended') {
       console.error(`${logTag}: manifest latch contended for ${String(uuid).slice(0, 8)}; left for retry`);
       return { destroyed: false, partial: true, remaining: null };
     }
     consumedAt = latch.consumedAt ?? consumedAt;
+    if (latch.manifest?.removed === true) removed = true;
   }
 
   const prefix = `${uuid}/`;
@@ -67,7 +74,7 @@ export async function destroyTransfer(env, uuid, manifest, nowSeconds, logTag) {
     console.error(`${logTag}: root_verified KV delete failed:`, e)
   );
 
-  await putManifest(env.BUCKET, uuid, buildTombstone(consumedAt));
+  await putManifest(env.BUCKET, uuid, buildTombstone(consumedAt, { removed }));
 
   // Share-B12-1 (B12 §0.3): every deletion path clears the index — absence is the trace.
   // Awaited (Share-DAD-2): an un-awaited write can be dropped once waitUntil settles.

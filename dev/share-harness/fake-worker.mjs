@@ -7,7 +7,13 @@
 // Share-Copy-2 (receiver stop lines): meta503 · meta_incomplete (no part count) · dl401 · auth500 · auth410 · auth_cut (socket cut).
 // UUID-Out-Of-Path-1: as the real Worker, transfer routes are fixed paths; the UUID is
 // X-Transfer-UUID and the download part X-Part. An old /meta/{uuid}-style call 404s here.
+// OSA-Tools-2: /meta 410 {"error":"removed"} after a take-down, or for any link with
+// ?fail=meta_removed (?fail=meta_deleted → the plain 410). /admin/reports/* as the Worker
+// (whoami, lookup, register, open, update, takedown, export, export-training, delete-training), keys from
+// FAKE_ADMIN_KEY / FAKE_HELPER_KEY; GET /_reports → every reports request as received
+// (method, url, headers) and the register, for the Terminal-script tests. FAKE_PORT moves it off 8766.
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
 import { blake3 } from '../../worker/node_modules/@noble/hashes/blake3.js';
 import { buildMerkleTree } from '../../worker/src/merkle.js';
@@ -15,6 +21,12 @@ const KEY = '1'.repeat(64);
 const CHUNK = 32 * 1024 * 1024;
 const T = new Map();             // uuid → { total, bytes, chunks: [], dad, pw, expiry, done }
 let ctl = { fail: 'none', slow: 0, rate: 0 };
+const ADMIN_KEY = process.env.FAKE_ADMIN_KEY || 'fake-admin-key';
+// FAKE_HELPER_KEY_FILE: read on every request, so a rehearsal can set and remove the helper key.
+const helperKey = () => { try { return process.env.FAKE_HELPER_KEY_FILE ? readFileSync(process.env.FAKE_HELPER_KEY_FILE, 'utf8') : (process.env.FAKE_HELPER_KEY || ''); } catch { return ''; } };
+const R = { rows: new Map(), n: { R: 0, T: 0 }, log: [] };   // the fake report register
+const role = (req) => req.headers['x-admin-key'] === ADMIN_KEY ? 'admin'
+  : helperKey() && req.headers['x-admin-key'] === helperKey() ? 'helper' : null;
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
 // B12-4a-2: sign-in + Citizen. One fake session; the cookie is plain (no __Host-/Secure on http).
 // GET /_last → what the last initiate carried. /_ctl?tier=free makes the session unpaid.
@@ -23,8 +35,10 @@ const hasCookie = (req) => /(?:^|;\s*)rfs_session=1(?:;|$)/.test(req.headers.coo
 const credCors = (req) => req.headers.origin === 'http://localhost:8765'
   ? { 'Access-Control-Allow-Origin': req.headers.origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type, X-CSRF, X-Transfer-UUID, X-Cashu-Credential, X-Credential-Commitment, X-Issued-Tier, X-Total-Chunks, X-Total-Bytes, X-Expiry-Timestamp, X-File-Name, X-P2SH-Secret-Hash, X-Destroy-After-Download', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Vary': 'Origin' }
   : {};
-const cjson = (req, res, code, o, extra = {}) => { res.writeHead(code, { ...cors, ...credCors(req), 'Content-Type': 'application/json', ...extra }); res.end(JSON.stringify(o)); };
-const json = (res, code, o) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+// no-store on every JSON answer, as the Worker (H1): /meta's URL is the same for every link
+// (the UUID is a header), so a cached 410 would otherwise answer for the next link.
+const cjson = (req, res, code, o, extra = {}) => { res.writeHead(code, { ...cors, ...credCors(req), 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...extra }); res.end(JSON.stringify(o)); };
+const json = (res, code, o) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
 const body = (req) => new Promise(r => { const b = []; req.on('data', c => { b.push(c); if (ctl.rate) { req.pause(); setTimeout(() => req.resume(), c.length / (ctl.rate * 1048.576)); } }); req.on('end', () => r(Buffer.concat(b))); });
 const dropOnce = (i) => { if (ctl.fail !== 'drop:' + i) return false; ctl.fail = 'none'; return true; };
 const send = async (res, b, cut) => {
@@ -46,6 +60,19 @@ http.createServer(async (req, res) => {
   try {
     if (p[0] === '_ctl') { if (u.searchParams.get('tier')) auth.tier = u.searchParams.get('tier'); if (u.searchParams.get('signout')) auth.session = null; ctl = { fail: u.searchParams.get('fail') || 'none', slow: +(u.searchParams.get('slow') || 0), rate: +(u.searchParams.get('rate') || 0) }; return json(res, 200, ctl); }
     if (p[0] === '_last') return json(res, 200, auth.last);
+    if (p[0] === '_reports') return json(res, 200, { log: R.log, rows: [...R.rows.values()] });
+    if (p[0] === '_seed') {   // a live, complete transfer to look up and take down: /_seed?id=<uuid>
+      const sid = u.searchParams.get('id');
+      T.set(sid, { total: 1, bytes: 1, chunks: [Buffer.alloc(1)], dad: false, pw: null, expiry: Math.floor(Date.now() / 1000) + 86400, done: true, tier: 'free', created: Math.floor(Date.now() / 1000) });
+      return json(res, 200, { ok: true });
+    }
+    if (p[0] === 'admin' && p[1] === 'reports') return reports(req, res, u, id);
+    if (p[0] === 'admin' && (p[1] === 'execution-dock' || p[1] === 'metrics')) {   // admin key only, as the Worker
+      if (role(req) !== 'admin') return json(res, 401, { error: 'Unauthorized' });
+      if (p[1] === 'metrics') return json(res, 200, {});
+      return json(res, 200, { badge_count: 0, transfers: [...T].filter(([, t]) => t.done && !t.removed)
+        .map(([uuid, t]) => ({ uuid, tier: t.tier ?? 'free', expiry_timestamp: t.expiry, created_at: t.created ?? 0 })) });
+    }
     if (TRANSFER.includes(u.pathname) && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, { error: 'missing_transfer_id' });
     // The receiver's password check, POST /unlock (any password opens it).
     if (u.pathname === '/unlock') {
@@ -150,7 +177,10 @@ http.createServer(async (req, res) => {
     }
     if (u.pathname === '/meta') {
       if (ctl.fail === 'meta503') return json(res, 503, { error: 'unavailable' });
+      if (ctl.fail === 'meta_removed') return json(res, 410, { error: 'removed' });
+      if (ctl.fail === 'meta_deleted') return json(res, 410, { error: 'deleted' });
       const t = T.get(id);
+      if (t?.removed) return json(res, 410, { error: 'removed' });
       if (t && ctl.fail === 'meta_incomplete') return json(res, 200, { total_chunks: 0, expiry_timestamp: t.expiry, passphrase_protected: !!t.pw, pending_destruction: null });
       if (!t || !t.done) return json(res, 404, { error: 'not found' });
       return json(res, 200, { total_chunks: t.total, total_bytes: null, expiry_timestamp: t.expiry, file_name: 'encrypted-payload',
@@ -158,7 +188,7 @@ http.createServer(async (req, res) => {
     }
     if (u.pathname === '/download') {
       if (!/^\d{4}$/.test(part)) return json(res, 400, { error: 'missing_part' });
-      const t = T.get(id); if (!t) return json(res, 410, { error: 'gone' });
+      const t = T.get(id); if (!t || t.removed) return json(res, 410, { error: 'gone' });
       if (ctl.fail === 'down:' + +part) return json(res, 503, { error: 'unavailable' });
       if (ctl.fail === 'dl401') return json(res, 401, { error: 'Invalid or expired download token' });
       console.log(`GET part ${part} ${Date.now() % 100000}`);
@@ -170,4 +200,78 @@ http.createServer(async (req, res) => {
     }
     json(res, 404, { error: 'no route ' + u.pathname });
   } catch (e) { console.error(e); json(res, 500, { error: String(e) }); }
-}).listen(8766, () => console.log('fake worker :8766'));
+}).listen(+process.env.FAKE_PORT || 8766, () => console.log(`fake worker :${+process.env.FAKE_PORT || 8766}`));
+
+// ── /admin/reports/* — the same answers as worker/src/handlers/reports.js ─────
+async function reports(req, res, u, id) {
+  const raw = req.method === 'POST' ? String(await body(req)) : '';
+  R.log.push({ method: req.method, url: req.url, headers: req.headers, body: raw });
+  const out = (code, o) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+  const who = role(req);
+  const route = `${req.method} ${u.pathname}`;
+  const adminOnly = ['GET /admin/reports/export', 'GET /admin/reports/export-training', 'POST /admin/reports/delete-training'].includes(route);
+  if (!who || (adminOnly && who !== 'admin')) return out(401, { error: 'Unauthorized' });
+  const b = raw ? JSON.parse(raw) : {};
+  const now = Math.floor(Date.now() / 1000);
+  const uuidOk = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
+  switch (route) {
+    case 'GET /admin/reports/whoami': return out(200, { role: who });
+    case 'GET /admin/reports/lookup': {
+      if (!uuidOk) return out(400, { error: 'missing_transfer_id' });
+      const t = T.get(id);
+      if (!t) return out(200, { state: 'not_found', consumed: false });
+      if (t.removed) return out(200, { state: 'removed', consumed: true });
+      return out(200, { state: t.expiry < now ? 'expired' : 'live', tier: t.tier ?? 'free', created_at: t.created ?? now,
+        expires_at: t.expiry, upload_complete: !!t.done, consumed: false });
+    }
+    case 'GET /admin/reports/register': return out(200, { rows: [...R.rows.values()].reverse() });
+    case 'POST /admin/reports/open': {
+      if (/@|#|http/i.test(b.reason ?? '')) return out(400, { error: 'reason_forbidden' });
+      const pre = b.training ? 'T' : 'R';
+      const case_ref = `${pre}-${new Date().getUTCFullYear()}-${String(++R.n[pre]).padStart(3, '0')}`;
+      const row = { case_ref, training: !!b.training, received_at: now, route: b.route, uuid8: b.uuid8 ?? null, category: b.category,
+        decision: 'open', reason: b.reason ?? null, takedown_at: null, takedown_by: null, nca_ref: null, reporter_told: null,
+        key_removed: false, closed_at: null, opened_by: who, updated_at: now };
+      R.rows.set(case_ref, row);
+      return out(200, { case_ref, row });
+    }
+    case 'POST /admin/reports/update': {
+      const r = R.rows.get(b.case_ref);
+      if (!r) return out(404, { error: 'not_found' });
+      if (who === 'helper' && !['csea', 'terrorism'].includes(r.category)) return out(403, { error: 'helper_category' });
+      if (who === 'helper' && b.category && b.category !== r.category) return out(403, { error: 'helper_category_change' });
+      if (/@|#|http/i.test(b.reason ?? '')) return out(400, { error: 'reason_forbidden' });
+      for (const k of ['category', 'decision', 'reason', 'nca_ref', 'reporter_told', 'key_removed']) if (k in b) r[k] = b[k];
+      r.closed_at = r.decision === 'open' ? null : (r.closed_at ?? now); r.updated_at = now;
+      return out(200, { row: r });
+    }
+    case 'POST /admin/reports/takedown': {
+      if (!uuidOk) return out(400, { error: 'missing_transfer_id' });
+      const r = R.rows.get(b.case_ref), u8 = id.slice(0, 8);
+      if (!r) return out(409, { error: 'case_mismatch', why: 'no_such_case' });
+      if (r.uuid8 !== u8) return out(409, { error: 'case_mismatch', why: 'other_link' });
+      if (r.decision !== 'open') return out(409, { error: 'case_mismatch', why: 'case_closed' });
+      if (b.confirm !== u8) return out(400, { error: 'confirm_mismatch' });
+      if (who === 'helper' && !['csea', 'terrorism'].includes(r.category)) return out(403, { error: 'helper_category' });
+      const t = T.get(id);
+      if (!t) return out(404, { error: 'not_found' });
+      if (t.removed) return out(200, { already_removed: true, removed_at: t.removedAt });
+      if (ctl.fail === 'takedown_partial') return out(202, { partial: true, remaining: 3 });
+      t.removed = true; t.removedAt = now; t.chunks = [];
+      if (ctl.fail === 'register_down') return out(200, { destroyed: true, removed_at: now, register_updated: false });
+      Object.assign(r, { takedown_at: now, takedown_by: who, updated_at: now });
+      return out(200, { destroyed: true, removed_at: now, register_updated: true });
+    }
+    case 'POST /admin/reports/delete-training': {
+      let deleted = 0;
+      for (const [k, r] of R.rows) if (r.training) { R.rows.delete(k); deleted++; }
+      return out(200, { deleted });
+    }
+    case 'GET /admin/reports/export':
+    case 'GET /admin/reports/export-training': {
+      const training = u.pathname.endsWith('training');
+      return out(200, { exported_at: now, rows: [...R.rows.values()].filter((r) => r.training === training), events: [] });
+    }
+  }
+  return out(404, { error: 'no route ' + u.pathname });
+}

@@ -221,12 +221,12 @@ describe('B12-1d — finalise exact-size check', () => {
     return { res, body: await res.json(), bucket, kv, c };
   }
 
-  it('correct sizes → 200, manifest gains no new size field', async () => {
+  it('correct sizes → 200, manifest gains no new size field (status: complete is OSA-Tools-2 F5)', async () => {
     const { res, bucket } = await finalise([FULL, FULL, 500]);
     expect(res.status).toBe(200);
     const m = JSON.parse(bucket._store.get(`${UUID}/manifest.json`).body);
     expect(m.upload_complete).toBe(true);
-    expect(Object.keys(m).sort()).toEqual(['merkle_root', 'tier', 'total_bytes', 'total_chunks', 'tree_algo', 'upload_complete', 'uuid']);
+    expect(Object.keys(m).sort()).toEqual(['merkle_root', 'status', 'tier', 'total_bytes', 'total_chunks', 'tree_algo', 'upload_complete', 'uuid']);
   });
 
   it('wrong-size full chunk → 409 wrong_size; delete queued via waitUntil; no state written', async () => {

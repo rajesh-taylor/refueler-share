@@ -90,11 +90,16 @@ export function flipPendingDestruction(manifest, chunkIndex) {
 // ---------------------------------------------------------------------------
 // Build the tombstone object written back to R2 after chunk deletion.
 // Drops all sensitive fields; keeps only consumed + consumed_at for audit.
+// OSA-Tools-2: a take-down adds removed: true (57 bytes) so /meta can say
+// "removed after a report". Nothing else ever goes in — no case reference,
+// category or reason — and it must stay ≤ 64 bytes or the nightly sweep keeps
+// it forever (TOMBSTONE_MAX_BYTES, test-locked).
 // ---------------------------------------------------------------------------
-export function buildTombstone(nowSeconds) {
+export function buildTombstone(nowSeconds, { removed = false } = {}) {
   return {
     consumed:     true,
     consumed_at:  nowSeconds,
+    ...(removed ? { removed: true } : {}),
   };
 }
 

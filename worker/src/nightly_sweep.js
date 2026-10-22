@@ -4,7 +4,8 @@
 // Runs from the 03:30 cron (index.js) and POST /admin/nightly-sweep. Three jobs:
 //
 //   1. Leftover record → deleted 30 days after the transfer ended (Privacy-Share-1).
-//      The record is exactly { consumed: true, consumed_at } (buildTombstone), it
+//      The record is exactly { consumed: true, consumed_at } (buildTombstone;
+//      a take-down adds removed: true — OSA-Tools-2, still ≤ 64 bytes), it
 //      sits alone under {uuid}/, and consumed_at is ≥ 30 days old. Then the
 //      manifest goes and the link reads as absent (404); the receiver page says
 //      the same "Link closed" for 404 and 410. Nothing reads the record that late:
@@ -38,16 +39,18 @@ import { putManifest } from './manifest.js';
 
 export const TOMBSTONE_KEEP_SECONDS = 30 * 86400;
 export const MAX_NIGHTLY_READS      = 500;
-const TOMBSTONE_MAX_BYTES = 64; // {"consumed":true,"consumed_at":1800000000} is 42
+export const TOMBSTONE_MAX_BYTES = 64; // {"consumed":true,"consumed_at":1800000000} is 42; with ,"removed":true 57
 
 const UUID_PREFIX_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//i;
 const CHUNK_RE = /^\d{4}$/;
 
-/** Exactly the record buildTombstone writes — nothing more, nothing less. */
+/** Exactly the record buildTombstone writes — nothing more, nothing less (removed: true optional). */
 export function isFinalTombstone(m) {
   if (!m || typeof m !== 'object') return false;
   const keys = Object.keys(m);
-  return keys.length === 2 && m.consumed === true && Number.isFinite(m.consumed_at);
+  const removed = 'removed' in m;
+  if (removed && m.removed !== true) return false;
+  return keys.length === (removed ? 3 : 2) && m.consumed === true && Number.isFinite(m.consumed_at);
 }
 
 function ae(env, d) {
@@ -132,7 +135,7 @@ export async function runNightlySweep(env, nowSeconds, { dryRun = false } = {}) 
       // A deletion that died part-way also leaves the full manifest: finish it
       // the way destroyTransfer would, with the leftover record dated as it was.
       const finish = isFinalTombstone(m) ? null : (Number.isFinite(m.consumed_at) ? m.consumed_at : nowSeconds);
-      actions.push({ kind: 'residue', uuid, groups: [e.others], finish });
+      actions.push({ kind: 'residue', uuid, groups: [e.others], finish, removed: m.removed === true });
     } else if (isPurgeableExpired(m, nowSeconds)) {
       const chunks = e.others.filter(k => CHUNK_RE.test(k.slice(uuid.length + 1)));
       const rest   = e.others.filter(k => !CHUNK_RE.test(k.slice(uuid.length + 1)));
@@ -169,7 +172,7 @@ export async function runNightlySweep(env, nowSeconds, { dryRun = false } = {}) 
     if (n === a.groups[0].length) {
       out.residue_cleared++;
       if (a.finish !== null) {
-        try { await putManifest(env.BUCKET, a.uuid, buildTombstone(a.finish)); }
+        try { await putManifest(env.BUCKET, a.uuid, buildTombstone(a.finish, { removed: a.removed })); }
         catch (e) { console.error('nightly_sweep: leftover record write failed:', e?.message ?? e); }
         await env.STATUS_KV.delete(`root_verified:${a.uuid}`).catch(() => {});
       }

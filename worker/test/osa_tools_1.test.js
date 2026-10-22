@@ -213,7 +213,7 @@ describe('the helper key → 401 on every route outside its allowlist', () => {
   const rows = readDocRows(routesDoc);
   const gate = (r) => rows.get(`${r.method} ${r.path}`)?.gate;
   const ALLOW = ['GET /admin/reports/whoami', 'GET /admin/reports/lookup', 'GET /admin/reports/register',
-                 'POST /admin/reports/open', 'POST /admin/reports/update'];
+                 'POST /admin/reports/open', 'POST /admin/reports/update', 'POST /admin/reports/takedown'];
   const admin = list.filter((r) => gate(r) === 'admin');
   const staff = list.filter((r) => gate(r) === 'staff');
 

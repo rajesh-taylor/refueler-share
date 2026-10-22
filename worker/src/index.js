@@ -8,7 +8,7 @@ import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } 
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
 import { handleConfirmTransfer } from './handlers/confirm_transfer.js';
-import { handleExecutionDock } from './handlers/execution_dock.js';
+import { handleExecutionDock, writeDockEntry } from './handlers/execution_dock.js';
 import { handleAdminStorage } from './handlers/storage.js';                // B12-2: Storage & Billing
 import { handleFinalise } from './handlers/finalise.js';                       // Share-Dash-2 fold
 import { handleDownload } from './handlers/download.js';                       // Share-6-5a full extraction
@@ -69,7 +69,7 @@ import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp
 import { handleDeleteTransfer, handleOwnerDelete }    from './handlers/delete_transfer.js';
 import {
   handleReportsWhoami, handleReportsLookup, handleReportsRegister, handleReportsOpen, handleReportsUpdate,
-  handleReportsExport, handleReportsExportTraining, handleReportsDeleteTraining,
+  handleReportsExport, handleReportsExportTraining, handleReportsDeleteTraining, handleReportsTakedown,
 } from './handlers/reports.js';                                                     // OSA-Tools-1
 
 
@@ -657,6 +657,7 @@ const worker = {
         : request.method === 'GET'  && path === '/admin/reports/export'          ? handleReportsExport
         : request.method === 'GET'  && path === '/admin/reports/export-training' ? handleReportsExportTraining
         : request.method === 'POST' && path === '/admin/reports/delete-training' ? handleReportsDeleteTraining
+        : request.method === 'POST' && path === '/admin/reports/takedown'        ? handleReportsTakedown
         : null;
       if (reportsHandler) {
         const rl = await checkRateLimit(env, getClientIp(request), 'reports', 30, 60);
@@ -1289,8 +1290,10 @@ async function handleMeta(request, env, uuid) {
   }
   // Share-DAD-2: deleted (tombstone) or being deleted (consumed guard written,
   // tombstone not yet) → 410 and nothing else — no size, expiry or chunk count.
+  // OSA-Tools-2: a take-down (removed: true) → {"error":"removed"}, so the page
+  // can say "removed after a report". Only /meta tells the two apart.
   if (manifest.consumed === true) {
-    return new Response(JSON.stringify({ error: 'deleted' }), {
+    return new Response(JSON.stringify({ error: manifest.removed === true ? 'removed' : 'deleted' }), {
       status: 410, headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -1857,7 +1860,7 @@ async function handleInitiate(request, env, ctx, uuid) {
   manifest.file_name       = 'encrypted-payload'; // D-1: real name in fragment only
   manifest.chunks_received = [];
   manifest.upload_complete = false;
-  manifest.status          = 'uploading';
+  manifest.status          = 'uploading';  // finalise sets 'complete' (OSA-Tools-2 F5); nothing reads it
   manifest.upload_mode     = 'direct-r2'; // Share-6 marker for finalise/download branch
   if (isTestCredential) manifest.soak = true; // B12-SR S2.5: own Navy Office line (B12-3)
 
@@ -1881,18 +1884,18 @@ async function handleInitiate(request, env, ctx, uuid) {
     return err(409, 'Transfer already initiated');
   }
 
-  // ── Execution Dock KV entry (TG-4) ─────────────────────────────────────────
-  const dockTtl = (expiryTs - nowSeconds) + 48 * 3600 + 3600;
-  env.STATUS_KV.put(
-    `dock_index:${uuid}`,
-    JSON.stringify({
-      expiry_timestamp: expiryTs,
-      tier:             resolvedTier,
-      file_name:        'encrypted-payload',
-      created_at:       nowSeconds,
-    }),
-    { expirationTtl: Math.max(dockTtl, 3600) }
-  ).catch(e => console.error('Execution Dock KV write failed:', e));
+  // ── Execution Dock KV entry (TG-4; OSA-Tools-2 §6) ─────────────────────────
+  // Awaited, one retry after 250 ms, then logged (uuid8) — initiate never fails
+  // because of the dock (F1: an un-awaited put could be dropped once the
+  // response was sent). The entry carries the transfer ID (F2) and also rides
+  // in the key's metadata, so the dock reads every row from list() alone (F3).
+  await writeDockEntry(env.STATUS_KV, uuid, {
+    uuid,
+    expiry_timestamp: expiryTs,
+    tier:             resolvedTier,
+    file_name:        'encrypted-payload',
+    created_at:       nowSeconds,
+  }, nowSeconds);
 
   // NOTE: the cargo.accepted receipt is deferred to /finalise (Share-6-3, spec
   // §3③.4). Under direct-R2 the transfer is not "accepted" until finalise
