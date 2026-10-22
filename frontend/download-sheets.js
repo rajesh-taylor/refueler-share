@@ -159,14 +159,15 @@ export function _showLinkInactive(_domRefs) {
 // OSA-Tools-2: /meta said {"error":"removed"} — taken down after a report.
 // The reference is the transfer ID's first 8 characters (never the case
 // reference); no reason, no category, no "ask the sender". After the record is
-// swept (30 days) the link reads as inactive instead. Wording: draft approved
-// by Rajesh before ship; final polish at OSA-Copy-1.
+// swept (30 days) the link reads as inactive instead. Wording chosen by Rajesh
+// 22 Oct (short, warm, no apology); final polish at OSA-Copy-1.
 export function _showLinkRemoved(uuid8) {
-  _showNotice('Link closed', 'This link was removed after a report.', '');
+  _showNotice('Link closed', 'This file is no longer available.', '');
   const lede = $('rx-notice-lede');
   const ref = document.createElement('strong');
   ref.textContent = uuid8;
-  lede.append('Reference: ', ref, '. To ask about it, write to report@refueler.io and give this reference.');
+  lede.append('We took the link down after a report. If you have a question, or think this was a mistake, write to report@refueler.io and mention ',
+    ref, '. We read every message.');
 }
 
 // No progress figures on an error (DAD-ERROR-TEXT, Share-B10-3): the notice sheet has none.
