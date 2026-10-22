@@ -67,6 +67,10 @@ import { sweepAuth } from './auth_store.js';
 import { fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber } from './handlers/stripe_sub.js';
 import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp.js';
 import { handleDeleteTransfer, handleOwnerDelete }    from './handlers/delete_transfer.js';
+import {
+  handleReportsWhoami, handleReportsLookup, handleReportsRegister, handleReportsOpen, handleReportsUpdate,
+  handleReportsExport, handleReportsExportTraining, handleReportsDeleteTraining,
+} from './handlers/reports.js';                                                     // OSA-Tools-1
 
 
 // UUID_RE, corsHeaders — imported from ./utils.js
@@ -638,6 +642,26 @@ const worker = {
       // Use after soak tests to reset R2 to a clean state. dry_run=true by default.
       if (request.method === 'DELETE' && path === '/admin/purge-test-transfers') {
         return timed('admin_purge_test_transfers', () => handlePurgeTestTransfers(request, env).then(r => addCors(r, request)));
+      }
+
+      // ── OSA-Tools-1: report route tools — /admin/reports/* ──────────────────
+      // Admin key, or HELPER_KEY where allowed (requireRole in each handler).
+      // Fixed paths; the transfer ID only in X-Transfer-UUID. 30 / 60 s per IP,
+      // checked before the key so it also slows key guessing.
+      const reportsHandler =
+          request.method === 'GET'  && path === '/admin/reports/whoami'          ? handleReportsWhoami
+        : request.method === 'GET'  && path === '/admin/reports/lookup'          ? handleReportsLookup
+        : request.method === 'GET'  && path === '/admin/reports/register'        ? handleReportsRegister
+        : request.method === 'POST' && path === '/admin/reports/open'            ? handleReportsOpen
+        : request.method === 'POST' && path === '/admin/reports/update'          ? handleReportsUpdate
+        : request.method === 'GET'  && path === '/admin/reports/export'          ? handleReportsExport
+        : request.method === 'GET'  && path === '/admin/reports/export-training' ? handleReportsExportTraining
+        : request.method === 'POST' && path === '/admin/reports/delete-training' ? handleReportsDeleteTraining
+        : null;
+      if (reportsHandler) {
+        const rl = await checkRateLimit(env, getClientIp(request), 'reports', 30, 60);
+        if (rl.limited) return rateLimitResponse(request, rl.resetAt, corsHeaders(request));
+        return timed('admin_reports', () => reportsHandler(request, env).then(r => addCors(r, request)));
       }
 
       // ── Share-Admin-1: test credential — POST /admin/test-credential ─────────

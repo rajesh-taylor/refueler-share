@@ -15,6 +15,8 @@
  *   json(data, status?) → Response
  *   err(status, message, request?) → Response   ← Share-5: optional request param adds CORS
  *   addCors(response, request) → Response
+ *   requireAdmin(request, env) → null | 401 Response
+ *   requireRole(request, env, roles) → 'admin' | 'helper' | 401 Response   (OSA-Tools-1)
  *   parseRange(rangeHeader) → { offset, length } | undefined
  */
 
@@ -195,6 +197,40 @@ export async function requireAdmin(request, env) {
     crypto.subtle.digest('SHA-256', enc.encode(expected)),
   ]);
   return crypto.subtle.timingSafeEqual(a, b) ? null : err(401, 'Unauthorised');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// requireRole(request, env, roles) → Promise<'admin' | 'helper' | Response>   (OSA-Tools-1)
+//
+// The /admin/reports/* check only. X-Admin-Key is compared with ADMIN_KEY and
+// HELPER_KEY every time — both compares always run, so timing doesn't say which
+// matched. Returns the role when it is in `roles`, else a 401 Response.
+// Fails closed: ADMIN_KEY unset → no admin; HELPER_KEY unset, shorter than 32
+// characters, or equal to ADMIN_KEY → no helper (the last two log one line).
+// requireAdmin above is unchanged, so the helper key fails every other route.
+// Revoke the helper alone: `npx wrangler secret delete HELPER_KEY`.
+// ─────────────────────────────────────────────────────────────────────────────
+export const HELPER_KEY_MIN = 32;
+
+export async function requireRole(request, env, roles) {
+  const presented = request.headers.get('X-Admin-Key') ?? '';
+  const admin  = env.ADMIN_KEY  ?? '';
+  const helper = env.HELPER_KEY ?? '';
+  const enc = new TextEncoder();
+  const digest = (s) => crypto.subtle.digest('SHA-256', enc.encode(s));
+  const [p, a, h] = await Promise.all([digest(presented), digest(admin), digest(helper)]);
+  const isAdmin  = crypto.subtle.timingSafeEqual(p, a);
+  const isHelper = crypto.subtle.timingSafeEqual(p, h);
+  let helperOn = helper.length >= HELPER_KEY_MIN;
+  if (helper && !helperOn) console.error('requireRole: HELPER_KEY too short — helper role disabled');
+  if (helperOn && crypto.subtle.timingSafeEqual(a, h)) {
+    console.error('requireRole: HELPER_KEY equals ADMIN_KEY — helper role disabled');
+    helperOn = false;
+  }
+  let role = null;
+  if (presented && admin && isAdmin) role = 'admin';
+  else if (presented && helperOn && isHelper) role = 'helper';
+  return role && roles.includes(role) ? role : err(401, 'Unauthorised');
 }
 
 export function addCors(response, request) {

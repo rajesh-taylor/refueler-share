@@ -6,7 +6,7 @@ The Worker (`api.share.refueler.io`) answers the routes below, all on one hostna
 
 - a route has no row here, or a row has no route,
 - a gate isn't one of the words below, or
-- an `/admin/…` or `/api/v1/admin/…` path has any gate other than `admin`.
+- an `/admin/…` or `/api/v1/admin/…` path has any gate other than `admin` (or `staff`, allowed only on `/admin/reports/…`).
 
 **Adding a route:** add its row in the same commit, with the gate its handler actually enforces.
 Moving the admin surface behind Cloudflare Access is B12-Audit.
@@ -24,7 +24,8 @@ Moving the admin surface behind Cloudflare Access is B12-Audit.
 | `link-or-owner` | A download token for that transfer, or an `rfs_owner_` bearer **plus** the admin key. |
 | `hmac` | API request signed with `rfs_sign_` (`requireApiAuth`). |
 | `hmac-sandbox` | As `hmac`, with an `rfs_test_` sandbox key. |
-| `admin` | `X-Admin-Key` matches Worker secret `ADMIN_KEY` (`requireAdmin`). |
+| `admin` | `X-Admin-Key` matches Worker secret `ADMIN_KEY` (`requireAdmin`, or `requireRole` with the admin role only). |
+| `staff` | `X-Admin-Key` matches `ADMIN_KEY` **or** `HELPER_KEY` (`requireRole`). Only on `/admin/reports/…`; the helper key fails every other route. Unset `HELPER_KEY`, shorter than 32 characters, or equal to `ADMIN_KEY` → helper off. |
 | `magic-link` | Single-use sign-in token from the email (sign-in flow). |
 | `session` | `__Host-rfs_session` cookie (+ CSRF where it writes) via `requireSession()`. |
 | `stripe-sig` | Stripe webhook signature (`STRIPE_WEBHOOK_SECRET`). |
@@ -102,6 +103,14 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | GET | `/admin/orphan-sweep` | admin | — | `handleOrphanSweep` |
 | POST | `/admin/patch-merkle-root` | admin | — | `handlePatchMerkleRoot` |
 | DELETE | `/admin/purge-test-transfers` | admin | — | `handlePurgeTestTransfers` |
+| GET | `/admin/reports/whoami` | staff | yes | `handleReportsWhoami` |
+| GET | `/admin/reports/lookup` | staff | yes | `handleReportsLookup` |
+| GET | `/admin/reports/register` | staff | yes | `handleReportsRegister` |
+| POST | `/admin/reports/open` | staff | yes | `handleReportsOpen` |
+| POST | `/admin/reports/update` | staff | yes | `handleReportsUpdate` |
+| GET | `/admin/reports/export` | admin | yes | `handleReportsExport` |
+| GET | `/admin/reports/export-training` | admin | yes | `handleReportsExportTraining` |
+| POST | `/admin/reports/delete-training` | admin | yes | `handleReportsDeleteTraining` |
 | POST | `/admin/test-credential` | admin | yes | `handleTestCredential` |
 | POST | `/auth/magic` | public | yes | `handleMagic` |
 | POST | `/auth/verify` | magic-link | yes | `handleVerify` |
@@ -110,4 +119,6 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/auth/signout-everywhere` | session | — | `handleSignout` |
 <!-- routes:end -->
 
-66 routes, 30 of them gated by the admin key (26 under `/admin` or `/api/v1/admin`, plus the sandbox activate/reset pair). Anything not listed answers 404.
+75 routes: 34 gated by the admin key alone (32 under `/admin` or `/api/v1/admin`, plus the sandbox activate/reset pair) and 5 by `staff` (admin or helper key). Anything not listed answers 404.
+
+**Report route tools (OSA-Tools-1 · 22 Oct 2026).** `/admin/reports/*` serve the Online Safety report route: `whoami` → `{role}`; `lookup` reads the R2 manifest only and answers `state` (`live` · `expired` · `gone` · `removed` · `not_found`) and `consumed`, plus `tier`, `created_at`, `expires_at`, `upload_complete` for live/expired — nothing else; the register (`register`, `open`, `update`, `export`, `export-training`, `delete-training`) lives in Supabase (`supabase/migrations/20261022_osa_tools_1_reports.sql`, functions only), keyed by case reference `R-YYYY-NNN` (training `T-YYYY-NNN`) and holding uuid8 — never the full transfer ID, an email, or the key part after the `#`. A helper may update CSEA and terrorism rows only and never changes a category. All answer `no-store`; 30 requests / 60 s per IP. Design: private `docs/OSA-Tools-plan-v1.md`.

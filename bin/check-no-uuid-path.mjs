@@ -19,7 +19,8 @@ import { join, dirname, relative, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const ROUTE = '(?:meta|download|unlock|auth|confirm|transfer|upload|timestamp/seal|api/v1/receipt|receipt)';
+// admin/reports: OSA-Tools-1 — the look-up and take-down name a transfer too (header only).
+const ROUTE = '(?:meta|download|unlock|auth|confirm|transfer|upload|timestamp/seal|api/v1/receipt|receipt|admin/reports)';
 const RULES = [
   [new RegExp(`(?<!releases)/${ROUTE}/[^'"\`\\s]*\\$[{A-Za-z_]`), 'path built with ${…} / $VAR under a transfer route'],
   [new RegExp(`(?<!releases)/${ROUTE}/['"\`]\\s*\\+`),           'path built with + after a transfer route'],

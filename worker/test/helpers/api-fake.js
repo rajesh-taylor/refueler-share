@@ -10,6 +10,7 @@ import { randomBase58 } from '../../src/handlers/api_admin.js';
 import { applyQuotaSpend, addOneMonth } from '../../src/quota.js';
 import { quotaRefFor } from '../../src/quota_store.js';
 import { makeBucket, makeKV } from '../_r2_mock.js';
+import { makeReportRpcs } from './report-fake.js';
 import { blindMessage, unblindSignature, pointFromHex } from '@cashu/cashu-ts';
 
 export const MINT_PRIVKEY_HEX = '7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f';
@@ -29,8 +30,10 @@ export function makeSupabase() {
   const calls = [];
   const state = { down: false };
   const now = () => Math.floor(Date.now() / 1000);
+  const reports = makeReportRpcs(now);   // OSA-Tools-1
 
   const rpcs = {
+    ...reports.rpcs,
     api_key_lookup({ p_key_hash }) {
       const k = keys.get(p_key_hash);
       const t = Date.now();
@@ -201,7 +204,7 @@ export function makeSupabase() {
     return new Response('[]', { status: 200 });
   }
 
-  return { keys, pools, spent, quota, reservations, calls, state, fetchImpl, rpcCalls: (fn) => calls.filter(c => c.path === `/rest/v1/rpc/${fn}`) };
+  return { keys, pools, spent, quota, reservations, reports, calls, state, fetchImpl, rpcCalls: (fn) => calls.filter(c => c.path === `/rest/v1/rpc/${fn}`) };
 }
 
 export function makeEnv(overrides = {}) {

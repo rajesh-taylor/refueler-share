@@ -28,6 +28,8 @@ test('refuses each way of putting a UUID in a path', () => {
     "fetch('https://api.share.refueler.io/meta/' + q[1]);",
     'signed("GET", `/api/v1/receipt/${uuid}/acceptance`, c);',
     "const u = '/transfer/0f8fad5b-d9cb-469f-a165-70867728950e';",
+    'fetch(`${API}/admin/reports/lookup/${uuid}`, { headers });',
+    "fetch(API + '/admin/reports/' + uuid);",
   ]) {
     const r = run({ 'a.js': bad });
     assert.equal(r.status, 1, bad);
@@ -41,6 +43,7 @@ test('passes the header form, comments and GitHub release URLs', () => {
     'ok.js': [
       "fetch(`${WORKER_URL}/meta`, { headers: { 'X-Transfer-UUID': uuid } });",
       "fetch(`${WORKER_URL}/download`, { headers: { 'X-Transfer-UUID': uuid, 'X-Part': padded } });",
+      "fetch(`${API}/admin/reports/lookup`, { headers: { 'X-Transfer-UUID': uuid, 'X-Admin-Key': key } });",
       '// was: GET /meta/${uuid}',
       '/* POST /upload/${uuid}/initiate */',
       'const sums = `${gh}/releases/download/app-${sha}/SHA256SUMS`;',
