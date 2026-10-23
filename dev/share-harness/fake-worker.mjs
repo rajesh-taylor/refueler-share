@@ -12,6 +12,10 @@
 // (whoami, lookup, register, open, update, takedown, export, export-training, delete-training), keys from
 // FAKE_ADMIN_KEY / FAKE_HELPER_KEY; GET /_reports → every reports request as received
 // (method, url, headers) and the register, for the Terminal-script tests. FAKE_PORT moves it off 8766.
+// OSA-Tools-4: /admin/execution-dock in the Worker's shape (status, days_remaining, rail,
+// upload_complete …); /_seed?id=<uuid>[&dock=0 not in the dock index][&done=0 still uploading]
+// [&tier=max][&age=<days old>][&drift=1 the index's tier disagrees with the live record][&n=<k> k more
+// random links]; the register keeps report_events (names of fields changed) and export returns them.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
@@ -24,7 +28,7 @@ let ctl = { fail: 'none', slow: 0, rate: 0 };
 const ADMIN_KEY = process.env.FAKE_ADMIN_KEY || 'fake-admin-key';
 // FAKE_HELPER_KEY_FILE: read on every request, so a rehearsal can set and remove the helper key.
 const helperKey = () => { try { return process.env.FAKE_HELPER_KEY_FILE ? readFileSync(process.env.FAKE_HELPER_KEY_FILE, 'utf8') : (process.env.FAKE_HELPER_KEY || ''); } catch { return ''; } };
-const R = { rows: new Map(), n: { R: 0, T: 0 }, log: [] };   // the fake report register
+const R = { rows: new Map(), n: { R: 0, T: 0 }, log: [], events: [] };   // the fake report register
 const role = (req) => req.headers['x-admin-key'] === ADMIN_KEY ? 'admin'
   : helperKey() && req.headers['x-admin-key'] === helperKey() ? 'helper' : null;
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
@@ -62,16 +66,32 @@ http.createServer(async (req, res) => {
     if (p[0] === '_last') return json(res, 200, auth.last);
     if (p[0] === '_reports') return json(res, 200, { log: R.log, rows: [...R.rows.values()] });
     if (p[0] === '_seed') {   // a live, complete transfer to look up and take down: /_seed?id=<uuid>
-      const sid = u.searchParams.get('id');
-      T.set(sid, { total: 1, bytes: 1, chunks: [Buffer.alloc(1)], dad: false, pw: null, expiry: Math.floor(Date.now() / 1000) + 86400, done: true, tier: 'free', created: Math.floor(Date.now() / 1000) });
-      return json(res, 200, { ok: true });
+      const q = (k, d) => u.searchParams.get(k) ?? d;
+      const ids = [q('id', crypto.randomUUID()), ...[...Array(+q('n', 0))].map(() => crypto.randomUUID())];
+      ids.forEach((sid, k) => {
+        const created = Math.floor(Date.now() / 1000) - Math.round(+q('age', 0) * 86400) - k * 3600;
+        T.set(sid, { total: 1, bytes: 1, chunks: [Buffer.alloc(1)], dad: false, pw: null, expiry: created + 7 * 86400,
+          done: q('done', '1') !== '0', tier: q('tier', 'free'), created, dock: q('dock', '1') !== '0',
+          drift: q('drift', '0') === '1' });
+      });
+      return json(res, 200, { ok: true, ids });
     }
     if (p[0] === 'admin' && p[1] === 'reports') return reports(req, res, u, id);
     if (p[0] === 'admin' && (p[1] === 'execution-dock' || p[1] === 'metrics')) {   // admin key only, as the Worker
       if (role(req) !== 'admin') return json(res, 401, { error: 'Unauthorized' });
       if (p[1] === 'metrics') return json(res, 200, {});
-      return json(res, 200, { badge_count: 0, transfers: [...T].filter(([, t]) => t.done && !t.removed)
-        .map(([uuid, t]) => ({ uuid, tier: t.tier ?? 'free', expiry_timestamp: t.expiry, created_at: t.created ?? 0 })) });
+      // As handlers/execution_dock.js: every indexed transfer (the initiate write), newest first;
+      // a take-down or deletion clears the entry. upload_complete = finalised (proposed, OSA-Tools-4).
+      const now = Math.floor(Date.now() / 1000);
+      const transfers = [...T].filter(([, t]) => t.dock !== false && !t.removed && t.created)
+        .map(([uuid, t]) => {
+          const tier = t.drift ? 'max' : (t.tier ?? 'free');
+          return { uuid, file_name: 'encrypted-payload', expiry_timestamp: t.expiry, created_at: t.created, tier,
+            collected: false, collected_at: null, status: now > t.expiry ? 'expired' : 'active',
+            days_remaining: Math.max(0, Math.ceil((t.expiry - now) / 86400)), purged_at: null,
+            rail: tier === 'free' ? null : 'identity', merkle_root: null, upload_complete: !!t.done };
+        }).sort((a, b) => b.created_at - a.created_at);
+      return json(res, 200, { transfers, badge_count: 0 });
     }
     if (TRANSFER.includes(u.pathname) && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, { error: 'missing_transfer_id' });
     // The receiver's password check, POST /unlock (any password opens it).
@@ -140,7 +160,7 @@ http.createServer(async (req, res) => {
       if (ctl.fail === 'initiate') return cjson(req, res, 401, { error: 'invalid credential' });
       const total = +req.headers['x-total-chunks'], bytes = +req.headers['x-total-bytes'];
       T.set(id, { total, bytes, chunks: [], dad: !!req.headers['x-destroy-after-download'], pw: req.headers['x-p2sh-secret-hash'] || null,
-        expiry: +req.headers['x-expiry-timestamp'], done: false });
+        expiry: +req.headers['x-expiry-timestamp'], done: false, tier: 'free', created: Math.floor(Date.now() / 1000) });
       const full = total - 1, first = Math.min(full, 256);
       return cjson(req, res, 200, { session_token: 'st-' + id, urls: [...Array(first)].map((_, i) => ({ index: i, url: url(id, i) })),
         batch_next: first < full ? first : null, tail_url: { index: total - 1, url: url(id, total - 1), expires: Date.now() / 1000 + 518400 } });
@@ -233,6 +253,7 @@ async function reports(req, res, u, id) {
         decision: 'open', reason: b.reason ?? null, takedown_at: null, takedown_by: null, nca_ref: null, reporter_told: null,
         key_removed: false, closed_at: null, opened_by: who, updated_at: now };
       R.rows.set(case_ref, row);
+      R.events.push({ id: R.events.length + 1, case_ref, at: now, by: who, action: 'open', fields: [] });
       return out(200, { case_ref, row });
     }
     case 'POST /admin/reports/update': {
@@ -241,8 +262,12 @@ async function reports(req, res, u, id) {
       if (who === 'helper' && !['csea', 'terrorism'].includes(r.category)) return out(403, { error: 'helper_category' });
       if (who === 'helper' && b.category && b.category !== r.category) return out(403, { error: 'helper_category_change' });
       if (/@|#|http/i.test(b.reason ?? '')) return out(400, { error: 'reason_forbidden' });
-      for (const k of ['category', 'decision', 'reason', 'nca_ref', 'reporter_told', 'key_removed']) if (k in b) r[k] = b[k];
+      const wasOpen = r.decision === 'open';
+      const changed = ['category', 'decision', 'reason', 'nca_ref', 'reporter_told', 'key_removed'].filter((k) => k in b && b[k] !== r[k]);
+      for (const k of changed) r[k] = b[k];
       r.closed_at = r.decision === 'open' ? null : (r.closed_at ?? now); r.updated_at = now;
+      if (changed.length) R.events.push({ id: R.events.length + 1, case_ref: r.case_ref, at: now, by: who,
+        action: wasOpen && r.decision !== 'open' ? 'close' : changed.includes('category') ? 'category_change' : 'update', fields: changed });
       return out(200, { row: r });
     }
     case 'POST /admin/reports/takedown': {
@@ -260,17 +285,20 @@ async function reports(req, res, u, id) {
       t.removed = true; t.removedAt = now; t.chunks = [];
       if (ctl.fail === 'register_down') return out(200, { destroyed: true, removed_at: now, register_updated: false });
       Object.assign(r, { takedown_at: now, takedown_by: who, updated_at: now });
+      R.events.push({ id: R.events.length + 1, case_ref: r.case_ref, at: now, by: who, action: 'takedown', fields: ['takedown_at', 'takedown_by'] });
       return out(200, { destroyed: true, removed_at: now, register_updated: true });
     }
     case 'POST /admin/reports/delete-training': {
       let deleted = 0;
       for (const [k, r] of R.rows) if (r.training) { R.rows.delete(k); deleted++; }
+      R.events = R.events.filter((e) => !e.case_ref.startsWith('T-'));
       return out(200, { deleted });
     }
     case 'GET /admin/reports/export':
     case 'GET /admin/reports/export-training': {
       const training = u.pathname.endsWith('training');
-      return out(200, { exported_at: now, rows: [...R.rows.values()].filter((r) => r.training === training), events: [] });
+      return out(200, { exported_at: now, rows: [...R.rows.values()].filter((r) => r.training === training),
+        events: R.events.filter((e) => e.case_ref.startsWith(training ? 'T-' : 'R-')) });
     }
   }
   return out(404, { error: 'no route ' + u.pathname });

@@ -18,7 +18,9 @@
  *     collected:         boolean,
  *     collected_at:      number | null,
  *     purged_at:         number | null,   // B12-1: set by a sweep that purged the objects
+ *     rail, merkle_root                    // added at finalise (Share-Dash-2)
  *   }
+ *   The answer adds upload_complete (OSA-Tools-4) = the entry has a merkle_root, i.e. finalise ran.
  *   size_bytes is NOT part of the schema (B12-SR X4). Legacy entries may still
  *   carry it in KV until TTL; it is never returned.
  *
@@ -178,6 +180,9 @@ export async function handleExecutionDock(request, env) {
       // Share-Dash-2 enrichment — written into dock_index at finalise.
       // (size_bytes removed in B12-1 — plaintext size is never persisted.)
       rail:             entry.rail ?? null,
+      // OSA-Tools-4: the Upload column. Finalise is the only write that adds merkle_root, so an
+      // entry carrying one has finished uploading; the root itself stays withheld (below).
+      upload_complete:  typeof entry.merkle_root === 'string' && entry.merkle_root.length > 0,
       // merkle_root IS captured in dock_index at finalise (ciphertext-chunk root),
       // but is deliberately WITHHELD here until Share-6-5 download verify is live
       // (kept pending, Rajesh · Share-Dash-2). Surfacing it is then a one-line
