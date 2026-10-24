@@ -218,7 +218,7 @@ describe('the helper key → 401 on every route outside its allowlist', () => {
   const staff = list.filter((r) => gate(r) === 'staff');
 
   it('the inventory sees the report routes, with the allowlist exactly the staff gate', () => {
-    expect(admin.length).toBeGreaterThanOrEqual(34);
+    expect(admin.length).toBeGreaterThanOrEqual(33);   // 34 → 33: purge-test-transfers removed (Purge-Route-Off)
     expect(staff.map((r) => `${r.method} ${r.path}`).sort()).toEqual([...ALLOW].sort());
     for (const p of ['/admin/reports/export', '/admin/reports/export-training', '/admin/reports/delete-training']) {
       expect(admin.some((r) => r.path === p)).toBe(true);

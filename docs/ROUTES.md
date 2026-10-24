@@ -102,7 +102,6 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/api/v1/admin/api-client/revoke` | admin | — | `handleAdminApiClientRevoke` |
 | GET | `/admin/orphan-sweep` | admin | — | `handleOrphanSweep` |
 | POST | `/admin/patch-merkle-root` | admin | — | `handlePatchMerkleRoot` |
-| DELETE | `/admin/purge-test-transfers` | admin | — | `handlePurgeTestTransfers` |
 | GET | `/admin/reports/whoami` | staff | yes | `handleReportsWhoami` |
 | GET | `/admin/reports/lookup` | staff | yes | `handleReportsLookup` |
 | GET | `/admin/reports/register` | staff | yes | `handleReportsRegister` |
@@ -120,7 +119,7 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/auth/signout-everywhere` | session | — | `handleSignout` |
 <!-- routes:end -->
 
-76 routes: 34 gated by the admin key alone (32 under `/admin` or `/api/v1/admin`, plus the sandbox activate/reset pair) and 6 by `staff` (admin or helper key). Anything not listed answers 404.
+75 routes: 33 gated by the admin key alone (31 under `/admin` or `/api/v1/admin`, plus the sandbox activate/reset pair) and 6 by `staff` (admin or helper key). Anything not listed answers 404.
 
 **Report route tools (OSA-Tools-1 · 22 Oct 2026).** `/admin/reports/*` serve the Online Safety report route: `whoami` → `{role}`; `lookup` reads the R2 manifest only and answers `state` (`live` · `expired` · `gone` · `removed` · `not_found`) and `consumed`, plus `tier`, `created_at`, `expires_at`, `upload_complete` for live/expired — nothing else; the register (`register`, `open`, `update`, `export`, `export-training`, `delete-training`) lives in Supabase (`supabase/migrations/20261022_osa_tools_1_reports.sql`, functions only), keyed by case reference `R-YYYY-NNN` (training `T-YYYY-NNN`) and holding uuid8 — never the full transfer ID, an email, or the key part after the `#`. A helper may update CSEA and terrorism rows only and never changes a category. All answer `no-store`; 30 requests / 60 s per IP. Design: private `docs/OSA-Tools-plan-v1.md`.
 
