@@ -78,12 +78,7 @@ jobs:
         run: npm test
 
       # ── Wrangler dry-run deploy ──────────────────────────────────────────
-      # Requires CF_API_TOKEN secret set in GitHub repo Settings → Secrets.
-      # The token needs Workers:Edit permission on the refueler.io account.
-      # Set it at: https://github.com/rajesh-taylor/refueler-share/settings/secrets/actions
-      # Token name: CF_API_TOKEN
+      # Bundles locally; needs no Cloudflare token (F5, removed 24 Oct 2026).
       - name: Wrangler dry-run deploy
         working-directory: worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: npx wrangler deploy --dry-run
