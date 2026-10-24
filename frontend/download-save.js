@@ -5,7 +5,7 @@
 import { setCalmText } from './progress.js';
 import { IntegrityError, DL_TEXT, _decryptPart,
          _eachPartInOrder } from './download-fetch.js';
-import { $, _showSheet, _showNotice, _showProgress, _setBar, _makeDlProgress, _showLinkInactive,
+import { $, _showSheet, _showStopped, _showProgress, _setBar, _makeDlProgress, _showLinkInactive,
          _showDownloadError } from './download-sheets.js';
 import { _showNotesCard } from './download-notes.js';
 import { makeProgramCheck, PROGRAM_NOTE } from './download-program.js';
@@ -21,7 +21,7 @@ import { makeProgramCheck, PROGRAM_NOTE } from './download-program.js';
 function _showIntegrityFailure(domRefs, reportError, uuid, chunkIdx) {
   // Item 12. Honest scope: the stored copy vs. what was uploaded (ciphertext storage
   // integrity), never end-to-end.
-  _showNotice('Stopped', "This file didn't pass its check.",
+  _showStopped("This file didn't pass its check.",
     "The stored copy doesn't match what the sender uploaded, so the download stopped. "
     + 'Nothing was saved to your device. Ask the sender for a new link.');
 

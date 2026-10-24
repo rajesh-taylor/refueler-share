@@ -408,12 +408,14 @@ html.up-dragging body::after {
   --rx-rule-strong: rgba(26,26,26,0.26);
   --rx-danger:      #B83A3A;
   --rx-accent:      #9A7A3E;
+  --rx-ref:         #7A5F2E;   /* Share-Copy-3: refueler.io ref-box gold (Notes), darker for small mono on Paper */
 }
 [data-theme="carbon"] {
   --rx-rule:        rgba(245,240,232,0.10);
   --rx-rule-strong: rgba(245,240,232,0.22);
   --rx-danger:      #E05252;
   --rx-accent:      #C8A96E;
+  --rx-ref:         #C8A96E;
 }
 /* Everywhere, not just .rx-mode: the upload page carries these sheets too (hidden). */
 .rx-sheet[hidden], .rx-sheet [hidden] { display: none !important; }
@@ -505,7 +507,7 @@ a.stage-chip:hover, a.stage-chip:focus-visible { color: var(--fg); }
 /* OSA-Tools-2: the closed-link ledger — the address opens an email, the reference selects in one click. */
 .rx-mail { color: inherit; text-decoration: underline; text-decoration-color: var(--rx-rule); text-underline-offset: 4px; }
 .rx-mail:hover, .rx-mail:focus-visible { text-decoration-color: currentColor; }
-.rx-row dd.rx-ref { font-family: var(--rx-mono); letter-spacing: .04em; user-select: all; }
+.rx-row dd.rx-ref { font-family: var(--rx-mono); letter-spacing: .04em; user-select: all; color: var(--rx-ref); }
 
 .rx-fname { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
 /* Share-DAD-2: filename hidden until asked */

@@ -36,12 +36,26 @@ function _arrive(sheet) {
   }, Math.max(0, lines.length - 1) * RX_STAGGER_MS + RX_SETTLE_MS + 100);
 }
 
-export function _showNotice(eyebrow, head, lede, { send = false, ledger = false } = {}) {
+// Share-Copy-3: the reference is the transfer ID's first 8 characters — the ?uuid= part,
+// never anything from #. download.js sets it once the link is read; a link that never
+// got that far shows no Reference row.
+let _reference = '';
+export function _setReference(uuid) {
+  const head = String(uuid || '').slice(0, 8).toLowerCase();
+  _reference = /^[0-9a-f]{8}$/.test(head) ? head : '';
+}
+
+// Ledger rows, set before the sheet arrives: mail = report@ (closed-link only),
+// ref = the reference. tryLink = "What to try →" (Stopped only).
+export function _showNotice(eyebrow, head, lede, { send = false, mail = false, ref = '', tryLink = false } = {}) {
   $('rx-notice-eyebrow').textContent = eyebrow;
   $('rx-notice-head').textContent    = head;
   $('rx-notice-lede').textContent    = lede;
   $('rx-notice-send').hidden         = !send;
-  $('rx-notice-ledger').hidden       = !ledger;   // closed-link email + reference (before the sheet arrives)
+  $('rx-notice-mail-row').hidden     = !mail;
+  $('rx-notice-ref').textContent     = ref;
+  $('rx-notice-ledger').hidden       = !(mail || ref);
+  $('rx-notice-try').hidden          = !tryLink;
   _showSheet('rx-notice');
 }
 
@@ -165,14 +179,18 @@ export function _showLinkInactive(_domRefs) {
 // swept (30 days) the link reads as inactive instead. Wording chosen by Rajesh
 // 22 Oct (short, warm, no apology); final polish at OSA-Copy-1.
 export function _showLinkRemoved(uuid8) {
-  $('rx-notice-ref').textContent = uuid8;
   $('rx-notice-mail').href = `mailto:report@refueler.io?subject=${encodeURIComponent(`Reference ${uuid8}`)}`;
   _showNotice('Link closed', 'This file is no longer available.',
     'We took the link down after a report. If you have a question, or think this was a mistake, write to us and give the reference. We read every message.',
-    { ledger: true });
+    { mail: true, ref: uuid8 });
 }
 
 // No progress figures on an error (DAD-ERROR-TEXT, Share-B10-3): the notice sheet has none.
+// Share-Copy-3: every Stopped sheet carries the reference (when known) and "What to try →".
+export function _showStopped(head, lede) {
+  _showNotice('Stopped', head, lede, { ref: _reference, tryLink: true });
+}
+
 export function _showDownloadError(msg, _domRefs) {
-  _showNotice('Stopped', 'The download stopped.', msg);
+  _showStopped('The download stopped.', msg);
 }

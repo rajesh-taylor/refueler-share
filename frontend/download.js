@@ -57,7 +57,7 @@ import { DL_TEXT, _resolveSize } from './download-fetch.js';
 import { LINK_INCOMPLETE } from './fragment.js';
 import { _startDownloadStream, _startDownload } from './download-save.js';
 import { $, _showSheet, _showNotice, _showWindowClosed, _setUnlockError, _showPreDownloadModal,
-         _renderHiddenFileName, _showLinkInactive, _showLinkRemoved, _showDownloadError } from './download-sheets.js';
+         _renderHiddenFileName, _showLinkInactive, _showLinkRemoved, _showDownloadError, _setReference, _showStopped } from './download-sheets.js';
 import { PROGRAM_NOTE, programBeforeDownload } from './download-program.js';
 import { _at, _fmtTime, _fmtDateTime, _sameDay, _countdown, _untilOpen } from './download-time.js';
 
@@ -71,13 +71,14 @@ export async function enterDownloadMode(detected, domRefs, state, helpers) {
     await _enterDownloadMode(detected, domRefs, state, helpers);
   } catch (e) {
     try { helpers.reportError('receiver_setup', e?.name || 'Error', ''); } catch {}
-    _showNotice('Stopped', 'Share couldn’t start in this browser.',
+    _showStopped('Share couldn’t start in this browser.',
       'Reload to try again, or use another browser.');
   }
 }
 
 async function _enterDownloadMode(detected, domRefs, state, helpers) {
   const { uuid } = detected;
+  _setReference(uuid);   // Share-Copy-3: the Stopped sheet's reference
   const {
     receiverCard,
     rcFileName, rcFolderNote, rcSize, rcExpiry,
