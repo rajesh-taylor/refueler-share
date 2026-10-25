@@ -106,6 +106,12 @@ async function _enterDownloadMode(detected, domRefs, state, helpers) {
   // Clear fragment + query from URL bar now (key is imported, no longer needed)
   history.replaceState(null, '', location.pathname);
 
+  // Report this link (OSA-Copy-1): the transfer ID part only, built from uuid —
+  // the key part after the # is never read here.
+  const reportLink = `${location.origin}${location.pathname}?uuid=${encodeURIComponent(uuid)}`;
+  $('rc-report-link').href = 'mailto:report@refueler.io?subject=' + encodeURIComponent('Report a link')
+    + '&body=' + encodeURIComponent(reportLink + '\n\nWhat it is, and when you saw it:\n');
+
   // Fetch metadata
   // Safari-Slow-Link-1: share-early.js asked already; a failed early ask is asked again.
   let meta = {};

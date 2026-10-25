@@ -540,6 +540,9 @@ a.stage-chip:hover, a.stage-chip:focus-visible { color: var(--fg); }
 .rx-btn:hover:not(:disabled) { opacity: .88; }
 .rx-btn:disabled { opacity: .35; cursor: not-allowed; }
 .rx-fine { font: 400 12.5px/1.5 var(--rx-sans); color: var(--fg-muted); margin: 0; text-align: center; }
+/* Report this link (OSA-Copy-1): quiet, under the card's actions. */
+.rx-report { margin-top: 6px; }
+.rx-report a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 
 /* Password screen (R-8) */
 .rx-field { margin-top: 32px; display: flex; flex-direction: column; gap: 8px; }
