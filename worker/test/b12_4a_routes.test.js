@@ -267,11 +267,11 @@ describe('session, sign-out, sign-out-everywhere (S6.6, S6.7)', () => {
     expect(b).toMatchObject({ kind: 'citizen', csrf, tier: 'free' });
     expect(JSON.stringify(b)).not.toContain(CUS);
   });
-  it('GET /chambers/session: tier max only when paid (B12-4a-2)', async () => {
+  it('GET /chambers/session: tier citizen only when paid (B12-4a-2)', async () => {
     const { cookie } = await signIn();
-    db.entitlements.set(CUS, { tier: 'max', paid: true });
-    expect((await (await getSession(cookie)).json()).tier).toBe('max');
-    db.entitlements.set(CUS, { tier: 'max', paid: false });
+    db.entitlements.set(CUS, { tier: 'citizen', paid: true });
+    expect((await (await getSession(cookie)).json()).tier).toBe('citizen');
+    db.entitlements.set(CUS, { tier: 'citizen', paid: false });
     expect((await (await getSession(cookie)).json()).tier).toBe('free');
   });
   it('expired session → 401 and the cookie is cleared', async () => {

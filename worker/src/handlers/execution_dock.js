@@ -42,6 +42,7 @@
  */
 
 import { requireAdmin } from '../utils.js';
+import { storedTier } from '../tiers.js';
 
 const PREFIX = 'dock_index:';
 const METADATA_MAX = 1000;   // KV allows 1,024 bytes of serialised metadata
@@ -171,7 +172,7 @@ export async function handleExecutionDock(request, env) {
       file_name:        entry.file_name ?? null,
       expiry_timestamp: entry.expiry_timestamp,
       created_at:       entry.created_at,
-      tier:             entry.tier ?? 'free',
+      tier:             storedTier(entry.tier ?? 'free'),  // pre-Stripe-Account-1 entries say 'max'
       collected:        entry.collected ?? false,
       collected_at:     entry.collected_at ?? null,
       status,

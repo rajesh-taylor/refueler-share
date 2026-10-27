@@ -6,7 +6,8 @@
 // CREDENTIALS ISSUED per tier, not "users":
 //   · Pro Bono (free) is anonymous by design — there are no accounts to count.
 //     Its line is credentials issued (≈ upload sessions). Labelled as such.
-//   · Paid  = Citizen + Sovereign  (wire tiers 'creative' + 'max').
+//   · Paid  = Citizen + Sovereign  (wire tier 'citizen'; older AE rows carry
+//     the pre-Stripe-Account-1 names, folded in by tiers.js storedTier).
 //   · API   = Chartered            (wire tier 'api').
 //
 // Source is Analytics Engine only (Share-B10-1, operator choice). Cloudflare AE
@@ -33,6 +34,7 @@
 // bucketSeconds is used to synthesise empty leading buckets client-independently
 // is NOT done here — we return only buckets AE actually has, ascending.
 import { requireAdmin } from '../utils.js';
+import { CITIZEN, storedTier } from '../tiers.js';
 
 const RANGES = {
   D: { windowQty: 1,  windowUnit: 'DAY', bucketQty: 1, bucketUnit: 'HOUR', truncated: false },
@@ -60,9 +62,9 @@ function err(status, message) {
 
 // tier blob → chart line. Returns 'free' | 'paid' | 'api' | null (drop).
 function lineForTier(tier) {
-  switch (tier) {
+  switch (storedTier(tier)) {
     case 'free':               return 'free';
-    case 'creative': case 'max': return 'paid';
+    case CITIZEN:              return 'paid';
     case 'api':                return 'api';
     default:                   return null; // rate_limited / resume_rejected / unknown
   }

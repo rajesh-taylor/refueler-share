@@ -117,7 +117,7 @@ describe('GET /admin/reports/lookup', () => {
   const LIVE_KEYS = ['consumed', 'created_at', 'expires_at', 'state', 'tier', 'upload_complete'];
   const DEAD_KEYS = ['consumed', 'state'];
   const full = (o = {}) => ({
-    uuid: UUID, tier: 'creative', total_chunks: 3, expiry_timestamp: NOW() + 86400, created_at: NOW() - 60,
+    uuid: UUID, tier: 'max', total_chunks: 3, expiry_timestamp: NOW() + 86400, created_at: NOW() - 60,
     blake3_root: 'r', chunks_received: [], upload_complete: true, download_initiated_at: null,
     p2sh_secret_hash: 'deadbeef', file_name: 'secret-name.pdf', total_bytes: 12345, status: 'uploading',
     destroy_after_download: true, available_from_timestamp: 1, merkle_root: 'm', sealed_qref: 'q', ...o,
@@ -132,7 +132,8 @@ describe('GET /admin/reports/lookup', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     const j = await res.json();
     expect(Object.keys(j).sort()).toEqual(LIVE_KEYS);
-    expect(j).toEqual({ state: 'live', tier: 'creative', created_at: m.created_at, expires_at: m.expiry_timestamp, upload_complete: true, consumed: false });
+    // a manifest written before Stripe-Account-1 reads back as citizen (tiers.js storedTier)
+    expect(j).toEqual({ state: 'live', tier: 'citizen', created_at: m.created_at, expires_at: m.expiry_timestamp, upload_complete: true, consumed: false });
   });
 
   it('upload not complete is reported as such (never from status)', async () => {

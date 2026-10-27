@@ -23,6 +23,7 @@
 
 import { json, requireRole, safeGetManifest, transferUuid } from '../utils.js';
 import { StoreUnavailable } from '../api_store.js';
+import { storedTier } from '../tiers.js';
 import { destroyTransfer, isTombstone } from './delete_transfer.js';
 import {
   parseOpen, parseUpdate, reportOpen, reportUpdate, reportList, reportExport, reportDeleteTraining,
@@ -89,7 +90,7 @@ export async function handleReportsLookup(request, env) {
   const expiresAt = Number.isFinite(manifest.expiry_timestamp) ? manifest.expiry_timestamp : null;
   return out({
     state:           expiresAt !== null && now > expiresAt ? 'expired' : 'live',
-    tier:            typeof manifest.tier === 'string' ? manifest.tier : null,
+    tier:            typeof manifest.tier === 'string' ? storedTier(manifest.tier) : null,
     created_at:      Number.isFinite(manifest.created_at) ? manifest.created_at : null,
     expires_at:      expiresAt,
     upload_complete: manifest.upload_complete === true,

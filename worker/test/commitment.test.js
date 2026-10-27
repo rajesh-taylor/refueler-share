@@ -62,7 +62,7 @@ function stubFetch() {
     calls.push(`${opts.method ?? 'GET'} ${String(url).replace('https://sb.test', '')}`);
     if (String(url).includes('/rest/v1/spent_tokens')) return new Response(null, { status: 201 });
     if (String(url).includes('/rest/v1/subscribers')) {
-      return new Response(JSON.stringify([{ tier: 'max' }]), { status: 200 });
+      return new Response(JSON.stringify([{ tier: 'citizen' }]), { status: 200 });
     }
     return new Response('[]', { status: 200 });
   });
@@ -115,7 +115,7 @@ describe('computeCommitment', () => {
     const base = await computeCommitment(KEY, UUID, 'free', WEEK);
     const variants = await Promise.all([
       computeCommitment(KEY, UUID2, 'free', WEEK),
-      computeCommitment(KEY, UUID, 'creative', WEEK),
+      computeCommitment(KEY, UUID, 'citizen', WEEK),
       computeCommitment(KEY, UUID, 'free', WEEK + 1),
       computeCommitment(KEY + 'x', UUID, 'free', WEEK),
     ]);
@@ -217,7 +217,7 @@ describe('POST /upload/:uuid/initiate — commitment gate', () => {
     const calls = stubFetch();
     const env = makeEnv();
     const { body, credential } = await issueViaWorker(env);
-    const overFreeCap = 5 * 1024 * 1024 * 1024; // > free 4 GB, < max
+    const overFreeCap = 5 * 1024 * 1024 * 1024; // > free 4 GB, < citizen
     const res = await initiate(env, body.uuid, {
       credential, commitment: body.commitment, bytes: overFreeCap,
       extra: { 'X-Email': 'subscriber@example.com' },

@@ -33,7 +33,7 @@ export async function loadAccount(domRefs, onChange) {
     if (r.ok) s = await r.json();
   } catch { /* offline, blocked, or no auth host: Pro Bono, say nothing */ }
   announce(s && s.kind === 'citizen' ? 'citizen' : null);
-  if (!s || s.kind !== 'citizen' || s.tier !== 'max' || typeof s.csrf !== 'string') return;
+  if (!s || s.kind !== 'citizen' || s.tier !== 'citizen' || typeof s.csrf !== 'string') return;
   account.csrf = s.csrf;
   account.use  = true;
   account.onChange = onChange;

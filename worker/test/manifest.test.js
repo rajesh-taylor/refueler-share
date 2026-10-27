@@ -2,8 +2,7 @@
 // Unit tests for worker/src/manifest.js
 //
 // Covers:
-//   TIER_CAPS         — free / max / api byte values (B12-4a-2)
-//   TIER_EXPIRY_SECONDS — free=7days, paid tiers null
+//   TIER_CAPS         — free / citizen / api byte values (B12-4a-2, Stripe-Account-1)
 //   createManifest    — required fields, defaults, p2shSecretHash optional
 //   isExpired         — past/future expiry_timestamp
 //   isInGracePeriod   — download_initiated_at before vs after expiry
@@ -15,7 +14,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   TIER_CAPS,
-  TIER_EXPIRY_SECONDS,
   createManifest,
   getManifest,
   putManifest,
@@ -78,25 +76,13 @@ describe('TIER_CAPS', () => {
     expect(TIER_CAPS.free).toBe(4 * 1024 * 1024 * 1024);
   });
 
-  it('max (Citizen) is exactly 100 GiB, api (Chartered) 250 GiB', () => {
-    expect(TIER_CAPS.max).toBe(100 * 1024 * 1024 * 1024);
+  it('citizen is exactly 100 GiB, api (Chartered) 250 GiB', () => {
+    expect(TIER_CAPS.citizen).toBe(100 * 1024 * 1024 * 1024);
     expect(TIER_CAPS.api).toBe(250 * 1024 * 1024 * 1024);
   });
 
   it('one wire name per tier — no legacy keys (B12-4a-2)', () => {
-    expect(Object.keys(TIER_CAPS).sort()).toEqual(['api', 'free', 'max']);
-  });
-});
-
-describe('TIER_EXPIRY_SECONDS', () => {
-  it('free tier is exactly 7 days in seconds', () => {
-    expect(TIER_EXPIRY_SECONDS.free).toBe(7 * 24 * 60 * 60);
-  });
-
-  it('paid tiers return null (user-set expiry)', () => {
-    expect(TIER_EXPIRY_SECONDS.creative).toBeNull();
-    expect(TIER_EXPIRY_SECONDS.production).toBeNull();
-    expect(TIER_EXPIRY_SECONDS.enterprise).toBeNull();
+    expect(Object.keys(TIER_CAPS).sort()).toEqual(['api', 'citizen', 'free']);
   });
 });
 
@@ -132,7 +118,7 @@ describe('createManifest', () => {
   it('sets created_at to current unix seconds', () => {
     vi.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
     const m = createManifest({
-      uuid: UUID, tier: 'creative', totalChunks: 1,
+      uuid: UUID, tier: 'citizen', totalChunks: 1,
       totalBytes: 100, expiryTimestamp: NOW_SEC + 100, blake3Root: 'b'.repeat(64),
     });
     expect(m.created_at).toBe(NOW_SEC);

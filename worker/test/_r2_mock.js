@@ -118,7 +118,7 @@ export function transfer(uuid, { total = 3, present = total, uploaded = NOW - DA
 }
 export const complete = (uuid, o = {}) => ({ uuid, total_chunks: 3, upload_complete: true, expiry_timestamp: NOW + DAY, created_at: NOW - 2 * DAY, ...o });
 export const partial  = (uuid, o = {}) => ({ uuid, total_chunks: 3, upload_complete: false, expiry_timestamp: NOW + DAY, created_at: NOW - DAY, ...o });
-export const dock     = (o = {}) => ({ expiry_timestamp: NOW - 3 * DAY, tier: 'creative', file_name: 'encrypted-payload', created_at: NOW - 10 * DAY, ...o });
+export const dock     = (o = {}) => ({ expiry_timestamp: NOW - 3 * DAY, tier: 'citizen', file_name: 'encrypted-payload', created_at: NOW - 10 * DAY, ...o });
 
 export async function sweep(bucket, kv, query = '') {
   const env = { BUCKET: bucket, STATUS_KV: kv, ADMIN_KEY: 'k' };

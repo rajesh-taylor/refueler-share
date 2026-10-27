@@ -27,6 +27,7 @@ import * as store from '../auth_store.js';
 import { sendSignInEmail } from '../mailer.js';
 import { verifyTurnstileToken } from '../turnstile.js';
 import { checkRateLimit, getClientIp } from '../ratelimit.js';
+import { CITIZEN } from '../tiers.js';
 
 // S6.2 limits (🔒 existence · 🟡 numbers).
 export const MAGIC_IP_LIMIT        = { max: 5,   window: 900 };    // per IP / 15 min → 429
@@ -187,12 +188,13 @@ export async function requireSession(request, env, { stateChanging }) {
 }
 
 /**
- * citizenTier(env, ref) → 'max' | 'free' (B12-4a-2). 'max' only for a paid
- * subscription (active + period not over). Throws StoreUnavailable.
+ * citizenTier(env, ref) → 'citizen' | 'free' (B12-4a-2; wire 'max' until
+ * Stripe-Account-1). 'citizen' only for a paid subscription (active + period
+ * not over) on a Citizen price. Throws StoreUnavailable.
  */
 export async function citizenTier(env, ref) {
   const e = await store.citizenEntitlement(env, ref);
-  return e.paid && e.tier === 'max' ? 'max' : 'free';
+  return e.paid && e.tier === CITIZEN ? CITIZEN : 'free';
 }
 
 // ── GET /chambers/session ────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ function seed() {
     // live Pro Bono, 2 chunks
     [`${U(1)}/manifest.json`]: man({ tier: 'free', upload_complete: true, expiry_timestamp: NOW + 100 }),
     [`${U(1)}/chunk-0`]: blob(1000), [`${U(1)}/chunk-1`]: blob(500),
-    // live Sovereign
+    // live Citizen, manifest written before Stripe-Account-1 (wire 'max')
     [`${U(2)}/manifest.json`]: man({ tier: 'max', upload_complete: true, expiry_timestamp: NOW + 100 }),
     [`${U(2)}/chunk-0`]: blob(4000),
     // still uploading
@@ -39,7 +39,8 @@ describe('B12-2 /admin/storage', () => {
     const s = await buildStorageSummary(env, NOW);
     expect(s.live.free).toMatchObject({ transfers: 1 });
     expect(s.live.free.bytes).toBeGreaterThanOrEqual(1500);
-    expect(s.live.max.transfers).toBe(1);
+    expect(s.live.citizen.transfers).toBe(1);   // read via storedTier
+    expect(s.live.max).toBeUndefined();
     expect(s.uploading.transfers).toBe(1);
     expect(s.expired.transfers).toBe(1);
     expect(s.deleted.transfers).toBe(1);

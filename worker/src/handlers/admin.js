@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { requireAdmin } from '../utils.js';
+import { storedTier } from '../tiers.js';
 import { readErrorNotes } from './client_errors_kv.js';
 import { cleanStatus, isShapeError } from '../status_shape.js';
 
@@ -117,7 +118,7 @@ export async function handleAdminMetrics(request, env) {
 
   const issByTier = aeData?.credential_issuances_by_tier;
   if (issByTier && !aeData?.credential_issuances_note) {
-    const totalIssuances = (issByTier.free ?? 0) + (issByTier.creative ?? 0) + (issByTier.max ?? 0);
+    const totalIssuances = (issByTier.free ?? 0) + (issByTier.citizen ?? 0);
     data.free_to_paid_conversion_rate = totalIssuances > 0
       ? parseFloat((data.paid_total / totalIssuances * 100).toFixed(2))
       : null;
@@ -139,24 +140,22 @@ export async function handleAdminMetrics(request, env) {
 }
 
 async function fetchMetricsData(env) {
-  const TIER_MRR = { creative: 12, max: 24 };
+  // Citizen £24/mo or £288/yr (= 12 × £24, Stripe-Account-1) — one monthly figure either way.
+  const TIER_MRR = { citizen: 24 };
 
   try {
     const countRes = await supabaseFetch(env, 'GET', '/rest/v1/subscribers?status=eq.active&select=tier');
     if (!countRes.ok) return err(502, 'Database unavailable');
     const activeRows = await countRes.json();
 
-    const subscribersByTier = { free: 0, creative: 0, max: 0 };
+    const subscribersByTier = { free: 0, citizen: 0 };
     for (const row of activeRows) {
-      const t = row.tier ?? 'free';
+      const t = row.tier ?? 'free';   // subscribers_tier_check: free | citizen
       subscribersByTier[t] = (subscribersByTier[t] ?? 0) + 1;
     }
 
-    const mrrGbp =
-      (subscribersByTier.creative ?? 0) * TIER_MRR.creative +
-      (subscribersByTier.max      ?? 0) * TIER_MRR.max;
-
-    const paidTotal = (subscribersByTier.creative ?? 0) + (subscribersByTier.max ?? 0);
+    const mrrGbp    = (subscribersByTier.citizen ?? 0) * TIER_MRR.citizen;
+    const paidTotal = subscribersByTier.citizen ?? 0;
 
     const now          = new Date();
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
@@ -208,7 +207,7 @@ async function fetchMetricsData(env) {
     return {
       as_of: new Date().toISOString(),
       mrr_gbp: mrrGbp,
-      mrr_note: 'Conservative floor: monthly plan prices used for all tiers. Yearly subscribers (£120/yr creative, £240/yr max) are under-counted by £2–4/mo each. Accurate MRR requires Stripe API interval lookup (dashboard layer, S22).',
+      mrr_note: 'Active Citizens × £24. Yearly is £288 = 12 × £24, so monthly and yearly subscribers count the same. Excludes Chartered (invoiced off-Stripe-subscription).',
       subscribers_by_tier: subscribersByTier,
       paid_total: paidTotal,
       churn_rate_mtd_pct: churnRateMtd,
@@ -345,10 +344,10 @@ async function fetchAeMetricsData(env) {
   let credentialIssuancesNote = null;
   if (issuanceResult.status === 'fulfilled') {
     const rows = issuanceResult.value?.data ?? [];
-    credentialIssuancesByTier = { free: 0, creative: 0, max: 0 };
+    credentialIssuancesByTier = { free: 0, citizen: 0 };
     for (const row of rows) {
-      const tier = row.tier ?? 'free';
-      credentialIssuancesByTier[tier] = parseInt(row.issued ?? 0, 10);
+      const tier = storedTier(row.tier ?? 'free');   // older AE rows: pre-Stripe-Account-1 names
+      credentialIssuancesByTier[tier] = (credentialIssuancesByTier[tier] ?? 0) + parseInt(row.issued ?? 0, 10);
     }
   } else {
     credentialIssuancesNote = `AE query failed: ${issuanceResult.reason?.message}`;

@@ -17,6 +17,8 @@
  * No digest, no calendar URLs stored in manifest — Worker is a blind byte-relay.
  */
 
+import { CITIZEN } from './tiers.js';
+
 // ---------------------------------------------------------------------------
 // Status check — called by both auth and download handlers before any work.
 // Returns { ok: true } or { ok: false, status: 410|425, body: string }.
@@ -112,12 +114,12 @@ export function buildTombstone(nowSeconds, { removed = false } = {}) {
 // tier string (feature level), which carries no rail signal, so it can only
 // ever express paid-vs-free — which is exactly the intended gate.
 //
-// Live wire values (Share-2, 11 Sep 2026): 'free' / 'creative' / 'max'. The
-// two paid keys are 'creative' and 'max' (the old lightning-routes.js
-// VALID_TIERS paid set went with KV-Fix-1a). Deferred: 'free'/'creative'/'max' →
-// 'paid_*' migration, after which gate via tiers.js isPaidTier() instead.
+// Live wire values (Stripe-Account-1, 27 Oct 2026): 'free' / 'citizen'. Called
+// at initiate with the resolved tier only, so no stored (legacy) value reaches
+// it. Deferred: 'free'/'citizen' → 'paid_*' migration, after which gate via
+// tiers.js isPaidTier() instead.
 // ---------------------------------------------------------------------------
-const PAID_TIERS = new Set(['creative', 'max']);
+const PAID_TIERS = new Set([CITIZEN]);
 
 export function isTidalPermitted(credentialTier) {
   return PAID_TIERS.has((credentialTier ?? '').toLowerCase());

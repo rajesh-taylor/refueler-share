@@ -47,6 +47,7 @@ import { finaliseQuota } from '../quota_store.js';
 import { wrongSizeSegments, DELETE_BATCH } from '../sweep_rules.js';
 import { hasCref, hasQref } from '../seal.js';
 import { issueReceipt } from '../receipts.js';
+import { CITIZEN, storedTier } from '../tiers.js';
 
 // base64url → Uint8Array. Returns null on any non-base64url input or decode
 // failure; the caller enforces the exact 32-byte length. Strict base64url
@@ -87,12 +88,12 @@ function aeLog(env, { endpoint = '', tier = 'free', status = 200, errorMsg = '' 
 // Pre-B7 the anonymous (Lightning / Bearer) consumer rail is not live, so every
 // paid transfer resolves to 'identity' and free transfers have no rail. When
 // Bearer ships, derive from the credential's actual rail rather than the tier.
-// Wire tiers today: free · creative · max (Stripe axis) · api (Chartered).
+// Wire tiers today: free · citizen (Stripe axis) · api (Chartered). A manifest
+// initiated before Stripe-Account-1 may still say 'max' — read via storedTier.
 function railForTier(tier) {
-  switch (tier) {
+  switch (storedTier(tier)) {
     case 'free':     return null;        // Pro Bono — no rail
-    case 'creative':
-    case 'max':      return 'identity';  // Registered (Stripe)
+    case CITIZEN:    return 'identity';  // Registered (Stripe)
     case 'api':      return 'identity';  // Chartered — Bearer variant post-B7
     default:         return null;
   }
@@ -293,7 +294,7 @@ export async function handleFinalise(request, env, uuid, ctx) {
     const existing = await env.STATUS_KV.get(dockKey, { type: 'json' });
     const entry = existing && typeof existing === 'object' ? existing : {
       expiry_timestamp: manifest.expiry_timestamp,
-      tier:             manifest.tier ?? 'free',
+      tier:             storedTier(manifest.tier ?? 'free'),
       file_name:        'encrypted-payload',
       created_at:       manifest.created_at,
     };

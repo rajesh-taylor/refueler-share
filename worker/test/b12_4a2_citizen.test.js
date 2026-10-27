@@ -21,6 +21,7 @@ import { openQref } from '../src/seal.js';
 import { newSecret, secretHash, csrfFor } from '../src/auth.js';
 import { TIER_CAPS, CHARTERED_CAP_BYTES } from '../src/manifest.js';
 import { destroyTransfer } from '../src/handlers/delete_transfer.js';
+import { computeCommitment } from '../src/commitment.js';
 import {
   makeSupabase, makeEnv as baseEnv, seedClient as seed, apiIssue, charteredInitiate, ctx, ORIGIN, QUOTA_REF_KEY,
 } from './helpers/api-fake.js';
@@ -72,7 +73,7 @@ const makeEnv = (o = {}) => baseEnv({
 async function signIn(env, { kind = 'citizen', ref = CUS, paid = true } = {}) {
   const id = newSecret();
   sessions.set(secretHash(id), { kind, ref, idle: nowS() + 3600, abs: nowS() + 86400 });
-  if (kind === 'citizen') entitlements.set(ref, { tier: 'max', paid });
+  if (kind === 'citizen') entitlements.set(ref, { tier: 'citizen', paid });
   return { cookie: `__Host-rfs_session=${id}`, csrf: await csrfFor(env, id) };
 }
 
@@ -111,8 +112,8 @@ const acct = () => sb.quota.get(KAT_CITIZEN_QREF);
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('TIER_CAPS — one wire name per tier', () => {
-  it('free 4 GiB · max 100 GiB · api 250 GiB; Chartered cap = api', () => {
-    expect(TIER_CAPS).toEqual({ free: 4 * GIB, max: 100 * GIB, api: 250 * GIB });
+  it('free 4 GiB · citizen 100 GiB · api 250 GiB; Chartered cap = api', () => {
+    expect(TIER_CAPS).toEqual({ free: 4 * GIB, citizen: 100 * GIB, api: 250 * GIB });
     expect(CHARTERED_CAP_BYTES).toBe(250 * GIB);
     expect(CITIZEN_LIMIT_CHUNKS * CHUNK).toBe(100 * GIB);
   });
@@ -130,14 +131,26 @@ describe('Citizen quota_ref (S1.4)', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Citizen initiate (S6.10)', () => {
-  it('paid session → tier max, account-of-one provisioned and reserved, qref_ct sealed', async () => {
+  it('Stripe-Account-1: an old wire name is not an alias — max issues as free; a max commitment 401s', async () => {
     const env = makeEnv();
     const s = await signIn(env);
-    const cred = await issue(env, 'max');
+    const asked = await issue(env, 'max');
+    expect(asked.issued_tier).toBe('free');
+    // A credential minted as 'max' before the deploy, used after it: refused, the browser asks again.
+    const old = await issue(env, 'citizen');
+    old.issued_tier = 'max';
+    old.commitment  = await computeCommitment(env.COMMITMENT_KEY, old.uuid, 'max', 90 * 86400);
+    expect((await initiate(env, old, { session: s })).status).toBe(401);
+  });
+
+  it('paid session → tier citizen, account-of-one provisioned and reserved, qref_ct sealed', async () => {
+    const env = makeEnv();
+    const s = await signIn(env);
+    const cred = await issue(env, 'citizen');
     const res = await initiate(env, cred, { bytes: 3 * CHUNK, session: s, expiry: nowS() + 60 * 86400 });
     expect(res.status).toBe(200);
     const m = manifestOf(env, cred.uuid);
-    expect(m.tier).toBe('max');
+    expect(m.tier).toBe('citizen');
     expect(JSON.stringify(m)).not.toContain(CUS);
     expect(JSON.stringify(m)).not.toContain(KAT_CITIZEN_QREF);
     expect((await openQref(env, cred.uuid, m.qref_ct)).quotaRef).toBe(KAT_CITIZEN_QREF);
@@ -147,14 +160,14 @@ describe('Citizen initiate (S6.10)', () => {
   it('paid Citizen gets the 100 GiB cap; Pro Bono still 413 above 4 GiB', async () => {
     const env = makeEnv();
     const s = await signIn(env);
-    expect((await initiate(env, await issue(env, 'max'), { bytes: 5 * GIB, session: s })).status).toBe(200);
-    expect((await initiate(env, await issue(env, 'max'), { bytes: 100 * GIB + 1, session: s })).status).toBe(413);
+    expect((await initiate(env, await issue(env, 'citizen'), { bytes: 5 * GIB, session: s })).status).toBe(200);
+    expect((await initiate(env, await issue(env, 'citizen'), { bytes: 100 * GIB + 1, session: s })).status).toBe(413);
     expect((await initiate(env, await issue(env), { bytes: 5 * GIB })).status).toBe(413);
   });
 
   it('no cookie → Pro Bono: no session lookup, no quota, 7-day ceiling', async () => {
     const env = makeEnv();
-    const cred = await issue(env, 'max');
+    const cred = await issue(env, 'citizen');
     expect((await initiate(env, cred, { expiry: nowS() + 30 * 86400 })).status).toBe(400);
     const ok = await issue(env);
     expect((await initiate(env, ok)).status).toBe(200);
@@ -168,7 +181,7 @@ describe('Citizen initiate (S6.10)', () => {
     const env = makeEnv();
     const s = await signIn(env);
     for (const o of [{ csrf: null }, { csrf: 'A'.repeat(43) }, { origin: 'https://evil.example' }, { origin: null }, { origin: 'http://localhost:8080' }]) {
-      const cred = await issue(env, 'max');
+      const cred = await issue(env, 'citizen');
       const r = await initiate(env, cred, { session: s, ...o });
       expect(r.status).toBe(403);
       expect(env.BUCKET._store.has(`${cred.uuid}/manifest.json`)).toBe(false);
@@ -181,7 +194,7 @@ describe('Citizen initiate (S6.10)', () => {
     const env = makeEnv();
     const s = await signIn(env);
     sessions.clear();
-    const r = await initiate(env, await issue(env, 'max'), { session: s });
+    const r = await initiate(env, await issue(env, 'citizen'), { session: s });
     expect(r.status).toBe(401);
     expect(r.headers.get('Set-Cookie')).toMatch(/Max-Age=0/);
     expect(sb.spent.size).toBe(0);
@@ -215,7 +228,7 @@ describe('Citizen initiate (S6.10)', () => {
   it('Supabase down at the session check → 503, nothing spent', async () => {
     const env = makeEnv();
     const s = await signIn(env);
-    const cred = await issue(env, 'max');
+    const cred = await issue(env, 'citizen');
     sb.state.down = true;
     expect((await initiate(env, cred, { session: s })).status).toBe(503);
     sb.state.down = false;
@@ -226,7 +239,7 @@ describe('Citizen initiate (S6.10)', () => {
     const env = makeEnv();
     const s = await signIn(env);
     sb.quota.set(KAT_CITIZEN_QREF, { kind: 'registered', limit_chunks: 4, used_chunks: 3, reserved_chunks: 0, max_in_flight: 20, updated_at: 0 });
-    const r = await initiate(env, await issue(env, 'max'), { bytes: 2 * CHUNK, session: s });
+    const r = await initiate(env, await issue(env, 'citizen'), { bytes: 2 * CHUNK, session: s });
     expect(r.status).toBe(402);
     expect(await r.json()).toMatchObject({ code: 'quota_exceeded', held_chunks: 3, limit_chunks: 4, need_chunks: 2 });
     expect(sb.spent.size).toBe(0);
@@ -236,7 +249,7 @@ describe('Citizen initiate (S6.10)', () => {
   it('finalise converts, DAD releases (one latch, one release)', async () => {
     const env = makeEnv();
     const s = await signIn(env);
-    const cred = await issue(env, 'max');
+    const cred = await issue(env, 'citizen');
     const r = await initiate(env, cred, { bytes: 2 * CHUNK, session: s });
     const { session_token } = await r.json();
     for (let i = 0; i < 2; i++) env.BUCKET._store.set(`${cred.uuid}/${String(i).padStart(4, '0')}`, { size: CHUNK + 16, uploaded: new Date(), etag: `c${i}` });
@@ -282,7 +295,7 @@ describe('initiate CORS (S6.6)', () => {
   it('the initiate response itself carries credentialed CORS', async () => {
     const env = makeEnv();
     const s = await signIn(env);
-    const r = await initiate(env, await issue(env, 'max'), { session: s });
+    const r = await initiate(env, await issue(env, 'citizen'), { session: s });
     expect(r.status).toBe(200);
     expect(r.headers.get('Access-Control-Allow-Origin')).toBe(PAGE);
     expect(r.headers.get('Access-Control-Allow-Credentials')).toBe('true');

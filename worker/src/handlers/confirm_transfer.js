@@ -30,6 +30,7 @@ import { latchConsumed }                                     from '../latch.js';
 import { destroyTransfer }                                   from './delete_transfer.js';
 import { verifyDownloadToken }                               from '../nut11.js';
 import { notifyTransfer, EVENTS }                            from '../webhook_delivery.js';
+import { storedTier }                                       from '../tiers.js';
 
 const MANIFEST_SIZE_MAX = 64 * 1024;
 
@@ -108,7 +109,7 @@ export async function handleConfirmTransfer(request, env, ctx, uuid) {
       if (env.AE) {
         try {
           env.AE.writeDataPoint({
-            blobs:   ['transfer_destroyed', manifest.tier ?? 'free', r?.destroyed ? '' : 'partial_delete', ''],
+            blobs:   ['transfer_destroyed', storedTier(manifest.tier ?? 'free'), r?.destroyed ? '' : 'partial_delete', ''],
             doubles: [0, 200, 0, totalChunks, 0],
             indexes: ['transfer_destroyed'],
           });

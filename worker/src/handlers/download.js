@@ -82,6 +82,7 @@ import { hasCref } from '../seal.js';
 import { notifyTransfer, EVENTS } from '../webhook_delivery.js';
 import { destroyTransfer } from './delete_transfer.js';
 import { updateManifest } from '../latch.js';
+import { storedTier } from '../tiers.js';
 import {
   isVerifiedPath,
   readSidecarWithRootCheck,
@@ -143,7 +144,7 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
   if (chunkIndex === 0) {
     logEvent(env, {
       endpoint:    'download_tier',
-      tier:        manifest.tier ?? 'free',
+      tier:        storedTier(manifest.tier ?? 'free'),
       status:      200,
       latency:     0,
       totalChunks: manifest.total_chunks ?? 0,

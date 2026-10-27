@@ -87,7 +87,7 @@ describe('expired purge — PURGED marking (B12 §6.2, SR §S3(b))', () => {
     const entry = JSON.parse(kv._store.get(`dock_index:${E}`));
     expect(entry.purged_at).toBe(NOW);
     expect(entry.expiry_timestamp).toBe(NOW - 3 * DAY);
-    expect(entry.tier).toBe('creative');
+    expect(entry.tier).toBe('citizen');
     expect(kv._log.puts.find(p => p.key === `dock_index:${E}`).opts.expirationTtl).toBe(7 * DAY);
     expect(body.summary.dock_marked).toBe(1);
     expect(kv._log.deletes).toContain(`root_verified:${E}`);

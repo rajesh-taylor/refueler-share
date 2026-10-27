@@ -20,6 +20,7 @@
  */
 
 import { err, json, requireAdmin } from '../utils.js';
+import { storedTier } from '../tiers.js';
 
 const UUID_PREFIX_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//i;
 const GIB = 1024 ** 3;
@@ -67,7 +68,7 @@ export async function buildStorageSummary(env, nowSeconds) {
       else if (nowSeconds > (m.expiry_timestamp ?? 0)) bucket = expired;
       else if (m.soak === true)                 bucket = soak;
       else {
-        const tier = typeof m.tier === 'string' ? m.tier : 'unknown';
+        const tier = typeof m.tier === 'string' ? storedTier(m.tier) : 'unknown';  // pre-Stripe-Account-1 manifests say 'max'
         bucket = live[tier] ??= blank();
       }
     }

@@ -14,7 +14,7 @@
 // (method, url, headers) and the register, for the Terminal-script tests. FAKE_PORT moves it off 8766.
 // OSA-Tools-4: /admin/execution-dock in the Worker's shape (status, days_remaining, rail,
 // upload_complete …); /_seed?id=<uuid>[&dock=0 not in the dock index][&done=0 still uploading]
-// [&tier=max][&age=<days old>][&drift=1 the index's tier disagrees with the live record][&n=<k> k more
+// [&tier=citizen][&age=<days old>][&drift=1 the index's tier disagrees with the live record][&n=<k> k more
 // random links]; the register keeps report_events (names of fields changed) and export returns them.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -34,7 +34,7 @@ const role = (req) => req.headers['x-admin-key'] === ADMIN_KEY ? 'admin'
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
 // B12-4a-2: sign-in + Citizen. One fake session; the cookie is plain (no __Host-/Secure on http).
 // GET /_last → what the last initiate carried. /_ctl?tier=free makes the session unpaid.
-const auth = { session: null, tokens: new Set(), tier: 'max', last: null };
+const auth = { session: null, tokens: new Set(), tier: 'citizen', last: null };
 const hasCookie = (req) => /(?:^|;\s*)rfs_session=1(?:;|$)/.test(req.headers.cookie || '');
 const credCors = (req) => req.headers.origin === 'http://localhost:8765'
   ? { 'Access-Control-Allow-Origin': req.headers.origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type, X-CSRF, X-Transfer-UUID, X-Cashu-Credential, X-Credential-Commitment, X-Issued-Tier, X-Total-Chunks, X-Total-Bytes, X-Expiry-Timestamp, X-File-Name, X-P2SH-Secret-Hash, X-Destroy-After-Download', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Vary': 'Origin' }
@@ -85,7 +85,7 @@ http.createServer(async (req, res) => {
       const now = Math.floor(Date.now() / 1000);
       const transfers = [...T].filter(([, t]) => t.dock !== false && !t.removed && t.created)
         .map(([uuid, t]) => {
-          const tier = t.drift ? 'max' : (t.tier ?? 'free');
+          const tier = t.drift ? 'citizen' : (t.tier ?? 'free');
           return { uuid, file_name: 'encrypted-payload', expiry_timestamp: t.expiry, created_at: t.created, tier,
             collected: false, collected_at: null, status: now > t.expiry ? 'expired' : 'active',
             days_remaining: Math.max(0, Math.ceil((t.expiry - now) / 86400)), purged_at: null,
@@ -155,7 +155,7 @@ http.createServer(async (req, res) => {
         if (!auth.session) return cjson(req, res, 401, { error: 'Not signed in' });
         if (auth.last.csrf !== auth.session.csrf) return cjson(req, res, 403, { error: 'Forbidden' });
       }
-      const capOk = auth.last.cookie && auth.session && auth.tier === 'max' ? 100 * 1024 ** 3 : 4 * 1024 ** 3;
+      const capOk = auth.last.cookie && auth.session && auth.tier === 'citizen' ? 100 * 1024 ** 3 : 4 * 1024 ** 3;
       if (auth.last.bytes > capOk) return cjson(req, res, 413, { error: 'over cap' });
       if (ctl.fail === 'initiate') return cjson(req, res, 401, { error: 'invalid credential' });
       const total = +req.headers['x-total-chunks'], bytes = +req.headers['x-total-bytes'];

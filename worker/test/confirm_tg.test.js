@@ -142,11 +142,14 @@ describe('flipPendingDestruction', () => {
 });
 
 describe('isTidalPermitted', () => {
-  it('returns true for max',      () => expect(isTidalPermitted('max')).toBe(true));
-  it('returns true for creative', () => expect(isTidalPermitted('creative')).toBe(true));
+  it('returns true for citizen',  () => expect(isTidalPermitted('citizen')).toBe(true));
+  it('old wire names are not paid (Stripe-Account-1)', () => {
+    expect(isTidalPermitted('max')).toBe(false);
+    expect(isTidalPermitted('creative')).toBe(false);
+  });
   it('returns false for free',    () => expect(isTidalPermitted('free')).toBe(false));
   it('returns false for undefined', () => expect(isTidalPermitted(undefined)).toBe(false));
-  it('is case-insensitive',       () => expect(isTidalPermitted('Max')).toBe(true));
+  it('is case-insensitive',       () => expect(isTidalPermitted('Citizen')).toBe(true));
 });
 
 describe('validateTidalHeaders', () => {
@@ -274,7 +277,7 @@ describe('handleConfirmTransfer', () => {
   });
 
   it('200 { destroyed: false } — not a destroy-after-download transfer', async () => {
-    const manifest = { total_chunks: 2, tier: 'max' }; // no pending_destruction field
+    const manifest = { total_chunks: 2, tier: 'citizen' }; // no pending_destruction field
     const env = makeEnv(manifest);
     const ctx = makeCtx();
 
@@ -287,7 +290,7 @@ describe('handleConfirmTransfer', () => {
   });
 
   it('409 — pending_destruction is false (armed but not yet fully downloaded)', async () => {
-    const manifest = { total_chunks: 3, pending_destruction: false, tier: 'max' };
+    const manifest = { total_chunks: 3, pending_destruction: false, tier: 'citizen' };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
 
@@ -304,7 +307,7 @@ describe('handleConfirmTransfer', () => {
     const manifest = {
       total_chunks:        2,
       pending_destruction: true,
-      tier:                'max',
+      tier:                'citizen',
       p2sh_secret_hash:    null,
     };
     const env = makeEnv(manifest, { uuid });
@@ -356,7 +359,7 @@ describe('handleConfirmTransfer', () => {
       total_chunks:        1,
       pending_destruction: true,
       p2sh_secret_hash:    'a'.repeat(64), // 64-char hex = passphrase present
-      tier:                'max',
+      tier:                'citizen',
     };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
@@ -372,7 +375,7 @@ describe('handleConfirmTransfer', () => {
       total_chunks:        1,
       pending_destruction: true,
       p2sh_secret_hash:    'a'.repeat(64),
-      tier:                'max',
+      tier:                'citizen',
     };
     const env = makeEnv(manifest);
     const ctx = makeCtx();
@@ -393,7 +396,7 @@ describe('handleConfirmTransfer', () => {
       total_chunks:        1,
       pending_destruction: true,
       p2sh_secret_hash:    'a'.repeat(64),
-      tier:                'max',
+      tier:                'citizen',
     };
     const env = makeEnv(manifest, { uuid });
     const ctx = makeCtx();
@@ -459,11 +462,11 @@ describe('tidal tier gate', () => {
     expect(isTidalPermitted('free')).toBe(false);
   });
 
-  it('permits max tier', () => {
-    expect(isTidalPermitted('max')).toBe(true);
+  it('permits citizen tier', () => {
+    expect(isTidalPermitted('citizen')).toBe(true);
   });
 
-  it('permits creative tier', () => {
-    expect(isTidalPermitted('creative')).toBe(true);
+  it('does not permit the retired creative tier', () => {
+    expect(isTidalPermitted('creative')).toBe(false);
   });
 });

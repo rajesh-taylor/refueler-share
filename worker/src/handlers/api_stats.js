@@ -31,13 +31,14 @@
 
 import { requireAdmin } from '../utils.js';
 import { poolStats } from '../api_store.js';
+import { CITIZEN, storedTier } from '../tiers.js';
 
 // tier → internal rail (identity/anonymous). Pre-B7 every paid tier is identity;
 // 'free' is Pro Bono and carries no rail. Matches finalise.js railForTier.
+// AE rows from before Stripe-Account-1 carry the old names — read via storedTier.
 function railForTier(tier) {
-  switch (tier) {
-    case 'creative':
-    case 'max':
+  switch (storedTier(tier)) {
+    case CITIZEN:
     case 'api':  return 'identity';
     case 'free': return 'none';
     default:     return 'none';

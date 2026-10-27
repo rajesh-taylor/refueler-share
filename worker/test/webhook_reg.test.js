@@ -294,7 +294,7 @@ describe('handleWebhookRegister POST', () => {
 
   it('returns 403 when tier is not api', async () => {
     requireApiAuth.mockResolvedValueOnce({
-      client: { tier: 'max', org_account_id: ORG },
+      client: { tier: 'citizen', org_account_id: ORG },
       apiKey: TEST_API_KEY,
     });
     const resp = await handleWebhookRegister(makePostRequest({ url: 'https://hooks.example.com/refueler' }), makeEnv());

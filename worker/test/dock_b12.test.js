@@ -46,7 +46,7 @@ const NOW  = 1_800_000_000;
 const DAY  = 86400;
 const UUID = '11111111-2222-4333-8444-555555555555';
 const B32  = 'A'.repeat(43); // base64url of 32 zero bytes
-const dockEntry = (o = {}) => ({ uuid: UUID, expiry_timestamp: NOW + DAY, tier: 'creative', file_name: 'encrypted-payload', created_at: NOW - 100, ...o });
+const dockEntry = (o = {}) => ({ uuid: UUID, expiry_timestamp: NOW + DAY, tier: 'citizen', file_name: 'encrypted-payload', created_at: NOW - 100, ...o });
 
 function armedTransfer(pendingDestruction) {
   const seed = { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify({ uuid: UUID, total_chunks: 3, upload_complete: true, pending_destruction: pendingDestruction }) } };
@@ -170,7 +170,7 @@ describe('every deletion path leaves the same trace in dock_index: absence', () 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('finalise — X4: no plaintext size in dock_index', () => {
   async function finalise(existingDock) {
-    const seed = { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify({ uuid: UUID, tier: 'creative', total_chunks: 2, total_bytes: 12345, upload_complete: false, expiry_timestamp: NOW + DAY }) },
+    const seed = { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify({ uuid: UUID, tier: 'citizen', total_chunks: 2, total_bytes: 12345, upload_complete: false, expiry_timestamp: NOW + DAY }) },
                    [`${UUID}/0000`]: { size: FULL, uploaded: NOW }, [`${UUID}/0001`]: { size: 10, uploaded: NOW } };
     const bucket = makeBucket(seed);
     const kv = makeKV({ [`dock_index:${UUID}`]: existingDock });

@@ -51,7 +51,7 @@ import {
   corsHeaders, safeGetManifest, supabaseFetch,
   json, err, addCors, parseRange, requireAdmin, setAppOrigins, scrubUuids, transferUuid } from './utils.js';
 
-import { TIERS, isCharteredTier } from './tiers.js';
+import { TIERS, CITIZEN, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
 import { makePresigner, presignPutObject, signSessionToken, computeTransferCost, PRESIGN_EXPIRY } from './r2_presign.js';
 import { CHUNK_SIZE, CHUNK_TAG_BYTES } from './sweep_rules.js';                // B12-1d: signed PUT sizes
@@ -63,7 +63,6 @@ import { handleStripeWebhook, handleCheckout } from './handlers/stripe_sub.js';
 import { AUTH_PATHS, onAuthHost, routeAuth, authCors, requireSession, citizenTier } from './handlers/auth.js';
 import { COOKIE_NAME, isAuthOrigin } from './auth.js';                             // B12-4a-2
 import { sweepAuth } from './auth_store.js';
-import { fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber } from './handlers/stripe_sub.js';
 import { handleTimestampSubmit, handleTimestampSeal } from './handlers/timestamp.js';
 import { handleDeleteTransfer, handleOwnerDelete }    from './handlers/delete_transfer.js';
 import {
@@ -1142,10 +1141,12 @@ async function handleApiCredentialIssue(request, env) {
 
 // Canonical expiry windows (seconds). Issue and /initiate both read this map;
 // a change invalidates every outstanding commitment.
+// Stripe-Account-1: 'citizen' replaces 'max'; 'creative' (30 d) is gone. A
+// credential issued under an old name falls back to 'free' and its commitment
+// fails at initiate (401 → the browser asks again) — plan v1 §7, no alias.
 const EXPIRY_WINDOWS = {
-  free:     7  * 24 * 3600,  //    604,800 s
-  creative: 30 * 24 * 3600,  //  2,592,000 s
-  max:      90 * 24 * 3600,  //  7,776,000 s
+  free:    7  * 24 * 3600,  //    604,800 s
+  citizen: 90 * 24 * 3600,  //  7,776,000 s
 };
 
 async function handleCredentialIssue(request, env) {
@@ -1321,8 +1322,8 @@ async function handleMeta(request, env, uuid) {
 // handleTimestampSubmit, handleTimestampSeal — moved to ./handlers/timestamp.js (SW9a)
 // handleDeleteTransfer, handleOwnerDelete    — moved to ./handlers/delete_transfer.js (SW9a)
 // handleStripeWebhook, handleCheckout, (status + portal removed B12-4a task 0),
-// fetchTierFromSubscription, fetchPeriodEnd, tierFromPriceKey, upsertSubscriber
-//   — moved to ./handlers/stripe_sub.js (SW9a)
+// upsertSubscriber — moved to ./handlers/stripe_sub.js (SW9a); the Stripe calls
+//   live in ./stripe.js (Stripe-Account-1)
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Share-6-1 — direct-to-R2 upload: initiate + next-batch + presign smoke test.
@@ -1340,12 +1341,11 @@ async function handleMeta(request, env, uuid) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // Canonical expiry ceilings (seconds), keyed on resolvedTier.
-// free/creative/max/api are the live Stripe-axis logic keys.
+// free/citizen (Stripe axis) and api (Chartered) are the live wire values.
 const INITIATE_EXPIRY_MAX = {
-  free:     7  * 24 * 3600,
-  creative: 30 * 24 * 3600,
-  max:      90 * 24 * 3600,
-  api:      90 * 24 * 3600,
+  free:    7  * 24 * 3600,
+  citizen: 90 * 24 * 3600,
+  api:     90 * 24 * 3600,
 };
 
 const PART_SIZE_BYTES = 33_554_432; // 32 MiB (Share-6-spec §2, D-1) — must equal sweep_rules CHUNK_SIZE (tested)
@@ -1562,7 +1562,7 @@ async function handleInitiate(request, env, ctx, uuid) {
   // three of S6.6: valid session · X-CSRF · exact Origin — else 401/403 before
   // anything is consumed. Only a citizen session counts; an org admin session
   // can't upload through the web page. Paid (active + period not over) →
-  // 'max' + the Citizen's quota; unpaid → Pro Bono, no quota.
+  // 'citizen' + the Citizen's quota; unpaid → Pro Bono, no quota.
   // Pro Bono and soak: quotaRef stays null — no reservation, no qref_ct.
   // Bearer-rail principals never get one (X2).
   let citizenPaid = false;
@@ -1583,7 +1583,7 @@ async function handleInitiate(request, env, ctx, uuid) {
       console.error('upload_initiate: entitlement store unavailable:', e.message);
       return err(503, 'Account check unavailable — please retry');
     }
-    if (tier === 'max') {
+    if (tier === CITIZEN) {
       quotaRef = await citizenQuotaRefFor(env, sess.ref);
       if (!quotaRef) {
         console.error('upload_initiate: QUOTA_REF_KEY unavailable — refusing Citizen initiate');
@@ -1595,10 +1595,10 @@ async function handleInitiate(request, env, ctx, uuid) {
 
   // ── Resolved tier — never issued_tier for the cap ─────────────────────────
   // Cred-Fix-1: no request header selects a tier. B12-4a-2: 'api' only after
-  // the Chartered HMAC check, 'max' only from a paid Citizen session. Soak
+  // the Chartered HMAC check, 'citizen' only from a paid Citizen session. Soak
   // credentials stay 'free' (their cap comes from the MAC'd token).
   const resolvedTier = (isChartered && !isTestCredential) ? TIERS.CHARTERED
-                     : citizenPaid ? 'max'
+                     : citizenPaid ? CITIZEN
                      : 'free';
   // Test credential: cap from the MAC'd token; TIER_CAPS is not consulted.
   const tierCap = isTestCredential

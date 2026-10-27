@@ -437,7 +437,7 @@ describe('Execution Dock — every page, from metadata; legacy get() fallback', 
 
   it('a legacy key without metadata is read with get(); its transfer ID comes from the key name', async () => {
     const kv = makeKv();
-    const fresh = { uuid: id(1), expiry_timestamp: NOW() + 86400, created_at: NOW() - 10, tier: 'max' };
+    const fresh = { uuid: id(1), expiry_timestamp: NOW() + 86400, created_at: NOW() - 10, tier: 'citizen' };
     await kv.put(`dock_index:${id(1)}`, JSON.stringify(fresh), { metadata: fresh });
     await kv.put(`dock_index:${id(2)}`, JSON.stringify({ expiry_timestamp: NOW() + 86400, created_at: NOW() - 20, tier: 'free', size_bytes: 9 }));
     const get = vi.spyOn(kv, 'get');
