@@ -7,8 +7,12 @@
  *   C. verifyStripeWebhook — malformed / missing headers
  *   D. createCheckoutSession — customer find-or-create, subscription creation
  *   E. createCheckoutSession — error paths
- *   F. getSubscriptionTier — active subscription lookup and tier routing
- *   G. getSubscriptionTier — edge cases (no subscription, API error)
+ *   F. tierFromLookupKey + resolveCitizenPrice — exact lookup keys, price resolve
+ *   G. handleStripeWebhook — re-fetch, period end from the item, retries
+ *   H. Stripe-Version — every Stripe call pins STRIPE_API_VERSION
+ *
+ * Fixtures are in the 2025-09-30.clover shape (Stripe-Account-1): period end on
+ * items.data[], client secret at latest_invoice.confirmation_secret.
  *
  * All Stripe API calls mocked via vi.stubGlobal('fetch', ...).
  * HMAC signatures generated with Node crypto — same algorithm as stripe.js.
@@ -23,8 +27,11 @@ import { createHmac } from 'crypto'; // Node built-in — available in Vitest (N
 import {
   verifyStripeWebhook,
   createCheckoutSession,
-  getSubscriptionTier,
+  resolveCitizenPrice,
+  tierFromLookupKey,
+  STRIPE_API_VERSION,
 } from '../src/stripe.js';
+import { handleStripeWebhook } from '../src/handlers/stripe_sub.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,19 +84,21 @@ function makeCustomer(id = 'cus_test123', email = 'test@refueler.io') {
   return { object: 'customer', id, email };
 }
 
-/** Build a minimal Stripe subscription with a price lookup_key */
-function makeSubscription(lookupKey = 'share-creative-monthly', subId = 'sub_test999') {
+const PERIOD_END = 1_800_000_000;
+
+/** Build a minimal Stripe subscription (2025-09-30.clover shape) with a price lookup_key */
+function makeSubscription(lookupKey = 'share-citizen-monthly', subId = 'sub_test999', extra = {}) {
   return {
     object: 'subscription',
     id: subId,
+    customer: 'cus_test123',
     status: 'active',
-    items: { data: [{ price: { id: 'price_abc', lookup_key: lookupKey } }] },
+    items: { data: [{ id: 'si_1', current_period_end: PERIOD_END, price: { id: 'price_abc', lookup_key: lookupKey } }] },
     latest_invoice: {
-      payment_intent: {
-        id: 'pi_test123',
-        client_secret: 'pi_test123_secret_abc',
-      },
+      id: 'in_test1',
+      confirmation_secret: { type: 'payment_intent', client_secret: 'pi_test123_secret_abc' },
     },
+    ...extra,
   };
 }
 
@@ -280,113 +289,90 @@ describe('C. verifyStripeWebhook — malformed / missing headers', () => {
 // ---------------------------------------------------------------------------
 
 describe('D. createCheckoutSession — customer find-or-create + subscription', () => {
-  const PRICE_ID = 'price_1Ts7lsGlctwiB9U3hdtgChU2';
+  const PRICE_ID = 'price_sandbox_monthly';
   const EMAIL = 'test@refueler.io';
 
   it('D1: existing customer found → reuses customer ID, creates subscription', async () => {
     const spy = mockFetchSequence([
       { body: stripeList([makeCustomer('cus_existing')]) }, // customer search
-      { body: makeSubscription('share-creative-monthly') }, // subscription create
+      { body: makeSubscription() },                          // subscription create
     ]);
     vi.stubGlobal('fetch', spy);
 
-    const result = await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
+    const result = await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
     expect(result.clientSecret).toBe('pi_test123_secret_abc');
     expect(result.subscriptionId).toBe('sub_test999');
-    // Should be 2 calls: search + create sub (no customer create call)
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it('D2: no existing customer → creates new customer then subscription', async () => {
     const spy = mockFetchSequence([
-      { body: stripeList([]) },                            // customer search → empty
-      { body: makeCustomer('cus_new') },                   // customer create
-      { body: makeSubscription('share-max-monthly') },     // subscription create
+      { body: stripeList([]) },
+      { body: makeCustomer('cus_new') },
+      { body: makeSubscription() },
     ]);
     vi.stubGlobal('fetch', spy);
 
-    const result = await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
+    const result = await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
     expect(result.clientSecret).toBe('pi_test123_secret_abc');
     expect(spy).toHaveBeenCalledTimes(3);
   });
 
-  it('D3: clientSecret extracted correctly from nested PaymentIntent', async () => {
-    const sub = makeSubscription('share-creative-monthly');
-    sub.latest_invoice.payment_intent.client_secret = 'pi_unique_secret_xyz_999';
-    const spy = mockFetchSequence([
-      { body: stripeList([makeCustomer('cus_abc')]) },
-      { body: sub },
-    ]);
-    vi.stubGlobal('fetch', spy);
-
-    const { clientSecret } = await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
+  it('D3: clientSecret comes from latest_invoice.confirmation_secret', async () => {
+    const sub = makeSubscription();
+    sub.latest_invoice.confirmation_secret.client_secret = 'pi_unique_secret_xyz_999';
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([makeCustomer()]) }, { body: sub }]));
+    const { clientSecret } = await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
     expect(clientSecret).toBe('pi_unique_secret_xyz_999');
   });
 
   it('D4: subscriptionId extracted from subscription response', async () => {
-    const sub = makeSubscription('share-creative-monthly', 'sub_specific_id');
-    const spy = mockFetchSequence([
-      { body: stripeList([makeCustomer('cus_abc')]) },
-      { body: sub },
-    ]);
-    vi.stubGlobal('fetch', spy);
-
-    const { subscriptionId } = await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
+    vi.stubGlobal('fetch', mockFetchSequence([
+      { body: stripeList([makeCustomer()]) },
+      { body: makeSubscription('share-citizen-monthly', 'sub_specific_id') },
+    ]));
+    const { subscriptionId } = await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
     expect(subscriptionId).toBe('sub_specific_id');
   });
 
-  it('D5: Authorization header uses Bearer + secret key', async () => {
+  function recordCalls() {
     const calls = [];
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url, opts) => {
       calls.push({ url, opts });
       if (calls.length === 1) return { ok: true, json: async () => stripeList([makeCustomer()]) };
       return { ok: true, json: async () => makeSubscription() };
     }));
+    return calls;
+  }
 
-    await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
-    for (const c of calls) {
-      expect(c.opts.headers['Authorization']).toBe(`Bearer ${STRIPE_KEY}`);
-    }
+  it('D5: Authorization header uses Bearer + secret key', async () => {
+    const calls = recordCalls();
+    await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
+    for (const c of calls) expect(c.opts.headers['Authorization']).toBe(`Bearer ${STRIPE_KEY}`);
   });
 
   it('D6: customer search uses email query param (encoded)', async () => {
-    const calls = [];
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url, opts) => {
-      calls.push({ url, opts });
-      if (calls.length === 1) return { ok: true, json: async () => stripeList([makeCustomer()]) };
-      return { ok: true, json: async () => makeSubscription() };
-    }));
-
-    await createCheckoutSession(PRICE_ID, 'test+user@refueler.io', '/', '/', STRIPE_KEY);
-    const searchUrl = calls[0].url;
-    expect(searchUrl).toContain('/v1/customers');
-    expect(searchUrl).toContain('email=');
+    const calls = recordCalls();
+    await createCheckoutSession(PRICE_ID, 'test+user@refueler.io', STRIPE_KEY);
+    expect(calls[0].url).toContain('/v1/customers');
+    expect(calls[0].url).toContain('email=test%2Buser%40refueler.io');
   });
 
-  it('D7: subscription POST includes payment_behavior=default_incomplete', async () => {
-    const calls = [];
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url, opts) => {
-      calls.push({ url, opts });
-      if (calls.length === 1) return { ok: true, json: async () => stripeList([makeCustomer()]) };
-      return { ok: true, json: async () => makeSubscription() };
-    }));
-
-    await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
-    const subBody = calls[1].opts.body.toString();
-    expect(subBody).toContain('payment_behavior=default_incomplete');
+  it('D7: subscription POST: default_incomplete, card only, the given price', async () => {
+    const calls = recordCalls();
+    await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
+    const body = new URLSearchParams(calls[1].opts.body);
+    expect(body.get('payment_behavior')).toBe('default_incomplete');
+    expect(body.get('payment_settings[payment_method_types][0]')).toBe('card');
+    expect(body.get('items[0][price]')).toBe(PRICE_ID);
   });
 
-  it('D8: subscription POST expands latest_invoice.payment_intent', async () => {
-    const calls = [];
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url, opts) => {
-      calls.push({ url, opts });
-      if (calls.length === 1) return { ok: true, json: async () => stripeList([makeCustomer()]) };
-      return { ok: true, json: async () => makeSubscription() };
-    }));
-
-    await createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY);
-    const subBody = calls[1].opts.body.toString();
-    expect(subBody).toContain('latest_invoice.payment_intent');
+  it('D8: subscription POST expands latest_invoice.confirmation_secret (not payment_intent)', async () => {
+    const calls = recordCalls();
+    await createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY);
+    const body = new URLSearchParams(calls[1].opts.body);
+    expect(body.get('expand[0]')).toBe('latest_invoice.confirmation_secret');
+    expect(calls[1].opts.body).not.toContain('payment_intent');
   });
 });
 
@@ -395,163 +381,254 @@ describe('D. createCheckoutSession — customer find-or-create + subscription', 
 // ---------------------------------------------------------------------------
 
 describe('E. createCheckoutSession — error paths', () => {
-  const PRICE_ID = 'price_1Ts7lsGlctwiB9U3hdtgChU2';
+  const PRICE_ID = 'price_sandbox_monthly';
   const EMAIL = 'test@refueler.io';
 
   it('E1: customer search fails → throws', async () => {
     vi.stubGlobal('fetch', mockFetchSequence([{ ok: false, status: 500, body: { error: 'server error' } }]));
-    await expect(createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY))
-      .rejects.toThrow(/stripe customer search error/i);
+    await expect(createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY)).rejects.toThrow(/stripe customer search error/i);
   });
 
   it('E2: customer create fails → throws', async () => {
-    const spy = mockFetchSequence([
-      { body: stripeList([]) },                    // search → empty
-      { ok: false, status: 400, body: { error: 'invalid' } }, // create fails
-    ]);
-    vi.stubGlobal('fetch', spy);
-    await expect(createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY))
-      .rejects.toThrow(/stripe customer create error/i);
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([]) }, { ok: false, status: 400, body: { error: 'invalid' } }]));
+    await expect(createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY)).rejects.toThrow(/stripe customer create error/i);
   });
 
   it('E3: subscription create fails → throws', async () => {
-    const spy = mockFetchSequence([
-      { body: stripeList([makeCustomer()]) },      // search finds customer
-      { ok: false, status: 402, body: { error: 'card_declined' } }, // sub fails
-    ]);
-    vi.stubGlobal('fetch', spy);
-    await expect(createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY))
-      .rejects.toThrow(/stripe subscription error/i);
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([makeCustomer()]) }, { ok: false, status: 402, body: { error: 'card_declined' } }]));
+    await expect(createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY)).rejects.toThrow(/stripe subscription error/i);
   });
 
-  it('E4: subscription response missing client_secret → throws', async () => {
-    const badSub = { id: 'sub_bad', latest_invoice: { payment_intent: null } };
-    const spy = mockFetchSequence([
-      { body: stripeList([makeCustomer()]) },
-      { body: badSub },
-    ]);
-    vi.stubGlobal('fetch', spy);
-    await expect(createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY))
-      .rejects.toThrow(/no client_secret/i);
+  it('E4: old-shape response (latest_invoice.payment_intent only) → throws, never half-works', async () => {
+    const oldShape = { id: 'sub_old', latest_invoice: { payment_intent: { client_secret: 'pi_x_secret_y' } } };
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([makeCustomer()]) }, { body: oldShape }]));
+    await expect(createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY)).rejects.toThrow(/no client_secret/i);
   });
 
   it('E5: subscription response missing latest_invoice entirely → throws', async () => {
-    const badSub = { id: 'sub_no_invoice' };
-    const spy = mockFetchSequence([
-      { body: stripeList([makeCustomer()]) },
-      { body: badSub },
-    ]);
-    vi.stubGlobal('fetch', spy);
-    await expect(createCheckoutSession(PRICE_ID, EMAIL, '/', '/', STRIPE_KEY))
-      .rejects.toThrow(/no client_secret/i);
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([makeCustomer()]) }, { body: { id: 'sub_no_invoice' } }]));
+    await expect(createCheckoutSession(PRICE_ID, EMAIL, STRIPE_KEY)).rejects.toThrow(/no client_secret/i);
   });
 });
 
 // ---------------------------------------------------------------------------
-// F. getSubscriptionTier — happy paths
+// F. Exact lookup keys + price resolve (S-4)
 // ---------------------------------------------------------------------------
 
-describe('F. getSubscriptionTier — tier routing', () => {
-  it('F1: share-creative-monthly lookup_key → creative', async () => {
-    const sub = makeSubscription('share-creative-monthly');
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('creative');
+function makePrice(lookupKey, interval, extra = {}) {
+  return { object: 'price', id: `price_${interval}`, lookup_key: lookupKey, currency: 'gbp',
+    type: 'recurring', recurring: { interval }, active: true, ...extra };
+}
+
+describe('F. tierFromLookupKey + resolveCitizenPrice', () => {
+  it('F1: exactly the two Citizen keys → citizen', () => {
+    expect(tierFromLookupKey('share-citizen-monthly')).toBe('citizen');
+    expect(tierFromLookupKey('share-citizen-yearly')).toBe('citizen');
   });
 
-  it('F2: share-creative-yearly lookup_key → creative', async () => {
-    const sub = makeSubscription('share-creative-yearly');
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('creative');
+  it('F2: no substring match — old keys, near misses and empties → free', () => {
+    for (const k of ['share-max-monthly', 'share-max-yearly', 'share-max-3month', 'share-creative-monthly',
+                     'share-citizen-monthly-x', 'xshare-citizen-yearly', 'SHARE-CITIZEN-MONTHLY',
+                     'share-citizen', '', 'citizen', 'max']) {
+      expect(tierFromLookupKey(k)).toBe('free');
+    }
+    expect(tierFromLookupKey(null)).toBe('free');
+    expect(tierFromLookupKey(undefined)).toBe('free');
   });
 
-  it('F3: share-max-monthly lookup_key → max', async () => {
-    const sub = makeSubscription('share-max-monthly');
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('max');
-  });
-
-  it('F4: share-max-yearly lookup_key → max', async () => {
-    const sub = makeSubscription('share-max-yearly');
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('max');
-  });
-
-  it('F5: unknown lookup_key → free (fallback)', async () => {
-    const sub = makeSubscription('share-enterprise-custom');
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('free');
-  });
-
-  it('F6: passes customer ID as query param', async () => {
-    let capturedUrl;
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url) => {
-      capturedUrl = url;
-      return { ok: true, json: async () => stripeList([makeSubscription()]) };
+  it('F3: monthly → GET /v1/prices by lookup key, active only → its id', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url, opts) => {
+      calls.push({ url, opts });
+      return { ok: true, json: async () => stripeList([makePrice('share-citizen-monthly', 'month')]) };
     }));
-    await getSubscriptionTier('cus_specific_id', STRIPE_KEY);
-    expect(capturedUrl).toContain('cus_specific_id');
+    expect(await resolveCitizenPrice('monthly', STRIPE_KEY)).toBe('price_month');
+    expect(calls[0].url).toBe('https://api.stripe.com/v1/prices?lookup_keys[]=share-citizen-monthly&active=true&limit=2');
+    expect(calls[0].opts.method).toBe('GET');
   });
 
-  it('F7: uses Authorization Bearer header', async () => {
-    let capturedOpts;
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url, opts) => {
-      capturedOpts = opts;
-      return { ok: true, json: async () => stripeList([makeSubscription()]) };
-    }));
-    await getSubscriptionTier('cus_abc', STRIPE_KEY);
-    expect(capturedOpts.headers['Authorization']).toBe(`Bearer ${STRIPE_KEY}`);
+  it('F4: yearly → share-citizen-yearly, interval year', async () => {
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([makePrice('share-citizen-yearly', 'year')]) }]));
+    expect(await resolveCitizenPrice('yearly', STRIPE_KEY)).toBe('price_year');
   });
-});
 
-// ---------------------------------------------------------------------------
-// G. getSubscriptionTier — edge cases
-// ---------------------------------------------------------------------------
+  it('F5: unknown plan → throws before any Stripe call', async () => {
+    const spy = vi.fn(); vi.stubGlobal('fetch', spy);
+    for (const plan of ['3month', 'max', 'price_1Ts7vIGlctwiB9U3kb3NCLue', '', '__proto__', 'toString']) {
+      await expect(resolveCitizenPrice(plan, STRIPE_KEY)).rejects.toThrow(/unknown plan/i);
+    }
+    expect(spy).not.toHaveBeenCalled();
+  });
 
-describe('G. getSubscriptionTier — edge cases and error paths', () => {
-  it('G1: no active subscriptions (empty list) → free', async () => {
+  it('F6: none or two prices for the key → throws', async () => {
     vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([]) }]));
-    expect(await getSubscriptionTier('cus_no_sub', STRIPE_KEY)).toBe('free');
+    await expect(resolveCitizenPrice('monthly', STRIPE_KEY)).rejects.toThrow(/found 0/);
+    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([makePrice('share-citizen-monthly', 'month'), makePrice('share-citizen-monthly', 'month')]) }]));
+    await expect(resolveCitizenPrice('monthly', STRIPE_KEY)).rejects.toThrow(/found 2/);
   });
 
-  it('G2: Stripe API non-200 response → free (graceful degradation)', async () => {
-    vi.stubGlobal('fetch', mockFetchSequence([{ ok: false, status: 500, body: {} }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('free');
+  it('F7: wrong currency, interval, type or key on the returned price → throws', async () => {
+    for (const bad of [
+      makePrice('share-citizen-monthly', 'month', { currency: 'usd' }),
+      makePrice('share-citizen-monthly', 'year'),
+      makePrice('share-citizen-monthly', 'month', { type: 'one_time' }),
+      makePrice('share-citizen-yearly', 'month'),
+    ]) {
+      vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([bad]) }]));
+      await expect(resolveCitizenPrice('monthly', STRIPE_KEY)).rejects.toThrow(/not a GBP/);
+    }
   });
 
-  it('G3: network error → free (graceful degradation)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network down')));
-    // getSubscriptionTier doesn't catch — let it propagate, verify real behaviour
-    // In index.js the caller catches and defaults free. Here we test the raw module.
-    await expect(getSubscriptionTier('cus_abc', STRIPE_KEY)).rejects.toThrow('Network down');
+  it('F8: Stripe error → throws', async () => {
+    vi.stubGlobal('fetch', mockFetchSequence([{ ok: false, status: 401, body: { error: 'no' } }]));
+    await expect(resolveCitizenPrice('monthly', STRIPE_KEY)).rejects.toThrow(/price lookup error/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G. handleStripeWebhook — re-fetch, period end from the item (S-1, S-3)
+// ---------------------------------------------------------------------------
+
+describe('G. handleStripeWebhook', () => {
+  const env = {
+    STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+    STRIPE_SECRET_KEY: STRIPE_KEY,
+    SUPABASE_URL: 'https://sb.test',
+    SUPABASE_SERVICE_KEY: 'service-test',
+  };
+
+  /** Stripe answers `sub` for the re-fetch; Supabase records the upsert body. */
+  function stub(sub, { subOk = true, sbOk = true } = {}) {
+    const f = vi.fn(async (url, opts = {}) => {
+      const u = String(url);
+      f.urls.push(u);
+      if (u.startsWith('https://api.stripe.com/v1/subscriptions/')) {
+        return subOk ? Response.json(sub) : new Response('{}', { status: 404 });
+      }
+      if (u.startsWith('https://api.stripe.com/v1/customers/')) return Response.json({ id: sub?.customer, email: 'c@example.com' });
+      if (u.startsWith('https://sb.test/rest/v1/subscribers')) {
+        f.upserts.push(JSON.parse(opts.body));
+        return new Response(null, { status: sbOk ? 201 : 400 });
+      }
+      throw new Error(`unexpected fetch ${u}`);
+    });
+    f.urls = []; f.upserts = [];
+    vi.stubGlobal('fetch', f);
+    return f;
+  }
+  const event = (type, object) => buildStripeRequest({ type, data: { object } });
+
+  it('G1: updated → re-fetches the subscription and writes citizen / active / item period end', async () => {
+    const f = stub(makeSubscription('share-citizen-yearly'));
+    // The event body is stale and old-shaped (2020-03-02 endpoint): ignored apart from the id.
+    const res = await handleStripeWebhook(event('customer.subscription.updated',
+      { id: 'sub_test999', status: 'incomplete', current_period_end: 1, items: { data: [{ price: { lookup_key: 'share-max-yearly' } }] } }), env);
+    expect(res.status).toBe(200);
+    expect(f.urls).toContain('https://api.stripe.com/v1/subscriptions/sub_test999');
+    expect(f.upserts).toHaveLength(1);
+    expect(f.upserts[0]).toMatchObject({
+      stripe_customer_id: 'cus_test123', email: 'c@example.com', tier: 'citizen', status: 'active',
+      current_period_end: new Date(PERIOD_END * 1000).toISOString(),
+    });
   });
 
-  it('G4: subscription with null lookup_key → free', async () => {
-    const sub = makeSubscription(null);
-    sub.items.data[0].price.lookup_key = null;
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('free');
+  it('G2: created + incomplete → inactive, never counted as paid', async () => {
+    const f = stub(makeSubscription('share-citizen-monthly', 'sub_test999', { status: 'incomplete' }));
+    await handleStripeWebhook(event('customer.subscription.created', { id: 'sub_test999' }), env);
+    expect(f.upserts[0]).toMatchObject({ tier: 'citizen', status: 'inactive' });
   });
 
-  it('G5: subscription with undefined lookup_key → free', async () => {
+  it('G3: an old-account key (share-max-*) is not Citizen', async () => {
+    const f = stub(makeSubscription('share-max-monthly'));
+    await handleStripeWebhook(event('customer.subscription.updated', { id: 'sub_test999' }), env);
+    expect(f.upserts[0]).toMatchObject({ tier: 'free', status: 'active' });
+  });
+
+  it('G4: re-fetched as canceled (out-of-order update) → free / cancelled', async () => {
+    const f = stub(makeSubscription('share-citizen-monthly', 'sub_test999', { status: 'canceled' }));
+    await handleStripeWebhook(event('customer.subscription.updated', { id: 'sub_test999' }), env);
+    expect(f.upserts[0]).toMatchObject({ tier: 'free', status: 'cancelled' });
+    expect(f.upserts[0].cancelled_at).toBeTruthy();
+  });
+
+  it('G5: no period end on the item → null (citizen_entitlement fails closed)', async () => {
     const sub = makeSubscription();
-    delete sub.items.data[0].price.lookup_key;
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('free');
+    delete sub.items.data[0].current_period_end;
+    const f = stub(sub);
+    await handleStripeWebhook(event('customer.subscription.updated', { id: 'sub_test999' }), env);
+    expect(f.upserts[0].current_period_end).toBeNull();
   });
 
-  it('G6: subscription data missing items → free (no crash)', async () => {
-    const sub = { id: 'sub_broken', status: 'active', items: { data: [] } };
-    vi.stubGlobal('fetch', mockFetchSequence([{ body: stripeList([sub]) }]));
-    expect(await getSubscriptionTier('cus_abc', STRIPE_KEY)).toBe('free');
+  it('G6: re-fetch fails → 500 so Stripe retries; nothing written', async () => {
+    const f = stub(null, { subOk: false });
+    const res = await handleStripeWebhook(event('customer.subscription.updated', { id: 'sub_test999' }), env);
+    expect(res.status).toBe(500);
+    expect(f.upserts).toHaveLength(0);
   });
 
-  it('G7: query filters for active status', async () => {
-    let capturedUrl;
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url) => {
-      capturedUrl = url;
-      return { ok: true, json: async () => stripeList([makeSubscription()]) };
+  it('G7: a malformed subscription id is never fetched → 500', async () => {
+    const f = stub(makeSubscription());
+    const res = await handleStripeWebhook(event('customer.subscription.updated', { id: '../customers/cus_x' }), env);
+    expect(res.status).toBe(500);
+    expect(f.urls).toHaveLength(0);
+  });
+
+  it('G8: Supabase refuses the write → 500 so Stripe retries', async () => {
+    stub(makeSubscription(), { sbOk: false });
+    const res = await handleStripeWebhook(event('customer.subscription.updated', { id: 'sub_test999' }), env);
+    expect(res.status).toBe(500);
+  });
+
+  it('G9: deleted → free / cancelled from the event, no Stripe call', async () => {
+    const f = stub(null);
+    const res = await handleStripeWebhook(event('customer.subscription.deleted', { id: 'sub_test999', customer: 'cus_gone' }), env);
+    expect(res.status).toBe(200);
+    expect(f.urls.filter(u => u.startsWith('https://api.stripe.com'))).toHaveLength(0);
+    expect(f.upserts[0]).toMatchObject({ stripe_customer_id: 'cus_gone', tier: 'free', status: 'cancelled' });
+  });
+
+  it('G10: checkout.session.completed (S-3) and other types → 200, nothing written', async () => {
+    const f = stub(null);
+    for (const type of ['checkout.session.completed', 'invoice.paid']) {
+      const res = await handleStripeWebhook(event(type, { id: 'cs_1', mode: 'subscription', customer: 'cus_x', subscription: 'sub_test999' }), env);
+      expect(res.status).toBe(200);
+    }
+    expect(f.urls).toHaveLength(0);
+  });
+
+  it('G11: bad signature → 401, nothing fetched', async () => {
+    const f = stub(makeSubscription());
+    const res = await handleStripeWebhook(buildBadSigRequest({ type: 'customer.subscription.updated', data: { object: { id: 'sub_test999' } } }), env);
+    expect(res.status).toBe(401);
+    expect(f.urls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H. Stripe-Version pin (S-1)
+// ---------------------------------------------------------------------------
+
+describe('H. Stripe-Version', () => {
+  it('H1: the pinned version is a Clover version', () => {
+    expect(STRIPE_API_VERSION).toBe('2025-09-30.clover');
+  });
+
+  it('H2: checkout, price resolve and webhook re-fetch all send it', async () => {
+    const seen = [];
+    vi.stubGlobal('fetch', vi.fn(async (url, opts = {}) => {
+      const u = String(url);
+      if (u.startsWith('https://api.stripe.com')) seen.push([u, opts.headers?.['Stripe-Version']]);
+      if (u.includes('/v1/prices')) return Response.json(stripeList([makePrice('share-citizen-monthly', 'month')]));
+      if (u.includes('/v1/customers?')) return Response.json(stripeList([makeCustomer()]));
+      if (u.includes('/v1/customers/')) return Response.json(makeCustomer());
+      if (u.includes('/v1/subscriptions')) return Response.json(makeSubscription());
+      return new Response(null, { status: 201 });
     }));
-    await getSubscriptionTier('cus_abc', STRIPE_KEY);
-    expect(capturedUrl).toContain('status=active');
+    await resolveCitizenPrice('monthly', STRIPE_KEY);
+    await createCheckoutSession('price_month', 'a@example.com', STRIPE_KEY);
+    await handleStripeWebhook(buildStripeRequest({ type: 'customer.subscription.updated', data: { object: { id: 'sub_test999' } } }),
+      { STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, STRIPE_SECRET_KEY: STRIPE_KEY, SUPABASE_URL: 'https://sb.test', SUPABASE_SERVICE_KEY: 'k' });
+    expect(seen.length).toBeGreaterThanOrEqual(5);
+    for (const [u, v] of seen) expect(v, u).toBe(STRIPE_API_VERSION);
   });
 });

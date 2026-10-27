@@ -91,8 +91,8 @@ export function makeSubscriptionUpdatedEvent(overrides = {}) {
         id:       `sub_test_${Date.now()}`,
         customer: `cus_test_${Date.now()}`,
         status:   'active',
-        items: { data: [{ price: { lookup_key: 'share-creative-monthly' } }] },
-        current_period_end: Math.floor(Date.now() / 1000) + 2592000,
+        // 2025-09-30.clover shape (Stripe-Account-1): the period end lives on the item.
+        items: { data: [{ price: { lookup_key: 'share-citizen-monthly' }, current_period_end: Math.floor(Date.now() / 1000) + 2592000 }] },
         cancel_at_period_end: false,
       },
     },
@@ -110,7 +110,7 @@ export function makeSubscriptionDeletedEvent(overrides = {}) {
         id:       `sub_test_${Date.now()}`,
         customer: `cus_test_${Date.now()}`,
         status:   'canceled',
-        items: { data: [{ price: { lookup_key: 'share-max-monthly' } }] },
+        items: { data: [{ price: { lookup_key: 'share-citizen-monthly' } }] },
       },
     },
   };

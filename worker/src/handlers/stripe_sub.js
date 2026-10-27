@@ -1,19 +1,32 @@
 // worker/src/handlers/stripe_sub.js
 //
 // SW9a — Extracted from index.js (Phase 2).
-// Stripe subscription handlers: webhook, checkout.
-// Stripe helper functions: fetchTierFromSubscription, fetchPeriodEnd,
-//   tierFromPriceKey, upsertSubscriber.
+// Stripe subscription handlers: webhook, checkout. Helper: upsertSubscriber.
+// The Stripe calls themselves live in ../stripe.js (one pinned API version).
 //
 // All imports from ./utils.js — never from index.js.
 // Stripe API client calls use env.STRIPE_SECRET_KEY directly.
 
-import { verifyStripeWebhook, createCheckoutSession } from '../stripe.js';
+import {
+  verifyStripeWebhook, createCheckoutSession, resolveCitizenPrice,
+  fetchSubscription, fetchCustomerEmail, citizenItem, tierFromLookupKey, CITIZEN_LOOKUP_KEYS,
+} from '../stripe.js';
 import { supabaseFetch, json, err }                   from '../utils.js';
 import { verifyTurnstileToken }                     from '../turnstile.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Stripe webhook — POST /webhook/stripe
+//
+// Stripe-Account-1: events are customer.subscription.created / updated /
+// deleted. checkout.session.completed is gone — Plans uses the Payment Element
+// on a default_incomplete subscription, so it never fired (plan v1 S-3); a
+// Citizen becomes paid on the update to active.
+//
+// created / updated: the event body is only a pointer. The subscription is
+// re-fetched with the pinned API version, so the endpoint's version (old
+// account: 2020-03-02) never changes what is read, and an out-of-order event
+// writes the subscription's current state. A failed re-fetch answers 500 so
+// Stripe retries.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function handleStripeWebhook(request, env) {
   let event;
@@ -28,32 +41,24 @@ export async function handleStripeWebhook(request, env) {
   console.log('Stripe event:', type);
 
   try {
-    if (type === 'checkout.session.completed') {
-      const session    = event.data.object;
-      if (session.mode !== 'subscription') return new Response('ok');
-      const customerId = session.customer;
-      const email      = session.customer_details?.email ?? session.customer_email ?? '';
-      const subId      = session.subscription;
-      const tier       = await fetchTierFromSubscription(subId, env.STRIPE_SECRET_KEY);
-      const periodEnd  = await fetchPeriodEnd(subId, env.STRIPE_SECRET_KEY);
-      await upsertSubscriber(env, customerId, email, tier, 'active', periodEnd);
-
-    } else if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
-      const sub        = event.data.object;
+    if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
+      const sub = await fetchSubscription(event.data?.object?.id, env.STRIPE_SECRET_KEY);
+      if (!sub) {
+        console.error('Webhook: subscription re-fetch failed');
+        return new Response('Handler error', { status: 500 });
+      }
       const customerId = sub.customer;
-      const tier       = tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
+      const item       = citizenItem(sub);
       // Plans-Stripe-1: an unpaid (incomplete) subscription is not a subscriber — pressing
       // Continue must not count as a paying Citizen in Navy Office's figures.
-      const status     = (sub.status === 'active' || sub.status === 'trialing') ? 'active' : 'inactive';
-      const periodEnd  = sub.current_period_end;
-      let email = null;
-      try {
-        const custRes = await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
-          headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
-        });
-        if (custRes.ok) { const c = await custRes.json(); email = c.email ?? null; }
-      } catch {}
-      await upsertSubscriber(env, customerId, email, tier, status, periodEnd);
+      const status = (sub.status === 'active' || sub.status === 'trialing') ? 'active'
+                   : sub.status === 'canceled' ? 'cancelled'
+                   : 'inactive';
+      const tier      = status === 'cancelled' ? 'free' : tierFromLookupKey(item?.price?.lookup_key ?? '');
+      const periodEnd = item?.current_period_end ?? null;
+      const email     = await fetchCustomerEmail(customerId, env.STRIPE_SECRET_KEY).catch(() => null);
+      await upsertSubscriber(env, customerId, email, tier, status, periodEnd,
+        status === 'cancelled' ? new Date().toISOString() : null);
 
     } else if (type === 'customer.subscription.deleted') {
       const sub = event.data.object;
@@ -87,34 +92,19 @@ export async function handleCheckout(request, env) {
     return err(400, 'Invalid JSON');
   }
 
-  const { price_id, email } = body;
-  if (!price_id || !email) return err(400, 'Missing price_id or email');
-
-  const validPriceIds = [
-    // live
-    'price_1Ts7lsGlctwiB9U3hdtgChU2',
-    'price_1Ts7sqGlctwiB9U3YRloCFfi',
-    'price_1Ts7vIGlctwiB9U3kb3NCLue',
-    'price_1Ts7xIGlctwiB9U3JyZB8Kwj',
-    // test
-    'price_1TtnCEGlctwiB9U3tErRazp2',
-    'price_1TtnD0GlctwiB9U3UzFr27Zl',
-    'price_1TtnDVGlctwiB9U3BYGRnWl6',
-    'price_1TtnETGlctwiB9U3UJH3uaA',
-  ];
-  if (!validPriceIds.includes(price_id)) return err(400, 'Invalid price_id');
+  // Stripe-Account-1 (S-4): Plans names the plan; the Worker maps it to the
+  // exact lookup key and asks Stripe for the price. No price IDs here or on Plans.
+  const { plan, email } = body;
+  if (!plan || !email) return err(400, 'Missing plan or email');
+  if (typeof plan !== 'string' || !Object.hasOwn(CITIZEN_LOOKUP_KEYS, plan)) return err(400, 'Invalid plan');
 
   if (!(await verifyTurnstileToken(body.turnstile_token, env.TURNSTILE_PLANS_SECRET_KEY, env.PLANS_TURNSTILE_HOSTNAME))) {
     return err(403, 'Check failed. Please try again.');
   }
 
   try {
-    const { clientSecret } = await createCheckoutSession(
-      price_id, email,
-      'https://refueler.io/share/upgrade/?success=1',
-      'https://refueler.io/share/upgrade/?cancelled=1',
-      env.STRIPE_SECRET_KEY
-    );
+    const priceId = await resolveCitizenPrice(plan, env.STRIPE_SECRET_KEY);
+    const { clientSecret } = await createCheckoutSession(priceId, email, env.STRIPE_SECRET_KEY);
     return json({ client_secret: clientSecret });
   } catch (e) {
     console.error('Checkout error:', e);
@@ -134,30 +124,6 @@ export async function handleCheckout(request, env) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Stripe helpers
 // ─────────────────────────────────────────────────────────────────────────────
-export async function fetchTierFromSubscription(subId, secretKey) {
-  const res = await fetch(`https://api.stripe.com/v1/subscriptions/${subId}`, {
-    headers: { 'Authorization': `Bearer ${secretKey}` },
-  });
-  if (!res.ok) return 'free';
-  const sub = await res.json();
-  return tierFromPriceKey(sub.items?.data?.[0]?.price?.lookup_key ?? '');
-}
-
-export async function fetchPeriodEnd(subId, secretKey) {
-  const res = await fetch(`https://api.stripe.com/v1/subscriptions/${subId}`, {
-    headers: { 'Authorization': `Bearer ${secretKey}` },
-  });
-  if (!res.ok) return null;
-  const sub = await res.json();
-  return sub.current_period_end ?? null;
-}
-
-export function tierFromPriceKey(lookupKey) {
-  if (lookupKey.includes('max'))      return 'max';
-  if (lookupKey.includes('creative')) return 'creative';
-  return 'free';
-}
-
 export async function upsertSubscriber(env, stripeCustomerId, email, tier, status, currentPeriodEnd, cancelledAt = null) {
   const payload = {
     stripe_customer_id: stripeCustomerId,
@@ -172,7 +138,6 @@ export async function upsertSubscriber(env, stripeCustomerId, email, tier, statu
   const res = await supabaseFetch(env, 'POST', '/rest/v1/subscribers?on_conflict=stripe_customer_id', payload, {
     'Prefer': 'resolution=merge-duplicates,return=minimal',
   });
-  if (!res.ok) {
-    console.error('Supabase upsert failed:', await res.text());
-  }
+  // Stripe-Account-1: a refused write throws → the webhook answers 500 and Stripe retries.
+  if (!res.ok) throw new Error(`Supabase upsert failed: ${res.status}`);
 }

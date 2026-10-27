@@ -535,7 +535,10 @@ describe('Tier cap enforcement — free tier upload cap', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('Stripe webhook authentication', () => {
-  const SAMPLE_EVENT = makeSubscriptionUpdatedEvent();
+  // An event type the handler acknowledges without acting on: this block tests
+  // authentication only. (A subscription event makes the Worker re-fetch the
+  // subscription from Stripe — Stripe-Account-1 — which a fake id can't pass.)
+  const SAMPLE_EVENT = makeSubscriptionUpdatedEvent({ type: 'invoice.paid' });
 
   it('valid signed webhook -> 200', async () => {
     const secret = inject('stripeWebhookSecret');
