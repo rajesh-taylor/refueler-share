@@ -5,8 +5,12 @@
 -- 20261012_b12_4a_auth.sql, whose trigger sits on public.subscribers.
 --
 -- Copied from production's catalogue (columns, defaults, keys, indexes, checks,
--- RLS and policies read 27 Oct 2026). Every statement is if-not-exists, so on
--- production it changes nothing: never apply it there by hand.
+-- RLS and policies read 27 Oct 2026). Tables, indexes and policies are
+-- if-not-exists. The explicit grants (Stripe-Account-2, 28 Oct) are for a
+-- project created with "Automatically expose new tables" off, which grants
+-- service_role nothing; on production they would only drop anon/authenticated
+-- table privileges the deny-all policies already block. Never apply it there
+-- by hand.
 --
 -- subscribers_tier_check is the pre-Stripe-Account-1 set; the next migration
 -- (20261027_stripe_account_1_citizen.sql) replaces it.
@@ -43,6 +47,15 @@ create index if not exists double_spend_attempts_attempted_at_idx on public.doub
 alter table public.subscribers           enable row level security;
 alter table public.spent_tokens          enable row level security;
 alter table public.double_spend_attempts enable row level security;
+
+-- Explicit privileges: a project created with "Automatically expose new tables"
+-- off grants service_role nothing. Same pattern as 20261011 / 20261012 / 20261022.
+-- The Worker reads and writes these three directly over REST (service role);
+-- the double_spend_attempts insert also needs its bigserial sequence.
+revoke all on public.subscribers, public.spent_tokens, public.double_spend_attempts from public, anon, authenticated;
+grant  all on public.subscribers, public.spent_tokens, public.double_spend_attempts to service_role;
+revoke all on sequence public.double_spend_attempts_id_seq from public, anon, authenticated;
+grant usage, select on sequence public.double_spend_attempts_id_seq to service_role;
 
 -- Deny-all policies, as production has them. The Worker uses the service role.
 do $$
