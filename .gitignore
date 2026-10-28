@@ -35,6 +35,7 @@ Thumbs.db
 # Test artefacts
 coverage/
 .dev.vars
+.dev.vars.*
 .wrangler-test-state/
 refueler-share-financial-model.xlsx
 
