@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.8 | **Created:** S63 · 27 July 2026 | **Updated:** SW9 · 11 Sep 2026
+> **Version:** v0.9 | **Created:** S63 · 27 July 2026 | **Updated:** Integration-Repair-1 · 28 Oct 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -26,30 +26,18 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 ## 2. Current test suite
 
-**376 tests passing across 11 suites** (Vitest 2 — 8 unit + 3 integration, run separately). SW block added `webhook_reg.test.js` (unit). Integration suite extended with TG and SW fixtures.
+Two suites, run separately (Vitest 4):
 
-**Unit suites** (`worker/tests/unit/` — 242 passing):
+- **Main suite** — `worker/test/` (54 files, 1,125 passing), `cd worker && npm test`. Runs inside workerd via `@cloudflare/vitest-plugin`. Pure logic plus handlers against in-memory KV/R2. The old `worker/tests/unit/` files (`destroy.test.js`, `webhook_reg.test.js`) were stale copies of what `test/` now covers and were removed at Integration-Repair-1.
+- **Integration suite** — `worker/tests/integration/` (3 files, 68 passing), `cd worker && npm run test:integration`. Real HTTP against `wrangler dev --local` (§3).
 
-| Suite | Tests | Covers |
-|-------|-------|--------|
-| `ratelimit.test.js` | 18 | KV-backed sliding window logic, limit boundaries, per-endpoint configs, `{ limited }` return shape |
-| `manifest.test.js` | 25 | Manifest schema validation, 64 KB ceiling, expiry windows, `safeGetManifest` guards |
-| `nut00.test.js` | 30 | Full BDHKE round-trip, blinding privacy guarantee (same secret + different r → same C), `verifyCredential`, `tokenSerial`, error paths |
-| `blake3.test.js` | 27 | Hash correctness against `@noble/hashes/blake3` reference, input validation, constant-time comparison, null-guard error handling |
-| `turnstile.test.js` | 34 | Input guards, CF success/failure paths, HTTP errors, malformed JSON, fail-closed behaviour |
-| `stripe.test.js` | 44 | HMAC-SHA256 webhook signature verification, ±300s replay window, body tampering detection, checkout customer find-or-create, tier routing across all 6 live lookup keys |
-| `destroy.test.js` | 64 | TG manifest state machine: `checkTransferStatus` (consumed/tidal boundary checks), `validateTidalHeaders` (window invariants), `flipPendingDestruction` (last-chunk armed flip, idempotency), `buildTombstone` (field strip — exactly 2 keys), `isTidalPermitted` (tier gate, case-insensitive) |
-| `webhook_reg.test.js` | 50 | SW4: `validateWebhookUrl` (21 URL rules incl. RFC1918 + loopback), `deriveWhsecFromHash` (HMAC-SHA256 + base58, determinism, rotation salt isolation), `kvWhConfigKey` (hash derivation), `handleWebhookRegister` POST/DELETE/GET/405 dispatch |
-
-**Integration suites** (`worker/tests/integration/` — 40 passing via `npm run test:integration`):
+**Integration suites:**
 
 | Suite | Tests | Covers |
 |-------|-------|--------|
-| `round-trip.test.js` | 3 | Full upload→download, passphrase-protected transfer, double-spend rejection |
-| `security.test.js` | 13 | Rate limits, credential farming, nonce binding, UUID validation, chunk bounds, tier cap, Stripe webhook auth (all 5 passing including valid-sig → 200) |
-| `tg-round-trip.test.js` | 16 | TG full lifecycle: destroy-after-download (open + passphrase), tidal windows (available_from past/future, available_until open/elapsed, Citizen rejection → 403, available_until > expiry → 400), combined tidal window, owner DELETE (admin key, idempotency, tombstone gate on all chunk indices), DELETE auth boundaries (no-auth 401, cross-transfer bearer 403, bad-admin-key 401), POST /confirm (open transfer, idempotency) |
-
-**Honest assessment:** the pure logic of each module is correct in isolation (unit), and the full Worker runtime enforces it correctly against real workerd with real KV/R2 simulation (integration). All five original seams are closed. No skipped tests.
+| `round-trip.test.js` | 6 | Two-part upload → finalise → byte-identical verified download (`X-Integrity: ciphertext-storage-verified`); finalise refusals (incomplete, stray chunk → `wrong_size`); stored bytes ≠ committed hash → 409 `integrity_failed`; password transfer (unlock 401/200, token exp ≥ expiry); double-spend (same UUID 409, spent proof under another valid UUID → ledger 409) |
+| `security.test.js` | 36 | Rate limits (issue 10/60, initiate 20/60, per IP); commitment binds UUID and tier; forged proof 401; Turnstile nonce replay; `X-Transfer-UUID` validation, UUID-in-path 404, `missing_part`; free cap 413 / at-cap 200 / 8-day expiry 400 / chunk-count mismatch 400 / scheduling 403; Stripe webhook auth (6); recipient DELETE 200/401/403/410; consumed state blocks unlock, download, meta; tidal gate on unlock (425/410) |
+| `tg-round-trip.test.js` | 26 | Destroy-after-download: last part served destroys the transfer (open + password, 2-part), `/confirm` 409/401/403/410/404/`destroyed:false`; owner DELETE (admin key, wrong key 401, every part 410, repeat 410, unknown 404); tidal windows on download (425/200/410, both bounds, meta); DELETE auth boundaries |
 
 **Original seams — all closed (S64–S72):**
 
@@ -67,41 +55,26 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 ### Configuration
 
-- `worker/vitest.config.integration.js` — separate config from unit tests. Integration tests never run in the default `npm test` path; invoked explicitly via `npm run test:integration`.
-- Setup file boots `wrangler dev --local --persist-to=.wrangler-test-state` as a child process, polls `/status` until ready, tears down after the suite.
-- Env: dev bucket bindings only. `SUPABASE_URL` points at a mock HTTP server (see fixtures) — integration tests never touch the live Supabase project.
-- `ADMIN_KEY` env var consumed by `client.js` `adminKey()` helper — set in `.dev.vars` for local runs.
+- `worker/vitest.config.integration.js` — `include: ['tests/integration/**/*.test.js']`, one file at a time. Never part of `npm test`. (Until 28 Oct it used `testMatch`, which Vitest ignores, so it ran every test file.)
+- `tests/integration/helpers/wrangler-lifecycle.js` (globalSetup) starts the Supabase mock, writes `.wrangler-test-state/integration.env`, boots `wrangler dev --local --port=8788 --persist-to=.wrangler-test-state --env-file=…`, polls `/status`.
+- **`worker/.dev.vars` is never read or written.** With `--env-file`, wrangler doesn't load it. The run's vars file is all fresh random keys (admin, mint, commitment, session, MAC, seal, Stripe webhook secret), the mock `SUPABASE_URL`, Cloudflare's published Turnstile test secret (siteverify passes any token, so the Worker's real verify and nonce code runs), and placeholder R2 S3 values for the presigner (never contacted).
+- wrangler runs in its own process group. Teardown and Ctrl-C kill the group. After a hard crash, the next run stops the leftover one (pid file, only if port 8788 still answers).
+- Values the tests need (`workerUrl`, `persistDir`, `envFile`, `adminKey`, `stripeWebhookSecret`) cross into the test processes by `provide`/`inject` only.
 
 ### HTTP client helper — `worker/tests/integration/client.js`
 
-Thin fetch wrapper against the local Worker:
-- `client.issueCredential()` → full BDHKE flow, returns parsed credential with `_credentialForUpload`
-- `client.uploadChunk(uuid, index, bytes, hash, headers)` / `client.buildCredentialHeaders(...)` → chunk PUT
-- `client.auth(uuid, passphrase)` / `client.downloadChunk(uuid, index, bearer)` → auth + download
-- `client.getMeta(uuid)` → public manifest metadata
-- `client.confirmTransfer(uuid, bearer?)` → POST /confirm/:uuid (open transfers, bearer optional)
-- `client.deleteTransfer(uuid, bearer?, opts?)` → DELETE /transfer/:uuid (passphrase path, bearer required)
-- `client.ownerDeleteTransfer(uuid, opts?)` → DELETE /transfer/:uuid (admin key path, Execution Dock)
-- Every method returns `{ status, headers, body }` — assertions stay in tests, not the client.
+Every endpoint helper returns `{ status, headers, body }`; assertions stay in tests. Test files call `client.init({...inject()})` in `beforeAll` and `client.close()` in `afterAll`.
+- `issueCredential({ ip, tier, turnstileToken })` — BDHKE, then `body.proof` = the v2 `X-Cashu-Credential` (`{id: keyset_id, amount: 1, secret, C}`)
+- `initiateHeaders(cred, opts)` / `initiate(headers)` — `POST /upload/initiate` (password, destroy-after-download, availability, overrides for negative tests)
+- `makeChunks(totalBytes)` / `putChunks(uuid, chunks)` / `finaliseBody(chunks)` / `finalise(uuid, token, body)` — chunk bytes are random stand-in ciphertext at the exact signed sizes. **Presigned R2 URLs can't reach a local Worker**, so `putChunks` writes them into the same local bucket via wrangler's `getPlatformProxy` (same persist dir). Everything else is the real Worker.
+- `upload(opts)` — all of the above, throws on any non-200
+- `patchManifest(uuid, fn)` — sets stored states no free upload can reach (tidal windows)
+- `getMeta`, `unlock`, `downloadChunk` (`X-Part`), `confirmTransfer`, `deleteTransfer`, `ownerDeleteTransfer` (`inject('adminKey')`, no default), `post`
+- The transfer UUID is only ever in `X-Transfer-UUID` (UUID-Out-Of-Path-1; `bin/check-no-uuid-path.mjs` covers these files).
 
-### Clean state between tests
+### Not covered here
 
-`--persist-to` a throwaway directory, wiped in `beforeEach` via test-only reset. UUID namespacing gives isolation without a reset endpoint.
-
-### Core test designs
-
-**Full upload→download round-trip (`round-trip.test.js`):**
-1. Issue credential (mocked Turnstile). Assert: valid NUT-00 credential, Worker-generated UUID.
-2. AES-GCM encrypt 3-chunk test payload client-side. Compute BLAKE3 hash per chunk.
-3. PUT chunks 0–2 with correct hashes and AAD. Assert: 200 each.
-4. PUT manifest. Assert: 200, `total_chunks` present.
-5. GET each chunk. Assert: 200, bytes identical to uploaded ciphertext.
-6. Decrypt and reassemble. Assert: plaintext matches original.
-7. Negative: PUT chunk with wrong BLAKE3 hash. Assert: 400.
-
-**Passphrase-protected variant:** `p2sh_secret_hash` in manifest. Wrong passphrase → 401; correct → bearer with `exp === manifest.expiry_timestamp`; download with bearer → 200.
-
-**Double-spend rejection:** issue credential, complete first-chunk melt, attempt second upload with same credential. Assert: rejection + mock Supabase records both the `spent_tokens` insert and `double_spend_attempts` write.
+Citizen (signed-in, paid) and Chartered (HMAC) initiates. They need a session or API client and are covered in `test/` and by `dev/stripe-sandbox/` (`docs/Stripe-Sandbox-Checklist.md`).
 
 ---
 
@@ -140,19 +113,18 @@ Fixtures are shared between Vitest integration tests and k6 load scripts. k6 run
 
 | Claim (whitepaper §) | Origin | Test name | What it proves |
 |----------------------|--------|-----------|----------------|
-| Server-side BLAKE3 chunk integrity | S34 | `rejects chunk with mismatched BLAKE3 hash (400)` | Malicious client cannot store data under a false hash |
-| AAD overflow closed | S35 | `accepts chunk index 256+ with 4-byte AAD` | `DataView.setUint32` AAD; the `Uint8Array([i])` overflow cannot recur |
-| Double-spend rejection | S20/B4 | `rejects reuse of melted credential; logs attempt` — `round-trip.test.js` | Supabase serial ledger blocks replay; attempt is recorded |
+| Storage integrity (ciphertext-chunk merkle) | S34 → Share-6 | `finalise refuses wrong chunk hashes and a missing chunk` — `round-trip.test.js` | Stored bytes that don't match the finalised hashes are refused at download (409 `integrity_failed`); an incomplete upload can't finalise |
+| Double-spend rejection | S20/B4 | `a spent proof under a second, valid UUID + commitment hits the spend ledger (409)` — `round-trip.test.js` | Supabase serial ledger blocks replay |
 | Credential farming defence | S42c/S42d | `rejects credential for foreign UUID` · `rejects reused Turnstile nonce` | UUID binding + nonce binding close cross-transfer farming |
 | Rate limit enforcement | S36/S42b | `returns 429 at limit+1 on credential_issue` | KV limits hold at exact boundaries; 429s emitted |
-| UUID validation | S41 | `rejects non-RFC4122 UUID in upload path` | Path traversal / key-forgery via malformed UUIDs closed |
-| Chunk bounds | S41/S42b | `rejects chunk index beyond declared total` | Storage-stuffing beyond manifest bounds closed |
+| UUID validation | S41 → UUID-Out-Of-Path-1 | `rejects "…" → 400 missing_transfer_id` · `a UUID in the path is not a route (404)` | Malformed UUIDs refused; the UUID never travels in a path |
+| Chunk bounds | S41/S42b → B12-1d | `a chunk beyond the declared count is refused at finalise (409 wrong_size)` — `round-trip.test.js` | Storage-stuffing beyond manifest bounds closed |
 | Bearer token scope | S58 | `bearer token exp equals manifest expiry; expired token rejected` | Token lifetime bound to transfer, not hardcoded |
 | Stripe webhook auth | S71/S72 | `tampered signature → 401` · `stale timestamp → 401` · `missing header → 401` · `empty body → 401` · `valid signature → 200` | Webhook auth enforced in real Worker route; all five tests passing |
 
 | HMAC API request authentication | SW2/SW4 | *(integration test deferred to SW9a)* | API requests signed with HMAC-SHA256 over method+path+timestamp+body_hash; replay window ±300s |
-| Webhook signing — stateless HMAC derivation | SW4-patch | `unit/webhook_reg.test.js` — `deriveWhsec` suite | `rfs_whsec_` derived from master key + apiKeyHash + created_at; never stored; rotation salt confirmed |
-| Webhook URL validation — private IP / localhost rejection | SW4 | `unit/webhook_reg.test.js` — `validateWebhookUrl` suite | RFC1918, loopback, link-local, unspecified ranges rejected; non-HTTPS rejected |
+| Webhook signing — stateless HMAC derivation | SW4-patch | `test/webhook_reg.test.js` — `deriveWhsec` suite | `rfs_whsec_` derived from master key + apiKeyHash + created_at; never stored; rotation salt confirmed |
+| Webhook URL validation — private IP / localhost rejection | SW4 | `test/webhook_reg.test.js` — `validateWebhookUrl` suite | RFC1918, loopback, link-local, unspecified ranges rejected; non-HTTPS rejected |
 | Sandbox credential isolation | SW6 | *(integration test deferred to SW9a)* | `rfs_test_` keypairs draw from sandbox pool only; never touch production quota |
 
 **Known test gaps (SW block — resolve at SW9a):**
@@ -331,8 +303,8 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 | 9 | Destroy-after-download transfers are permanently consumed after recipient confirmation | `integration/tg-round-trip.test.js` | `POST /confirm returns 200 and destroyed: true` · `re-download after confirm returns 410` · `second POST /confirm returns 410 (already consumed)` | Tombstone gate enforced end-to-end in real Worker runtime; consumed state is permanent |
 | 10 | Tidal windows are enforced server-side; Citizen tier cannot schedule availability | `integration/tg-round-trip.test.js` | `returns 425 when available_from is in the future` · `returns 410 when available_until has elapsed` · `Citizen tier — tidal headers rejected with 403 at upload` | Time-gating and tier gate hold at real Worker boundary |
 
-| 11 | Webhook signing keys are derived statelessly and rotation-salted | `unit/webhook_reg.test.js` | `deriveWhsec` determinism · `different created_at → different output` | Same master key + same API key + different `created_at` yields a different `rfs_whsec_` — re-registration automatically rotates the signing key |
-| 12 | Webhook endpoint URL validation rejects private/loopback addresses | `unit/webhook_reg.test.js` | `validateWebhookUrl` suite (21 cases) | RFC1918, loopback, link-local, unspecified ranges, HTTP, localhost all rejected; client cannot register an internal delivery target |
+| 11 | Webhook signing keys are derived statelessly and rotation-salted | `test/webhook_reg.test.js` | `deriveWhsec` determinism · `different created_at → different output` | Same master key + same API key + different `created_at` yields a different `rfs_whsec_` — re-registration automatically rotates the signing key |
+| 12 | Webhook endpoint URL validation rejects private/loopback addresses | `test/webhook_reg.test.js` | `validateWebhookUrl` suite (21 cases) | RFC1918, loopback, link-local, unspecified ranges, HTTP, localhost all rejected; client cannot register an internal delivery target |
 
 **Scope honesty:** this trail proves server-side *chunk* integrity, not end-to-end file integrity — full Merkle root verification unimplemented until B9. Rows added for NUT-11 Mode 2 (B8), Merkle (B9), ML-KEM (B10), HMAC API auth (SW) when tests exist — never before.
 

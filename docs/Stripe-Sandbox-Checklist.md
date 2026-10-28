@@ -111,7 +111,9 @@ At B12-6: repeat 3a through the portal.
   Radar's postcode rule can fire.
 - **Abandoned checkouts:** an unpaid (incomplete) subscription stays `inactive`
   until Stripe expires it (≈ 23 h) — it never counts as paid.
-- **`npm run test:integration` is stale** (not caused by this run): its config
-  uses `testMatch`, which Vitest ignores, so it runs every test, and its client
-  predates UUID-Out-Of-Path-1 and credential v2. 59 of 624 fail. Needs its own
-  repair session; the scripts above cover the sandbox path meanwhile.
+- **`npm run test:integration` was stale** (not caused by this run): config
+  used `testMatch`, which Vitest ignores, and its client predated
+  UUID-Out-Of-Path-1 and credential v2. Repaired the same day
+  (Integration-Repair-1): integration tests only, 68 green, and it no longer
+  touches `.dev.vars`. It still doesn't cover Citizen or Chartered initiates —
+  the scripts above do.
