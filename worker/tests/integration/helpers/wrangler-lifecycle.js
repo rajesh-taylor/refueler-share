@@ -15,6 +15,7 @@
  */
 
 import { spawn }                  from 'node:child_process';
+import { randomBytes }            from 'node:crypto';
 import { rm, readFile, writeFile } from 'node:fs/promises';
 import { existsSync }              from 'node:fs';
 import { join }                    from 'node:path';
@@ -86,6 +87,9 @@ export async function setup({ provide }) {
   vars['SUPABASE_URL'] = supabaseMock.url;
   // SUPABASE_SERVICE_KEY can be anything — mock ignores auth headers
   vars['SUPABASE_SERVICE_KEY'] = vars['SUPABASE_SERVICE_KEY'] ?? 'test-service-key';
+  // A fresh admin key per run — never the one .dev.vars holds.
+  const adminKey = randomBytes(32).toString('hex');
+  vars['ADMIN_KEY'] = adminKey;
 
   await writeFile(DEV_VARS, serialiseDevVars(vars), 'utf8');
   console.log(`[wrangler-lifecycle] Wrote SUPABASE_URL=${supabaseMock.url} to .dev.vars`);
@@ -122,6 +126,7 @@ export async function setup({ provide }) {
   // provide/inject is the only mechanism that does.
   const stripeWebhookSecret = vars['STRIPE_WEBHOOK_SECRET'] ?? '';
   provide('stripeWebhookSecret', stripeWebhookSecret);
+  provide('adminKey', adminKey);
   console.log(`[wrangler-lifecycle] stripeWebhookSecret provided (${stripeWebhookSecret ? 'present' : 'MISSING — check .dev.vars'})`);
 }
 

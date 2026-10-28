@@ -22,7 +22,7 @@
  *   window is already open at download time.
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, inject } from 'vitest';
 import { blake3 } from '@noble/hashes/blake3';
 import * as client from './client.js';
 import { makeChunks } from './fixtures/chunks.js';
@@ -208,7 +208,7 @@ describe('TG: destroy-after-download (open transfer)', () => {
   });
 
   it('owner DELETE destroys the transfer synchronously — 200', async () => {
-    const r = await client.ownerDeleteTransfer(uuid);
+    const r = await client.ownerDeleteTransfer(uuid, { adminKey: inject('adminKey') });
     expect(r.status).toBe(200);
     expect(r.body.destroyed).toBe(true);
     expect(r.body.consumed_at).toBeTypeOf('number');
@@ -252,7 +252,7 @@ describe('TG: destroy-after-download (passphrase-protected)', () => {
   });
 
   it('owner DELETE with admin key destroys transfer — 200', async () => {
-    const r = await client.ownerDeleteTransfer(uuid);
+    const r = await client.ownerDeleteTransfer(uuid, { adminKey: inject('adminKey') });
     expect(r.status).toBe(200);
     expect(r.body.destroyed).toBe(true);
   });
@@ -408,7 +408,7 @@ describe('TG: owner DELETE (X-Admin-Key)', () => {
   });
 
   it('DELETE with admin key returns 200 and destroyed: true', async () => {
-    const r = await client.ownerDeleteTransfer(uuid);
+    const r = await client.ownerDeleteTransfer(uuid, { adminKey: inject('adminKey') });
     expect(r.status).toBe(200);
     expect(r.body.destroyed).toBe(true);
     expect(r.body.consumed_at).toBeTypeOf('number');
@@ -420,7 +420,7 @@ describe('TG: owner DELETE (X-Admin-Key)', () => {
   });
 
   it('second owner DELETE returns 410 (already consumed)', async () => {
-    const r = await client.ownerDeleteTransfer(uuid);
+    const r = await client.ownerDeleteTransfer(uuid, { adminKey: inject('adminKey') });
     expect(r.status).toBe(410);
   });
 
@@ -455,7 +455,7 @@ describe('TG: DELETE auth boundaries', () => {
 
   it('owner DELETE with wrong X-Admin-Key returns 401', async () => {
     const { uuid } = await uploadTransfer({});
-    const r = await client.ownerDeleteTransfer(uuid, { badKey: true });
+    const r = await client.ownerDeleteTransfer(uuid, { badKey: true, adminKey: inject('adminKey') });
     expect(r.status).toBe(401);
   });
 });
@@ -497,7 +497,7 @@ describe('TG: POST /confirm/:uuid (open transfer, no bearer)', () => {
   });
 
   it('owner DELETE destroys the transfer — 200', async () => {
-    const r = await client.ownerDeleteTransfer(uuid);
+    const r = await client.ownerDeleteTransfer(uuid, { adminKey: inject('adminKey') });
     expect(r.status).toBe(200);
     expect(r.body.destroyed).toBe(true);
   });

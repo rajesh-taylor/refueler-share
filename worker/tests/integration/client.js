@@ -72,9 +72,11 @@ function baseUrl() {
   return process.env.WORKER_BASE_URL ?? 'http://localhost:8788';
 }
 
-function adminKey() {
-  // Must match ADMIN_KEY in worker/.dev.vars exactly.
-  return process.env.ADMIN_KEY ?? 'Neelam';
+function adminKey(key) {
+  // wrangler-lifecycle.js writes a fresh random ADMIN_KEY into the test run's
+  // .dev.vars and provides it; tests pass inject('adminKey'). No default.
+  if (!key) throw new Error('adminKey: pass inject(\'adminKey\') from the test');
+  return key;
 }
 
 async function parseBody(res) {
@@ -279,14 +281,15 @@ export async function deleteTransfer(uuid, bearer = null, opts = {}) {
  * @param {string} uuid
  * @param {object} opts
  * @param {boolean} opts.badKey - send a wrong X-Admin-Key value (tests 401 path)
+ * @param {string}  opts.adminKey - inject('adminKey')
  */
 export async function ownerDeleteTransfer(uuid, opts = {}) {
-  const { badKey = false } = opts;
+  const { badKey = false, adminKey: key } = opts;
   return request(`/transfer/${uuid}`, {
     method: 'DELETE',
     headers: {
       'Authorization': 'Bearer rfs_owner_executiondock',
-      'X-Admin-Key':   badKey ? 'wrong-key' : adminKey(),
+      'X-Admin-Key':   badKey ? 'wrong-key' : adminKey(key),
     },
   });
 }
