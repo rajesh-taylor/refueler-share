@@ -376,11 +376,16 @@ describe('Execution Dock — the initiate write', () => {
       landed = true;
     };
     const e = makeEnv({ STATUS_KV: kv });
+    const before = NOW();
     const res = await initiate(e);
+    const after = NOW();
     expect(res.status).toBe(200);
     expect(landed).toBe(true);
     const entry = JSON.parse(kv._store.get(`dock_index:${UUID}`));
-    expect(entry).toMatchObject({ uuid: UUID, tier: 'free', file_name: 'encrypted-payload', created_at: NOW() });
+    expect(entry).toMatchObject({ uuid: UUID, tier: 'free', file_name: 'encrypted-payload' });
+    // The write is delayed 40 ms on purpose, so the call can cross a second boundary.
+    expect(entry.created_at).toBeGreaterThanOrEqual(before);
+    expect(entry.created_at).toBeLessThanOrEqual(after);
     expect(kv._meta.get(`dock_index:${UUID}`).metadata).toEqual(entry);
     expect(kv._meta.get(`dock_index:${UUID}`).expirationTtl).toBeGreaterThan(48 * 3600);
   });
