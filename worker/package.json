@@ -25,7 +25,7 @@
     "@vitest/runner": "4.1.11",
     "@vitest/snapshot": "4.1.11",
     "eslint": "^9.0.0",
-    "vitest": "4.1.11",
+    "vitest": "4.1.12",
     "wrangler": "4.145.0"
   }
 }
