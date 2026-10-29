@@ -404,6 +404,9 @@ case "$MODE" in
     [ "$(git -C "$ROOT" rev-list --count origin/main..HEAD)" -eq 0 ] || die "HEAD not pushed — git push first (a release must exist on GitHub)"
     command -v gh >/dev/null 2>&1 || die "gh (GitHub CLI) not found — brew install gh"
     gh auth status >/dev/null 2>&1 || die "gh is not signed in — gh auth login"
+    # H6 · D-8: the Pages deploy runs on the scoped "ship" token from the Keychain (name only here).
+    security find-generic-password -a "$USER" -s refueler-cf-ship >/dev/null 2>&1 \
+      || die "no Keychain item refueler-cf-ship — store the Pages token first (bin/cf-token.sh header)"
     check_protections
     FULL="$(git -C "$ROOT" rev-parse HEAD)"
     SHA="${FULL:0:10}"
@@ -428,7 +431,7 @@ case "$MODE" in
       # Same deploy as the first time: its kept previous release comes from the release itself.
       PREV="$(node -p "require('$T/published/release-extra.json').previous_release || ''")"
     fi
-    echo "  ✓ main, clean, pushed · gh signed in · app-* tags protected · releases immutable"
+    echo "  ✓ main, clean, pushed · gh signed in · ship token in Keychain · app-* tags protected · releases immutable"
     echo "  ✓ release $SHA · live now: $(live_release || true) · keeping: ${PREV:-none}${STATE:+ · $STATE}"
     step "2/7"; build "$SHA" "$PREV"
     step "3/7"; check "$SHA"
@@ -448,7 +451,7 @@ case "$MODE" in
     fi
     step "5/7 deploy (Cloudflare Pages, direct upload, project $PROJECT)"
     # Run from a directory with no wrangler.toml (the Worker's would be read and ignored, with a warning).
-    ( cd "$DIST" && "$ROOT/worker/node_modules/.bin/wrangler" pages deploy "$DIST" --project-name "$PROJECT" --branch main \
+    ( cd "$DIST" && "$ROOT/bin/cf-token.sh" ship "$ROOT/worker/node_modules/.bin/wrangler" pages deploy "$DIST" --project-name "$PROJECT" --branch main \
         --commit-hash "$FULL" --commit-message "release $SHA" --commit-dirty=false ) \
       || die "wrangler pages deploy failed$([ "$STATE" = new ] && echo " (the $TAG draft stays private; the next ship replaces it)")"
     step "6/7"; prove || die "prove FAILED — deployed, but share.refueler.io is not serving dist/ exactly (the $TAG release is not published)"
