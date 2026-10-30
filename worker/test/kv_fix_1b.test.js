@@ -48,6 +48,7 @@ function makeEnv(overrides = {}) {
     UPLOAD_SESSION_KEY: 'c2Vzc2lvbi1rZXktdGVzdC1vbmx5LTMyLWJ5dGVzLSE=',
     TEST_CRED_KEY:           TC_KEY,
     ADMIN_KEY,
+    ADMIN_PUBLIC_UNTIL:      '9999999999',   // H6a: admin route on this host via the break-glass window
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,
     SUPABASE_URL:            'https://sb.test',
     SUPABASE_SERVICE_KEY:    'x',

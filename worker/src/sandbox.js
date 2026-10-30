@@ -27,8 +27,8 @@
 // (it would sign on the production mint key — KV-Audit F6).
 //
 // Endpoints (all rate-limited under api_sandbox bucket):
-//   POST /api/v1/sandbox/activate  — issue keypair + test credits. Admin-key only.
-//   POST /api/v1/sandbox/reset     — refill credits / reissue tokens. Admin-key only.
+//   POST /api/v1/admin/sandbox/activate  — issue keypair + test credits. Admin-key only.
+//   POST /api/v1/admin/sandbox/reset     — refill credits / reissue tokens. Admin-key only.
 //   GET  /api/v1/sandbox/status    — HMAC-auth, returns credit balance + rail info.
 //   POST /api/v1/sandbox/spend     — HMAC-auth, consumes one identity credit (test path).
 //
@@ -137,7 +137,7 @@ async function provisionSandboxPool(env, org, nowSeconds) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/sandbox/activate
+// POST /api/v1/admin/sandbox/activate
 //
 // Admin-only. Creates a sandbox keypair for a given rail.
 //
@@ -204,7 +204,7 @@ export async function handleSandboxActivate(request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/sandbox/reset
+// POST /api/v1/admin/sandbox/reset
 //
 // Admin-only. Refills credits (identity) or reissues test tokens (anonymous).
 // Does NOT rotate the keypair.
@@ -317,7 +317,7 @@ export async function handleSandboxSpend(request, env) {
     const spend = await spendCredits(env, client.org_account_id, 1);
     if (!spend?.ok) {
       return sandboxResponse({
-        error:     'Test credit limit reached. Call POST /api/v1/sandbox/reset to reissue.',
+        error:     'Test credit limit reached. Call POST /api/v1/admin/sandbox/reset to reissue.',
         code:      spend?.code ?? 'quota_exhausted',
         remaining: spend?.remaining_credits ?? 0,
         sandbox:   true,

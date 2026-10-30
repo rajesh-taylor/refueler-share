@@ -228,6 +228,9 @@ export function makeEnv(overrides = {}) {
     QUOTA_REF_KEY,
     UPLOAD_SESSION_KEY,
     WEBHOOK_SIGNING_MASTER_KEY: 'test-master-key',
+    // H6a: admin routes are tested on this host through the break-glass window
+    // (same behaviour as before); admin_host.test.js tests the host split itself.
+    ADMIN_PUBLIC_UNTIL:      '9999999999',
     ...overrides,
   };
 }

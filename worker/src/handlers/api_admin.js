@@ -87,7 +87,7 @@ export async function handleAdminApiClientCreate(request, env) {
     overage_ceiling: body.overage_ceiling ?? undefined,
   }, Math.floor(Date.now() / 1000));
   if (params.error) return err(400, params.error);
-  if (params.plan === 'sandbox') return err(400, 'Use POST /api/v1/sandbox/activate for sandbox keys');
+  if (params.plan === 'sandbox') return err(400, 'Use POST /api/v1/admin/sandbox/activate for sandbox keys');
   if (body.label !== undefined && (typeof body.label !== 'string' || body.label.length > 64)) {
     return err(400, 'label must be a string of at most 64 characters');
   }

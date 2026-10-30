@@ -310,7 +310,7 @@ describe('sandbox on Supabase', () => {
   it('activate → status → spend to zero → 402 → reset; no KV writes, raw key never stored', async () => {
     const env = makeEnv();
     const kvPut = vi.spyOn(env.STATUS_KV, 'put');
-    const act = await worker.fetch(admin('/api/v1/sandbox/activate', { rail: 'identity' }), env, ctx);
+    const act = await worker.fetch(admin('/api/v1/admin/sandbox/activate', { rail: 'identity' }), env, ctx);
     expect(act.status).toBe(201);
     const a = await act.json();
     const cred = { live: a.live_key, sign: a.sign_key };
@@ -326,7 +326,7 @@ describe('sandbox on Supabase', () => {
     const out = await worker.fetch(await signedRequest('POST', '/api/v1/sandbox/spend', cred), env, ctx);
     expect(out.status).toBe(402);
 
-    const rs = await worker.fetch(admin('/api/v1/sandbox/reset', { live_key: a.live_key }), env, ctx);
+    const rs = await worker.fetch(admin('/api/v1/admin/sandbox/reset', { live_key: a.live_key }), env, ctx);
     expect(rs.status).toBe(200);
     expect(sb.pools.get(org).remaining).toBe(25);
     expect(kvPut.mock.calls.filter(([k]) => !k.startsWith('rl:') && !k.startsWith('errlog:'))).toHaveLength(0);

@@ -48,6 +48,7 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | GET | `/wl/config` | public | — | `handleWlConfig` |
 | GET | `/status` | public | — | `handleStatus` |
 | POST | `/admin/status` | admin | — | `handleAdminStatus` |
+| GET | `/admin/status` | admin | — | `handleStatus` |
 | POST | `/api/v1/credential/issue` | hmac | yes | `handleApiCredentialIssue` |
 | GET | `/api/v1/capabilities` | hmac | yes | `handleApiCapabilities` |
 | POST | `/api/v1/webhook/register` | hmac | yes | `handleWebhookRegister` |
@@ -56,8 +57,8 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | GET | `/api/v1/receipt/{acceptance\|collection}` | hmac | yes | `handleApiReceipt` |
 | GET | `/api/v1/webhooks/status` | hmac | yes | `handleWebhookStatus` |
 | GET | `/api/v1/hostname/health` | hmac | yes | `handleHostnameHealth` |
-| POST | `/api/v1/sandbox/activate` | admin | yes | `handleSandboxActivate` |
-| POST | `/api/v1/sandbox/reset` | admin | yes | `handleSandboxReset` |
+| POST | `/api/v1/admin/sandbox/activate` | admin | yes | `handleSandboxActivate` |
+| POST | `/api/v1/admin/sandbox/reset` | admin | yes | `handleSandboxReset` |
 | GET | `/api/v1/sandbox/status` | hmac-sandbox | yes | `handleSandboxStatus` |
 | POST | `/api/v1/sandbox/spend` | hmac-sandbox | yes | `handleSandboxSpend` |
 | POST | `/credential/issue` | turnstile | yes | `handleCredentialIssue` |

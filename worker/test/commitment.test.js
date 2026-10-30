@@ -43,6 +43,7 @@ function makeEnv(overrides = {}) {
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,
     TURNSTILE_SECRET_KEY:    'ts',
     ADMIN_KEY:               'admin-test',
+    ADMIN_PUBLIC_UNTIL:      '9999999999',   // H6a: admin route on this host via the break-glass window
     TEST_CRED_KEY:           'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=',
     SUPABASE_URL:            'https://sb.test',
     SUPABASE_SERVICE_KEY:    'x',

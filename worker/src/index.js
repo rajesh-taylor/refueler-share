@@ -69,6 +69,7 @@ import {
   handleReportsWhoami, handleReportsLookup, handleReportsRegister, handleReportsOpen, handleReportsUpdate,
   handleReportsExport, handleReportsExportTraining, handleReportsDeleteTraining, handleReportsTakedown,
 } from './handlers/reports.js';                                                     // OSA-Tools-1
+import { adminGate, onAdminHost, stripCors } from './admin_host.js';                  // H6a
 
 
 // UUID_RE, corsHeaders — imported from ./utils.js
@@ -203,6 +204,11 @@ const worker = {
       if (request.method === 'POST' && path === '/admin/status') {
         return timed('admin_status', () => handleAdminStatus(request, env).then(r => addCors(r, request)));
       }
+      // H6a: GET /status behind the admin key, so Navy Office only ever calls its own host.
+      if (request.method === 'GET' && path === '/admin/status') {
+        return timed('admin_status_get', async () =>
+          addCors((await requireAdmin(request, env)) ?? await handleStatus(request, env), request));
+      }
 
       // ── SW2a: API credential issuance — POST /api/v1/credential/issue ─────
       // HMAC-authenticated. Identity rail only until B7. Credits spent atomically
@@ -292,12 +298,13 @@ const worker = {
         return timed('api_hostname_health', () => handleHostnameHealth(request, env).then(r => addCors(r, request)));
       }
 
-      // ── SW6: Sandbox endpoints — POST/GET /api/v1/sandbox/* ──────────────
-      // Admin-key protected (activate, reset). HMAC-authenticated (status, spend).
+      // ── SW6: Sandbox endpoints ──────────────────────────────────────────────
+      // Admin-key protected (activate, reset) under /api/v1/admin/sandbox/* since H6a,
+      // so they live on the admin host. HMAC-authenticated (status, spend) stay public.
       // All responses carry X-Refueler-Sandbox: true.
       // Rate-limited under api_sandbox bucket — tighter than production to discourage
       // using the sandbox as a free tier with a different name.
-      if (request.method === 'POST' && path === '/api/v1/sandbox/activate') {
+      if (request.method === 'POST' && path === '/api/v1/admin/sandbox/activate') {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'api_sandbox', 5, 60);
         if (rl.limited) {
@@ -307,7 +314,7 @@ const worker = {
         return timed('sandbox_activate', () => handleSandboxActivate(request, env).then(r => addCors(r, request)));
       }
 
-      if (request.method === 'POST' && path === '/api/v1/sandbox/reset') {
+      if (request.method === 'POST' && path === '/api/v1/admin/sandbox/reset') {
         const ip = getClientIp(request);
         const rl = await checkRateLimit(env, ip, 'api_sandbox', 5, 60);
         if (rl.limited) {
@@ -769,10 +776,15 @@ export function hardenJson(res) {
   return out;
 }
 
+// H6a (30 Oct 2026): the host split runs first — Access token on the admin host,
+// admin paths 404 everywhere else (admin_host.js). Nothing on the admin host carries CORS.
 export default {
   ...worker,
   async fetch(request, env, ctx) {
-    return hardenJson(await worker.fetch(request, env, ctx));
+    const gate = await adminGate(request, env);
+    if (gate) return hardenJson(gate);
+    const res = hardenJson(await worker.fetch(request, env, ctx));
+    return onAdminHost(request, env) ? stripCors(res) : res;
   },
 };
 

@@ -38,7 +38,7 @@
  * account status — policy enforced at the manifest/transfer layer, not here.
  *
  * Sandbox plan ('sandbox'): hard stop like personal_api, never resets lazily —
- *   only POST /api/v1/sandbox/reset refills it.
+ *   only POST /api/v1/admin/sandbox/reset refills it.
  *
  * Do-not-retry:
  *   - Never write overage_credits or overage_ceiling for personal_api plan — hard stop only.
