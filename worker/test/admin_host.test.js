@@ -16,6 +16,7 @@ vi.mock('../src/turnstile.js', () => ({
 
 import worker from '../src/index.js';
 import routesDoc from '../../docs/ROUTES.md?raw';
+import toml from '../wrangler.toml?raw';
 import { readDocRows, ADMIN_PATH as INVENTORY_ADMIN_PATH } from '../../bin/lib/route-inventory-lib.mjs';
 import { ADMIN_PATH } from '../src/admin_host.js';
 import { forgetAccessCerts, ACCESS_HEADER } from '../src/access_jwt.js';
@@ -214,5 +215,32 @@ describe('fails closed', () => {
     const res = await call(env(), 'GET', '/status');
     expect(res.status).toBe(200);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://refueler.io');
+  });
+});
+
+describe('wrangler.toml pins (plan §1.1, §1.2, §3.1)', () => {
+  const top = toml.slice(0, toml.search(/^\[/m));
+  const v = (name) => toml.match(new RegExp(`^${name}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
+
+  it('no workers.dev, no preview URLs', () => {
+    expect(top).toMatch(/^workers_dev\s*=\s*false\s*$/m);
+    expect(top).toMatch(/^preview_urls\s*=\s*false\s*$/m);
+  });
+
+  it('the admin host is a Custom Domain; the API route is unchanged', () => {
+    expect(toml).toMatch(/\[\[routes\]\]\s*\npattern\s*=\s*"admin\.share\.refueler\.io"\s*\ncustom_domain\s*=\s*true/);
+    expect(toml).toMatch(/\[\[routes\]\]\s*\npattern\s*=\s*"api\.share\.refueler\.io\/\*"\s*\nzone_name\s*=\s*"refueler\.io"/);
+  });
+
+  it('admin host vars set; the window closes within a fortnight of the cut-over', () => {
+    expect(v('ADMIN_HOST')).toBe('admin.share.refueler.io');
+    expect(v('ACCESS_TEAM')).toMatch(/^[a-z0-9-]+$/);
+    expect(v('ACCESS_AUD')).toMatch(/^[0-9a-f]{64}$/);
+    expect(Number(v('ADMIN_PUBLIC_UNTIL'))).toBeLessThanOrEqual(Date.UTC(2026, 10, 15) / 1000);
+  });
+
+  it('static assets, if configured, always run the Worker first (else they would be public on api.share)', () => {
+    const assets = toml.match(/^\[assets\]\s*\n((?:(?!\[).*\n?)*)/m);
+    if (assets) expect(assets[1]).toMatch(/^run_worker_first\s*=\s*true\s*$/m);
   });
 });

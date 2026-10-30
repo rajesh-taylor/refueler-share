@@ -2,6 +2,10 @@ name = "refueler-share"
 main = "src/index.js"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
+# H6a (30 Oct 2026): no workers.dev or preview hostname — each would be a door to the
+# admin routes without Cloudflare Access. Pinned here so a deploy can't turn them back on.
+workers_dev  = false
+preview_urls = false
 
 [limits]
 cpu_ms = 300000
@@ -32,24 +36,15 @@ preview_bucket_name = "refueler-share-dev"
 # SUPABASE_SERVICE_KEY — service_role JWT (spent_tokens write)
 # R2_S3_ACCESS_KEY_ID     — R2 API token Access Key ID  (Share-6-1, presigning). Worker secret only.
 # R2_S3_SECRET_ACCESS_KEY — R2 API token Secret Access Key (Share-6-1, presigning). Worker secret only — never KV, never a URL.
-# BLINK_API_KEY        — Blink Share account API key (READ + RECEIVE scopes)
-# BLINK_WALLET_ID      — Blink Share account GBP wallet ID
 
 [vars]
 ENVIRONMENT = "production"
-LIGHTNING_BACKEND = "lnbits"
 # Share-6-1: bucket the Worker presigns PutObject against (direct-to-R2 path).
 # The R2 Workers binding above (BUCKET) is unaffected. For the dev smoke test,
 # set this to refueler-share-dev; the /admin/r2-presign-test endpoint always
 # forces the dev bucket regardless of this value.
 R2_BUCKET_NAME = "refueler-share-prod"
 R2_BUDGET_GIB  = "500"   # B12-2: Navy Office occupancy budget (display only)
-BLINK_WALLET_ID            = ""
-BLINK_API_KEY              = ""
-PRICE_CREATIVE_MONTHLY_GBP = "12"
-PRICE_CREATIVE_YEARLY_GBP  = "144"
-PRICE_MAX_MONTHLY_GBP      = "24"
-PRICE_MAX_YEARLY_GBP       = "288"
 # Sealing key generation (B12-SR S3): secret SHARE_SEAL_KEY_<n>, n = this value.
 # Rotate by adding SHARE_SEAL_KEY_2 and flipping this to "2" (src/seal.js).
 SHARE_SEAL_CURRENT         = "1"
@@ -67,6 +62,16 @@ AUTH_MAIL_FROM             = "signin@mail.refueler.io"
 # Plans-Stripe-1: the page host a checkout Turnstile token must come from.
 # Becomes "pay.refueler.io" when Plans moves (Plans-Design-Opus).
 PLANS_TURNSTILE_HOSTNAME   = "refueler.io"
+# H6a admin host (src/admin_host.js, src/access_jwt.js). Admin paths answer only on
+# ADMIN_HOST, behind Cloudflare Access app "Share admin" (team + AUD tag: not secrets).
+# ADMIN_PUBLIC_UNTIL (unix seconds): while in the future, api.share also answers admin
+# paths as before. Set for the cut-over: 1793577600 = 2 Nov 2026 00:00 UTC (the day
+# after Admin-Access-1b, planned 31 Oct). Break-glass if Access is down: now + 2 h,
+# deploy, commit message starting "break-glass:". "0" = shut.
+ADMIN_HOST                 = "admin.share.refueler.io"
+ACCESS_TEAM                = "refueler"
+ACCESS_AUD                 = "80791e08c0e4393cd50e014a4c44c421fa09e2293cc2e7138973367ab3b05a0a"
+ADMIN_PUBLIC_UNTIL         = "1793577600"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
@@ -99,3 +104,11 @@ crons = ["0 3 * * *", "30 3 * * *", "15 * * * *"]  # 03:30 = nightly_sweep.js; :
 [[routes]]
 pattern = "api.share.refueler.io/*"
 zone_name = "refueler.io"
+
+# H6a: admin host as a Workers Custom Domain — creates the DNS record and an Advanced
+# Certificate (Universal SSL doesn't cover a second-level subdomain). Access app
+# "Share admin" stands in front of the whole hostname. Never the Worker-level Access
+# toggle: it would put Access in front of api.share too.
+[[routes]]
+pattern = "admin.share.refueler.io"
+custom_domain = true
