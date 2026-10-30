@@ -214,11 +214,12 @@ describe('take-down — already gone, idempotent, part-way, register failure', (
   });
 
   it('a plain record (deleted after download, or swept) → 410 already_gone, record unchanged', async () => {
-    const e = envWith({ [`${UUID}/manifest.json`]: { uploaded: NOW(), body: JSON.stringify(buildTombstone(NOW() - 5)) } });
+    const at = NOW() - 5;   // read the clock once: a second boundary between two reads flaked
+    const e = envWith({ [`${UUID}/manifest.json`]: { uploaded: NOW(), body: JSON.stringify(buildTombstone(at)) } });
     const res = await takedown(e, await openCase(e));
     expect(res.status).toBe(410);
     expect(await res.json()).toEqual({ error: 'already_gone' });
-    expect(stored(e)).toEqual({ consumed: true, consumed_at: NOW() - 5 });
+    expect(stored(e)).toEqual({ consumed: true, consumed_at: at });
     expect(await meta(e)).toEqual([410, { error: 'deleted' }]);
   });
 
