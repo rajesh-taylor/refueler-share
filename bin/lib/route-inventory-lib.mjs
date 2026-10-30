@@ -9,7 +9,10 @@ export const GATES = new Set([
   'public', 'turnstile', 'credential', 'upload-session', 'link', 'password', 'link-or-owner',
   'hmac', 'hmac-sandbox', 'admin', 'staff', 'magic-link', 'session', 'stripe-sig', 'gone', 'cf-challenge',
 ]);
-export const ADMIN_PATH = /^\/(api\/v1\/)?admin\//;
+// Same shape as ADMIN_PATH in worker/src/admin_host.js (worker/test/admin_host.test.js checks they agree).
+export const ADMIN_PATH = /^\/(api\/v1\/)?admin(\/|$)/;
+// Host column (H6a · Admin-Access-1a): `admin` = admin.share.refueler.io behind Access, `api` = everything else.
+export const HOSTS = new Set(['api', 'admin']);
 // `staff` (admin key or HELPER_KEY, requireRole) is allowed only here.
 export const STAFF_PATH = /^\/admin\/reports\//;
 export const BEGIN = '<!-- routes:begin -->';
@@ -96,7 +99,7 @@ export function readRoutes(indexSrc, authSrc) {
   return found;
 }
 
-/** docs/ROUTES.md table → Map("METHOD /path" → { method, path, gate }). */
+/** docs/ROUTES.md table → Map("METHOD /path" → { method, path, gate, host }). */
 export function readDocRows(text) {
   const a = text.indexOf(BEGIN), b = text.indexOf(END);
   if (a < 0 || b < a) throw new Error(`docs/ROUTES.md: missing ${BEGIN} / ${END}`);
@@ -105,11 +108,11 @@ export function readDocRows(text) {
     if (!line.startsWith('|') || /^\|\s*-/.test(line) || /^\|\s*Method\s*\|/.test(line)) continue;
     // split on unescaped pipes; a path's own `|` is written \| in Markdown
     const c = line.split(/(?<!\\)\|/).slice(1, -1).map((s) => s.trim().replace(/^`|`$/g, '').replace(/\\\|/g, '|'));
-    if (c.length < 3) throw new Error(`ROUTES.md row too short: ${line}`);
-    const [method, path, gate] = c;
+    if (c.length < 4) throw new Error(`ROUTES.md row too short: ${line}`);
+    const [method, path, gate, host] = c;
     const k = `${method} ${path}`;
     if (rows.has(k)) throw new Error(`ROUTES.md lists ${k} twice`);
-    rows.set(k, { method, path, gate });
+    rows.set(k, { method, path, gate, host });
   }
   return rows;
 }
@@ -124,6 +127,13 @@ export function inventoryProblems(list, rows) {
     if (row.gate === 'staff' && !STAFF_PATH.test(r.path)) problems.push(`${r.method} ${r.path}: gate "staff" is only for /admin/reports/*`);
     if (ADMIN_PATH.test(r.path) && row.gate !== 'admin' && !(row.gate === 'staff' && STAFF_PATH.test(r.path))) {
       problems.push(`${r.method} ${r.path} is an admin path but its gate is "${row.gate}"`);
+    }
+    // H6a: an admin path answers only on the admin host, and the admin host only admin paths.
+    if (!HOSTS.has(row.host)) problems.push(`unknown host "${row.host}" for ${r.method} ${r.path}`);
+    else {
+      if (['admin', 'staff'].includes(row.gate) && row.host !== 'admin') problems.push(`${r.method} ${r.path}: gate "${row.gate}" must be on host "admin"`);
+      if (row.host === 'admin' && !ADMIN_PATH.test(r.path)) problems.push(`${r.method} ${r.path}: host "admin" is only for /admin and /api/v1/admin paths`);
+      if (ADMIN_PATH.test(r.path) && row.host !== 'admin') problems.push(`${r.method} ${r.path} is an admin path but its host is "${row.host}"`);
     }
   }
   // UUID-Out-Of-Path-1: no transfer UUID in any path — it travels in X-Transfer-UUID.

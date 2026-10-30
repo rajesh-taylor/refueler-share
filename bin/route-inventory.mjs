@@ -5,8 +5,10 @@
 // and checks docs/ROUTES.md has exactly one row for each, with a known gate.
 // CI fails on: a route with no row, a row with no route, an unknown gate, an /admin
 // path not gated by the admin key (or `staff` on /admin/reports/*, OSA-Tools-1),
-// a {uuid} in a route path (UUID-Out-Of-Path-1), or a path check in the router this
-// script can't read (a new route shape — teach it rather than let a route slip past).
+// a host other than `api`/`admin` or one that doesn't match the path (H6a: admin paths
+// and admin/staff gates on `admin` only), a {uuid} in a route path (UUID-Out-Of-Path-1),
+// or a path check in the router this script can't read (a new route shape — teach it
+// rather than let a route slip past).
 //
 //   node bin/route-inventory.mjs           print the routes found
 //   node bin/route-inventory.mjs --check   compare with docs/ROUTES.md (CI)
@@ -42,4 +44,4 @@ if (problems.length) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   die(`${problems.length} route inventory problem(s) — update docs/ROUTES.md`);
 }
-console.log(`✓ route inventory: ${list.length} routes, each with one row and a known gate`);
+console.log(`✓ route inventory: ${list.length} routes, each with one row, a known gate and its host`);
