@@ -74,13 +74,13 @@ PLANS_TURNSTILE_HOSTNAME   = "refueler.io"
 # H6a admin host (src/admin_host.js, src/access_jwt.js). Admin paths answer only on
 # ADMIN_HOST, behind Cloudflare Access app "Share admin" (team + AUD tag: not secrets).
 # ADMIN_PUBLIC_UNTIL (unix seconds): while in the future, api.share also answers admin
-# paths as before. Set for the cut-over: 1793577600 = 2 Nov 2026 00:00 UTC (the day
-# after Admin-Access-1b, planned 31 Oct). Break-glass if Access is down: now + 2 h,
+# paths as before. Cut-over (Admin-Access-1b, 31 Oct): now + 24 h = 1793545200 =
+# Sun 1 Nov 2026 15:00 UTC; it shuts itself then. Break-glass if Access is down: now + 2 h,
 # deploy, commit message starting "break-glass:". "0" = shut.
 ADMIN_HOST                 = "admin.share.refueler.io"
 ACCESS_TEAM                = "refueler"
 ACCESS_AUD                 = "80791e08c0e4393cd50e014a4c44c421fa09e2293cc2e7138973367ab3b05a0a"
-ADMIN_PUBLIC_UNTIL         = "1793577600"
+ADMIN_PUBLIC_UNTIL         = "1793545200"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)
