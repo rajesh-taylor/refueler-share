@@ -25,6 +25,7 @@ const KEY = '1'.repeat(64);
 const CHUNK = 32 * 1024 * 1024;
 const T = new Map();             // uuid → { total, bytes, chunks: [], dad, pw, expiry, done }
 let ctl = { fail: 'none', slow: 0, rate: 0 };
+let lightning = 'phoenixd';      // GET/POST /admin/status (Admin-Access-1b)
 const ADMIN_KEY = process.env.FAKE_ADMIN_KEY || 'fake-admin-key';
 // FAKE_HELPER_KEY_FILE: read on every request, so a rehearsal can set and remove the helper key.
 const helperKey = () => { try { return process.env.FAKE_HELPER_KEY_FILE ? readFileSync(process.env.FAKE_HELPER_KEY_FILE, 'utf8') : (process.env.FAKE_HELPER_KEY || ''); } catch { return ''; } };
@@ -92,6 +93,18 @@ http.createServer(async (req, res) => {
             rail: tier === 'free' ? null : 'identity', merkle_root: null, upload_complete: !!t.done };
         }).sort((a, b) => b.created_at - a.created_at);
       return json(res, 200, { transfers, badge_count: 0 });
+    }
+    // Admin-Access-1b: Navy Office's admin-host twins — GET/POST /admin/status (the Lightning toggle)
+    // and the sandbox under /api/v1/admin/sandbox/*. Admin key only, as the Worker.
+    if (u.pathname === '/admin/status' || u.pathname.startsWith('/api/v1/admin/sandbox/')) {
+      if (role(req) !== 'admin') return json(res, 401, { error: 'Unauthorised' });
+      const b = req.method === 'POST' ? JSON.parse((await body(req)) || '{}') : {};
+      if (u.pathname === '/admin/status') {
+        if (req.method === 'POST' && b.lightning_available) lightning = String(b.lightning_available);
+        return json(res, 200, req.method === 'POST' ? { ok: true } : { lightning_available: lightning, updated_at: Math.floor(Date.now() / 1000) });
+      }
+      if (u.pathname.endsWith('/activate')) return json(res, 200, { client_id: 'sbx_fake', live_key: 'rfs_sandbox_fake', sign_key: 'fake-sign-key', rail: b.rail ?? 'none', credits: 10 });
+      if (u.pathname.endsWith('/reset')) return json(res, 200, { ok: true, credits: 10, test_tokens: [] });
     }
     if (TRANSFER.includes(u.pathname) && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, { error: 'missing_transfer_id' });
     // The receiver's password check, POST /unlock (any password opens it).
