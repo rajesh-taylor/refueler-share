@@ -54,6 +54,7 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | OPTIONS | `/api/v1/auth/ping` | public | api | — | `handleAuthPingOptions` |
 | GET | `/api/v1/auth/ping` | hmac | api | — | `handleAuthPing` |
 | GET | `/wl/config` | public | api | — | `handleWlConfig` |
+| GET | `/health` | public | api | — | inline (Ops-Alerts-1 heartbeat) |
 | GET | `/status` | public | api | — | `handleStatus` |
 | POST | `/admin/status` | admin | admin | — | `handleAdminStatus` |
 | GET | `/admin/status` | admin | admin | — | `handleStatus` |

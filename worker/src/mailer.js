@@ -10,6 +10,8 @@
 // links themselves. Never logs the address or a link.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { count } from './ops.js';
+
 const LABELS = { citizen: 'Your account', org_admin: 'Your organisation (admin)' };
 
 export function signInEmailText(links) {
@@ -31,10 +33,15 @@ export function signInEmailText(links) {
 /** Throws on any failure; the caller (inside waitUntil) logs without details. */
 export async function sendSignInEmail(env, to, links) {
   if (!env.EMAIL?.send) throw new Error('mailer: EMAIL binding missing');
-  await env.EMAIL.send({
-    from: env.AUTH_MAIL_FROM,
-    to,
-    subject: 'Your Refueler Share sign-in link',
-    text: signInEmailText(links),
-  });
+  try {
+    await env.EMAIL.send({
+      from: env.AUTH_MAIL_FROM,
+      to,
+      subject: 'Your Refueler Share sign-in link',
+      text: signInEmailText(links),
+    });
+  } catch (e) {
+    await count(env, 'email_send_fail');   // Ops-Alerts-1: the count only, never who
+    throw e;
+  }
 }

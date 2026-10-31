@@ -1,0 +1,32 @@
+# Ops-Alerts-1 · 1 Nov 2026 (row 30b) — is Share up, seen from outside Cloudflare.
+#
+# Hourly at :41: GET https://api.share.refueler.io/health must answer {"ok":true}, and
+# https://share.refueler.io/ must answer 200. A failed scheduled run makes GitHub email
+# the person who last changed this schedule (Rajesh). Each check retries 3 times, 20 s
+# apart, so a single dropped request is not an alert.
+#
+# Sends nothing but two GETs, no secrets, no checkout. The Worker's own hourly check
+# (worker/src/ops.js) covers webhooks, the sweep, email and R2 from the inside.
+# GitHub pauses scheduled workflows after 60 days with no commit to the repo; a push
+# switches it back on (Actions → Heartbeat → Enable).
+name: Heartbeat
+
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: API /health
+        run: |
+          body=$(curl -fsS --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 https://api.share.refueler.io/health)
+          [ "$body" = '{"ok":true}' ] || { echo "::error::api.share /health answered: $body"; exit 1; }
+
+      - name: App page
+        run: curl -fsS --retry 3 --retry-delay 20 --retry-all-errors --max-time 20 -o /dev/null https://share.refueler.io/

@@ -70,6 +70,7 @@ import {
   handleReportsExport, handleReportsExportTraining, handleReportsDeleteTraining, handleReportsTakedown,
 } from './handlers/reports.js';                                                     // OSA-Tools-1
 import { adminGate, onAdminHost, stripCors } from './admin_host.js';                  // H6a
+import { count, webhookOutcome, recordSweep, countingBucket, runOpsCheck } from './ops.js'; // Ops-Alerts-1
 
 
 // UUID_RE, corsHeaders — imported from ./utils.js
@@ -196,6 +197,10 @@ const worker = {
       // SW1: white-label config discovery
       if (request.method === 'GET' && path === '/wl/config') {
         return timed('wl_config', () => Promise.resolve(handleWlConfig(request)).then(r => addCors(r, request)));
+      }
+      // Ops-Alerts-1: liveness for the GitHub Actions heartbeat. Touches nothing.
+      if (request.method === 'GET' && path === '/health') {
+        return new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } });
       }
       if (request.method === 'GET' && path === '/status') {
         return timed('status', () => handleStatus(request, env).then(r => addCors(r, request)));
@@ -492,7 +497,11 @@ const worker = {
       }
 
       if (request.method === 'POST' && path === '/webhook/stripe') {
-        return timed('webhook_stripe', () => handleStripeWebhook(request, env));
+        return timed('webhook_stripe', async () => {
+          const res = await handleStripeWebhook(request, env);
+          ctx.waitUntil(count(env, webhookOutcome(res.status)));   // Ops-Alerts-1
+          return res;
+        });
       }
 
       // KV-Fix-1a: Lightning create / status / webhook routes removed (dormant;
@@ -746,6 +755,12 @@ const worker = {
       } catch {
         console.error('scheduled/auth_sweep: unhandled error');
       }
+      // Ops-Alerts-1: add up the last 24 hours' counters, email any problem.
+      try {
+        await runOpsCheck(env);
+      } catch {
+        console.error('scheduled/ops_check: unhandled error');
+      }
     }
 
     // Tombstone-30: after a transfer ends — expired purge, residue, and the
@@ -753,8 +768,10 @@ const worker = {
     if (event.cron === '30 3 * * *') {
       try {
         await runNightlySweep(env, Math.floor(Date.now() / 1000));
+        await recordSweep(env, true);
       } catch (e) {
         console.error('scheduled/nightly_sweep: unhandled error:', e?.message ?? e);
+        await recordSweep(env, false);
       }
     }
   },
@@ -778,9 +795,20 @@ export function hardenJson(res) {
 
 // H6a (30 Oct 2026): the host split runs first — Access token on the admin host,
 // admin paths 404 everywhere else (admin_host.js). Nothing on the admin host carries CORS.
+// Ops-Alerts-1: every R2 call that throws is counted (ops.js); results unchanged.
+function withOps(env, ctx) {
+  if (!env?.BUCKET) return env;
+  const onError = () => { const p = count(env, 'r2_error'); ctx?.waitUntil?.(p); };
+  return { ...env, BUCKET: countingBucket(env.BUCKET, onError) };
+}
+
 export default {
   ...worker,
+  async scheduled(event, env, ctx) {
+    return worker.scheduled(event, withOps(env, ctx), ctx);
+  },
   async fetch(request, env, ctx) {
+    env = withOps(env, ctx);
     const gate = await adminGate(request, env);
     if (gate) return hardenJson(gate);
     const res = hardenJson(await worker.fetch(request, env, ctx));

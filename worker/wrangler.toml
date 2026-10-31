@@ -68,6 +68,9 @@ AUTH_ORIGINS               = "https://share.refueler.io"
 APP_ORIGINS                = "https://share.refueler.io,https://refueler.io"
 AUTH_SIGNIN_URL            = "https://share.refueler.io/signin/"
 AUTH_MAIL_FROM             = "signin@mail.refueler.io"
+# Ops-Alerts-1 (src/ops.js): the hourly check's alert emails. The recipient is the secret
+# OPS_ALERT_TO (wrangler secret put), so the address stays out of this public repo.
+OPS_MAIL_FROM              = "alerts@mail.refueler.io"
 # Plans-Stripe-1: the page host a checkout Turnstile token must come from.
 # Becomes "pay.refueler.io" when Plans moves (Plans-Design-Opus).
 PLANS_TURNSTILE_HOSTNAME   = "refueler.io"
@@ -91,7 +94,8 @@ type = "CompiledWasm"
 globs = ["**/*.wasm"]
 fallthrough = false
 
-# B12-4a: Cloudflare Email Sending (beta) — sign-in links only (src/mailer.js).
+# B12-4a: Cloudflare Email Sending (beta) — sign-in links (src/mailer.js) and, since
+# Ops-Alerts-1, ops alerts to Rajesh (src/ops.js). Nothing else.
 [[send_email]]
 name = "EMAIL"
 
@@ -107,7 +111,7 @@ dataset  = "share_events"
 
 # SW4b: daily dead-letter webhook retry — 03:00 UTC
 [triggers]
-crons = ["0 3 * * *", "30 3 * * *", "15 * * * *"]  # 03:30 = nightly_sweep.js; :15 hourly = sign-in sweep (Tombstone-30)
+crons = ["0 3 * * *", "30 3 * * *", "15 * * * *"]  # 03:30 = nightly_sweep.js; :15 hourly = sign-in sweep (Tombstone-30) + ops check (Ops-Alerts-1)
 
 # SW1: custom hostname routing — api.share.refueler.io → this Worker
 [[routes]]
