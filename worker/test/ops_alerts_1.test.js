@@ -1,5 +1,5 @@
 // test/ops_alerts_1.test.js
-// Ops-Alerts-1 (1 Nov 2026, row 30b): hourly integer counters of our own machinery,
+// Ops-Alerts-1 (31 Oct 2026, row 30b): hourly integer counters of our own machinery,
 // checked by the :15 cron; one plain email per problem per day; GET /health for the
 // GitHub Actions heartbeat. Never who: no IP, transfer ID, email or customer ID.
 

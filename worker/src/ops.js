@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ops.js — alerting without tracking anyone (Ops-Alerts-1 · 1 Nov 2026, row 30b)
+// ops.js — alerting without tracking anyone (Ops-Alerts-1 · 31 Oct 2026, row 30b)
 //
 // Rule: watch our own machinery, never users. What is kept is seven integers per
 // hour — how many times something worked or failed — in one STATUS_KV record

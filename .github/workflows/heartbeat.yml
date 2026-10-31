@@ -1,4 +1,4 @@
-# Ops-Alerts-1 · 1 Nov 2026 (row 30b) — is Share up, seen from outside Cloudflare.
+# Ops-Alerts-1 · 31 Oct 2026 (row 30b) — is Share up, seen from outside Cloudflare.
 #
 # Hourly at :41: GET https://api.share.refueler.io/health must answer {"ok":true}, and
 # https://share.refueler.io/ must answer 200. A failed scheduled run makes GitHub email

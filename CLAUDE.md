@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.30 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Ops-Hardening-Ease-1 · 1 Nov 2026
+> **Version:** 2.30 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Ops-Hardening-Ease-1 · 31 Oct 2026
 > Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -178,7 +178,7 @@ Claude must ask for all relevant files before writing any fix — never assume a
 
 ---
 
-## Dependencies — read before merge (H4 Supply-Chain-1 · 1 Nov 2026)
+## Dependencies — read before merge (H4 Supply-Chain-1 · 31 Oct 2026)
 
 - **Exact pins** in every `package.json` (no `^` or `~`); the lock file decides the rest.
 - **Read before merge.** A Dependabot PR is never merged on green CI alone: read its changelog
