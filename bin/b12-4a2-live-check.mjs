@@ -1,3 +1,4 @@
+// Before H6a (Admin-Access-1b, 31 Oct 2026): kept as history. Admin calls now need the admin host (admin.share.refueler.io) + a Cloudflare Access token.
 // B12-4a-2 live check (13 Oct 2026) — the API-Repair-1 check plus the carried
 // retest: a Chartered upload now resolves to tier 'api', so the permanent-record
 // route accepts it and transfer.timestamp_submitted fires (unit-tested only

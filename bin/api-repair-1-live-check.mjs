@@ -1,3 +1,4 @@
+// Before H6a (Admin-Access-1b, 31 Oct 2026): kept as history. Admin calls now need the admin host (admin.share.refueler.io) + a Cloudflare Access token.
 // API-Repair-1 live check (9 Oct 2026). Against production, with two throwaway
 // API clients made through the admin route:
 //   unsigned Chartered initiate → 401 · signed initiate → 200, pool debited ·

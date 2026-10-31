@@ -78,7 +78,7 @@ if (flag('summarise') || flag('summarize')) {
   const f = flags(runFiles.flatMap(rowsFromRun));
   console.log(`summary: ${s.runs.length} runs, ${s.competitors.length} other-site runs, ${s.cache_ab.length} cache A/B → ${out}`);
   for (const x of f) console.log(`  ⚑ ${x.row.when.slice(0, 16)} ${x.row.engine} ${x.row.page} ${x.row.label ?? ''} ${x.row.place ?? ''}: ${x.metric} ${pct(x.rise)}`);
-  console.log('Open it in Navy Office → Speed (refueler.io/share/admin/navy-office).');
+  console.log('Open it in Navy Office → Speed (admin.share.refueler.io).');
   process.exit(0);
 }
 

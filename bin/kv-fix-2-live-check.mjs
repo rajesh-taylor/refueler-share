@@ -1,3 +1,4 @@
+// Before H6a (Admin-Access-1b, 31 Oct 2026): kept as history. Admin calls now need the admin host (admin.share.refueler.io) + a Cloudflare Access token.
 // KV-Fix-2 live check (9 Oct 2026). Creates a throwaway API client through the
 // admin route, proves issue / 402 / revocation against production, then revokes it.
 // Prints no keys. Run with ADMIN_KEY in the environment:

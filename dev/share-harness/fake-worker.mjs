@@ -77,6 +77,8 @@ http.createServer(async (req, res) => {
       });
       return json(res, 200, { ok: true, ids });
     }
+    // The Terminal scripts' Access test: an expired token answers as the admin host does.
+    if (p[0] === 'admin' && req.headers['cf-access-token'] === 'expired-token') return json(res, 401, { error: 'access' });
     if (p[0] === 'admin' && p[1] === 'reports') return reports(req, res, u, id);
     if (p[0] === 'admin' && (p[1] === 'execution-dock' || p[1] === 'metrics')) {   // admin key only, as the Worker
       if (role(req) !== 'admin') return json(res, 401, { error: 'Unauthorized' });

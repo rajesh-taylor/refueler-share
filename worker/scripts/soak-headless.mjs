@@ -20,6 +20,11 @@
 //
 // Admin key: env SOAK_ADMIN_KEY (preferred; `read -rs SOAK_ADMIN_KEY && export SOAK_ADMIN_KEY`)
 //            or --admin-key= (visible in ps and shell history).
+// Access token (H6a, 31 Oct 2026): /admin/test-credential lives on admin.share.refueler.io behind
+//            Cloudflare Access. env SOAK_ACCESS_TOKEN, read the same way:
+//            `SOAK_ACCESS_TOKEN="$(cloudflared access token -app=https://admin.share.refueler.io)" && export SOAK_ACCESS_TOKEN`
+//            (first time: `cloudflared access login https://admin.share.refueler.io`). Valid 8 h.
+//            --admin-url overrides the admin host (break-glass: the public URL while its window is open).
 // Flags: --gib (default 250) · --encrypt · --concurrency (8)
 //        --expiry-days (6; test credentials obey the 7-day ceiling) · --cred-expiry (s, 28800)
 //        --link-dir (~/.refueler-soak) · --put-timeout-s · --url
@@ -46,6 +51,8 @@ const args = Object.fromEntries(
 );
 
 const workerUrl   = (args.url || 'https://api.share.refueler.io').replace(/\/$/, '');
+const adminUrl    = (args['admin-url'] || 'https://admin.share.refueler.io').replace(/\/$/, '');
+const accessToken = (process.env.SOAK_ACCESS_TOKEN || '').replace(/\x1b\[20[01]~/g, '').trim() || null;
 // Env preferred (argv shows in ps). Strip whitespace and bracketed-paste markers
 // (ESC[200~ / ESC[201~) that a paste into a hidden `read` prompt can carry.
 const adminKey    = (process.env.SOAK_ADMIN_KEY || args['admin-key'] || '')
@@ -263,11 +270,13 @@ function printFinalTally() {
     // Step 1: credential (key length only — never the key)
     log(`Admin key: ${adminKey.length} chars`);
     const { blinded_message } = blindedMessage();
-    const credRes = await fetchWithTimeout(`${workerUrl}/admin/test-credential`, {
+    const credRes = await fetchWithTimeout(`${adminUrl}/admin/test-credential`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey,
+        ...(accessToken ? { 'cf-access-token': accessToken } : {}) },
       body: JSON.stringify({ blinded_message, cap_bytes: capBytes, expires_in_seconds: credExpiry }),
     });
+    if (credRes.status === 302 || credRes.redirected) throw new Error('credential: Cloudflare Access sign-in needed — set SOAK_ACCESS_TOKEN (see the header)');
     if (!credRes.ok) throw new Error(`credential ${credRes.status}: ${await credRes.text()}`);
     const cred = await credRes.json();
     if (typeof cred.test_credential !== 'string') throw new Error('Worker returned no test_credential (pre-KV-Fix-1b Worker?)');

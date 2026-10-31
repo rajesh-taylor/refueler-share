@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Before H6a (Admin-Access-1b, 31 Oct 2026): kept as history. Admin calls now need the admin host (admin.share.refueler.io) + a Cloudflare Access token.
 # scripts/tg-smoke.sh — Traitor's Gate production smoke test
 #
 # Usage: ADMIN_KEY=<your-admin-key> bash scripts/tg-smoke.sh

@@ -1,3 +1,4 @@
+// Before H6a (Admin-Access-1b, 31 Oct 2026): kept as history. Admin calls now need the admin host (admin.share.refueler.io) + a Cloudflare Access token.
 // B12-3 live check (11 Oct 2026). Against production, with one throwaway API
 // client (storage quota: 2 chunks, 2 in flight) made through the admin route:
 //   client create provisions a storage quota · signed initiate reserves 1 chunk ·

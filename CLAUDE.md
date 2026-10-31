@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.28 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** UUID-Out-Of-Path-1 · 21 Oct 2026
+> **Version:** 2.29 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Admin-Access-1b · 31 Oct 2026
 > Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -87,12 +87,15 @@ commit command at session close, without being asked.
 **Deploy surfaces (rewritten X5-2 · 15 Oct 2026; was the refueler.io mirror, Share-Sync-1):**
 
 1. **`refueler-share` Worker** (`api.share.refueler.io`) — `npm run deploy` from `worker/`. Not
-   Git-connected; pushing does nothing here. Rajesh runs it.
+   Git-connected; pushing does nothing here. Rajesh runs it. Since H6a (Admin-Access-1b, 31 Oct) it also
+   serves **Navy Office** on `admin.share.refueler.io`, behind Cloudflare Access: the source is
+   `navy-office/` (static assets, headers in `worker/src/admin_headers.js`), shipped by the same
+   `npm run deploy` — never by `ship-app.sh`. Every admin path answers 404 on `api.share`.
 2. **`share.refueler.io`** — the ONLY place Share's frontend is served. Cloudflare Pages project
    `refueler-share-app`, **direct upload** (never Git-connected), reached ONLY via `bin/ship-app.sh`.
    Rajesh runs it. Its `refueler-share-app.pages.dev` alias is in no allowlist — never link it, never verify there.
 3. **refueler.io** (Git-connected `refueler-io` repo; pushing `main` deploys) owns Share's
-   **landing page `/share/`**, **Plans**, **Status**, `/upgrade.html`, Navy Office, and
+   **landing page `/share/`**, **Plans**, **Status**, `/upgrade.html` (`/share/admin/` → 301 to the admin host), and
    `share/forward.js` (carries old `refueler.io/share/?uuid=…#…` and `/share/signin/#t=…` links to
    share.refueler.io; fixed destination, never reads the fragment; **remove 12 Jan 2027**). Its
    `/share/` + `/share/signin/` CSP allows refueler.io's inline theme script and two nav `onclick`s by
@@ -157,8 +160,8 @@ Applies to ANY change under `frontend/` (incl. `frontend/app/`, `frontend/blake3
   across a ship still loads its own modules.
 - **Browser cache:** Cloudflare Cache Rule `http.host eq "share.refueler.io"` → Browser TTL = Respect
   origin (dashboard, off-repo); `ship-app.sh` fails if responses become browser-cacheable. The refueler.io
-  Cache Rule "Share assets — respect origin browser TTL" (`/share/assets/` + `/share/admin/`) **stays**:
-  Navy Office (`/share/admin/navy-office.js`, unversioned) and Plans/Status CSS still live there (X5-2).
+  Cache Rule "Share assets — respect origin browser TTL" (`/share/assets/`) **stays**: Plans/Status CSS
+  live there (X5-2). Its `/share/admin/` half is dead since Navy Office moved (H6a; optional tidy, G-9).
 - Local preview of every state: `dev/share-harness/` (builds the real app, fake Worker, stub Turnstile).
 - Admin tooling never goes on share.refueler.io. `worker/src/share/admin/test-upload.html` is local-only.
 
