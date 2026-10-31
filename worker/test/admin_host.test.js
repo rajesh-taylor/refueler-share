@@ -6,8 +6,11 @@
 //   • every Host admin row → admin host with a good token, no key → 401 Unauthorised (the key gate still holds)
 //   • every Host api row → admin host with a good token → 404
 //   • no Access-Control-* on the admin host; ADMIN_PUBLIC_UNTIL open → old behaviour, shut → 404; fails closed
+//   • Admin-Access-1b (31 Oct): Navy Office (the real [assets] binding, ../navy-office) → 200 with the exact
+//     admin headers on the admin host after the Access check; on the public host an unknown route (404)
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { env as cfEnv } from 'cloudflare:test';
 
 vi.mock('../src/turnstile.js', () => ({
   verifyTurnstileToken: vi.fn(async () => true),
@@ -19,6 +22,7 @@ import routesDoc from '../../docs/ROUTES.md?raw';
 import toml from '../wrangler.toml?raw';
 import { readDocRows, ADMIN_PATH as INVENTORY_ADMIN_PATH } from '../../bin/lib/route-inventory-lib.mjs';
 import { ADMIN_PATH } from '../src/admin_host.js';
+import { ADMIN_HEADERS } from '../src/admin_headers.js';
 import { forgetAccessCerts, ACCESS_HEADER } from '../src/access_jwt.js';
 import { forgetApiKey } from '../src/api_store.js';
 import { makeSupabase, makeEnv, ctx, ADMIN, ORIGIN } from './helpers/api-fake.js';
@@ -39,7 +43,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const env = (o = {}) => makeEnv({
   ADMIN_HOST: 'admin.share.test', ACCESS_TEAM: TEAM, ACCESS_AUD: AUD, ADMIN_PUBLIC_UNTIL: '0',
-  APP_ORIGINS: 'https://share.refueler.io,https://refueler.io', ...o,
+  APP_ORIGINS: 'https://share.refueler.io,https://refueler.io', ASSETS: cfEnv.ASSETS, ...o,
 });
 const rows = [...readDocRows(routesDoc).values()];
 const adminRows = rows.filter((r) => r.host === 'admin');
@@ -127,10 +131,72 @@ describe('admin host, good Access token: every Host api row → 404', () => {
     expect(corsOf(res)).toEqual([]);
   });
 
-  it('/ and any other path → 404 (Navy Office arrives in Admin-Access-1b)', async () => {
-    for (const p of ['/', '/index.html', '/navy-office.js', '/administrator']) {
-      expect((await call(env(), 'GET', p, { origin: ADMIN_ORIGIN, token: await makeToken() })).status).toBe(404);
+  it('a path that is neither an admin route nor a Navy Office file → 404', async () => {
+    for (const p of ['/administrator', '/navy-office.html', '/.assetsignore', '/no-such.js']) {
+      const res = await call(env(), 'GET', p, { origin: ADMIN_ORIGIN, token: await makeToken() });
+      expect(res.status, p).toBe(404);
+      expect(res.headers.get('Content-Security-Policy'), p).toBe(ADMIN_HEADERS['Content-Security-Policy']);
     }
+  });
+});
+
+// Pinned as literals, not read back from admin_headers.js: a change there has to change this too.
+const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
+const NAVY_FILES = ['/', '/navy-office.js', '/navy-office.css', '/reports-view.js', '/dock-view.js', '/speed-view.js',
+  '/case-record-page.css', '/fonts/dm-sans-latin-400-normal.woff2'];
+
+describe('Navy Office (Admin-Access-1b): files on the admin host only', () => {
+  it.each(NAVY_FILES)('admin host + token: %s → 200, exact admin headers, no CORS', async (p) => {
+    const res = await call(env(), 'GET', p, { origin: ADMIN_ORIGIN, token: await makeToken() });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Security-Policy')).toBe(CSP);
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('X-Robots-Tag')).toBe('noindex');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Strict-Transport-Security')).toBe('max-age=31536000; includeSubDomains');
+    expect(corsOf(res)).toEqual([]);
+    if (p === '/') {
+      expect(res.headers.get('Content-Type')).toMatch(/^text\/html/);
+      const html = await res.text();
+      expect(html).toContain('<title>refueler-share · Navy Office</title>');
+      expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);   // no inline script
+    }
+  });
+
+  it('every call in the page is relative: no other origin in WORKER', async () => {
+    const js = await (await call(env(), 'GET', '/navy-office.js', { origin: ADMIN_ORIGIN, token: await makeToken() })).text();
+    expect(js).toContain("const WORKER = '';");
+    expect(js).not.toMatch(/fetch\(\s*['"`]https?:/);
+    expect(js).not.toContain('/api/v1/sandbox/');
+  });
+
+  it('HEAD works; POST / is not a file', async () => {
+    expect((await call(env(), 'HEAD', '/', { origin: ADMIN_ORIGIN, token: await makeToken() })).status).toBe(200);
+    expect((await call(env(), 'POST', '/', { origin: ADMIN_ORIGIN, token: await makeToken() })).status).toBe(404);
+  });
+
+  it('admin host without an Access token → 401 {error:access}, no file', async () => {
+    for (const p of NAVY_FILES) {
+      const res = await call(env(), 'GET', p, { origin: ADMIN_ORIGIN });
+      expect(res.status, p).toBe(401);
+      expect(await res.json()).toEqual({ error: 'access' });
+    }
+  });
+
+  it('public host: every Navy Office path is the unknown-route 404 (window shut or open)', async () => {
+    for (const e of [env(), env({ ADMIN_PUBLIC_UNTIL: String(NOW() + 3600) })]) {
+      const unknown = await snapshot(await call(e, 'GET', '/no-such-route'));
+      for (const p of [...NAVY_FILES, '/index.html']) {
+        expect(await snapshot(await call(e, 'GET', p, { key: ADMIN })), p).toEqual(unknown);
+      }
+    }
+  });
+
+  it('the public host never asks the assets binding', async () => {
+    const assets = { fetch: vi.fn(async () => new Response('leak')) };
+    for (const p of NAVY_FILES) await call(env({ ASSETS: assets }), 'GET', p);
+    expect(assets.fetch).not.toHaveBeenCalled();
   });
 });
 
@@ -239,8 +305,11 @@ describe('wrangler.toml pins (plan §1.1, §1.2, §3.1)', () => {
     expect(Number(v('ADMIN_PUBLIC_UNTIL'))).toBeLessThanOrEqual(Date.UTC(2026, 10, 15) / 1000);
   });
 
-  it('static assets, if configured, always run the Worker first (else they would be public on api.share)', () => {
+  it('static assets always run the Worker first (else they would be public on api.share)', () => {
     const assets = toml.match(/^\[assets\]\s*\n((?:(?!\[).*\n?)*)/m);
-    if (assets) expect(assets[1]).toMatch(/^run_worker_first\s*=\s*true\s*$/m);
+    expect(assets).not.toBeNull();
+    expect(assets[1]).toMatch(/^run_worker_first\s*=\s*true\s*$/m);
+    expect(assets[1]).toMatch(/^directory\s*=\s*"\.\.\/navy-office"\s*$/m);
+    expect(assets[1]).toMatch(/^binding\s*=\s*"ASSETS"\s*$/m);
   });
 });

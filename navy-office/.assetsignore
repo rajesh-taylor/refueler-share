@@ -1,0 +1,8 @@
+# Uploaded with the Worker (worker/wrangler.toml [assets]): the page's own files only.
+*
+!index.html
+!*.js
+!*.css
+!fonts/
+!fonts/*.woff2
+!fonts/OFL-*.txt

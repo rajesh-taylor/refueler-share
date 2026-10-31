@@ -3,7 +3,7 @@
  *
  * Plan: private strategy/docs/H6a-Admin-Access-plan-v1.md §3.1. One rule:
  * an admin path answers only on the admin host, and the admin host answers only
- * admin paths (and, from Admin-Access-1b, Navy Office's files).
+ * admin paths and Navy Office's files (GET/HEAD, from Admin-Access-1b).
  *
  *   ADMIN_HOST          the admin hostname (admin.share.refueler.io). Unset → no host is
  *                       the admin host, so every admin path answers 404 (fails closed).
@@ -18,6 +18,7 @@
  */
 
 import { requireAccess } from './access_jwt.js';
+import { ADMIN_HEADERS } from './admin_headers.js';
 import { corsHeaders, setAppOrigins } from './utils.js';
 
 // Same shape as ADMIN_PATH in bin/lib/route-inventory-lib.mjs (admin_host.test.js checks they agree).
@@ -43,14 +44,26 @@ export async function adminGate(request, env) {
   if (onAdminHost(request, env)) {
     const refused = await requireAccess(request, env);
     if (refused) return refused;
-    if (!ADMIN_PATH.test(path)) return new Response('Not found', { status: 404 });
-    return null;
+    if (ADMIN_PATH.test(path)) return null;
+    if (['GET', 'HEAD'].includes(request.method) && env.ASSETS) return adminAsset(request, env);
+    return new Response('Not found', { status: 404 });
   }
   if (ADMIN_PATH.test(path) && !adminPublicOpen(env)) {
     setAppOrigins(env);
     return notFound(request);
   }
   return null;
+}
+
+// Navy Office's files (navy-office/, the [assets] binding), reached only from adminGate()
+// after the Access check. run_worker_first = true in wrangler.toml, so nothing is served
+// before this runs — on api.share an asset path is just an unknown route. Every answer,
+// a 404 included, carries the admin headers.
+async function adminAsset(request, env) {
+  const res = await env.ASSETS.fetch(request);
+  const out = new Response(res.body, res);
+  for (const [k, v] of Object.entries(ADMIN_HEADERS)) out.headers.set(k, v);
+  return out;
 }
 
 export function stripCors(res) {

@@ -7,6 +7,15 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev  = false
 preview_urls = false
 
+# H6a Admin-Access-1b (31 Oct 2026): Navy Office (../navy-office/) as static assets.
+# run_worker_first = true: every request reaches the Worker first, which serves these files
+# only on ADMIN_HOST, after the Access check (src/admin_host.js); without it they would be
+# public on api.share too. navy-office/.assetsignore lets only the page's own files through.
+[assets]
+directory = "../navy-office"
+binding = "ASSETS"
+run_worker_first = true
+
 [limits]
 cpu_ms = 300000
 

@@ -22,14 +22,16 @@
  *   (4)  Execution Dock detail: size_bytes human-readable, rail label map,
  *        merkle_root "pending (available at Share-6-5)", download count pending.
  *
- * Speed-View-Opus (17 Oct 2026) — strict CSP on /share/admin/* (src/_headers):
+ * Speed-View-Opus (17 Oct 2026) — strict CSP (now refueler-share worker/src/admin_headers.js):
  *   no inline handlers: every control carries data-* and one delegated listener (bottom of
  *   this file) acts on it; no style= in markup or in HTML strings (classes, the hidden
  *   attribute, or CSSOM element.style for data-driven sizes); every Worker value that goes
  *   into an HTML string passes escHtml() or is a Number. Speed is drawn by speed-view.js.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-const WORKER = 'https://api.share.refueler.io';
+// H6a Admin-Access-1b (31 Oct 2026): served by the Share Worker on admin.share.refueler.io behind
+// Cloudflare Access; every call is a relative path to that same host (CSP connect-src 'self').
+const WORKER = '';
 let adminKey    = '';
 let refreshTimer = null;
 let countdown   = 60;
@@ -1418,7 +1420,7 @@ function renderLightningToggle(val) {
 
 async function loadLightningToggleState() {
   try {
-    const res  = await fetch(`${WORKER}/status`);
+    const res  = await fetch(`${WORKER}/admin/status`, { headers: { 'X-Admin-Key': adminKey } });
     const data = await res.json();
     const val  = String(data.lightning_available ?? 'phoenixd');
     renderLightningToggle(val);
@@ -1529,7 +1531,7 @@ async function sandboxActivate() {
   btn.disabled = true; btn.textContent = 'Issuing…';
 
   try {
-    const res  = await fetch(`${WORKER}/api/v1/sandbox/activate`, {
+    const res  = await fetch(`${WORKER}/api/v1/admin/sandbox/activate`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
       body:    JSON.stringify({ rail, transfer_ref_prefix: ref }),
@@ -1593,7 +1595,7 @@ async function sandboxReset() {
   btn.disabled = true; btn.textContent = 'Resetting…';
 
   try {
-    const res  = await fetch(`${WORKER}/api/v1/sandbox/reset`, {
+    const res  = await fetch(`${WORKER}/api/v1/admin/sandbox/reset`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
       body:    JSON.stringify({ live_key: liveKey }),

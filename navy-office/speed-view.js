@@ -5,7 +5,7 @@
  * Both are read in this page with FileReader: nothing is fetched, sent or kept. Close the tab and
  * they are gone.
  *
- * Written for the strict CSP on /share/admin/*: no inline handlers, no HTML strings — every value
+ * Written for the strict CSP (worker/src/admin_headers.js): no inline handlers, no HTML strings — every value
  * from a file goes in through textContent, setAttribute or CSSOM (element.style), never innerHTML.
  * Two colours: ink and gold. Gold = Safari's engine (WebKit) or Share; ⚑ = a rise over 20 %.
  */
