@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install root dependencies (Eleventy, from the release's own lock file)
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Fetch the release's published files
         id: published

@@ -1,5 +1,5 @@
 # CLAUDE.md — refueler-share
-> **Version:** 2.29 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Admin-Access-1b · 31 Oct 2026
+> **Version:** 2.30 | **Initialised:** CC-64 · 8 July 2026 | **Updated:** Ops-Hardening-Ease-1 · 1 Nov 2026
 > Load alongside `../refueler-share-private/strategy/share-sessions.md` (and `Share-Master-Context.md` beside it) at the start of every session on this repo.
 > For platform-wide context (brand, Supabase, Numo), load the main `claude.md` + `Refueler_MasterContext_CC64.md`.
 
@@ -175,6 +175,20 @@ DO NOT put a transfer UUID in an API path or query: it travels in `X-Transfer-UU
 NOTE (browser + hostname, Share-6 live-test 21 Sep): download "CORS/ERR_FAILED/503" failures were **Brave** + the api.share.refueler.io custom hostname (6-6b cutover not done) intermittently 503-ing; a 503 carries no CORS header so the browser mislabels it "CORS". Safari downloads the same link cleanly, and curl shows the Worker DOES send CORS on the failing chunk. DO NOT edit Worker CORS or finalise token logic for this — both are correct. Real fix lives in 6-6b (or revert frontend/crypto.js WORKER_URL to https://refueler-share.rt-fc4.workers.dev). Test downloads in Safari before assuming a code fault.
 NOTE (verifying R2): wrangler v4 `r2/kv/d1 object get` defaults to the LOCAL store — pass `--remote` to read production, e.g. `npx wrangler r2 object get refueler-share-prod/{uuid}/manifest.json --remote --pipe`; without it you get "key does not exist" against an empty local bucket.
 Claude must ask for all relevant files before writing any fix — never assume and code blind.
+
+---
+
+## Dependencies — read before merge (H4 Supply-Chain-1 · 1 Nov 2026)
+
+- **Exact pins** in every `package.json` (no `^` or `~`); the lock file decides the rest.
+- **Read before merge.** A Dependabot PR is never merged on green CI alone: read its changelog
+  and the lock-file diff (new packages, new install scripts, new maintainers), then either fold it
+  into a commit that summarises that diff, or close it with one line saying why.
+- **Majors are planned sessions** (vitest, eslint, `@noble/*`, cashu-ts — which moves only with
+  `bin/vendor-cashu.sh`), never a weekly merge.
+- **No install scripts:** CI and local installs use `npm ci --ignore-scripts`; nothing needs one
+  today (esbuild and workerd ship binaries as packages). A new package that needs one is a decision
+  to record here, not a flag to drop. CI also runs `npm audit signatures` on both lock files.
 
 ---
 

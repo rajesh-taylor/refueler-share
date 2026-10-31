@@ -30,8 +30,14 @@ jobs:
             worker/package-lock.json
 
       # ── Install root deps (Eleventy) ─────────────────────────────────────
+      # H4 Supply-Chain-1: no package's install script runs (esbuild and workerd ship their
+      # binaries as optional packages, so nothing needs one), then every package's registry
+      # signature is checked against the lock file.
       - name: Install root dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Registry signatures (root)
+        run: npm audit signatures
 
       # ── Eleventy build check (the app's HTML, eleventy.app.js) ──────────
       - name: Eleventy build
@@ -40,7 +46,11 @@ jobs:
       # ── Install Worker deps ──────────────────────────────────────────────
       - name: Install Worker dependencies
         working-directory: worker
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Registry signatures (Worker)
+        working-directory: worker
+        run: npm audit signatures
 
       # ── Vulnerability scan (Vuln-Watch-1) ────────────────────────────────
       # Blocks on high/critical advisories in what the Worker ships (prod deps).

@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install root dependencies (Eleventy)
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build and check the app (no deploy)
         run: bin/ship-app.sh --ci
