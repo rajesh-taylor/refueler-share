@@ -1,0 +1,4 @@
+/* case-record-page.css — loaded by reports-view.js only while a case record prints (OSA-Tools-4).
+ * navy-office.css sets every print to A4 landscape for the growth chart; this later rule wins
+ * for the one print and is removed afterwards. */
+@page { size: A4 portrait; margin: 16mm 18mm; }

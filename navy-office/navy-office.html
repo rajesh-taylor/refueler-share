@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="carbon">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>refueler-share · Navy Office</title>
+<!-- Strict CSP (src/_headers, /share/admin/*): no inline script, handler or style anywhere in this
+     page. Fonts are self-hosted in fonts/ (OFL); behaviour is wired in navy-office.js by data-* attributes. -->
+<link rel="stylesheet" href="navy-office.css">
+</head>
+<body>
+
+<!-- ─── Sidebar ───
+     OSA-Tools-4 (23 Oct 2026): each section is its own page (data-page; the address ends #overview,
+     #metrics, #data, #reports, #ops or #api). A helper key sees the Reports page only (data-staff).
+     Upload latency, Download latency, Token security and Client errors open that figure's detail. -->
+<aside id="sidebar">
+  <div class="sb-wordmark">
+    <span class="wm-brand">Navy Office</span>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-section">Overview</div>
+    <a class="sb-item" href="#overview" data-page="overview">System Summary</a>
+    <div class="sb-section">Metrics</div>
+    <a class="sb-item stub" tabindex="0" role="button" data-modal="upload-speed">Upload latency</a>
+    <a class="sb-item stub" tabindex="0" role="button" data-modal="download-speed">Download latency</a>
+    <a class="sb-item stub" tabindex="0" role="button" data-modal="uniqueness">Token security</a>
+    <a class="sb-item stub" tabindex="0" role="button" data-modal="client-errors">Client errors</a>
+    <a class="sb-item" href="#metrics" data-page="metrics" data-scroll="card-storage">Storage &amp; Billing</a>
+    <a class="sb-item" href="#metrics" data-page="metrics" data-scroll="card-speed" id="sb-speed">Speed</a>
+    <div class="sb-section">Data</div>
+    <a class="sb-item" href="#data" data-page="data">Transfers</a>
+    <a class="sb-item stub" data-soon="Subscribers">Subscribers<span class="sb-soon">soon</span></a>
+    <div class="sb-section" data-staff>Reports</div>
+    <a class="sb-item" href="#reports" data-page="reports" data-staff>Cases</a>
+    <div class="sb-section">Ops</div>
+    <a class="sb-item" href="#ops" data-page="ops">Lightning availability</a>
+    <a class="sb-item stub" data-soon="Maintenance mode">Maintenance mode<span class="sb-soon">soon</span></a>
+    <a class="sb-item stub" data-soon="Rate limits">Rate limits<span class="sb-soon">soon</span></a>
+    <div class="sb-section">API</div>
+    <a class="sb-item" href="#api" data-page="api">Sandbox</a>
+  </nav>
+  <div class="sb-footer">
+    <div class="sb-theme">
+      <button id="theme-paper" type="button" data-theme-set="paper">Paper</button>
+      <button id="theme-carbon" type="button" data-theme-set="carbon">Carbon</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── Main ─── -->
+<div id="main">
+
+  <!-- Password gate -->
+  <div id="gate">
+    <h1>Navy Office</h1>
+    <input type="password" id="key-input" placeholder="Key" autocomplete="off">
+    <button type="button" id="unlock-btn">Unlock</button>
+    <div id="gate-error"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard">
+    <div class="content-header" data-staff>
+      <div class="section-title" id="section-title">System Summary</div>
+      <div class="header-right">
+        <span id="refreshed-at"></span>
+        <span id="countdown"></span>
+        <button class="ghost-btn" id="refresh-btn" type="button" data-action="refresh">↻ Refresh</button>
+        <button class="ghost-btn" type="button" data-action="print">Print / Export PDF</button>
+        <span class="role-chip" id="role-chip" data-staff hidden></span>
+        <button class="ghost-btn signout-btn" type="button" data-action="sign-out" data-staff>Sign out</button>
+      </div>
+    </div>
+
+    <div id="error-banner"></div>
+
+    <!-- ═══ Overview ═══════════════════════════════════════════════════════ -->
+    <section class="page" data-page="overview" data-title="System Summary" hidden>
+      <div class="card-group">
+        <!-- Row 1: primary metrics -->
+        <div class="row-6">
+          <div class="snap-metric" tabindex="0" data-modal="mrr">
+            <div class="sm-label">Monthly run rate</div>
+            <div class="sm-plain">Revenue</div>
+            <div class="sm-value blue" id="snap-mrr">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="paid">
+            <div class="sm-label">Paid subscribers</div>
+            <div class="sm-plain">Paying customers</div>
+            <div class="sm-value" id="snap-paid">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="issuances">
+            <div class="sm-label">Issuances (30d)</div>
+            <div class="sm-plain">Uploads started</div>
+            <div class="sm-value" id="snap-issuances">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="errors">
+            <div class="sm-label">Server errors</div>
+            <div class="sm-plain">Right now</div>
+            <div class="sm-value" id="snap-error-rate">—</div>
+          </div>
+          <div class="snap-metric" id="metric-client-errors" tabindex="0" data-modal="client-errors">
+            <div class="sm-label">Client errors (24h)</div>
+            <div class="sm-plain">Real failures only</div>
+            <div class="sm-value" id="snap-client-errors">—</div>
+          </div>
+          <div class="snap-metric quiet" id="metric-expected-events" tabindex="0" data-modal="expected-events">
+            <div class="sm-label">Expected events (24h)</div>
+            <div class="sm-plain">Retries, closed links, refusals</div>
+            <div class="sm-value" id="snap-expected-events">—</div>
+          </div>
+        </div>
+
+        <!-- Row 2: latency + reliability -->
+        <div class="row-6">
+          <div class="snap-metric" id="metric-upload" tabindex="0" data-modal="upload-speed">
+            <div class="sm-label">Upload speed · p95</div>
+            <div class="sm-plain">Typical worst case</div>
+            <div class="sm-value" id="snap-upload-speed">—</div>
+          </div>
+          <div class="snap-metric" id="metric-download" tabindex="0" data-modal="download-speed">
+            <div class="sm-label">Download speed · p95</div>
+            <div class="sm-plain">Typical worst case</div>
+            <div class="sm-value" id="snap-download-speed">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="upload-speed-p99">
+            <div class="sm-label">Upload speed · p99</div>
+            <div class="sm-plain">Extreme tail</div>
+            <div class="sm-value" id="snap-upload-speed-p99">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="download-speed-p99">
+            <div class="sm-label">Download speed · p99</div>
+            <div class="sm-plain">Extreme tail</div>
+            <div class="sm-value" id="snap-download-speed-p99">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="retrieval">
+            <div class="sm-label">Download success</div>
+            <div class="sm-plain">Last 24 hours</div>
+            <div class="sm-value" id="snap-retrieval">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="churn">
+            <div class="sm-label">Churn</div>
+            <div class="sm-plain">Month to date</div>
+            <div class="sm-value" id="snap-churn">—</div>
+          </div>
+        </div>
+
+        <!-- Row 3: growth + ops (6-column, matches rows 1 & 2) -->
+        <div class="row-6">
+          <div class="snap-metric" tabindex="0" data-modal="free-users">
+            <div class="sm-label">Free users</div>
+            <div class="sm-plain">Total on free tier</div>
+            <div class="sm-value" id="snap-free-users">—</div>
+          </div>
+          <div class="snap-metric" id="metric-token-security" tabindex="0" data-modal="uniqueness">
+            <div class="sm-label">Token security</div>
+            <div class="sm-plain">No double-spends</div>
+            <div class="sm-value" id="snap-uniqueness">—</div>
+          </div>
+          <div class="snap-metric deferred deferred-open" tabindex="0" title="Deferred — B7 Lightning/Blink" data-modal="lightning">
+            <div class="sm-label">Lightning settlement<span class="b7-badge">B7</span></div>
+            <div class="sm-plain">Sats vs fiat mix</div>
+            <div class="sm-value amber">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="farming">
+            <div class="sm-label">Farming signal</div>
+            <div class="sm-plain">Credentials per upload</div>
+            <div class="sm-value" id="snap-farming">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="kv-monitor">
+            <div class="sm-label">KV keys stored</div>
+            <div class="sm-plain">Free plan · 1 GB cap</div>
+            <div class="sm-value" id="snap-kv-keys">—</div>
+          </div>
+          <div class="snap-metric" id="metric-api-mcp" tabindex="0" data-modal="api-mcp">
+            <div class="sm-label">Requests (all tiers)</div>
+            <div class="sm-plain">Active keys</div>
+            <div class="sm-value" id="snap-api-keys">—</div>
+            <div class="sm-plain" id="snap-api-reqs"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Growth signal card (Share-Dash-3) ───────────────────────────────── -->
+      <div class="growth-panel" id="card-growth">
+        <div class="growth-header">
+          <div class="growth-title">Growth signal</div>
+          <div class="growth-legend">
+            <span class="growth-legend-item"><span class="growth-legend-swatch swatch-probono"></span>Pro Bono</span>
+            <span class="growth-legend-item"><span class="growth-legend-swatch swatch-paid"></span>Paid</span>
+            <span class="growth-legend-item"><span class="growth-legend-swatch swatch-api"></span>API</span>
+            <span class="growth-legend-item"><span class="growth-legend-swatch growth-legend-swatch-dash swatch-btc"></span>BTC/GBP</span>
+          </div>
+        </div>
+
+        <div class="growth-subhead">
+          <span class="growth-range-label">Last 90 days</span>
+          <span class="growth-range-note" id="growth-range-note"></span>
+          <button class="growth-print-btn" type="button" data-action="print-growth" title="Print or save this chart as a PDF to archive it before the data ages out">Print chart</button>
+        </div>
+
+        <div class="growth-chart-wrap">
+          <svg class="growth-svg" id="growth-svg" viewBox="0 0 800 120" preserveAspectRatio="none"></svg>
+          <div class="growth-tick-tooltip" id="growth-tooltip"></div>
+        </div>
+
+        <div class="growth-events-list" id="growth-events-list" hidden>
+          <div class="growth-events-title">Annotations</div>
+          <div id="growth-events-body"></div>
+        </div>
+
+        <div class="growth-form">
+          <div class="growth-form-title">Add annotation</div>
+          <p class="growth-form-hint">The three lines auto-populate from Analytics Engine (credentials issued per tier). Annotations mark events on the timeline — date + label + optional note.</p>
+          <div class="growth-form-row">
+            <div class="growth-form-field">
+              <label class="growth-form-label" for="growth-date">Date</label>
+              <input type="date" id="growth-date">
+            </div>
+            <div class="growth-form-field growth-form-field-label">
+              <label class="growth-form-label" for="growth-label">Label</label>
+              <input type="text" id="growth-label" maxlength="60" placeholder="e.g. HN launch">
+            </div>
+            <div class="growth-form-field growth-form-field-note">
+              <label class="growth-form-label" for="growth-note">Note</label>
+              <input type="text" id="growth-note" maxlength="200" placeholder="optional detail">
+            </div>
+            <button class="growth-submit-btn" type="button" data-action="growth-add">Add event</button>
+          </div>
+          <div id="growth-form-status" class="growth-form-status" hidden></div>
+        </div>
+      </div>
+
+      <p class="editorial-note">All figures update every 60 seconds. Data sourced from Cloudflare Analytics Engine and Supabase.</p>
+
+      <div class="group-footer">
+        <button class="ghost-btn" id="snapshot-copy-btn" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+            <path d="M3 11V3a1 1 0 0 1 1-1h8"/>
+          </svg>
+          Copy JSON
+        </button>
+      </div>
+    </section>
+
+    <!-- ═══ Metrics ════════════════════════════════════════════════════════ -->
+    <section class="page" data-page="metrics" data-title="Metrics" hidden>
+      <!-- ─── Storage & Billing (B12-2) ─────────────────────────────────────── -->
+      <div class="storage-panel" id="card-storage">
+        <div class="dock-header">
+          <div class="dock-title">Storage &amp; Billing</div>
+          <span class="storage-asof" id="storage-asof"></span>
+        </div>
+        <div class="card-group">
+        <div class="row-6">
+          <div class="snap-metric" tabindex="0" data-modal="storage">
+            <div class="sm-label">Fleet occupancy</div>
+            <div class="sm-plain" id="snap-fleet-plain">Held in R2 now</div>
+            <div class="sm-value" id="snap-bytes">—</div>
+            <div class="sm-plain" id="snap-fleet-cost"></div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="storage">
+            <div class="sm-label">Citizen</div>
+            <div class="sm-plain">Live transfers · held</div>
+            <div class="sm-value" id="snap-citizen">—</div>
+          </div>
+          <div class="snap-metric" tabindex="0" data-modal="storage">
+            <div class="sm-label">Pro Bono</div>
+            <div class="sm-plain">Live transfers · held</div>
+            <div class="sm-value" id="snap-probono">—</div>
+          </div>
+          <div class="snap-metric quiet">
+            <div class="sm-label">Capacity pressure</div>
+            <div class="sm-plain">Accounts near their quota</div>
+            <div class="sm-value na">No accounts yet</div>
+          </div>
+          <div class="snap-metric quiet">
+            <div class="sm-label">Chartered orgs</div>
+            <div class="sm-plain">Quota · held · renewal</div>
+            <div class="sm-value na">No accounts yet</div>
+          </div>
+          <div class="snap-metric quiet">
+            <div class="sm-label">Citizen distribution</div>
+            <div class="sm-plain">How full accounts are</div>
+            <div class="sm-value na">No accounts yet</div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <!-- ─── Speed (Speed-View-Opus · 17 Oct 2026; Share-Release-1c) ─────────────
+           Draws refueler-share-private/speed/summary.json (speed.mjs --summarise) and, if given, speed/places.md.
+           Clicking Speed in the sidebar opens the file picker; dropping the files on this panel works too.
+           Read in the page with FileReader: nothing fetched, uploaded or stored. Drawn by speed-view.js. -->
+      <div class="dock-panel speed-panel" id="card-speed">
+        <div class="dock-header">
+          <div class="dock-title">Speed · share.refueler.io from the Mac</div>
+          <button class="ghost-btn" id="speed-open" type="button">Open summary.json</button>
+          <input type="file" id="speed-file" accept=".json,.md,application/json,text/markdown" multiple hidden>
+        </div>
+        <p class="speed-status" id="speed-status">Open speed/summary.json from refueler-share-private (add places.md to show place names), or drop them here. Read in this page only; nothing is sent or kept.</p>
+        <div id="speed-root"></div>
+      </div>
+
+    </section>
+
+    <!-- ═══ Data — Execution Dock (Share-Dash-1; redesigned OSA-Tools-4 · 23 Oct 2026) ═════════
+         Eight columns at most, then Recheck and Copy UUID on each row (no card: the row is the record).
+         "Find a transfer" marks a listed transfer, or adds a row read from the transfer itself
+         (GET /admin/reports/lookup) when it is not in the list. A pasted link is cut at the # first: the key part never reaches a field or a request.
+         Drawn by dock-view.js. -->
+    <section class="page" data-page="data" data-title="Data" hidden>
+      <div class="dock-panel" id="card-execution-dock">
+        <div class="dock-find">
+          <label class="rp-label rp-label-big" for="dock-lookup-input">Find a transfer</label>
+          <div class="rp-row">
+            <div class="dock-find-field rp-grow">
+              <input id="dock-lookup-input" class="rp-input rp-input-big" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste its link or transfer ID (UUID)">
+              <button class="dock-find-clear" id="dock-lookup-clear" type="button" aria-label="Clear the field" hidden>×</button>
+            </div>
+            <button class="rp-strong" id="dock-lookup-go" type="button">Find</button>
+          </div>
+          <p class="rp-msg" id="dock-lookup-msg" role="status"></p>
+        </div>
+        <div class="dock-header">
+          <div class="dock-title" id="dock-title">Execution Dock · last 10 transfers</div>
+        </div>
+        <div class="dock-table-wrap">
+          <table class="dock-table">
+            <thead><tr>
+              <th>Transfer ID</th>
+              <th>Tier</th>
+              <th>Status</th>
+              <th>Upload</th>
+              <th class="dock-col-created">Created</th>
+              <th>Expires</th>
+              <th class="dock-col-left">Left</th>
+              <th class="dock-col-collected">Collected</th>
+              <th class="dock-col-act"><span class="visually-hidden">Recheck · Copy UUID</span></th>
+            </tr></thead>
+            <tbody id="dock-tbody">
+              <tr><td colspan="9" class="dock-empty">Loading transfers…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Reports (OSA-Tools-3 · 22 Oct 2026; one case in route order, OSA-Tools-4 · 23 Oct 2026) ═══
+         Find the link · Open the case · Acknowledgement · Take down · Close · Outcome (CSEA and terrorism:
+         take down before the acknowledgement). One job per step; each step is a card, the open one with a
+         hairline border and its number in gold; a finished step is one line. Admin and helper keys; the Worker enforces the
+         helper's limits. A pasted link is cut at the # before anything else runs. Drawn by reports-view.js. -->
+    <section class="page reports-panel" data-page="reports" data-title="Reports" id="card-reports" data-staff hidden>
+      <div class="dock-header">
+        <div class="dock-title">Reports · one case at a time</div>
+      </div>
+
+      <!-- The steps' order is set by reports-view.js (CSEA / terrorism: take down before the
+           acknowledgement); numbers are drawn from that order. -->
+      <ol class="rp-route" id="rp-route">
+
+        <!-- Find the link: start from the link in the report -->
+        <li class="rp-step" id="rp-s-find" data-state="current">
+          <div class="rp-step-line"><span class="rp-step-mark" aria-hidden="true"></span><span class="rp-step-n"></span><span class="rp-step-text" id="rp-s-find-text">Find the link</span><button class="rp-link-btn" id="rp-change-btn" type="button" hidden>Start again</button></div>
+          <div class="rp-step-body" id="rp-s-find-body">
+            <label class="rp-label rp-label-big" for="rp-link">Paste the link from the report</label>
+            <div class="rp-row">
+              <input id="rp-link" class="rp-input rp-grow rp-input-big" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://share.refueler.io/?uuid=…">
+              <button class="rp-strong" id="rp-lookup-btn" type="button">Look up</button>
+            </div>
+            <p class="rp-hint">Everything from the # on is removed as you paste: only the transfer ID (UUID) part is kept and sent, never the key part after the #.</p>
+            <p class="rp-msg" id="rp-lookup-msg" role="status"></p>
+
+            <div class="rp-found" id="rp-found" hidden>
+              <div class="rp-card" id="rp-card"></div>
+              <p class="rp-note" id="rp-found-note"></p>
+              <div class="rp-actions" id="rp-found-actions"></div>
+            </div>
+
+            <div class="rp-actions rp-case-actions">
+              <button class="toggle-btn" id="rp-nolink-btn" type="button">The report has no link</button>
+              <button class="toggle-btn" id="rp-reload-btn" type="button">↻ Refresh</button>
+            </div>
+            <p class="rp-msg" id="rp-register-msg" role="status"></p>
+
+            <div class="rp-card-title rp-register-title">Or pick a case from the register</div>
+            <div class="dock-table-wrap">
+              <table class="dock-table rp-table">
+                <thead><tr>
+                  <th>Case</th>
+                  <th class="rp-col-rec">Received</th>
+                  <th class="rp-col-cat">Category</th>
+                  <th>Link</th>
+                  <th>Decision</th>
+                  <th class="rp-col-td">Taken down</th>
+                </tr></thead>
+                <tbody id="rp-tbody">
+                  <tr><td colspan="6" class="dock-empty">Loading the register…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </li>
+
+        <!-- Open the case -->
+        <li class="rp-step" id="rp-s-open" data-state="todo">
+          <div class="rp-step-line"><span class="rp-step-mark" aria-hidden="true"></span><span class="rp-step-n"></span><span class="rp-step-text" id="rp-s-open-text">Open the case</span></div>
+          <div class="rp-step-body" id="rp-s-open-body" hidden>
+              <form class="rp-form rp-form-plain" id="rp-new">
+                <div class="rp-grid">
+                  <label class="rp-label" for="rp-new-training">Real report or training drill</label>
+                  <select id="rp-new-training" class="rp-input" required></select>
+                  <label class="rp-label" for="rp-new-route">How it arrived</label>
+                  <select id="rp-new-route" class="rp-input" required></select>
+                  <label class="rp-label" for="rp-new-category">Category</label>
+                  <select id="rp-new-category" class="rp-input" required></select>
+                  <label class="rp-label" for="rp-new-link">The link</label>
+                  <input id="rp-new-link" class="rp-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Empty: the report has no link">
+                  <label class="rp-label" for="rp-new-reason">Short note</label>
+                  <textarea id="rp-new-reason" class="rp-input" rows="2" maxlength="500" placeholder="No email addresses, no links"></textarea>
+                </div>
+                <div class="rp-actions">
+                  <button class="rp-strong" id="rp-new-submit" type="button">Open case</button>
+                  <button class="toggle-btn" id="rp-new-cancel" type="button">Back</button>
+                </div>
+                <p class="rp-msg" id="rp-new-msg" role="status"></p>
+              </form>
+          </div>
+        </li>
+
+        <!-- Template A -->
+        <li class="rp-step" id="rp-s-ack" data-state="todo">
+          <div class="rp-step-line"><span class="rp-step-mark" aria-hidden="true"></span><span class="rp-step-n"></span><span class="rp-step-text" id="rp-s-ack-text">Acknowledgement</span></div>
+          <div class="rp-step-body" id="rp-s-ack-body" hidden>
+            <p class="rp-lead">Copy the text below into your reply.</p>
+            <div class="rp-tpl-slot" id="rp-s-ack-slot"></div>
+            <div class="rp-actions rp-step-actions">
+              <button class="rp-strong" id="rp-a-sent" type="button">Sent</button>
+              <button class="toggle-btn" id="rp-a-none" type="button">No way to reply</button>
+            </div>
+          </div>
+        </li>
+
+        <!-- Take down -->
+        <li class="rp-step" id="rp-s-td" data-state="todo">
+          <div class="rp-step-line"><span class="rp-step-mark" aria-hidden="true"></span><span class="rp-step-n"></span><span class="rp-step-text" id="rp-s-td-text">Take down</span></div>
+          <p class="rp-step-after" id="rp-s-td-after" hidden></p>
+          <div class="rp-step-body" id="rp-s-td-body" hidden>
+            <div id="rp-td-look" hidden>
+              <label class="rp-label" for="rp-td-link">Paste the link from the report to look it up</label>
+              <div class="rp-row">
+                <input id="rp-td-link" class="rp-input rp-grow" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the link or the transfer ID (UUID)">
+                <button class="rp-strong" id="rp-td-lookup-btn" type="button">Look up</button>
+              </div>
+              <p class="rp-msg" id="rp-td-look-msg" role="status"></p>
+            </div>
+            <div id="rp-td-ready" hidden>
+              <div class="rp-card" id="rp-td-card"></div>
+              <p class="rp-warn">This deletes the file for good. It can’t be undone.</p>
+              <div id="rp-td-form" class="rp-td-row">
+                <label class="rp-label" for="rp-td-confirm" id="rp-td-label">Type the first 8 characters</label>
+                <span class="rp-td-u8" id="rp-td-u8"></span>
+                <input id="rp-td-confirm" class="rp-input rp-mono rp-td-input" type="text" maxlength="8" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <button class="rp-strong" id="rp-td-btn" type="button" disabled>Take down</button>
+                <button class="toggle-btn" id="rp-td-skip" type="button">Not taking it down</button>
+              </div>
+              <p class="rp-note" id="rp-td-note"></p>
+              <p class="rp-msg" id="rp-td-msg" role="status"></p>
+            </div>
+          </div>
+        </li>
+
+        <!-- Close -->
+        <li class="rp-step" id="rp-s-close" data-state="todo">
+          <div class="rp-step-line"><span class="rp-step-mark" aria-hidden="true"></span><span class="rp-step-n"></span><span class="rp-step-text" id="rp-s-close-text">Close the case</span></div>
+          <p class="rp-step-after" id="rp-s-close-after" hidden></p>
+          <div class="rp-step-body" id="rp-s-close-body" hidden>
+            <form class="rp-form rp-form-plain" id="rp-close">
+              <div class="rp-grid">
+                <label class="rp-label" for="rp-close-decision">Decision</label>
+                <select id="rp-close-decision" class="rp-input" required></select>
+                <label class="rp-label" for="rp-close-reason">Reason</label>
+                <textarea id="rp-close-reason" class="rp-input" rows="2" maxlength="500" placeholder="No email addresses, no links. Leave empty to keep the opening note."></textarea>
+                <label class="rp-label" for="rp-close-told">Reporter told</label>
+                <select id="rp-close-told" class="rp-input" required></select>
+                <label class="rp-label" for="rp-close-nca">NCA reference</label>
+                <input id="rp-close-nca" class="rp-input rp-mono" type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Leave empty if none">
+                <label class="rp-label" for="rp-close-key">Key part removed</label>
+                <select id="rp-close-key" class="rp-input" required></select>
+              </div>
+              <div class="rp-actions">
+                <button class="rp-strong" id="rp-close-btn" type="button">Close case</button>
+              </div>
+              <p class="rp-note" id="rp-close-note"></p>
+              <p class="rp-msg" id="rp-close-msg" role="status"></p>
+            </form>
+          </div>
+        </li>
+
+        <!-- Template B -->
+        <li class="rp-step" id="rp-s-out" data-state="todo">
+          <div class="rp-step-line"><span class="rp-step-mark" aria-hidden="true"></span><span class="rp-step-n"></span><span class="rp-step-text" id="rp-s-out-text">Outcome</span></div>
+          <div class="rp-step-body" id="rp-s-out-body" hidden>
+            <p class="rp-lead">Copy the text below into your reply.</p>
+            <div class="rp-tpl-slot" id="rp-s-out-slot"></div>
+            <div class="rp-actions rp-step-actions">
+              <button class="rp-strong" id="rp-b-sent" type="button">Sent</button>
+              <button class="toggle-btn" id="rp-b-none" type="button">No way to reply</button>
+            </div>
+          </div>
+        </li>
+      </ol>
+
+      <!-- Once the case is closed: the case record (print / save as PDF) and the templates (C for an appeal). -->
+      <div class="rp-finish" id="rp-finish" hidden>
+        <div class="rp-actions">
+          <button class="rp-strong" id="rp-record-btn" type="button">Case record · print or save as PDF</button>
+          <button class="toggle-btn" id="rp-tpl-show" type="button">Replies</button>
+          <button class="toggle-btn" id="rp-new-case-btn" type="button">Start a new case</button>
+        </div>
+        <p class="rp-note" id="rp-finish-note"></p>
+        <div class="rp-tpl-slot" id="rp-finish-slot"></div>
+      </div>
+
+      <!-- The replies in tabs with one Copy, moved into the step that needs it. Read-only; the admin key
+           has Edit, which changes this one copy only (nothing typed here is saved). -->
+      <div class="rp-templates" id="rp-templates" hidden>
+        <div class="rp-tabs" role="tablist">
+          <button class="rp-tab" type="button" role="tab" id="rp-tab-a" data-tpl="a" aria-selected="true">Acknowledgement</button>
+          <button class="rp-tab" type="button" role="tab" id="rp-tab-b" data-tpl="b" aria-selected="false">Outcome</button>
+          <button class="rp-tab" type="button" role="tab" id="rp-tab-c" data-tpl="c" aria-selected="false">Appeal reply</button>
+          <button class="toggle-btn rp-tab-copy" type="button" id="rp-tpl-copy">Copy</button>
+          <button class="toggle-btn" type="button" id="rp-tpl-edit" data-admin-only>Edit</button>
+        </div>
+        <textarea id="rp-tpl-a" class="rp-input rp-tpl-text" rows="8" readonly aria-labelledby="rp-tab-a"></textarea>
+        <textarea id="rp-tpl-b" class="rp-input rp-tpl-text" rows="8" readonly aria-labelledby="rp-tab-b" hidden></textarea>
+        <textarea id="rp-tpl-c" class="rp-input rp-tpl-text" rows="8" readonly aria-labelledby="rp-tab-c" hidden></textarea>
+      </div>
+
+      <!-- The register as a whole (admin): export and training clean-up. -->
+      <div class="rp-register-foot" data-admin-only>
+        <span class="rp-card-title">Register</span>
+        <div class="rp-actions">
+          <button class="toggle-btn" id="rp-export-btn" type="button">Export</button>
+          <button class="toggle-btn" id="rp-export-training-btn" type="button">Export training</button>
+          <button class="toggle-btn" id="rp-delete-training-btn" type="button">Delete training rows</button>
+        </div>
+        <div class="rp-confirm" id="rp-delete-confirm" hidden>
+          <span id="rp-delete-confirm-text">Delete every training (T-) row?</span>
+          <button class="rp-strong" id="rp-delete-yes" type="button">Delete training rows</button>
+          <button class="toggle-btn" id="rp-delete-no" type="button">Back</button>
+        </div>
+        <p class="rp-msg" id="rp-export-msg" role="status"></p>
+      </div>
+    </section>
+
+    <!-- ═══ Ops ════════════════════════════════════════════════════════════ -->
+    <section class="page" data-page="ops" data-title="Ops" hidden>
+  <div class="ops-section-heading">Lightning availability</div>
+  <div class="card" id="card-lightning-toggle">
+    <div class="card-label">Lightning availability</div>
+    <div class="card-value" id="lightning-toggle-state">—</div>
+    <div class="card-sub" id="lightning-toggle-sub">checking…</div>
+    <div class="lightning-toggle-controls">
+      <button class="toggle-btn" id="btn-lightning-phoenixd" data-value="phoenixd">Phoenixd</button>
+      <button class="toggle-btn" id="btn-lightning-true"     data-value="true">On (any)</button>
+      <button class="toggle-btn" id="btn-lightning-false"    data-value="false">Off</button>
+    </div>
+  </div>
+
+    </section>
+
+    <!-- ═══ API ════════════════════════════════════════════════════════════ -->
+    <section class="page" data-page="api" data-title="API" hidden>
+  <!-- ─── Sandbox card ──────────────────────────────────────────────────────── -->
+  <div class="card" id="card-sandbox">
+    <div class="card-label">API Sandbox</div>
+    <div class="card-value" id="sandbox-state">—</div>
+    <div class="card-sub" id="sandbox-sub">Credential-limited test environment · both rails</div>
+
+    <div class="sandbox-controls">
+
+      <div class="sandbox-row">
+        <div class="sandbox-field">
+          <label class="card-sub sandbox-label" for="sandbox-rail-select">Rail</label>
+          <select id="sandbox-rail-select" class="sandbox-select">
+            <option value="identity">Identity</option>
+            <option value="anonymous">Anonymous</option>
+          </select>
+        </div>
+        <div class="sandbox-field">
+          <label class="card-sub sandbox-label" for="sandbox-ref-input">Transfer ref prefix</label>
+          <input id="sandbox-ref-input" type="text" value="sandbox" maxlength="32" class="sandbox-input" />
+        </div>
+        <button class="toggle-btn nowrap" id="btn-sandbox-activate" type="button">
+          Issue keypair
+        </button>
+      </div>
+
+      <div class="sandbox-row">
+        <div class="sandbox-field sandbox-field-wide">
+          <label class="card-sub sandbox-label" for="sandbox-reset-key-input">rfs_test_live_ key (to reset)</label>
+          <input id="sandbox-reset-key-input" type="text" placeholder="rfs_test_live_…" maxlength="64" class="sandbox-input sandbox-input-full" />
+        </div>
+        <button class="toggle-btn nowrap" id="btn-sandbox-reset" type="button">
+          Reset credits
+        </button>
+      </div>
+    </div>
+
+    <!-- Result area — shown after activate/reset. Auto-clears after 5 min. -->
+    <div id="sandbox-result" class="sandbox-result" hidden></div>
+
+    <div class="ops-keypair-divider"></div>
+    <div class="card-sub ops-keypair-warn">
+      ⚠ Keypair shown once — record it immediately. Do not send real cargo to the sandbox.
+    </div>
+  </div>
+
+    </section>
+  </div>
+
+  <!-- Case record (OSA-Tools-4): filled by reports-view.js and printed alone (Save as PDF). Never an
+       email, the full transfer ID or the key part — the register holds none of them. -->
+  <section id="case-record" class="case-record" aria-hidden="true"></section>
+</div>
+
+<!-- ─── Modal ─── -->
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-plain">
+  <div class="modal-header">
+    <div class="modal-titles">
+      <div class="modal-label" id="modal-label"></div>
+      <div class="modal-plain" id="modal-plain"></div>
+    </div>
+    <button id="modal-close" type="button" aria-label="Close">×</button>
+  </div>
+  <div class="modal-body">
+    <div class="modal-value" id="modal-value">—</div>
+    <div class="modal-sub"   id="modal-sub"></div>
+    <div id="modal-deferred-note" class="modal-deferred-note" hidden></div>
+    <div class="modal-section-title">Trend</div>
+    <div class="modal-sparkline-stub" id="modal-sparkline">
+      Trend history — coming B5 polish pass
+    </div>
+    <div class="modal-section-title">Export</div>
+    <button class="modal-csv-btn" id="modal-csv-btn" type="button">⬇ Download CSV</button>
+    <div class="modal-csv-note" id="modal-csv-note" hidden>CSV export available from B6</div>
+  </div>
+</div>
+
+<!-- ─── Micro-modal: coming-soon (Share-Dash-1) ─── -->
+<div class="micro-modal-backdrop" id="soon-modal">
+  <div class="micro-modal" role="dialog" aria-modal="true" aria-labelledby="soon-modal-title">
+    <div class="micro-modal-label">Planned</div>
+    <div class="micro-modal-title" id="soon-modal-title">—</div>
+    <div class="micro-modal-body" id="soon-modal-body"></div>
+    <div class="micro-modal-actions">
+      <button class="ghost-btn" type="button" data-action="close-soon">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="speed-view.js"></script>
+<script src="reports-view.js"></script>
+<script src="dock-view.js"></script>
+<script src="navy-office.js"></script>
+</body>
+</html>
