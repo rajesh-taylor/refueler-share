@@ -1,21 +1,23 @@
 // dev/stripe-sandbox/lib.mjs — shared by the sandbox test-through scripts
 // (Stripe-Account-2, 28 Oct 2026). Reads worker/.dev.vars; refuses anything that
-// is not a sandbox: production Supabase ref, a live Stripe key, a Worker that is
-// not on localhost. Never prints a key, secret, cookie or token.
+// is not a sandbox: any Supabase project but the sandbox, a live Stripe key, a
+// Worker that is not on localhost. Never prints a key, secret, cookie or token.
 import fs from 'node:fs';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 
 const DEV_VARS = fileURLToPath(new URL('../../worker/.dev.vars', import.meta.url));
-const PRODUCTION_REF = 'tihgvdokeofnjxjkenmm';
+// Allowlist since Supabase-Split-1: production's ref stays out of this public repo,
+// and any other project is refused. A rebuilt sandbox changes this line.
+const SANDBOX_REF = 'xlwwfafhxqusqyhjgyra';
 
 export const env = {};
 for (const l of fs.readFileSync(DEV_VARS, 'utf8').split('\n')) {
   const m = l.match(/^([A-Z_0-9]+)=(.*)$/);
   if (m) env[m[1]] = m[2];
 }
-if (!/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(env.SUPABASE_URL ?? '') || env.SUPABASE_URL.includes(PRODUCTION_REF)) {
-  throw new Error('SUPABASE_URL is not a sandbox project — refusing');
+if (env.SUPABASE_URL !== `https://${SANDBOX_REF}.supabase.co`) {
+  throw new Error('SUPABASE_URL is not the sandbox project — refusing');
 }
 if (env.STRIPE_SECRET_KEY && !/^(rk|sk)_test_/.test(env.STRIPE_SECRET_KEY)) throw new Error('STRIPE_SECRET_KEY is not a test key — refusing');
 

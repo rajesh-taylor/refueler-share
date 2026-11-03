@@ -25,9 +25,11 @@ import { fileURLToPath } from 'node:url';
 
 const DEV_VARS = join(dirname(fileURLToPath(import.meta.url)), '..', '.dev.vars');
 
-// Production Supabase (already public in TESTING.md). Sandbox runs must never
-// write its subscribers table (plan v1 S-6), so .dev.vars never points at it.
-const PRODUCTION_SUPABASE_REF = 'tihgvdokeofnjxjkenmm';
+// Sandbox runs must never write production's subscribers table (plan v1 S-6), so
+// .dev.vars points only at the sandbox or a local stack. An allowlist since
+// Supabase-Split-1: production's ref stays out of this public repo. A rebuilt
+// sandbox changes this line.
+const SANDBOX_SUPABASE_REF = 'xlwwfafhxqusqyhjgyra';
 
 // Per-name shape checks for the values -2 sets. Unknown names: any single line.
 const SHAPES = {
@@ -51,7 +53,7 @@ if (!value) fail('VAL is empty — run the hidden read -s prompt first');
 if (/[\r\n\0]/.test(value)) fail('value has a line break or NUL — refused');
 if (/^(sk|rk)_live_/.test(value)) fail('a live Stripe key never goes in .dev.vars — refused');
 if (SHAPES[name] && !SHAPES[name].test(value)) fail(`value does not look like a sandbox ${name} — refused`);
-if (name === 'SUPABASE_URL' && value.includes(PRODUCTION_SUPABASE_REF)) fail('that is the production Supabase project — sandbox runs never write it');
+if (name === 'SUPABASE_URL' && value.startsWith('https:') && value !== `https://${SANDBOX_SUPABASE_REF}.supabase.co`) fail('that is not the sandbox Supabase project — sandbox runs write nothing else');
 
 const before = existsSync(DEV_VARS) ? readFileSync(DEV_VARS, 'utf8') : '';
 const lines = before === '' ? [] : before.replace(/\n$/, '').split('\n');

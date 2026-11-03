@@ -183,7 +183,7 @@ Rule: **no security fix ships in future blocks without a row added to this table
 | Concern | Production | Staging |
 |---------|-----------|---------|
 | R2 | `refueler-share-prod` | `refueler-share-dev`, aggressive lifecycle expiry (1 day) |
-| Supabase | `tihgvdokeofnjxjkenmm` | Separate free-tier project or schema |
+| Supabase | Share's own project (since Supabase-Split-1, 3 Nov 2026) | Separate free-tier project or schema |
 | Stripe | Live keys | Test keys only |
 | Lightning | LNbits live | LNbits test/regtest path per B9 planning |
 | Turnstile | Production sitekey | Separate sitekey or test-mode always-pass key |
