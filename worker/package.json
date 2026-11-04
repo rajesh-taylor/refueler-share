@@ -21,12 +21,12 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
-    "@eslint/js": "9.39.5",
+    "@eslint/js": "10.0.1",
     "@vitest/runner": "4.1.12",
-    "@vitest/snapshot": "4.1.12",
-    "eslint": "9.39.5",
+    "@vitest/snapshot": "5.0.5",
+    "eslint": "10.14.0",
     "fast-check": "4.10.2",
-    "vitest": "4.1.12",
+    "vitest": "5.0.5",
     "wrangler": "4.156.0"
   }
 }
