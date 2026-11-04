@@ -7,7 +7,7 @@
 //   2  new token: the signing key has changed                             → yes
 //   3  new token: a dev-bucket URL, upload                                → 403 (production can't reach dev)
 //      You run an upload and download in Safari, delete the old token; press Return.
-//   4  the URL from step 1, signed by the old token, upload               → 403 (the old token is dead)
+//   4  the URL from step 1, signed by the old token, upload               → 401 (R2 no longer knows the key; 403 also passes)
 //
 // The URL from step 1 lives only in this process's memory, because it is the proof for step 4. It
 // and the Access token are never printed or written. So if this window closes before step 4, that
@@ -115,9 +115,15 @@ async function main() {
 
   await pressReturn('NOW, IN SAFARI: upload and download a file on https://share.refueler.io/ .\nOnly if both work: delete the OLD token in the dashboard, and only then come back here.\nIf either fails, press Ctrl-C and keep the old token.');
 
-  const last = await putUntil(oldUrl, 403, 'step 4');
-  if (last !== 403) stop(`step 4 answered ${last}, not 403: the old token still works, or R2 hasn't caught up. Check the dashboard, then ask.`);
-  ok('4  the old token is dead (403)');
+  // Live answer on 4 Nov 2026 was 401: R2 no longer knows the key. 403 is a refusal too; a 2xx is not.
+  let last = await put(oldUrl);
+  const refused = (s) => s === 401 || s === 403;
+  for (const end = Date.now() + SETTLE_MS; !refused(last) && Date.now() <= end; last = await put(oldUrl)) {
+    console.log(`  step 4: answered ${last}, want 401 or 403. Trying again in ${RETRY_MS / 1000} s.`);
+    await sleep(RETRY_MS);
+  }
+  if (!refused(last)) stop(`step 4 answered ${last}: the old token still works, or R2 hasn't caught up. Check the dashboard, then ask.`);
+  ok(`4  the old token is dead (${last})`);
 
   console.log('\n✓ R2 cut-over proved. Paste these four lines into the chat.');
 }
