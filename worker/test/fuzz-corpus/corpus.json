@@ -1,0 +1,9 @@
+{
+  "_note": "Shrunk inputs from fuzz failures, replayed first on every run. Only inputs for FIXED issues go here (this repo is public). Seeds: worker/test/fuzz.test.js.",
+  "dl_token_junk": [
+    "dl1..",
+    "dl1.e30.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "e30.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "."
+  ]
+}

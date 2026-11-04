@@ -25,6 +25,7 @@
     "@vitest/runner": "4.1.12",
     "@vitest/snapshot": "4.1.12",
     "eslint": "9.39.5",
+    "fast-check": "4.10.2",
     "vitest": "4.1.12",
     "wrangler": "4.156.0"
   }
