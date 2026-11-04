@@ -156,7 +156,7 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
     const authHeader = request.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) return err(401, 'Download token required');
-    const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env.MINT_PRIVATE_KEY);
+    const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env);
     if (!valid || tokenUuid !== uuid) return err(401, 'Invalid or expired download token');
   }
 

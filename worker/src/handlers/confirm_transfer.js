@@ -63,7 +63,7 @@ export async function handleConfirmTransfer(request, env, ctx, uuid) {
     if (!token) {
       return _err(401, 'Download token required.');
     }
-    const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env.MINT_PRIVATE_KEY);
+    const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env);
     if (!valid || tokenUuid !== uuid) {
       return _err(403, 'Not authorised for this transfer.');
     }

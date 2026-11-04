@@ -211,6 +211,7 @@ export function makeEnv(overrides = {}) {
   return {
     COMMITMENT_KEY:          'test-commitment-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,
+    DL_TOKEN_KEY:            'QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=',
     TURNSTILE_SECRET_KEY:    'ts',
     ADMIN_KEY:               ADMIN,
     TEST_CRED_KEY:           'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=',

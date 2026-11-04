@@ -38,12 +38,13 @@ bucket_name = "refueler-share-prod"
 preview_bucket_name = "refueler-share-dev"
 
 # Secrets (set via `wrangler secret put <NAME>`)
-# MINT_PRIVATE_KEY     — secp256k1 private key hex (32 bytes). Never logged. Never exposed.
+# MINT_PRIVATE_KEY     — secp256k1 private key hex (32 bytes). Never logged. Never exposed. Mint job only.
+# DL_TOKEN_KEY         — download-token key, 32 random bytes, base64 (Worker-Keys-1). Piped from openssl, never displayed, no copy kept.
 # TURNSTILE_SECRET_KEY — Cloudflare Turnstile secret key (app widget, share.refueler.io)
 # TURNSTILE_PLANS_SECRET_KEY — Plans widget secret (Plans-Stripe-1; checkout only)
 # SUPABASE_URL         — https://<project>.supabase.co
 # SUPABASE_SERVICE_KEY — sb_secret_ key on Share's own project (Supabase-Split-1); bypasses RLS there only
-# R2_S3_ACCESS_KEY_ID     — R2 API token Access Key ID  (Share-6-1, presigning). Worker secret only.
+# R2_S3_ACCESS_KEY_ID     — R2 API token Access Key ID  (Share-6-1, presigning). Worker secret only. Token reaches refueler-share-prod only (Worker-Keys-1).
 # R2_S3_SECRET_ACCESS_KEY — R2 API token Secret Access Key (Share-6-1, presigning). Worker secret only — never KV, never a URL.
 
 [vars]
@@ -84,6 +85,10 @@ ADMIN_HOST                 = "admin.share.refueler.io"
 ACCESS_TEAM                = "refueler"
 ACCESS_AUD                 = "80791e08c0e4393cd50e014a4c44c421fa09e2293cc2e7138973367ab3b05a0a"
 ADMIN_PUBLIC_UNTIL         = "1793545200"
+# Worker-Keys-1 (src/nut11.js): old mint-keyed download tokens still VERIFY until this time, never
+# sign. 1794484800 = Thu 12 Nov 2026 12:00 UTC; it shuts itself then, and the follow-up commit
+# deletes this line and the fallback. Unset or past = refused.
+DL_TOKEN_LEGACY_UNTIL      = "1794484800"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)

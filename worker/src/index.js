@@ -1304,7 +1304,12 @@ async function handleAuth(request, env, uuid) {
     return err(401, 'Incorrect passphrase');
   }
 
-  const token = await issueDownloadToken(uuid, env.MINT_PRIVATE_KEY, manifest.expiry_timestamp);
+  const token = await issueDownloadToken(uuid, env, manifest.expiry_timestamp);
+  if (!token) {
+    // Worker-Keys-1: fail closed. Never signed with the mint key.
+    logEvent(env, { endpoint: 'auth', status: 503, errorMsg: 'dl_token_key_missing' });
+    return err(503, 'Unlock is unavailable — please try again shortly');
+  }
   return json({ token });
 }
 
@@ -2037,8 +2042,9 @@ async function handleUploadUrls(request, env, uuid) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /admin/r2-presign-test  — X-Admin-Key gated. DEV bucket only.
-// Presigns one PutObject so the presigner can be proven end-to-end (Share-6-1
-// definition of done) without a Cashu credential. Cannot mint a prod write URL.
+// Presigns one PutObject without a Cashu credential. Cannot mint a prod write URL.
+// Worker-Keys-1: production's R2 token reaches refueler-share-prod only, so R2 answers 403 to
+// the URL this returns. That is the point: bin/r2-token-cutover.mjs uses it to prove the scope.
 // Body (optional): { key }.  Returns { url, expires, bucket, key }.
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleAdminR2PresignTest(request, env) {

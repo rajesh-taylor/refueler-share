@@ -113,7 +113,7 @@ export async function handleDeleteTransfer(request, env, uuid) {
     return err(410, 'Transfer has already been destroyed');
   }
 
-  const { valid, uuid: tokenUuid } = await verifyDownloadToken(bearerToken, env.MINT_PRIVATE_KEY);
+  const { valid, uuid: tokenUuid } = await verifyDownloadToken(bearerToken, env);
   if (!valid || tokenUuid !== uuid) {
     return err(403, 'Not authorised to destroy this transfer');
   }

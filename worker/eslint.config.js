@@ -47,6 +47,8 @@ export default [
       'no-control-regex': 'off',
       'eqeqeq': ['error', 'always', { null: 'ignore' }],
       'no-var': 'error',
+      // Worker-Keys-1: all randomness comes from crypto.getRandomValues / crypto.randomUUID.
+      'no-restricted-properties': ['error', { object: 'Math', property: 'random', message: 'Use crypto.getRandomValues.' }],
       'prefer-const': ['error', { destructuring: 'all' }],
     },
   },

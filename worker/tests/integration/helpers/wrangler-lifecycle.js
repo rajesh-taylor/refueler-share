@@ -100,6 +100,7 @@ export async function setup({ provide }) {
     TURNSTILE_SECRET_KEY:       TURNSTILE_TEST_SECRET,
     STRIPE_WEBHOOK_SECRET:      stripeWebhookSecret,
     MINT_PRIVATE_KEY:           hex(),
+    DL_TOKEN_KEY:               b64(),
     COMMITMENT_KEY:             b64(),
     UPLOAD_SESSION_KEY:         b64(),
     KV_MAC_KEY:                 b64(),

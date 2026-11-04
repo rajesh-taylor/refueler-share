@@ -57,7 +57,7 @@ export async function handleTimestampSubmit(request, env, ctx) {
     return err(502, 'Failed to store timestamp blob');
   }
 
-  const jitterMs = 50 + Math.floor(Math.random() * 150);
+  const jitterMs = 50 + (crypto.getRandomValues(new Uint8Array(1))[0] % 150);
   await new Promise(r => setTimeout(r, jitterMs));
 
   const nowSeconds = Math.floor(Date.now() / 1000);
