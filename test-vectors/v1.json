@@ -1,0 +1,401 @@
+{
+ "schema": "refueler.share.kat.v1",
+ "generated_by": {
+  "script": "test-vectors/gen.py",
+  "cryptography": "50.0.2",
+  "blake3": "1.0.11"
+ },
+ "published_sources": {
+  "blake3": "github.com/BLAKE3-team/BLAKE3 test_vectors/test_vectors.json",
+  "nut00": "github.com/cashubtc/nuts tests/00-tests.md",
+  "nut12": "github.com/cashubtc/nuts tests/12-tests.md",
+  "sha256": "FIPS 180 examples"
+ },
+ "part": {
+  "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "k2": "430552d8a89ebe1e620555e6f53ec4dc2c29149b7aaf64c3d3f47c0c5c455645",
+  "info": "72656675656c65722e73686172652e7061796c6f61642e763200",
+  "part_key": "071ab966413cac37cbf2a65ebe81ad4da4049b2ecf665ce219891f073c231727",
+  "cases": [
+   {
+    "name": "part 0 of 3",
+    "key": "K",
+    "i": 0,
+    "n": 3,
+    "pt": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "nonce": "000000000000000000000000",
+    "aad": "00000000",
+    "ct": "cf47ee88c5c37583842f70540588361ba8d0431f7d6759d7dc28e8c861d6367fbde366c2d2cc88a8daab89fda2943b962c327fae94522385539c91c46cbd55dddfa4ea7f052da674b103f22c01d2453b"
+   },
+   {
+    "name": "part 1 of 3",
+    "key": "K",
+    "i": 1,
+    "n": 3,
+    "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "nonce": "000000000000000000000100",
+    "aad": "00000001",
+    "ct": "78c1270ac7411c536825378da89b0d3b57cfff1ef5b68268352c5d6a9410ea5bf9b3d1f9dd89b9257b7b57163a7a72e54940845b6f576af1f6d9e9fbdab0bdf40a2a7f8ccf7c623fa9b7c2ef59ca517e"
+   },
+   {
+    "name": "part 2 of 3",
+    "key": "K",
+    "i": 2,
+    "n": 3,
+    "pt": "72656675656c6572207368617265207632207461696c",
+    "nonce": "000000000000000000000201",
+    "aad": "00000002",
+    "ct": "61122800f308c8ca48965584e0d6085da38bb5bad574a434760d80aacb1a3ce67124232ab404"
+   },
+   {
+    "name": "single part: last flag on index 0",
+    "key": "K",
+    "i": 0,
+    "n": 1,
+    "pt": "72656675656c6572207368617265207632207461696c",
+    "nonce": "000000000000000000000001",
+    "aad": "00000000",
+    "ct": "88b66ec651266c7222c3d1da3f5d544d85688199515e75129211588dc55681e47c833567470c"
+   },
+   {
+    "name": "index past one byte: 256 of 300",
+    "key": "K",
+    "i": 256,
+    "n": 300,
+    "pt": "72656675656c6572207368617265207632207461696c",
+    "nonce": "000000000000000000010000",
+    "aad": "00000100",
+    "ct": "3d2728e01733493ed5e6b36212d9d099e629db38092e08e697afc8243549c132616b8b321c25"
+   },
+   {
+    "name": "largest transfer: last of 8000",
+    "key": "K",
+    "i": 7999,
+    "n": 8000,
+    "pt": "72656675656c6572207368617265207632207461696c",
+    "nonce": "0000000000000000001f3f01",
+    "aad": "00001f3f",
+    "ct": "7c67b9980308922032a4e943e46a9fcf0ee7cdb30c11fb4ae41f606879e921757716108ccb0c"
+   },
+   {
+    "name": "empty plaintext",
+    "key": "K2",
+    "i": 0,
+    "n": 1,
+    "pt": "",
+    "nonce": "000000000000000000000001",
+    "aad": "00000000",
+    "ct": "5efafd0a0909de30b833942502ca5a72"
+   }
+  ],
+  "refuse": [
+   {
+    "name": "part 0 read as part 1 (reordered)",
+    "ct": "cf47ee88c5c37583842f70540588361ba8d0431f7d6759d7dc28e8c861d6367fbde366c2d2cc88a8daab89fda2943b962c327fae94522385539c91c46cbd55dddfa4ea7f052da674b103f22c01d2453b",
+    "i": 1,
+    "n": 3
+   },
+   {
+    "name": "part 1 read as part 0 (reordered)",
+    "ct": "78c1270ac7411c536825378da89b0d3b57cfff1ef5b68268352c5d6a9410ea5bf9b3d1f9dd89b9257b7b57163a7a72e54940845b6f576af1f6d9e9fbdab0bdf40a2a7f8ccf7c623fa9b7c2ef59ca517e",
+    "i": 0,
+    "n": 3
+   },
+   {
+    "name": "middle part read as the last (file cut short)",
+    "ct": "78c1270ac7411c536825378da89b0d3b57cfff1ef5b68268352c5d6a9410ea5bf9b3d1f9dd89b9257b7b57163a7a72e54940845b6f576af1f6d9e9fbdab0bdf40a2a7f8ccf7c623fa9b7c2ef59ca517e",
+    "i": 1,
+    "n": 2
+   },
+   {
+    "name": "last part read as a middle part (part added after it)",
+    "ct": "61122800f308c8ca48965584e0d6085da38bb5bad574a434760d80aacb1a3ce67124232ab404",
+    "i": 2,
+    "n": 4
+   },
+   {
+    "name": "tag changed",
+    "ct": "cf47ee88c5c37583842f70540588361ba8d0431f7d6759d7dc28e8c861d6367fbde366c2d2cc88a8daab89fda2943b962c327fae94522385539c91c46cbd55dddfa4ea7f052da674b103f22c01d2453a",
+    "i": 0,
+    "n": 3
+   },
+   {
+    "name": "one byte missing",
+    "ct": "cf47ee88c5c37583842f70540588361ba8d0431f7d6759d7dc28e8c861d6367fbde366c2d2cc88a8daab89fda2943b962c327fae94522385539c91c46cbd55dddfa4ea7f052da674b103f22c01d245",
+    "i": 0,
+    "n": 3
+   },
+   {
+    "name": "encrypted under K, not the derived part key",
+    "ct": "0ebcb5deb52c83bd08a8a935182c9199d24356532881602f809eb383c5ff5d564e5fe6bc2af2b80633c371f5c1ce694ea90741e6797146a550b63f264a604ee4b5d5bbbacfdbc9e017545d59199633d7",
+    "i": 0,
+    "n": 3
+   },
+   {
+    "name": "other transfer's key",
+    "ct": "2ccd107730462242253d9db074b7ec2d78c9cb6c68be7beee19df236ae2dfd09bef90a0a4645a7bf03f9b248d717dacd632a5e943e5ce87046a4b1065ebf08d275a9c2ffc147378d67a595044ff8dbe8",
+    "i": 0,
+    "n": 3
+   }
+  ],
+  "big": {
+   "name": "full-size part: 32 MiB of zeros, index 0 of 2",
+   "plain_len": 33554432,
+   "ct_len": 33554448,
+   "sha256": "41ab6071f878149bc764b6e78d14b9fe12fa70397e504cedf998a400a3d7439a",
+   "tag": "8cbbb1515c359c14696240207fe6b3c5"
+  },
+  "bad_k_lengths": [
+   0,
+   16,
+   31,
+   33
+  ],
+  "v1": {
+   "name": "links before v2: K directly, the link's IV, AAD = index",
+   "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "iv": "a1a2a3a4a5a6a7a8a9aaabac",
+   "i": 3,
+   "pt": "72656675656c6572207368617265207632207461696c",
+   "ct": "548ae11a91395b1dae0dda1126a7ec0550b75e4e1e29432e926e1d167592602d37723ae8ea24"
+  }
+ },
+ "blake3": {
+  "cases": [
+   {
+    "input_len": 0,
+    "hash": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+   },
+   {
+    "input_len": 1,
+    "hash": "2d3adedff11b61f14c886e35afa036736dcd87a74d27b5c1510225d0f592e213"
+   },
+   {
+    "input_len": 1023,
+    "hash": "10108970eeda3eb932baac1428c7a2163b0e924c9a9e25b35bba72b28f70bd11"
+   },
+   {
+    "input_len": 1024,
+    "hash": "42214739f095a406f3fc83deb889744ac00df831c10daa55189b5d121c855af7"
+   },
+   {
+    "input_len": 1025,
+    "hash": "d00278ae47eb27b34faecf67b4fe263f82d5412916c1ffd97c8cb7fb814b8444"
+   },
+   {
+    "input_len": 2048,
+    "hash": "e776b6028c7cd22a4d0ba182a8bf62205d2ef576467e838ed6f2529b85fba24a"
+   },
+   {
+    "input_len": 3072,
+    "hash": "b98cb0ff3623be03326b373de6b9095218513e64f1ee2edd2525c7ad1e5cffd2"
+   },
+   {
+    "input_len": 31744,
+    "hash": "62b6960e1a44bcc1eb1a611a8d6235b6b4b78f32e7abc4fb4c6cdcce94895c47"
+   }
+  ],
+  "abc": "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"
+ },
+ "sha256": {
+  "cases": [
+   {
+    "msg": "",
+    "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+    "msg": "616263",
+    "digest": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+   },
+   {
+    "msg": "6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071",
+    "digest": "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+   }
+  ],
+  "million_a": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+ },
+ "fragment": {
+  "assemble": [
+   {
+    "name": "ascii",
+    "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "n": "test.bin",
+    "z": 33554455,
+    "s": null,
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJ0ZXN0LmJpbiIsInoiOjMzNTU0NDU1fQ"
+   },
+   {
+    "name": "non-ASCII name",
+    "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "n": "Fürst 写真 📷 final.zip",
+    "z": 1,
+    "s": null,
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJGw7xyc3Qg5YaZ55yfIPCfk7cgZmluYWwuemlwIiwieiI6MX0"
+   },
+   {
+    "name": "with a seal nonce (key order v k n s z)",
+    "k": "430552d8a89ebe1e620555e6f53ec4dc2c29149b7aaf64c3d3f47c0c5c455645",
+    "n": "a b.txt",
+    "z": 9007199254740991,
+    "s": "000102030405060708090a0b0c0d0e0f",
+    "blob": "eyJ2IjoyLCJrIjoiUXdWUzJLaWV2aDVpQlZYbTlUN0UzQ3dwRkp0NnIyVEQwX1I4REZ4RlZrVSIsIm4iOiJhIGIudHh0IiwicyI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHciLCJ6Ijo5MDA3MTk5MjU0NzQwOTkxfQ"
+   }
+  ],
+  "parse_ok": [
+   {
+    "name": "v1 with IV",
+    "blob": "eyJ2IjoxLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJvbGQuYmluIiwiaSI6Im9hS2pwS1dtcDZpcHFxdXMifQ",
+    "v": 1,
+    "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "n": "old.bin",
+    "iv": "a1a2a3a4a5a6a7a8a9aaabac",
+    "z": null,
+    "legacy": false
+   },
+   {
+    "name": "v1 with a damaged size keeps the link",
+    "blob": "eyJ2IjoxLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJvbGQuYmluIiwieiI6IngifQ",
+    "v": 1,
+    "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "n": "old.bin",
+    "iv": null,
+    "z": null,
+    "legacy": false
+   },
+   {
+    "name": "legacy raw key",
+    "blob": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "v": null,
+    "k": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "n": null,
+    "iv": null,
+    "z": null,
+    "legacy": true
+   }
+  ],
+  "parse_refuse": [
+   {
+    "name": "v2 key 31 bytes",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhnIiwibiI6ImEiLCJ6IjoxfQ"
+   },
+   {
+    "name": "v2 key 33 bytes",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOEEiLCJuIjoiYSIsInoiOjF9"
+   },
+   {
+    "name": "v2 key missing",
+    "blob": "eyJ2IjoyLCJuIjoiYSIsInoiOjF9"
+   },
+   {
+    "name": "v2 key not text",
+    "blob": "eyJ2IjoyLCJrIjo3LCJuIjoiYSIsInoiOjF9"
+   },
+   {
+    "name": "v2 name empty",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiIiLCJ6IjoxfQ"
+   },
+   {
+    "name": "v2 name missing",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsInoiOjF9"
+   },
+   {
+    "name": "v2 size zero",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJhIiwieiI6MH0"
+   },
+   {
+    "name": "v2 size negative",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJhIiwieiI6LTF9"
+   },
+   {
+    "name": "v2 size not whole",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJhIiwieiI6MS41fQ"
+   },
+   {
+    "name": "v2 size missing",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJhIn0"
+   },
+   {
+    "name": "v2 size past safe integers",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJhIiwieiI6OTAwNzE5OTI1NDc0MDk5Mn0"
+   },
+   {
+    "name": "v2 empty seal nonce",
+    "blob": "eyJ2IjoyLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCIsIm4iOiJhIiwicyI6IiIsInoiOjF9"
+   },
+   {
+    "name": "v1 key missing",
+    "blob": "eyJ2IjoxLCJuIjoiYSJ9"
+   },
+   {
+    "name": "v1 name missing",
+    "blob": "eyJ2IjoxLCJrIjoiQUFFQ0F3UUZCZ2NJQ1FvTERBME9EeEFSRWhNVUZSWVhHQmthR3h3ZEhoOCJ9"
+   }
+  ]
+ },
+ "nut00": {
+  "hash_to_curve": [
+   {
+    "msg": "0000000000000000000000000000000000000000000000000000000000000000",
+    "point": "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"
+   },
+   {
+    "msg": "0000000000000000000000000000000000000000000000000000000000000001",
+    "point": "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"
+   },
+   {
+    "msg": "0000000000000000000000000000000000000000000000000000000000000002",
+    "point": "026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f"
+   }
+  ],
+  "blinded": [
+   {
+    "x": "d341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6",
+    "r": "99fce58439fc37412ab3468b73db0569322588f62fb3a49182d67e23d877824a",
+    "B_": "033b1a9737a40cc3fd9b6af4b723632b76a67a36782596304612a6c2bfb5197e6d"
+   },
+   {
+    "x": "f1aaf16c2239746f369572c0784d9dd3d032d952c2d992175873fb58fae31a60",
+    "r": "f78476ea7cc9ade20f9e05e58a804cf19533f03ea805ece5fee88c8e2874ba50",
+    "B_": "029bdf2d716ee366eddf599ba252786c1033f47e230248a4612a5670ab931f1763"
+   }
+  ],
+  "signed": [
+   {
+    "k": "0000000000000000000000000000000000000000000000000000000000000001",
+    "B_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+    "C_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+   },
+   {
+    "k": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+    "B_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+    "C_": "0398bc70ce8184d27ba89834d19f5199c84443c31131e48d3c1214db24247d005d"
+   }
+  ],
+  "dleq_valid": {
+   "A": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+   "B_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+   "C_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+   "e": "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9",
+   "s": "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
+  },
+  "dleq_invalid": {
+   "A": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+   "B_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+   "C_": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+   "e": "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9",
+   "s": "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73db"
+  },
+  "flow": {
+   "mint_k": "b7d0104d2d8c70935d492ad26fd170586c66380f5a6703cf01b8fe109fdfad5a",
+   "mint_pub": "0326bdcf53467eddd70bce96e363514adfc481759218d586d9b7fabf09d42a8866",
+   "secret": "5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e5f1e",
+   "r": "853877026d270d8ba66eaa2823114525720a3cdce5de511c6b6655d005d633ce",
+   "Y": "0264948504c4949d018d4c6f13064a9c365d10cade0bb5c33fa1a73da91e9450b2",
+   "B_": "02058f9de1867ed61c1767d8ceebc5566f9165d1e7a62572ef8d07d42e046e3719",
+   "C_": "03b1e25d8a4531048e8d261df0abcec0d25dbaa1899c234b472a94761a86dfc75b",
+   "e": "feb973381d762dc43632cc4694a3884b1ab9b3ba07e2c20768751a3180fc1177",
+   "s": "388b602b256e1413d7d5aca2113115692d34911671b014f52d060ff8b026c979",
+   "C": "024bd2246aafed0984c09ef4b099815fbdf615e7cb1d11d4e904ea34632623e6d9"
+  }
+ }
+}

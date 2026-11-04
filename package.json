@@ -7,7 +7,8 @@
   },
   "scripts": {
     "build": "APP_SHA=dev eleventy --config=eleventy.app.js",
-    "dev": "APP_SHA=dev eleventy --config=eleventy.app.js --serve --port=8080"
+    "dev": "APP_SHA=dev eleventy --config=eleventy.app.js --serve --port=8080",
+    "test:browser": "dev/share-harness/build.sh && playwright test"
   },
   "devDependencies": {
     "@11ty/eleventy": "3.1.6",

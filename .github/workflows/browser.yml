@@ -1,0 +1,93 @@
+# Test-Hardening-1 · 4 Nov 2026 (H2 Browser-KAT-1 + H3 Smoke-1). The real built app, under the real
+# CSP (only the API origin swapped), against dev/share-harness/fake-worker.mjs. Nothing is
+# deployed and nothing here reaches production.
+#   engines:     test-vectors/v1.json + the upload and download flows, in Chromium, Firefox and
+#                Playwright's WebKit (which is not Safari)
+#   real-safari: the vectors in Safari itself, on a macOS runner. Weekly and by hand: it costs
+#                nothing on a public repo, but every push doesn't need it.
+name: Browser — vectors + smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '29 6 * * 2'   # Tuesdays 06:29 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  engines:
+    name: ${{ matrix.engine }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      - name: Install root dependencies (no install scripts)
+        run: npm ci --ignore-scripts
+
+      # The fake Worker signs credentials with worker/src/nut00.js.
+      - name: Install Worker dependencies (no install scripts)
+        working-directory: worker
+        run: npm ci --ignore-scripts
+
+      - name: Install ${{ matrix.engine }}
+        run: npx playwright install --with-deps ${{ matrix.engine }}
+
+      - name: Build the app into the harness
+        run: dev/share-harness/build.sh
+
+      - name: Vectors + smoke in ${{ matrix.engine }}
+        run: npx playwright test --project=${{ matrix.engine }}
+
+  real-safari:
+    name: real Safari (vectors)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      - name: Install root dependencies (no install scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Install Worker dependencies (no install scripts)
+        working-directory: worker
+        run: npm ci --ignore-scripts
+
+      - name: Build the app into the harness
+        run: dev/share-harness/build.sh
+
+      - name: Allow Safari to be driven
+        run: sudo safaridriver --enable
+
+      - name: Vectors in real Safari
+        run: node dev/share-harness/real-safari.mjs

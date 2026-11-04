@@ -18,12 +18,14 @@
 // random links]; the register keeps report_events (names of fields changed) and export returns them.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { issueBlindSignature } from '../../worker/src/nut00.js';
 import { blake3 } from '../../worker/node_modules/@noble/hashes/blake3.js';
 import { buildMerkleTree } from '../../worker/src/merkle.js';
 const KEY = '1'.repeat(64);
 const CHUNK = 32 * 1024 * 1024;
 const T = new Map();             // uuid → { total, bytes, chunks: [], dad, pw, expiry, done }
+const consumed = new Set();       // delete-after-download: the 410 tombstone (Test-Hardening-1)
 let ctl = { fail: 'none', slow: 0, rate: 0 };
 let lightning = 'phoenixd';      // GET/POST /admin/status (Admin-Access-1b)
 const ADMIN_KEY = process.env.FAKE_ADMIN_KEY || 'fake-admin-key';
@@ -111,11 +113,17 @@ http.createServer(async (req, res) => {
     if (TRANSFER.includes(u.pathname) && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, { error: 'missing_transfer_id' });
     // The receiver's password check, POST /unlock (any password opens it).
     if (u.pathname === '/unlock') {
-      await body(req);
+      const ub = JSON.parse((await body(req)) || '{}');
       if (ctl.fail === 'auth500') return json(res, 500, { error: 'boom' });
       if (ctl.fail === 'auth410') return json(res, 410, { error: 'Transfer expired' });
       if (ctl.fail === 'auth_cut') { req.socket.destroy(); return; }
-      return json(res, 200, { token: 'dl-token' });
+      // As the Worker (Test-Hardening-1): the hash of the right password, or 401. Token per transfer.
+      const ut = T.get(id);
+      if (consumed.has(id)) return json(res, 410, { error: 'deleted' });
+      if (!ut) return json(res, 404, { error: 'not found' });
+      const given = createHash('sha256').update(String(ub.passphrase ?? '')).digest('hex');
+      if (!ut.pw || given !== ut.pw) return json(res, 401, { error: 'wrong password' });
+      return json(res, 200, { token: 'dl-token-' + id });
     }
     if (p[0] === 'auth' || p[0] === 'chambers') {
       const b = req.method === 'POST' ? JSON.parse((await body(req)) || '{}') : {};
@@ -215,6 +223,7 @@ http.createServer(async (req, res) => {
       if (ctl.fail === 'meta_removed') return json(res, 410, { error: 'removed' });
       if (ctl.fail === 'meta_deleted') return json(res, 410, { error: 'deleted' });
       const t = T.get(id);
+      if (consumed.has(id)) return json(res, 410, { error: 'deleted' });
       if (t?.removed) return json(res, 410, { error: 'removed' });
       if (t && ctl.fail === 'meta_incomplete') return json(res, 200, { total_chunks: 0, expiry_timestamp: t.expiry, passphrase_protected: !!t.pw, pending_destruction: null });
       if (!t || !t.done) return json(res, 404, { error: 'not found' });
@@ -224,13 +233,15 @@ http.createServer(async (req, res) => {
     if (u.pathname === '/download') {
       if (!/^\d{4}$/.test(part)) return json(res, 400, { error: 'missing_part' });
       const t = T.get(id); if (!t || t.removed) return json(res, 410, { error: 'gone' });
+      // As the Worker: a password transfer's parts need this transfer's token (Test-Hardening-1).
+      if (t.pw && req.headers.authorization !== 'Bearer dl-token-' + id) return json(res, 401, { error: 'Invalid or expired download token' });
       if (ctl.fail === 'down:' + +part) return json(res, 503, { error: 'unavailable' });
       if (ctl.fail === 'dl401') return json(res, 401, { error: 'Invalid or expired download token' });
       console.log(`GET part ${part} ${Date.now() % 100000}`);
       if (ctl.slow) await sleep(ctl.slow);   // like the Worker: whole part read and checked before the first byte
       const b = t.chunks[+part]; res.writeHead(200, { ...cors, 'Content-Type': 'application/octet-stream', 'Content-Length': b.length,
         'X-Integrity': 'ciphertext-storage-verified', 'X-Chunk-Index': String(+part), 'Access-Control-Expose-Headers': 'X-Integrity, X-Chunk-Index' });
-      if (t.dad && +part === t.total - 1) setTimeout(() => T.delete(id), 2000);
+      if (t.dad && +part === t.total - 1) setTimeout(() => { T.delete(id); consumed.add(id); }, 2000);
       return send(res, b, dropOnce(+part));
     }
     json(res, 404, { error: 'no route ' + u.pathname });

@@ -5,14 +5,17 @@
 set -euo pipefail
 H="$(cd "$(dirname "$0")" && pwd)"; OUT="$H/.out"
 S="$(cd "$H/../.." && pwd)"
-"$S/bin/ship-app.sh" --check >/dev/null
+# CI has no Satoshi (never committed): --ci puts an empty stand-in in its slot, as app-check.yml does.
+MODE=--check; [ -n "${CI:-}" ] && MODE=--ci
+"$S/bin/ship-app.sh" "$MODE" >/dev/null
 rm -rf "$OUT/app"; mkdir -p "$OUT"; cp -R "$S/dist" "$OUT/app"; rm -f "$OUT/app/_headers"
 REL="$(sed -n 's|.*src="/v/\([0-9a-z]*\)/share.js".*|\1|p' "$OUT/app/index.html" | head -1)"
 A="$OUT/app/v/$REL"
 cp "$H/turnstile-stub.js" "$A/turnstile-stub.js"
-sed -i '' 's|https://api.share.refueler.io|http://localhost:8766|g' "$A/config.js" "$A/share-early.js"
-sed -i '' "s|https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit|/v/$REL/turnstile-stub.js|" "$A/signin.js" "$A/upload-turnstile.js"
-sed -i '' 's|https://refueler.io/notes/|http://localhost:8765/notes/|g' "$A/download-notes.js"
+# perl -pi, not sed -i: this also runs on GitHub's Linux runners (Test-Hardening-1).
+perl -pi -e 's|https://api.share.refueler.io|http://localhost:8766|g' "$A/config.js" "$A/share-early.js"
+perl -pi -e "s|https://challenges.cloudflare.com/turnstile/v0/api.js\\?render=explicit|/v/$REL/turnstile-stub.js|" "$A/signin.js" "$A/upload-turnstile.js"
+perl -pi -e 's|https://refueler.io/notes/|http://localhost:8765/notes/|g' "$A/download-notes.js"
 # Part retries wait 2 → 10 s live (~2 min before "Stopped"); 0.2 s each here.
 perl -0pi -e 's/RETRY_DELAYS_MS = \[[^\]]*\]/RETRY_DELAYS_MS = [200, 200, 200, 200, 200]/' "$A/progress.js"
 # Notes card: a fixed stand-in for refueler.io/notes/latest.json
@@ -20,4 +23,8 @@ mkdir -p "$OUT/app/notes"
 cat > "$OUT/app/notes/latest.json" <<'JSON'
 {"schema":"notes-latest.v1","title":"Harness article","summary":"A stand-in for the newest Notes article.","url":"http://localhost:8765/notes/harness/"}
 JSON
+# The vector page (H2): real built modules, real CSP. Harness only, never in dist/.
+mkdir -p "$OUT/app/kat"
+cp "$H/kat/index.html" "$H/kat/page.js" "$S/test-vectors/v1.json" "$S/test-vectors/run.mjs" "$OUT/app/kat/"
+printf '{"rel":"%s"}\n' "$REL" > "$OUT/app/kat/rel.json"
 echo "built $(date +%H:%M:%S) (release $REL)"
