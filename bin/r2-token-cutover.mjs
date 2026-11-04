@@ -53,11 +53,13 @@ function accessToken() {
 }
 
 async function devUrl() {
+  // Before the fetch's timeout starts: a browser sign-in here can take longer than the timeout.
+  const access = accessToken();
   const res = await fetch(`${ADMIN}/admin/r2-presign-test`, {
     method: 'POST',
     redirect: 'manual',
     signal: AbortSignal.timeout(20_000),
-    headers: { 'cf-access-token': accessToken(), 'X-Admin-Key': KEY, 'Content-Type': 'application/json' },
+    headers: { 'cf-access-token': access, 'X-Admin-Key': KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: OBJECT }),
   });
   if (res.status !== 200) stop(`/admin/r2-presign-test answered ${res.status}. Is the admin key right, and Access signed in?`);
