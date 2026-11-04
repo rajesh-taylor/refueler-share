@@ -23,7 +23,8 @@ jobs:
   engines:
     name: ${{ matrix.engine }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Browser install is usually under a minute, but took 12 once (4 Nov 2026).
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
