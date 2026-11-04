@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v0.9 | **Created:** S63 · 27 July 2026 | **Updated:** Integration-Repair-1 · 28 Oct 2026
+> **Version:** v1.0 | **Created:** S63 · 27 July 2026 | **Updated:** Test-Hardening-1 · 4 Nov 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -26,9 +26,9 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 ## 2. Current test suite
 
-Two suites, run separately (Vitest 4):
+Worker suites, run separately (Vitest 4), then the browser tests (§2a):
 
-- **Main suite** — `worker/test/` (54 files, 1,125 passing), `cd worker && npm test`. Runs inside workerd via `@cloudflare/vitest-plugin`. Pure logic plus handlers against in-memory KV/R2. The old `worker/tests/unit/` files (`destroy.test.js`, `webhook_reg.test.js`) were stale copies of what `test/` now covers and were removed at Integration-Repair-1.
+- **Main suite** — `worker/test/` (62 files, 1,461 passing, 29 todo), `cd worker && npm test`. Runs inside workerd via `@cloudflare/vitest-plugin`. Pure logic plus handlers against in-memory KV/R2. The old `worker/tests/unit/` files (`destroy.test.js`, `webhook_reg.test.js`) were stale copies of what `test/` now covers and were removed at Integration-Repair-1.
 - **Integration suite** — `worker/tests/integration/` (3 files, 68 passing), `cd worker && npm run test:integration`. Real HTTP against `wrangler dev --local` (§3).
 
 **Integration suites:**
@@ -46,6 +46,21 @@ Two suites, run separately (Vitest 4):
 3. **The credential→upload chain** — closed S64.
 4. **Stripe webhook → Supabase** — closed S71/S72.
 5. **HTTP routing** — closed S64–S66.
+
+---
+
+## 2a. Browser, fuzz and mutation tests (Test-Hardening-1, 4 Nov 2026)
+
+| What | Where | Runs | Proves |
+|---|---|---|---|
+| **Known-answer vectors** | `test-vectors/v1.json`, checks in `run.mjs` | workerd (`worker/test/kat-vectors.test.js`), Chromium, Firefox, Playwright WebKit on every push; real Safari weekly | The browser and the Worker give the same answers as independent sources: AES-GCM + HKDF + STREAM nonces, BLAKE3 (WASM and noble), SHA-256, link fragment, NUT-00 + NUT-12. `gen.py` imports nothing of Share's. Each browser must run the WASM BLAKE3 under the CSP |
+| **Flow smoke** | `dev/share-harness/tests/smoke.spec.mjs` | Three engines on every push | The real built app under the real CSP (only the API origin swapped): send, stranger's download, two parts, half links, wrong key, password, delete after download, folder, resume, Chromium's stream save. No key or name on the wire; stored bytes open outside the browser with the link's key |
+| **Property tests** | `worker/test/fuzz.test.js` (fast-check 4.10.2) | `npm test`, fixed seed 20261104, 500 runs per property; random seeds on the Mac | Tokens, range, manifest, fragment, proofs, headers and transfer routes never crash or accept the wrong thing |
+| **Mutants** | `dev/mutants/run.mjs` (272, no package) | By hand, about 20 min; not a CI gate | Which lines no test is watching. `worker/test/crypto-edges.test.js` came from this |
+
+Local: `npm run test:browser` from the repo root (`--project=webkit` etc. after `dev/share-harness/build.sh`). Workflow: `.github/workflows/browser.yml`.
+
+**What these don't prove.** The smoke runs against a fake Worker, so it proves the app and its use of the API; the Worker's own behaviour is the two suites above. Playwright WebKit is not Safari. Real Safari runs only the vectors, on GitHub's macOS image, whose Safari can lag the current one; flows in real Safari stay the Safari + Mullvad check in `CLAUDE.md`. Results that point at test gaps or open issues stay in the private repo. Three 32 MiB BLAKE3 tests can pass their 5 s limit on a very busy machine.
 
 ---
 
@@ -338,6 +353,9 @@ New endpoint required: `POST /admin/test-results` — scheduled with the dashboa
 ```
 refueler-share/
   TESTING.md                          ← this file
+  test-vectors/                       ← Test-Hardening-1: v1.json, gen.py, run.mjs
+  dev/share-harness/tests/            ← kat + smoke specs; dev/mutants/run.mjs beside it
+  playwright.config.mjs
   scripts/
     tg-smoke.sh                       ← S-TG-5 production smoke (10 boundary checks)
   docs/

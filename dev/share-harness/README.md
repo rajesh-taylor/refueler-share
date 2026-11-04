@@ -8,6 +8,8 @@ before `bin/ship-app.sh`. Nothing here is deployed. (No CSP here: `_headers` is 
     node dev/share-harness/fake-worker.mjs     # :8766, in-memory
     python3 -m http.server 8765 --directory dev/share-harness/.out/app
 
+Or under the real CSP, as the tests do: `node dev/share-harness/serve-app.mjs` in place of the python line. Tests (Test-Hardening-1, TESTING.md §2a): `npm run test:browser` from the repo root; `/kat/` runs the vectors in whatever browser opens it. The fake's `/unlock` now wants the right password, and its `/download` the token, on password transfers.
+
 Open http://localhost:8765/. The fake Worker signs credentials with `worker/src/nut00.js`
 (a fixed test key), so the browser's DLEQ check and the real AES-GCM path both run.
 
