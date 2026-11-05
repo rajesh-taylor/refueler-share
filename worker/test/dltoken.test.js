@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import worker from '../src/index.js';
 import {
   issueDownloadToken, verifyDownloadToken, timingSafeEqual, hashSecret,
-} from '../src/nut11.js';
+} from '../src/download_gate.js';
 import indexSrc from '../src/index.js?raw';
 import downloadSrc from '../src/handlers/download.js?raw';
 import deleteSrc from '../src/handlers/delete_transfer.js?raw';
@@ -28,13 +28,11 @@ const MINT = 'ab'.repeat(32);
 const NOW = Math.floor(Date.now() / 1000);
 const FAR = 4102444800; // 1 Jan 2100
 const UUID = '0f8fad5b-d9cb-469f-a165-70867728950e';
-const OPEN = String(NOW + 3600);
-const SHUT = String(NOW - 1);
 
 const b64url = (s) => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 const payloadFor = (uuid, exp) => b64url(JSON.stringify({ uuid, exp }));
 
-/** The old form: HMAC-SHA256(mint key, payload). Only tests may still sign one. */
+/** The old form, HMAC-SHA256(mint key, payload): gone at Worker-Keys-2. Tests sign one, with a test key, to prove it stays refused. */
 async function mintSigned(uuid, exp, mintHex = MINT) {
   const payload = payloadFor(uuid, exp);
   const bytes = Uint8Array.from(mintHex.match(/../g), (h) => parseInt(h, 16));
@@ -115,7 +113,7 @@ describe('fails closed without DL_TOKEN_KEY', () => {
 
   it('issues nothing, and never signs with the mint key', async () => {
     for (const k of unusable) {
-      const env = { DL_TOKEN_KEY: k, MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: OPEN };
+      const env = { DL_TOKEN_KEY: k, MINT_PRIVATE_KEY: MINT };
       expect(await issueDownloadToken(UUID, env, FAR), String(k)).toBeNull();
     }
   });
@@ -123,56 +121,33 @@ describe('fails closed without DL_TOKEN_KEY', () => {
   it('a new-form token does not verify, and the mint key does not stand in', async () => {
     const token = await issueDownloadToken(UUID, { DL_TOKEN_KEY: KEY_B64 }, FAR);
     for (const k of unusable) {
-      const env = { DL_TOKEN_KEY: k, MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: OPEN };
+      const env = { DL_TOKEN_KEY: k, MINT_PRIVATE_KEY: MINT };
       expect((await verifyDownloadToken(token, env)).valid, String(k)).toBe(false);
     }
   });
 });
 
-describe('the overlap: old mint-keyed tokens verify, then stop', () => {
-  const base = { DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: MINT };
+describe('the old mint-keyed form is gone', () => {
+  const env = { DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: MINT };
 
-  it('verifies while DL_TOKEN_LEGACY_UNTIL is in the future', async () => {
-    const token = await mintSigned(UUID, FAR);
-    expect(await verifyDownloadToken(token, { ...base, DL_TOKEN_LEGACY_UNTIL: OPEN }))
-      .toEqual({ valid: true, uuid: UUID });
+  it('DONE-PROOF: a genuine mint-signed token is refused, with the mint key set', async () => {
+    expect((await verifyDownloadToken(await mintSigned(UUID, FAR), env)).valid).toBe(false);
   });
 
-  it('verifies even if DL_TOKEN_KEY is missing: a deploy before the secret keeps old tabs working', async () => {
+  it('DONE-PROOF: the old setting reopens nothing, if it were ever set again', async () => {
     const token = await mintSigned(UUID, FAR);
-    expect((await verifyDownloadToken(token, { MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: OPEN })).valid).toBe(true);
-  });
-
-  it('DONE-PROOF: a mint-signed token is refused once the overlap has shut', async () => {
-    const token = await mintSigned(UUID, FAR);
-    expect((await verifyDownloadToken(token, { ...base, DL_TOKEN_LEGACY_UNTIL: SHUT })).valid).toBe(false);
-  });
-
-  it('DONE-PROOF: refused when the setting is gone, as after the follow-up commit', async () => {
-    const token = await mintSigned(UUID, FAR);
-    for (const until of [undefined, '', 'soon', '0']) {
-      expect((await verifyDownloadToken(token, { ...base, DL_TOKEN_LEGACY_UNTIL: until })).valid, String(until)).toBe(false);
-    }
+    const stale = { ...env, DL_TOKEN_LEGACY_UNTIL: String(NOW + 3600) };
+    expect((await verifyDownloadToken(token, stale)).valid).toBe(false);
   });
 
   it('a mint-keyed signature inside the new form is refused', async () => {
     const [payload, sig] = (await mintSigned(UUID, FAR)).split('.');
-    expect((await verifyDownloadToken(`dl1.${payload}.${sig}`, { ...base, DL_TOKEN_LEGACY_UNTIL: OPEN })).valid).toBe(false);
+    expect((await verifyDownloadToken(`dl1.${payload}.${sig}`, env)).valid).toBe(false);
   });
 
   it('a new-key signature in the old form is refused', async () => {
-    const [, payload, sig] = (await issueDownloadToken(UUID, base, FAR)).split('.');
-    expect((await verifyDownloadToken(`${payload}.${sig}`, { ...base, DL_TOKEN_LEGACY_UNTIL: OPEN })).valid).toBe(false);
-  });
-
-  it('old tokens from another mint key, or with no mint key set, are refused', async () => {
-    const token = await mintSigned(UUID, FAR, 'cd'.repeat(32));
-    expect((await verifyDownloadToken(token, { ...base, DL_TOKEN_LEGACY_UNTIL: OPEN })).valid).toBe(false);
-    const good = await mintSigned(UUID, FAR);
-    for (const m of [undefined, '', 'not-hex', MINT.slice(0, 62)]) {
-      const env = { DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: m, DL_TOKEN_LEGACY_UNTIL: OPEN };
-      expect((await verifyDownloadToken(good, env)).valid, String(m)).toBe(false);
-    }
+    const [, payload, sig] = (await issueDownloadToken(UUID, env, FAR)).split('.');
+    expect((await verifyDownloadToken(`${payload}.${sig}`, env)).valid).toBe(false);
   });
 });
 
@@ -182,14 +157,15 @@ describe('the overlap: old mint-keyed tokens verify, then stop', () => {
 describe('regression: a junk signature never passes', () => {
   const FORGED = 'eyJ1dWlkIjoiMGY4ZmFkNWItZDljYi00NjlmLWExNjUtNzA4Njc3Mjg5NTBlIiwiZXhwIjo0MTAyNDQ4NzM1fQ'
     + '.zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
-  const env = { DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: OPEN };
+  const env = { DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: MINT };
 
   it('the token the old check accepted is refused', async () => {
     expect((await verifyDownloadToken(FORGED, env)).valid).toBe(false);
   });
 
-  it('a genuine token for the same claims does verify, so the refusal above means the signature', async () => {
-    expect((await verifyDownloadToken(await mintSigned(UUID, 4102448735), env)).valid).toBe(true);
+  it('the same junk signature in the new form is refused; a genuine one for those claims verifies', async () => {
+    expect((await verifyDownloadToken(`dl1.${FORGED}`, env)).valid).toBe(false);
+    expect((await verifyDownloadToken(await issueDownloadToken(UUID, env, 4102448735), env)).valid).toBe(true);
   });
 
   it('20,000 tries at one junk signature, both forms: none pass', async () => {
@@ -210,6 +186,21 @@ describe('regression: a junk signature never passes', () => {
     expect(timingSafeEqual('ab'.repeat(32), 'ab'.repeat(32))).toBe(true);
     expect(timingSafeEqual('AB', 'ab')).toBe(true);
     expect(timingSafeEqual('ab'.repeat(32), 'ac'.repeat(32))).toBe(false);
+  });
+
+  it('timingSafeEqual: one changed hex digit anywhere in a digest is unequal', () => {
+    const digest = '0123456789abcdef'.repeat(4);
+    for (let i = 0; i < digest.length; i++) {
+      const other = digest.slice(0, i) + (digest[i] === 'a' ? 'b' : 'a') + digest.slice(i + 1);
+      expect(timingSafeEqual(digest, other), `digit ${i}`).toBe(false);
+    }
+  });
+
+  it('timingSafeEqual: every pair of byte values stays distinct', () => {
+    const hex = (n) => n.toString(16).padStart(2, '0');
+    for (let a = 0; a < 256; a++) {
+      for (let b = 0; b < 256; b++) expect(timingSafeEqual(hex(a), hex(b))).toBe(a === b);
+    }
   });
 });
 
@@ -244,7 +235,7 @@ describe('every route, with real tokens', () => {
     });
     env = {
       BUCKET: bucket, STATUS_KV: makeKV(), ENVIRONMENT: 'test',
-      DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: OPEN,
+      DL_TOKEN_KEY: KEY_B64, MINT_PRIVATE_KEY: MINT,
     };
   });
   afterEach(() => vi.restoreAllMocks());
@@ -271,12 +262,9 @@ describe('every route, with real tokens', () => {
     expect((await wrong()).status).toBe(401);
   }, 20000);
 
-  it('GET /download: old token in the overlap passes; after it, and any forged one, 401', async () => {
-    const old = await mintSigned(UUID, FAR);
-    expect((await call('/download', 'GET', bearer(old))).status).not.toBe(401);
+  it('GET /download: a genuine old-form token and a forged one: both 401', async () => {
+    expect((await call('/download', 'GET', bearer(await mintSigned(UUID, FAR)))).status).toBe(401);
     expect((await call('/download', 'GET', bearer(forged()))).status).toBe(401);
-    env.DL_TOKEN_LEGACY_UNTIL = SHUT;
-    expect((await call('/download', 'GET', bearer(old))).status).toBe(401);
   });
 
   it('GET /download with no token on a password transfer: 401', async () => {
@@ -290,17 +278,16 @@ describe('every route, with real tokens', () => {
     expect((await call('/transfer', 'DELETE', bearer(token))).status).toBe(403);
   });
 
-  it('POST /confirm: forged and shut-out tokens refused, a real one accepted', async () => {
-    const old = await mintSigned(UUID, FAR);
+  it('POST /confirm: forged and old-form tokens refused, a real one accepted', async () => {
+    expect((await call('/confirm', 'POST', bearer(await mintSigned(UUID, FAR)))).status).toBe(403);
     expect((await call('/confirm', 'POST', bearer(forged()))).status).toBe(403);
     const real = await issueDownloadToken(UUID, env, FAR);
     expect((await call('/confirm', 'POST', bearer(real))).status).toBe(200);
-    env.DL_TOKEN_LEGACY_UNTIL = SHUT;
-    expect((await call('/confirm', 'POST', bearer(old))).status).toBe(403);
   });
 
   it('DELETE /transfer: a forged token destroys nothing; a real one does', async () => {
     expect((await call('/transfer', 'DELETE', bearer(forged()))).status).toBe(403);
+    expect((await call('/transfer', 'DELETE', bearer(await mintSigned(UUID, FAR)))).status).toBe(403);
     const before = JSON.parse(await (await bucket.get(`${UUID}/manifest.json`)).text());
     expect(before.consumed).toBeUndefined();
     const real = await issueDownloadToken(UUID, env, FAR);

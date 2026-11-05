@@ -75,7 +75,7 @@
 
 import { UUID_RE, safeGetManifest, json, err, parseRange, scrubUuids } from '../utils.js';
 import { isDownloadBlocked, requiresPassphrase } from '../manifest.js';
-import { verifyDownloadToken } from '../nut11.js';
+import { verifyDownloadToken } from '../download_gate.js';
 import { checkTransferStatus, flipPendingDestruction } from '../manifest_tg.js';
 import { issueReceipt } from '../receipts.js';
 import { hasCref } from '../seal.js';
@@ -247,13 +247,19 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
     return finishDownload(request, env, ctx, uuid, chunkIndex, manifest, dlResponse);
   }
 
-  // ── Legacy path (pre-6-3, no merkle_root) — UNCHANGED.
-  const obj = await env.BUCKET.get(key, {
-    range: request.headers.has('Range') ? parseRange(request.headers.get('Range')) : undefined,
-  });
+  // ── Legacy path (pre-6-3, no merkle_root).
+  // A Range that can't be read is ignored, as HTTP allows: whole object, 200. 206 only for a real range.
+  const range = request.headers.has('Range') ? parseRange(request.headers.get('Range')) : undefined;
+  if (range) {
+    // Checked first: R2's error for an offset past the end isn't one spelling we can rely on.
+    const head = await env.BUCKET.head(key);
+    if (!head) return err(404, 'Chunk not found');
+    if (range.offset >= head.size) return err(416, 'Range not satisfiable');
+  }
+  const obj = await env.BUCKET.get(key, { range });
   if (!obj) return err(404, 'Chunk not found');
 
-  const status = request.headers.has('Range') ? 206 : 200;
+  const status = range ? 206 : 200;
   const headers = new Headers({
     'Content-Type':    'application/octet-stream',
     'Cache-Control':   'private, no-store',
@@ -262,7 +268,8 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
   });
 
   if (obj.range) {
-    headers.set('Content-Range', `bytes ${obj.range.offset}-${obj.range.end}/${obj.size}`);
+    // R2 reports { offset, length }; there is no .end.
+    headers.set('Content-Range', `bytes ${obj.range.offset}-${obj.range.offset + obj.range.length - 1}/${obj.size}`);
   }
 
   const dlResponse = new Response(obj.body, { status, headers });

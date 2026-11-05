@@ -86,6 +86,9 @@ export async function verifySessionToken(env, token, uuid, nowSeconds) {
   const presented = b64urlToBytes(m[3]);
   const expected  = await sessionMac(key, uuid, totalChunks, sessionExp);
   if (!presented || !expected || presented.length !== expected.length) return null;
+  // One token, one spelling: the last character has spare bits, and finalise finds the quota
+  // reservation by hashing the token as presented.
+  if (bytesToB64url(presented) !== m[3]) return null;
   return crypto.subtle.timingSafeEqual(presented, expected) ? { totalChunks, sessionExp } : null;
 }
 

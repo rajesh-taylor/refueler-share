@@ -241,9 +241,17 @@ export function addCors(response, request) {
 }
 
 export function parseRange(rangeHeader) {
-  const m = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+  const m = /^bytes=(\d+)-(\d*)$/.exec(rangeHeader);
   if (!m) return undefined;
-  const offset = parseInt(m[1], 10);
-  const end    = m[2] ? parseInt(m[2], 10) : undefined;
-  return { offset, length: end !== undefined ? end - offset + 1 : undefined };
+  const offset = Number(m[1]);
+  if (!Number.isSafeInteger(offset)) return undefined;
+  if (!m[2]) return { offset, length: undefined };
+  const length = Number(m[2]) - offset + 1;
+  if (!Number.isSafeInteger(Number(m[2])) || !Number.isSafeInteger(length) || length < 1) return undefined;
+  return { offset, length };
+}
+
+/** A parsed JSON body the handler can read fields from: not null, an array or a bare value. */
+export function isJsonObject(v) {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }

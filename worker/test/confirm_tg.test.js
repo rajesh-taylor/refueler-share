@@ -203,8 +203,8 @@ describe('buildTombstone', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Import after pure-fn tests so vi.mock works at module boundary.
-// We mock the R2 / KV / nut11 deps that confirm_transfer.js uses indirectly
-// via manifest.js and nut11.js.
+// We mock the R2 / KV / download_gate deps that confirm_transfer.js uses indirectly
+// via manifest.js and download_gate.js.
 
 import { handleConfirmTransfer } from '../src/handlers/confirm_transfer.js';
 import { makeBucket } from './_r2_mock.js';
@@ -245,15 +245,15 @@ function makeCtx() {
   };
 }
 
-// ── Mock nut11.verifyDownloadToken ─────────────────────────────────────────
-vi.mock('../src/nut11.js', () => ({
+// ── Mock download_gate.verifyDownloadToken ─────────────────────────────────────────
+vi.mock('../src/download_gate.js', () => ({
   verifyDownloadToken: vi.fn(),
   hashSecret:          vi.fn(),
   timingSafeEqual:     vi.fn(),
   issueDownloadToken:  vi.fn(),
 }));
 
-import { verifyDownloadToken } from '../src/nut11.js';
+import { verifyDownloadToken } from '../src/download_gate.js';
 
 // ── Mock manifest.js safeGetManifest / putManifest ───────────────────────
 // confirm_transfer.js imports safeGetManifest from '../manifest.js'.

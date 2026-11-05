@@ -1,7 +1,8 @@
 /**
- * nut11.js — NUT-11 Mode 1 helpers
+ * download_gate.js — what stands between a request and a password-protected download
  *
- * Passphrase hashing, timing-safe comparison of hex digests, and download tokens.
+ * Password hashing, timing-safe comparison of hex digests, and download tokens.
+ * (Was nut11.js until Worker-Keys-2: it never had anything to do with NUT-11.)
  * Tokens are HMAC-SHA256 signed, bound to a UUID, valid until the transfer expires.
  *
  * LAYER BOUNDARY: This module handles download gating only.
@@ -48,11 +49,7 @@ export function timingSafeEqual(a, b) {
 //   payload = b64url(json({ uuid, exp }))     exp = the transfer's own expiry, not a short TTL.
 //
 // Fails closed: no usable DL_TOKEN_KEY → nothing is issued and no dl1 token verifies. The mint
-// key never signs. WebCrypto only; known-answer vector in test/dltoken.test.js.
-//
-// Overlap: the old form (b64url(json).b64url(HMAC-SHA256(mint key, payload))) still VERIFIES
-// while env.DL_TOKEN_LEGACY_UNTIL (unix seconds) is in the future. Unset, or past, means refused:
-// the overlap shuts itself even if the follow-up commit deleting it slips.
+// key never signs or verifies. WebCrypto only; known-answer vector in test/dltoken.test.js.
 // ─────────────────────────────────────────────────────────────────────────────
 const DL_TOKEN_TAG   = 'refueler.share.dltoken.v1';
 const DL_TOKEN_BYTES = 32;
@@ -107,24 +104,12 @@ export async function verifyDownloadToken(token, env) {
     if (typeof token !== 'string') return refused;
     const parts = token.split('.');
     const now = Math.floor(Date.now() / 1000);
-    let payload;
-    if (parts.length === 3 && parts[0] === 'dl1') {
-      const key = await dlTokenKey(env);
-      const sig = sigBytes(parts[2]);
-      if (!key || !sig) return refused;
-      payload = parts[1];
-      if (!(await crypto.subtle.verify('HMAC', key, sig, tagged(textEnc.encode(payload))))) return refused;
-    } else if (parts.length === 2) {
-      // Old form. Delete this branch, and DL_TOKEN_LEGACY_UNTIL, at the follow-up commit.
-      if (!(Number(env?.DL_TOKEN_LEGACY_UNTIL) > now)) return refused;
-      const key = await legacyMintHmacKey(env?.MINT_PRIVATE_KEY);
-      const sig = sigBytes(parts[1]);
-      if (!key || !sig) return refused;
-      payload = parts[0];
-      if (!(await crypto.subtle.verify('HMAC', key, sig, textEnc.encode(payload)))) return refused;
-    } else {
-      return refused;
-    }
+    if (parts.length !== 3 || parts[0] !== 'dl1') return refused;
+    const key = await dlTokenKey(env);
+    const sig = sigBytes(parts[2]);
+    if (!key || !sig) return refused;
+    const payload = parts[1];
+    if (!(await crypto.subtle.verify('HMAC', key, sig, tagged(textEnc.encode(payload))))) return refused;
     const claims = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
     if (typeof claims?.uuid !== 'string' || !Number.isInteger(claims.exp) || now > claims.exp) return refused;
     return { valid: true, uuid: claims.uuid };
@@ -143,12 +128,6 @@ function sigBytes(sigB64) {
   if (!SIG_B64URL.test(sigB64)) return null;
   const bytes = Uint8Array.from(atob(sigB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
   return bufToBase64url(bytes) === sigB64 ? bytes : null;
-}
-
-// Verify only, and only inside the overlap. The mint key never signs a token.
-async function legacyMintHmacKey(mintPrivkeyHex) {
-  if (typeof mintPrivkeyHex !== 'string' || !HEX.test(mintPrivkeyHex) || mintPrivkeyHex.length !== 64) return null;
-  return crypto.subtle.importKey('raw', hexToBytes(mintPrivkeyHex), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
 }
 
 function hexToBytes(hex) {

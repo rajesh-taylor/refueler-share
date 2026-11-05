@@ -3,7 +3,7 @@ import { verifyTurnstileToken } from './turnstile.js';
 import { issueBlindSignature, verifyProofV2 } from './nut00.js';
 import { computeCommitment } from './commitment.js';
 import { createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS, CHARTERED_CAP_BYTES } from './manifest.js';
-import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './nut11.js';
+import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './download_gate.js';
 // verifyStripeWebhook, createCheckoutSession — imported by ./handlers/stripe_sub.js
 import { checkRateLimit, getClientIp, rateLimitResponse } from './ratelimit.js';
 import { checkTransferStatus, flipPendingDestruction, buildTombstone, isTidalPermitted, validateTidalHeaders, getTimestampState, buildTimestampPendingPatch, isTimestampEligible } from './manifest_tg.js';
@@ -49,7 +49,7 @@ import { handleSandboxActivate, handleSandboxReset, handleSandboxStatus, handleS
 import {
   UUID_RE, MANIFEST_SIZE_MAX,
   corsHeaders, safeGetManifest, supabaseFetch,
-  json, err, addCors, parseRange, requireAdmin, setAppOrigins, scrubUuids, transferUuid } from './utils.js';
+  json, err, isJsonObject, addCors, parseRange, requireAdmin, setAppOrigins, scrubUuids, transferUuid } from './utils.js';
 
 import { TIERS, CITIZEN, isCharteredTier } from './tiers.js';
 // Share-6-1: direct-to-R2 presigning + upload-session token + transfer cost
@@ -469,12 +469,25 @@ const worker = {
       if (request.method === 'DELETE' && path === '/transfer') {
         const uuid = uuidOf();
         if (!uuid) return noTransferId();
+        // Rate limit: 30 requests / 60s per IP. Per IP only: a per-transfer limit would let anyone
+        // holding the link stop the real recipient deleting or confirming.
+        const rlDel = await checkRateLimit(env, getClientIp(request), 'delete_transfer', 30, 60);
+        if (rlDel.limited) {
+          logEvent(env, { endpoint: 'delete_transfer', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_ip' });
+          return rateLimitResponse(request, rlDel.resetAt, corsHeaders(request));
+        }
         return timed('delete_transfer', () => handleDeleteTransfer(request, env, uuid).then(r => addCors(r, request)));
       }
 
       if (request.method === 'POST' && path === '/confirm') {
         const uuid = uuidOf();
         if (!uuid) return noTransferId();
+        // Rate limit: 30 requests / 60s per IP, its own count (see DELETE /transfer).
+        const rlConfirm = await checkRateLimit(env, getClientIp(request), 'confirm_transfer', 30, 60);
+        if (rlConfirm.limited) {
+          logEvent(env, { endpoint: 'confirm_transfer', tier: 'rate_limited', status: 429, latency: performance.now() - t0, errorMsg: 'rate_limit_ip' });
+          return rateLimitResponse(request, rlConfirm.resetAt, corsHeaders(request));
+        }
         return timed('confirm_transfer', () => handleConfirmTransfer(request, env, ctx, uuid).then(r => addCors(r, request)));
       }
 
@@ -945,10 +958,13 @@ async function handleLogError(request, env, ctx) {
 
   let body;
   try { body = await request.json(); } catch { return new Response('OK', { status: 200 }); }
+  if (!isJsonObject(body)) return new Response('OK', { status: 200 });
 
-  const context = String(body.context || '').slice(0, 64);
-  const message = String(body.message || '').slice(0, 200);
-  const detail  = String(body.detail  || '').slice(0, 200);
+  // Strings only: anything else counts as empty, and is never coerced.
+  const field   = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+  const context = field(body.context, 64);
+  const message = field(body.message, 200);
+  const detail  = field(body.detail, 200);
 
   // Share-B10-1 (B7 snag S93–S95): receiver A/B telemetry is NOT an error — it is
   // a legitimate completion signal that was mis-routed here and so polluted the
@@ -1196,9 +1212,10 @@ async function handleCredentialIssue(request, env) {
   } catch {
     return err(400, 'Invalid JSON');
   }
+  if (!isJsonObject(body)) return err(400, 'Invalid JSON');
 
   const { blinded_message, tier = 'free' } = body;
-  if (!blinded_message) return err(400, 'Missing blinded_message');
+  if (!blinded_message || typeof blinded_message !== 'string') return err(400, 'Missing blinded_message');
 
   // Resume-issue path removed (Cred-Fix-1) — resume uses the upload session token.
   if (body.resume === true) {
@@ -1214,7 +1231,7 @@ async function handleCredentialIssue(request, env) {
 
   // ── Turnstile required ───────────────────────────────────────────────
   const { turnstile_token } = body;
-  if (!turnstile_token) return err(400, 'Missing turnstile_token or blinded_message');
+  if (!turnstile_token || typeof turnstile_token !== 'string') return err(400, 'Missing turnstile_token or blinded_message');
 
   const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
   if (!turnstileOk) return err(403, 'Turnstile verification failed');
@@ -1241,7 +1258,8 @@ async function handleCredentialIssue(request, env) {
     console.error('Turnstile nonce KV write failed:', e)
   );
 
-  const issuedTier      = EXPIRY_WINDOWS[tier] !== undefined ? tier : 'free';
+  // hasOwn: "constructor" or "__proto__" is not a tier.
+  const issuedTier      = typeof tier === 'string' && Object.hasOwn(EXPIRY_WINDOWS, tier) ? tier : 'free';
   const expiryWindow    = EXPIRY_WINDOWS[issuedTier];
   const allocationBytes = TIER_CAPS[issuedTier] ?? TIER_CAPS.free;
 
@@ -1279,6 +1297,7 @@ async function handleAuth(request, env, uuid) {
   } catch {
     return err(400, 'Invalid JSON');
   }
+  if (!isJsonObject(body)) return err(400, 'Invalid JSON');
 
   const { passphrase } = body;
   if (!passphrase || typeof passphrase !== 'string') return err(400, 'Missing passphrase');
@@ -2008,11 +2027,13 @@ async function handleUploadUrls(request, env, uuid) {
   } catch {
     return err(400, 'Invalid JSON');
   }
+  if (!isJsonObject(body)) return err(400, 'Invalid JSON');
   // B12-1d: /urls serves full chunks 0…N−2 only. The tail URL came from
   // /initiate; from ≥ N−1 is a plain 400 (the frontend's old-record signal).
   const fullCount = totalChunks - 1;
-  const from  = parseInt(body.from, 10);
-  let   count = parseInt(body.count, 10);
+  // JSON numbers only, never coerced.
+  const from  = body.from;
+  let   count = body.count;
   if (!Number.isInteger(from) || from < 0 || from >= fullCount) {
     return err(400, 'from out of range');
   }

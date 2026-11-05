@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { makeBucket, makeKV, FULL } from './_r2_mock.js';
 
 // Isolate the units under test from heavy siblings (WASM, crypto, receipts).
-vi.mock('../src/nut11.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
+vi.mock('../src/download_gate.js',                     () => ({ verifyDownloadToken: vi.fn(async (_t, _k) => ({ valid: true, uuid: globalThis.__uuid })) }));
 vi.mock('../src/receipts.js',                  () => ({ issueReceipt: vi.fn() }));
 vi.mock('../src/webhook_delivery.js',          () => ({ notifyTransfer: vi.fn(async () => {}), EVENTS: { CONFIRMED: 'transfer.confirmed' } }));
 vi.mock('../src/handlers/download_verify.js',  () => ({ isVerifiedPath: vi.fn(), readSidecarWithRootCheck: vi.fn(), verifyChunkStream: vi.fn() }));

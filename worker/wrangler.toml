@@ -85,10 +85,6 @@ ADMIN_HOST                 = "admin.share.refueler.io"
 ACCESS_TEAM                = "refueler"
 ACCESS_AUD                 = "80791e08c0e4393cd50e014a4c44c421fa09e2293cc2e7138973367ab3b05a0a"
 ADMIN_PUBLIC_UNTIL         = "1793545200"
-# Worker-Keys-1 (src/nut11.js): old mint-keyed download tokens still VERIFY until this time, never
-# sign. 1794484800 = Thu 12 Nov 2026 12:00 UTC; it shuts itself then, and the follow-up commit
-# deletes this line and the fallback. Unset or past = refused.
-DL_TOKEN_LEGACY_UNTIL      = "1794484800"
 
 # R2 lifecycle rules are applied via Wrangler CLI — see docs/r2-lifecycle.md
 # Rule 1: AbortIncompleteMultipartUpload — 24h (entire bucket)

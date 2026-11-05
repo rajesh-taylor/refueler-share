@@ -5,19 +5,15 @@
 // publishes a new failing input before its fix. Random seeds run on the Mac:
 //   VITE_FUZZ_SEED=$RANDOM VITE_FUZZ_RUNS=5000 npx vitest run test/fuzz.test.js
 // A failure prints its seed and shrunk input. Once FIXED, its input goes in fuzz-corpus/.
-//
-// The old mint-keyed token form goes when the overlap does (Worker-Keys-2, on or after 12 Nov):
-// delete the tests marked OLD FORM then. They set DL_TOKEN_LEGACY_UNTIL themselves, so they don't
-// depend on today's date, and nothing here changes the fallback.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
 
 import worker from '../src/index.js';
-import { issueDownloadToken, verifyDownloadToken, timingSafeEqual } from '../src/nut11.js';
+import { issueDownloadToken, verifyDownloadToken, timingSafeEqual } from '../src/download_gate.js';
 import { makeSessionToken, verifySessionToken, MAX_TRANSFER_CHUNKS } from '../src/upload_session.js';
 import { parseRange, transferUuid, UUID_RE } from '../src/utils.js';
-import { getManifest, requiresPassphrase } from '../src/manifest.js';
+import { getManifest, isExpired, isDownloadBlocked, isInGracePeriod, requiresPassphrase } from '../src/manifest.js';
 import { safeGetManifest } from '../src/utils.js';
 import { verifyProofV2, keysetIdFor } from '../src/nut00.js';
 import { parseHmacCredentials } from '../src/api_auth.js';
@@ -165,50 +161,20 @@ describe('download tokens, new form', () => {
   });
 });
 
-describe('download tokens, OLD FORM (delete with the overlap at Worker-Keys-2)', () => {
-  const open = () => ({ DL_TOKEN_KEY: DL_KEY, MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: String(NOW() + 3600) });
-  const shut = () => ({ DL_TOKEN_KEY: DL_KEY, MINT_PRIVATE_KEY: MINT, DL_TOKEN_LEGACY_UNTIL: String(NOW() - 1) });
+describe('download tokens, the old mint-keyed form stays refused', () => {
+  const env = { DL_TOKEN_KEY: DL_KEY, MINT_PRIVATE_KEY: MINT };
 
-  it('junk is refused while the overlap is open', async () => {
-    await fc.assert(fc.asyncProperty(tokenLike, async (t) => {
-      expect(await verifyDownloadToken(t, open())).toEqual(REFUSED);
-    }), cfg());
-  });
-
-  it('a real old token passes only while the overlap is open', async () => {
+  it('a genuine old token is refused, for any transfer, with the mint key set', async () => {
     await fc.assert(fc.asyncProperty(uuidArb, async (uuid) => {
-      const t = await signOld(payloadOf({ uuid, exp: FAR }));
-      expect(await verifyDownloadToken(t, open())).toEqual({ valid: true, uuid });
-      expect(await verifyDownloadToken(t, shut())).toEqual(REFUSED);
-      expect(await verifyDownloadToken(t, { DL_TOKEN_KEY: DL_KEY, MINT_PRIVATE_KEY: MINT })).toEqual(REFUSED);
+      expect(await verifyDownloadToken(await signOld(payloadOf({ uuid, exp: FAR })), env)).toEqual(REFUSED);
     }), cfg());
-  });
-
-  it('a well-formed wrong signature on the old form is refused', async () => {
-    const payload = payloadOf({ uuid: UUID, exp: FAR });
-    const realSig = (await signOld(payload)).split('.')[1];
-    await fc.assert(fc.asyncProperty(fc.uint8Array({ minLength: 32, maxLength: 32 }), async (sig) => {
-      const s = b64url(sig);
-      fc.pre(s !== realSig);
-      expect(await verifyDownloadToken(`${payload}.${s}`, open())).toEqual(REFUSED);
-    }), cfg(RUNS * 4));
   });
 
   it('the two forms do not stand in for each other', async () => {
     await fc.assert(fc.asyncProperty(uuidArb, async (uuid) => {
       const payload = payloadOf({ uuid, exp: FAR });
-      const fresh = await signDl1(payload);
-      const old = await signOld(payload);
-      expect(await verifyDownloadToken(fresh.slice(4), open())).toEqual(REFUSED);   // new, "dl1." off
-      expect(await verifyDownloadToken(`dl1.${old}`, open())).toEqual(REFUSED);      // old, "dl1." on
-    }), cfg());
-  });
-
-  it('a bad mint key is never used', async () => {
-    await fc.assert(fc.asyncProperty(fc.oneof(unicode, anyJson), async (m) => {
-      fc.pre(m !== MINT);
-      const env = { DL_TOKEN_KEY: DL_KEY, MINT_PRIVATE_KEY: m, DL_TOKEN_LEGACY_UNTIL: String(NOW() + 3600) };
-      expect(await verifyDownloadToken(await signOld(payloadOf({ uuid: UUID, exp: FAR })), env)).toEqual(REFUSED);
+      expect(await verifyDownloadToken((await signDl1(payload)).slice(4), env)).toEqual(REFUSED);   // new, "dl1." off
+      expect(await verifyDownloadToken(`dl1.${await signOld(payload)}`, env)).toEqual(REFUSED);      // old, "dl1." on
     }), cfg());
   });
 });
@@ -270,6 +236,14 @@ describe('upload session tokens', () => {
     }), cfg());
   });
 
+  it('any one changed character anywhere is refused', async () => {
+    const t = await makeSessionToken(env, UUID, 3, FAR);
+    await fc.assert(fc.asyncProperty(fc.nat({ max: t.length - 1 }), b64Char, async (i, c) => {
+      fc.pre(t[i] !== c);
+      expect(await verifySessionToken(env, t.slice(0, i) + c + t.slice(i + 1), UUID, NOW())).toBeNull();
+    }), cfg(RUNS * 2));
+  });
+
   it('a well-formed wrong MAC is refused', async () => {
     const t = await makeSessionToken(env, UUID, 3, FAR);
     const head = t.slice(0, t.lastIndexOf('.') + 1);
@@ -298,8 +272,13 @@ describe('parseRange', () => {
     fc.tuple(unicode, fc.nat(), fc.nat(), unicode).map(([x, a, b, y]) => `${x}bytes=${a}-${b}${y}`),
   );
 
-  it('never throws', () => {
-    fc.assert(fc.property(rangeLike, (h) => { parseRange(h); }), cfg(RUNS * 2));
+  it('never throws; anything it returns is a range R2 can serve', () => {
+    fc.assert(fc.property(rangeLike, (h) => {
+      const r = parseRange(h);
+      if (r === undefined) return;
+      expect(Number.isSafeInteger(r.offset) && r.offset >= 0, `offset for ${h}`).toBe(true);
+      if (r.length !== undefined) expect(Number.isSafeInteger(r.length) && r.length >= 1, `length for ${h}`).toBe(true);
+    }), cfg(RUNS * 2, corpus.range_headers.map((x) => [x])));
   });
 
   it('a well-formed range reads as itself', () => {
@@ -334,10 +313,18 @@ describe('manifest reading', () => {
     quiet.mockRestore();
   });
 
-  it('a password is required only by a 64-character hash', () => {
-    fc.assert(fc.property(fc.dictionary(fc.constantFrom('p2sh_secret_hash', 'status'), anyJson), (m) => {
-      expect(requiresPassphrase(m)).toBe(typeof m.p2sh_secret_hash === 'string' && m.p2sh_secret_hash.length === 64);
-    }), cfg());
+  it('the gate helpers never throw on any object, and never call a missing password protected', () => {
+    const manifest = fc.dictionary(
+      fc.constantFrom('expiry_timestamp', 'download_initiated_at', 'p2sh_secret_hash', 'status', 'total_chunks', 'merkle_root'),
+      anyJson,
+    );
+    fc.assert(fc.property(manifest, (m) => {
+      expect(typeof isExpired(m)).toBe('boolean');
+      expect(typeof isInGracePeriod(m)).toBe('boolean');
+      expect(typeof isDownloadBlocked(m)).toBe('boolean');
+      const p = requiresPassphrase(m);
+      expect(p).toBe(typeof m.p2sh_secret_hash === 'string' && m.p2sh_secret_hash.length === 64);
+    }), cfg(RUNS, corpus.manifests.map((x) => [x])));
   });
 });
 
@@ -520,10 +507,50 @@ describe('routes, through worker.fetch', { timeout: 180_000 }, () => {
     }), cfg(R));
   });
 
-  it('POST /unlock: any password value', async () => {
-    const body = fc.oneof(fc.string().map((v) => `x${v}`), fc.record({ passphrase: anyJson }).map((v) => JSON.stringify(v)));
+  // Bodies that aren't what the route asked for: noise, any JSON, and the shapes that broke it before.
+  const anyBody = (...shapes) => fc.oneof(unicode, anyJson.map((v) => JSON.stringify(v)), ...shapes);
+  const fromCorpus = () => corpus.json_bodies.map((x) => [x]);
+  const post = (path, body, headers = {}) => new Request(`${ORIGIN}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.11', ...headers }, body });
+
+  it('POST /unlock: any body; a wrong password is 401', async () => {
+    const body = anyBody(fc.record({ passphrase: anyJson }).map((v) => JSON.stringify(v)));
     await fc.assert(fc.asyncProperty(body, async (b) => {
       await noServerError(transferRequest(`${ORIGIN}/unlock`, UUID, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.7' }, body: b }));
+    }), cfg(R, fromCorpus()));
+  });
+
+  it('POST /credential/issue: any body', async () => {
+    const hostile = fc.oneof(anyJson, fc.constantFrom('constructor', '__proto__', 'free'), fc.constant({ toString: null }));
+    const body = anyBody(fc.record({ blinded_message: hostile, turnstile_token: hostile, tier: hostile, resume: anyJson }, { requiredKeys: [] }).map((v) => JSON.stringify(v)));
+    await fc.assert(fc.asyncProperty(body, async (b) => {
+      await noServerError(post('/credential/issue', b));
+    }), cfg(R, fromCorpus()));
+  });
+
+  it('POST /log/error: any body answers 200', async () => {
+    const hostile = fc.oneof(anyJson, fc.constant({ toString: null }));
+    const body = anyBody(fc.record({ context: hostile, message: hostile, detail: hostile }, { requiredKeys: [] }).map((v) => JSON.stringify(v)));
+    await fc.assert(fc.asyncProperty(body, async (b) => {
+      expect((await noServerError(post('/log/error', b))).status).toBe(200);
+    }), cfg(R, [...fromCorpus(), ...corpus.log_error_bodies.map((x) => [x])]));
+  });
+
+  it('POST /subscription/checkout, admin test credential and BTC rate: any body', async () => {
+    await fc.assert(fc.asyncProperty(anyBody(), async (b) => {
+      await noServerError(post('/subscription/checkout', b));
+      await noServerError(post('/admin/test-credential', b, { 'X-Admin-Key': ADMIN }));
+      await noServerError(post('/admin/btc-rate', b, { 'X-Admin-Key': ADMIN }));
+    }), cfg(R, fromCorpus()));
+  });
+
+  it('GET /download: any Range, good token; 206 only for a range it can serve', async () => {
+    const value = fc.oneof(headerSafe, fc.tuple(fc.nat(), fc.nat()).map(([a, b]) => `bytes=${a}-${b}`), fc.constantFrom(...corpus.range_headers));
+    await fc.assert(fc.asyncProperty(value, async (range) => {
+      const env = liveEnv();
+      const token = await issueDownloadToken(UUID, env, FAR);
+      const res = await noServerError(transferRequest(`${ORIGIN}/download`, UUID, { headers: { Authorization: `Bearer ${token}`, Range: range, 'CF-Connecting-IP': '198.51.100.12' } }, 0), env);
+      const read = parseRange(range.trim());
+      expect(res.status).toBe(read === undefined ? 200 : (read.offset >= 100 ? 416 : 206));
     }), cfg(R));
   });
 
@@ -548,18 +575,17 @@ describe('routes, through worker.fetch', { timeout: 180_000 }, () => {
     }), cfg(R));
   });
 
-  it('POST /upload/urls: any numbers; POST /upload/finalise: any body; good session token', async () => {
-    const num = fc.oneof(fc.integer(), fc.double(), fc.nat().map(String), fc.string());
-    const urls = fc.record({ from: num, count: num }).map((v) => JSON.stringify(v));
-    const finalise = fc.oneof(unicode, anyJson.map((v) => JSON.stringify(v)),
+  it('POST /upload/urls and /upload/finalise: any body, good session token', async () => {
+    const body = fc.oneof(unicode, anyJson.map((v) => JSON.stringify(v)),
+      fc.record({ from: anyJson, count: anyJson }).map((v) => JSON.stringify(v)),
       fc.record({ hashes: anyJson, merkle_root: anyJson }).map((v) => JSON.stringify(v)));
-    await fc.assert(fc.asyncProperty(urls, finalise, async (u, f) => {
+    await fc.assert(fc.asyncProperty(body, async (b) => {
       const env = liveEnv();
       const tok = await makeSessionToken(env, UUID, 2, NOW_S + 3600);
       const headers = { 'Content-Type': 'application/json', 'X-Upload-Session': tok, 'CF-Connecting-IP': '198.51.100.10' };
-      await noServerError(transferRequest(`${ORIGIN}/upload/urls`, UUID, { method: 'POST', headers, body: u }), env);
-      await noServerError(transferRequest(`${ORIGIN}/upload/finalise`, UUID, { method: 'POST', headers, body: f }), env);
-    }), cfg(R));
+      await noServerError(transferRequest(`${ORIGIN}/upload/urls`, UUID, { method: 'POST', headers, body: b }), env);
+      await noServerError(transferRequest(`${ORIGIN}/upload/finalise`, UUID, { method: 'POST', headers, body: b }), env);
+    }), cfg(R, [...fromCorpus(), ...corpus.upload_urls_bodies.map((x) => [x])]));
   });
 
   it('POST /admin/reports/takedown: any body with the admin key', async () => {

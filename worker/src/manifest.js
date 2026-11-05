@@ -72,7 +72,7 @@ export async function putManifest(r2, uuid, manifest) {
 
 /**
  * Build a fresh manifest object.
- * p2shSecretHash: hex string from nut11.hashSecret(), or null.
+ * p2shSecretHash: hex string from download_gate.hashSecret(), or null.
  */
 export function createManifest({
   uuid,
@@ -102,9 +102,10 @@ export function createManifest({
 
 /**
  * Is the transfer expired?
- * Returns true if past expiry_timestamp.
+ * Returns true if past expiry_timestamp, or if it isn't a number (fails closed).
  */
 export function isExpired(manifest) {
+  if (typeof manifest.expiry_timestamp !== 'number') return true;
   return Math.floor(Date.now() / 1000) > manifest.expiry_timestamp;
 }
 
@@ -114,7 +115,8 @@ export function isExpired(manifest) {
  * we continue serving chunks even after expiry_timestamp has passed.
  */
 export function isInGracePeriod(manifest) {
-  if (!manifest.download_initiated_at) return false;
+  if (typeof manifest.download_initiated_at !== 'number' || !manifest.download_initiated_at) return false;
+  if (typeof manifest.expiry_timestamp !== 'number') return false;
   return manifest.download_initiated_at < manifest.expiry_timestamp;
 }
 

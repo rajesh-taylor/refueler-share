@@ -42,7 +42,7 @@
 // refreshBtcRate() is called from scheduled() as Task 3 (after DLQ + hostname health).
 
 import { BTC_RATE_KV_KEY } from './api_capabilities.js';
-import { requireAdmin } from '../utils.js';
+import { requireAdmin, isJsonObject } from '../utils.js';
 
 // CoinGecko free tier — no key required for simple/price.
 const COINGECKO_URL =
@@ -131,6 +131,7 @@ export async function handleAdminBtcRatePost(request, env) {
   } catch {
     return err(400, 'Invalid JSON.');
   }
+  if (!isJsonObject(body)) return err(400, 'Invalid JSON.');
 
   const { gbp_per_btc } = body;
 

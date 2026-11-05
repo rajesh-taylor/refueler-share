@@ -5,5 +5,10 @@
     "dl1.e30.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "e30.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "."
-  ]
+  ],
+  "json_bodies": ["null", "[]", "5", "true", "\"x\""],
+  "upload_urls_bodies": ["{\"from\":{\"toString\":null},\"count\":1}", "{\"from\":0,\"count\":{\"toString\":null}}", "{\"from\":\"0\",\"count\":\"1\"}"],
+  "log_error_bodies": ["{\"context\":{\"toString\":null}}", "{\"message\":{\"toString\":null}}", "{\"detail\":{\"toString\":null}}"],
+  "range_headers": ["bytes=5-2", "bytes=1-0", "xbytes=0-1", "bytes=0-1x", "bytes=0-1,3-4", "bytes=-5", "bytes=99999999999999999999-", "bytes=0-99999999999999999999", "bytes=0-9007199254740991"],
+  "manifests": [{"expiry_timestamp": {"toString": null}}, {"download_initiated_at": {"toString": null}, "expiry_timestamp": 1}, {"download_initiated_at": 1, "expiry_timestamp": {"toString": null}}]
 }

@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { makeBucket, makeKV } from './_r2_mock.js';
 
-vi.mock('../src/nut11.js', () => ({ verifyDownloadToken: vi.fn(async () => ({ valid: true, uuid: globalThis.__uuid })) }));
+vi.mock('../src/download_gate.js', () => ({ verifyDownloadToken: vi.fn(async () => ({ valid: true, uuid: globalThis.__uuid })) }));
 vi.mock('../src/utils.js', async (importOriginal) => {
   const real = await importOriginal();
   return {

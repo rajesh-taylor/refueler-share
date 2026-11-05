@@ -4,7 +4,7 @@
 // sent a well-formed wrong signature. A mutant is one small deliberate bug; if every test still
 // passes, nothing is watching that line.
 //
-//   node dev/mutants/run.mjs --out=<folder outside this repo> [--jobs=3] [--only=nut11] [--retest=<an earlier mutants.json>] [--list]
+//   node dev/mutants/run.mjs --out=<folder outside this repo> [--jobs=3] [--only=download_gate] [--retest=<an earlier mutants.json>] [--list]
 // --retest runs only that file's survivors: the check after adding a test.
 //
 // Works on temporary copies, never this checkout, and never copies .dev.vars. Each mutant first
@@ -29,7 +29,7 @@ if (!LIST) {
 
 // What gets mutated: whole file, or the lines between two markers.
 const TARGETS = [
-  { name: 'nut11', file: 'worker/src/nut11.js', from: 'export function timingSafeEqual', tests: ['dltoken', 'fuzz'] },
+  { name: 'download_gate', file: 'worker/src/download_gate.js', from: 'export function timingSafeEqual', tests: ['dltoken', 'fuzz'] },
   { name: 'upload_session', file: 'worker/src/upload_session.js', from: 'const TOKEN_RE', tests: ['fuzz', 'share-6-3a'] },
   { name: 'part-crypto', file: 'frontend/crypto.js', from: 'const _PAYLOAD_INFO', to: '// Credential format v2', tests: ['part-crypto', 'kat-vectors'] },
   { name: 'proof', file: 'worker/src/nut00.js', from: 'export function verifyProofV2', tests: ['nut00', 'credential-v2', 'kat-vectors', 'fuzz'] },
@@ -51,22 +51,22 @@ const GUARD = /^\s*if \(.*\) (return\b.*|throw\b.*);\s*$/;
 
 // Bugs of the kind that matter here, spelled out. A find that stops matching stops the run.
 const HAND = [
-  ['nut11', 'tagged(textEnc.encode(payload))))) return refused', 'textEnc.encode(payload)))) return refused', 'verify drops the MAC tag'],
-  ['nut11', "crypto.subtle.sign('HMAC', key, tagged(textEnc.encode(payload)))", "crypto.subtle.sign('HMAC', key, textEnc.encode(payload))", 'issue drops the MAC tag'],
-  ['nut11', 'info: tagged(new Uint8Array(0))', 'info: new Uint8Array(0)', 'HKDF info without its tag'],
-  ['nut11', 'return bufToBase64url(bytes) === sigB64 ? bytes : null;', 'return bytes;', 'second spelling of a signature accepted'],
-  ['nut11', '|| now > claims.exp', '', 'expiry not checked'],
-  ['nut11', 'typeof claims?.uuid !== \'string\' || ', '', 'uuid type not checked'],
-  ['nut11', '!Number.isInteger(claims.exp) || ', '', 'exp type not checked'],
-  ['nut11', 'if (!(Number(env?.DL_TOKEN_LEGACY_UNTIL) > now)) return refused;', '', 'old form never shuts'],
-  ['nut11', "if (!HEX.test(a) || !HEX.test(b)) return false;", '', 'non-hex compared in timingSafeEqual'],
-  ['nut11', 'raw.length !== DL_TOKEN_BYTES', 'false', 'a short DL_TOKEN_KEY accepted'],
+  ['download_gate', 'tagged(textEnc.encode(payload))))) return refused', 'textEnc.encode(payload)))) return refused', 'verify drops the MAC tag'],
+  ['download_gate', "crypto.subtle.sign('HMAC', key, tagged(textEnc.encode(payload)))", "crypto.subtle.sign('HMAC', key, textEnc.encode(payload))", 'issue drops the MAC tag'],
+  ['download_gate', 'info: tagged(new Uint8Array(0))', 'info: new Uint8Array(0)', 'HKDF info without its tag'],
+  ['download_gate', 'return bufToBase64url(bytes) === sigB64 ? bytes : null;', 'return bytes;', 'second spelling of a signature accepted'],
+  ['download_gate', '|| now > claims.exp', '', 'expiry not checked'],
+  ['download_gate', 'typeof claims?.uuid !== \'string\' || ', '', 'uuid type not checked'],
+  ['download_gate', '!Number.isInteger(claims.exp) || ', '', 'exp type not checked'],
+  ['download_gate', "if (!HEX.test(a) || !HEX.test(b)) return false;", '', 'non-hex compared in timingSafeEqual'],
+  ['download_gate', 'raw.length !== DL_TOKEN_BYTES', 'false', 'a short DL_TOKEN_KEY accepted'],
   ['upload_session', 'crypto.subtle.timingSafeEqual(presented, expected)', 'true', 'MAC not compared'],
   ['upload_session', 'msg.set(u, tag.length + 1);', '', 'UUID not in the MAC'],
   ['upload_session', 'dv.setUint32(tag.length + 17, totalChunks, false);', '', 'part count not in the MAC'],
   ['upload_session', 'dv.setBigUint64(tag.length + 21, BigInt(sessionExp), false);', '', 'expiry not in the MAC'],
   ['upload_session', 'totalChunks > MAX_TRANSFER_CHUNKS || ', '', 'part cap not checked'],
   ['upload_session', ' || sessionExp <= nowSeconds', '', 'expiry not checked'],
+  ['upload_session', 'if (bytesToB64url(presented) !== m[3]) return null;', '', 'second spelling of a session token accepted'],
   ['part-crypto', ", 0x00]);", "]);", 'HKDF info loses its 0x00'],
   ['part-crypto', "salt: new Uint8Array(0), info: _PAYLOAD_INFO", "salt: new Uint8Array(32), info: _PAYLOAD_INFO", 'HKDF salt changed'],
   ['part-crypto', 'n[11] = last ? 1 : 0;', 'n[11] = 0;', 'no last-chunk flag'],

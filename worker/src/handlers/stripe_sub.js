@@ -11,7 +11,7 @@ import {
   verifyStripeWebhook, createCheckoutSession, resolveCitizenPrice,
   fetchSubscription, fetchCustomerEmail, citizenItem, tierFromLookupKey, CITIZEN_LOOKUP_KEYS,
 } from '../stripe.js';
-import { supabaseFetch, json, err }                   from '../utils.js';
+import { supabaseFetch, json, err, isJsonObject }     from '../utils.js';
 import { verifyTurnstileToken }                     from '../turnstile.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +91,7 @@ export async function handleCheckout(request, env) {
   } catch {
     return err(400, 'Invalid JSON');
   }
+  if (!isJsonObject(body)) return err(400, 'Invalid JSON');
 
   // Stripe-Account-1 (S-4): Plans names the plan; the Worker maps it to the
   // exact lookup key and asks Stripe for the price. No price IDs here or on Plans.

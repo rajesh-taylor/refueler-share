@@ -8,7 +8,7 @@
 
 import { buildTombstone }                      from '../manifest_tg.js';
 import { putManifest }                         from '../manifest.js';
-import { verifyDownloadToken }                 from '../nut11.js';
+import { verifyDownloadToken }                 from '../download_gate.js';
 import { deleteKeys }                          from '../sweep_rules.js';
 import { latchConsumed }                       from '../latch.js';
 import { UUID_RE, safeGetManifest, json, err, requireAdmin } from '../utils.js';

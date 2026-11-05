@@ -28,7 +28,7 @@
 import { getManifest }                                       from '../manifest.js';
 import { latchConsumed }                                     from '../latch.js';
 import { destroyTransfer }                                   from './delete_transfer.js';
-import { verifyDownloadToken }                               from '../nut11.js';
+import { verifyDownloadToken }                               from '../download_gate.js';
 import { notifyTransfer, EVENTS }                            from '../webhook_delivery.js';
 import { storedTier }                                       from '../tiers.js';
 

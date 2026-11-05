@@ -7,7 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { hashToCurve } from '@cashu/cashu-ts';
 
 import { keysetIdFor, verifyProofV2 } from '../src/nut00.js';
-import { issueDownloadToken, verifyDownloadToken } from '../src/nut11.js';
+import { issueDownloadToken, verifyDownloadToken } from '../src/download_gate.js';
 import { makeSessionToken, verifySessionToken } from '../src/upload_session.js';
 import { derivePartKey } from '../../frontend/crypto.js';
 

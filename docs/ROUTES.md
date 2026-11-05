@@ -77,8 +77,8 @@ Auth routes (`/auth/magic`, `/auth/verify`, `/chambers/session`, `/auth/signout*
 | POST | `/unlock` | password | api | yes (IP + UUID) | `handleAuth` |
 | GET | `/meta` | link | api | — | `handleMeta` |
 | GET | `/download` | link | api | yes | `handleDownload` |
-| DELETE | `/transfer` | link-or-owner | api | — | `handleDeleteTransfer` |
-| POST | `/confirm` | link | api | — | `handleConfirmTransfer` |
+| DELETE | `/transfer` | link-or-owner | api | yes | `handleDeleteTransfer` |
+| POST | `/confirm` | link | api | yes | `handleConfirmTransfer` |
 | POST | `/timestamp/submit` | public | api | yes | `handleTimestampSubmit` |
 | GET | `/timestamp/seal` | link | api | — | `handleTimestampSeal` |
 | POST | `/webhook/stripe` | stripe-sig | api | — | `handleStripeWebhook` |

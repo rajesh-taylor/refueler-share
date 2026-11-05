@@ -32,7 +32,7 @@
 import { issueBlindSignature } from '../nut00.js';
 import { computeCommitment } from '../commitment.js';
 import { TIERS, isCharteredTier } from '../tiers.js';
-import { requireAdmin } from '../utils.js';
+import { requireAdmin, isJsonObject } from '../utils.js';
 import { CHUNK_SIZE } from '../sweep_rules.js';
 import { importTestCredKey, makeTestCredential, TESTCRED_MAX_CHUNKS } from '../testcred.js';
 
@@ -70,6 +70,7 @@ export async function handleTestCredential(request, env) {
   } catch {
     return err(400, 'Invalid JSON body');
   }
+  if (!isJsonObject(body)) return err(400, 'Invalid JSON body');
 
   // No secret → no test credentials (and /initiate never bypasses).
   const tcKey = await importTestCredKey(env);

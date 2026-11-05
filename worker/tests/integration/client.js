@@ -28,7 +28,7 @@ import { join }                     from 'node:path';
 import { secp256k1 }                from '@noble/curves/secp256k1.js';
 import { blake3 }                   from '@noble/hashes/blake3';
 import { reconstructRoot }          from '../../src/merkle.js';
-import { hashSecret }               from '../../src/nut11.js';
+import { hashSecret }               from '../../src/download_gate.js';
 
 const Point = secp256k1.Point;
 
