@@ -25,5 +25,6 @@ export default defineConfig({
   webServer: [
     { command: 'node dev/share-harness/fake-worker.mjs', port: 8766, reuseExistingServer: false, stdout: 'ignore' },
     { command: 'node dev/share-harness/serve-app.mjs', port: 8765, reuseExistingServer: false },
+    { command: 'node dev/share-harness/serve-gate.mjs', port: 8768, reuseExistingServer: false },
   ],
 });

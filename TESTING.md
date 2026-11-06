@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v1.0 | **Created:** S63 · 27 July 2026 | **Updated:** Test-Hardening-1 · 4 Nov 2026
+> **Version:** v1.1 | **Created:** S63 · 27 July 2026 | **Updated:** Turnstile-Gate-1 · 6 Nov 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -55,6 +55,7 @@ Worker suites, run separately (Vitest 4), then the browser tests (§2a):
 |---|---|---|---|
 | **Known-answer vectors** | `test-vectors/v1.json`, checks in `run.mjs` | workerd (`worker/test/kat-vectors.test.js`), Chromium, Firefox, Playwright WebKit on every push; real Safari weekly | The browser and the Worker give the same answers as independent sources: AES-GCM + HKDF + STREAM nonces, BLAKE3 (WASM and noble), SHA-256, link fragment, NUT-00 + NUT-12. `gen.py` imports nothing of Share's. Each browser must run the WASM BLAKE3 under the CSP |
 | **Flow smoke** | `dev/share-harness/tests/smoke.spec.mjs` | Three engines on every push | The real built app under the real CSP (only the API origin swapped): send, stranger's download, two parts, half links, wrong key, password, delete after download, folder, resume, Chromium's stream save. No key or name on the wire; stored bytes open outside the browser with the link's key |
+| **Gate smoke** (Turnstile-Gate-1) | same file, `gate:` tests | Three engines on every push | The app frames the real gate build (`dev/share-harness/serve-gate.mjs`, :8768, the gate's real CSP with localhost swapped in), with the stub Turnstile inside the gate: no Cloudflare script in the app page; the click box path; a forged token from the page is ignored; Cloudflare's script blocked in the gate → the blocked line at once; the gate unreachable → the line 15 s after the press, then a fresh frame; sign-in through the gate; a top-level gate visit loads nothing. `SMOKE_REAL_TURNSTILE=1` adds one upload with Cloudflare's real script and its always-pass test key (network) |
 | **Property tests** | `worker/test/fuzz.test.js` (fast-check 4.10.2) | `npm test`, fixed seed 20261104, 500 runs per property; random seeds on the Mac | Tokens, range, manifest, fragment, proofs, headers and transfer routes never crash or accept the wrong thing |
 | **Mutants** | `dev/mutants/run.mjs` (272, no package) | By hand, about 20 min; not a CI gate | Which lines no test is watching. `worker/test/crypto-edges.test.js` came from this |
 
@@ -72,7 +73,7 @@ Local: `npm run test:browser` from the repo root (`--project=webkit` etc. after 
 
 - `worker/vitest.config.integration.js` — `include: ['tests/integration/**/*.test.js']`, one file at a time. Never part of `npm test`. (Until 28 Oct it used `testMatch`, which Vitest ignores, so it ran every test file.)
 - `tests/integration/helpers/wrangler-lifecycle.js` (globalSetup) starts the Supabase mock, writes `.wrangler-test-state/integration.env`, boots `wrangler dev --local --port=8788 --persist-to=.wrangler-test-state --env-file=…`, polls `/status`.
-- **`worker/.dev.vars` is never read or written.** With `--env-file`, wrangler doesn't load it. The run's vars file is all fresh random keys (admin, mint, commitment, session, MAC, seal, Stripe webhook secret), the mock `SUPABASE_URL`, Cloudflare's published Turnstile test secret (siteverify passes any token, so the Worker's real verify and nonce code runs), and placeholder R2 S3 values for the presigner (never contacted).
+- **`worker/.dev.vars` is never read or written.** With `--env-file`, wrangler doesn't load it. The run's vars file is all fresh random keys (admin, mint, commitment, session, MAC, seal, Stripe webhook secret), the mock `SUPABASE_URL`, Cloudflare's published Turnstile test secret, `TURNSTILE_VERIFY_URL` = a local siteverify stand-in (Turnstile-Gate-1: Cloudflare's test secret names example.com and no action, which the Worker now refuses; the stand-in answers as for a gate token for `upload`, every time, so the Worker's own nonce replay still runs; the Worker takes only a localhost address there), and placeholder R2 S3 values for the presigner (never contacted).
 - wrangler runs in its own process group. Teardown and Ctrl-C kill the group. After a hard crash, the next run stops the leftover one (pid file, only if port 8788 still answers).
 - Values the tests need (`workerUrl`, `persistDir`, `envFile`, `adminKey`, `stripeWebhookSecret`) cross into the test processes by `provide`/`inject` only.
 

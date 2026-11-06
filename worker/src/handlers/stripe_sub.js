@@ -99,7 +99,7 @@ export async function handleCheckout(request, env) {
   if (!plan || !email) return err(400, 'Missing plan or email');
   if (typeof plan !== 'string' || !Object.hasOwn(CITIZEN_LOOKUP_KEYS, plan)) return err(400, 'Invalid plan');
 
-  if (!(await verifyTurnstileToken(body.turnstile_token, env.TURNSTILE_PLANS_SECRET_KEY, env.PLANS_TURNSTILE_HOSTNAME))) {
+  if (!(await verifyTurnstileToken(body.turnstile_token, env.TURNSTILE_PLANS_SECRET_KEY, { hostnames: [env.PLANS_TURNSTILE_HOSTNAME] }))) {
     return err(403, 'Check failed. Please try again.');
   }
 

@@ -37,7 +37,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', async (url) => {
     if (String(url).includes('siteverify')) {
       turnstileCalls++;
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ success: true, hostname: 'gate.share.refueler.io', action: 'upload' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response('{}', { status: 200 });
   });

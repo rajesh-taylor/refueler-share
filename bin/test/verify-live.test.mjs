@@ -87,7 +87,7 @@ test('urlFor maps SHA256SUMS paths the way ship-app.sh url_for does', () => {
 test('everything matches → ok', async () => {
   const t = await setup();
   const r = await t.run();
-  assert.deepEqual(r.found, { mismatch: [], missing: [], fetch: [], headers: [], release: [] });
+  assert.deepEqual(r.found, { mismatch: [], missing: [], fetch: [], headers: [], release: [], gate: [] });
   assert.equal(r.ok, true);
   assert.equal(r.live, A);
   assert.equal(r.files, 9);
@@ -217,4 +217,68 @@ test('CLI: exit 0 on a match, 1 on a changed byte, 2 on a bad argument', async (
   assert.match(red.stderr, /Served file differs from the release:\n {2}✗ v\/aaaaaaaaaa\/share-early\.js: published/);
   assert.match(red.stderr, /✗ RED — .* \(release app-aaaaaaaaaa\): 1 mismatch\(es\), 0 fetch failure\(s\)/);
   assert.equal((await cli(['--host', 'not a url'])).code, 2);
+});
+
+// ── Turnstile-Gate-1: the gate host, checked from the same SHA256SUMS ────────
+const GATE_CSP = "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-ancestors https://share.refueler.io";
+const gateHeaders = (extra = '') => `/*\n  Content-Security-Policy: ${GATE_CSP}\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  ! Link\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Robots-Tag: noindex\n  Strict-Transport-Security: max-age=31536000; includeSubDomains\n${extra}`;
+
+async function setupGate({ sha = A, appCsp, tamperGate, gateHeadersText } = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'vl-app-')), g = mkdtempSync(join(tmpdir(), 'vl-gate-'));
+  tmp.push(d, g);
+  const put = (root, p, data) => { mkdirSync(dirname(join(root, p)), { recursive: true }); writeFileSync(join(root, p), data); };
+  const csp = appCsp ?? "default-src 'none'; script-src 'self'; frame-src GATE_ORIGIN";
+  put(d, 'index.html', `<script src="/v/${sha}/share-early.js"></script>\n`);
+  put(d, '404.html', '<p>Not found</p>\n');
+  put(d, `v/${sha}/share-early.js`, '/* early */\n');
+  put(d, `v/${sha}/share.js`, 'export const x = 1;\n');
+  put(g, 'index.html', `<script type="module" src="/v/${sha}/gate.js"></script>\n`);
+  put(g, '404.html', '<p>Nothing here.</p>\n');
+  put(g, 'robots.txt', 'User-agent: *\nDisallow: /\n');
+  put(g, `v/${sha}/gate.js`, '/* gate */\n');
+  put(g, '_headers', gateHeadersText ?? gateHeaders());
+  // The gate server first, so the app CSP can name its real origin.
+  const gate = await startServer(pagesHandler(g));
+  servers.push(gate);
+  const appCspReal = csp.replace('GATE_ORIGIN', new URL(gate.url).origin);
+  put(d, '_headers', headers(appCspReal));
+  const r = generate({ dist: d, commit: sha.repeat(4), prev: '', csp: appCspReal, satoshiSha: SATOSHI, nvmrc: '22', eleventy: '3.1.6', gateDist: g, gateCsp: GATE_CSP });
+  put(d, 'release.json', r.manifestText);
+  put(d, 'release-extra.json', r.extraText);
+  put(g, 'release.json', r.gateManifestText);
+  tamperGate?.(g);
+  const state = { releases: { [`app-${sha}`]: { SHA256SUMS: r.sumsText, 'manifest.json': r.manifestText } }, latest: `app-${sha}` };
+  const host = await startServer(pagesHandler(d));
+  const gh = await startServer(github(state));
+  servers.push(host, gh);
+  return () => verifyLive({ host: host.url, gate: gate.url, repo: REPO, github: gh.url, api: gh.url, retryWait: 0, backoffMs: 1 });
+}
+
+test('gate: app and gate both match their release → ok', async () => {
+  const r = await (await setupGate())();
+  assert.deepEqual(r.found, { mismatch: [], missing: [], fetch: [], headers: [], release: [], gate: [] });
+  assert.equal(r.ok, true);
+  assert.equal(r.gateFiles, 5);
+  assert.equal(r.gateSame, 5);
+});
+
+test('gate: one changed byte in the gate → red, named gate/…', async () => {
+  const r = await (await setupGate({ tamperGate: (g) => writeFileSync(join(g, `v/${A}/gate.js`), '/* changed */\n') }))();
+  assert.equal(r.ok, false);
+  assert.match(r.found.mismatch.join('\n'), new RegExp(`gate/v/${A}/gate.js: published`));
+});
+
+test('gate: missing noindex / no-referrer → red under Gate', async () => {
+  const text = gateHeaders().replace('  Referrer-Policy: no-referrer\n', '').replace('  X-Robots-Tag: noindex\n', '');
+  const r = await (await setupGate({ gateHeadersText: text }))();
+  assert.equal(r.ok, false);
+  assert.match(r.found.gate.join('\n'), /X-Robots-Tag: noindex missing/);
+  assert.match(r.found.gate.join('\n'), /Referrer-Policy: no-referrer missing/);
+});
+
+test('gate: an app CSP still naming challenges.cloudflare.com, or framing anything else → red', async () => {
+  const r = await (await setupGate({ appCsp: "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src GATE_ORIGIN https://challenges.cloudflare.com" }))();
+  assert.equal(r.ok, false);
+  assert.match(r.found.release.join('\n'), /names challenges\.cloudflare\.com/);
+  assert.match(r.found.release.join('\n'), /frame-src is/);
 });

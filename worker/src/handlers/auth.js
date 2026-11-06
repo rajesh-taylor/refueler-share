@@ -26,6 +26,7 @@ import {
 import * as store from '../auth_store.js';
 import { sendSignInEmail } from '../mailer.js';
 import { verifyTurnstileToken } from '../turnstile.js';
+import { appTurnstileRule } from '../app_turnstile.js';
 import { checkRateLimit, getClientIp } from '../ratelimit.js';
 import { CITIZEN } from '../tiers.js';
 
@@ -103,7 +104,7 @@ export async function handleMagic(request, env, ctx) {
   const body = await readJson(request);
   const email = normaliseEmail(body?.email);
   if (!email || typeof body?.turnstile_token !== 'string') return reply(request, env, 400, { error: 'Bad request' });
-  if (!(await verifyTurnstileToken(body.turnstile_token, env.TURNSTILE_SECRET_KEY))) {
+  if (!(await verifyTurnstileToken(body.turnstile_token, env.TURNSTILE_SECRET_KEY, appTurnstileRule(env, 'signin')))) {
     return reply(request, env, 403, { error: 'Turnstile verification failed' });
   }
   ctx.waitUntil(sendMagic(env, email).catch(() => console.error('auth/magic: send failed')));

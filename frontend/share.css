@@ -338,6 +338,11 @@ html.up-dragging body::after {
 /* Full width (Cloudflare fixes the height at 65 px); theme follows Carbon/Paper (Share-Upload-4). */
 .up-check { margin-top: 24px; }
 .up-check .rx-fine { margin: 0 0 10px; }
+/* Turnstile-Gate-1: the check runs in the gate page, framed here. color-scheme: normal on the  */
+/* frame itself: in Carbon the page is dark, the gate declares none, and a scheme mismatch makes */
+/* browsers paint the frame opaque white (spike, plan §11). Transparent, so the page's grain     */
+/* shows through; the gate draws no grain of its own.                                            */
+.cf-gate { display: block; width: 100%; height: 65px; border: 0; margin: 0; padding: 0; background: transparent; color-scheme: normal; }
 
 .rx-btn.up-ghost { background: none; color: var(--fg); border: 1px solid var(--rx-rule-strong); }
 .up-btnrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
@@ -654,6 +659,9 @@ a.stage-chip:hover, a.stage-chip:focus-visible { color: var(--fg); }
   outline: none;
 }
 .si-input:focus { border-color: var(--fg-muted); }
-.si-check:not(:empty) { margin-top: 20px; }
+/* Sign-in: the gate frame takes no room until Cloudflare asks for a click (interaction-only). */
+.si-check .cf-gate { height: 0; }
+.si-check.is-asking { margin-top: 20px; }
+.si-check.is-asking .cf-gate { height: 65px; }
 .si-actions a.rx-btn { display: block; text-align: center; text-decoration: none; }
 .si-actions .up-link { align-self: center; }

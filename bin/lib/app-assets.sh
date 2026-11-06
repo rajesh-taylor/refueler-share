@@ -7,11 +7,16 @@
 # Every top-level frontend/*.js and *.css must be listed here: an unlisted file fails the
 # check (aa_check_listed), so a new module can never be left out of a release by accident.
 # frontend/app/ (app-only files: header, tokens, fonts, icons) is copied over these after.
-AA_JS="share.js share-early.js signin.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js upload-account.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js download-program.js timestamp.js refueler-badge.js fragment.js merkle.js"
+AA_JS="share.js share-early.js signin.js crypto.js config.js progress.js zip.js locke.js upload.js upload-turnstile.js gate-client.js upload-options.js upload-folder.js upload-start.js upload-send.js upload-resume.js upload-store.js upload-stop.js upload-net.js upload-account.js download.js download-fetch.js download-save.js download-sheets.js download-time.js download-notes.js download-program.js timestamp.js refueler-badge.js fragment.js merkle.js"
 AA_CSS="share.css"
 AA_VENDOR="fflate.min.js qr-creator.min.js noble-blake3.js cashu-crypto.js"   # see frontend/VENDORED.md
 
 AA_ASSETS="$AA_JS $AA_CSS $AA_VENDOR"
+
+# ── The gate (Turnstile-Gate-1 · 6 Nov 2026): gate.share.refueler.io, its own Pages project ──
+# Copied from src/gate/ into dist-gate/v/<sha>/. Every src/gate/*.js and *.css must be listed
+# (ag_check_listed); the HTML comes from src/gate/*.njk (eleventy.gate.js).
+AG_FILES="gate.js gate.css"
 
 AA_FAILS=0
 aa_fail() { echo "  ✗ $*" >&2; AA_FAILS=$((AA_FAILS + 1)); }
@@ -40,4 +45,15 @@ aa_check_listed() {
     aa_in_list "$n" "$AA_ASSETS" || aa_fail "frontend/$n is not in bin/lib/app-assets.sh — add it to AA_JS/AA_CSS/AA_VENDOR"
   done
   for n in $AA_ASSETS; do [ -f "$1/$n" ] || aa_fail "app-assets.sh lists $n but frontend/$n does not exist"; done
+}
+
+# ag_check_listed GATE_SRC_DIR — every src/gate/*.js/*.css is in AG_FILES, and every listed file exists.
+ag_check_listed() {
+  local f n
+  for f in "$1"/*.js "$1"/*.css; do
+    [ -e "$f" ] || continue
+    n="$(basename "$f")"
+    aa_in_list "$n" "$AG_FILES" || aa_fail "src/gate/$n is not in bin/lib/app-assets.sh — add it to AG_FILES"
+  done
+  for n in $AG_FILES; do [ -f "$1/$n" ] || aa_fail "app-assets.sh lists gate file $n but src/gate/$n does not exist"; done
 }

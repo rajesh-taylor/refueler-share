@@ -15,13 +15,16 @@
 //
 // The CSRF token is held in this module's memory only. Every auth call is
 // credentialed; the cookie is HttpOnly and never touched here. Cloudflare's
-// script is loaded only when the email form shows — never on the link page.
+// check is loaded only when the email form shows — never on the link page.
+// Turnstile-Gate-1 (6 Nov 2026): it runs in the gate page (gate.share.refueler.io),
+// framed through gate-client.js, never in this page; the gate picks the sitekey and
+// the action (signin) itself.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { WORKER_URL } from './config.js';
+import { openGate } from './gate-client.js';
 
-const SITEKEY = '0x4AAAAAAD0N7GlHlCRuWITr';
-const TURNSTILE_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+const GATE_WAIT_MS = 15000;
 const $ = (id) => document.getElementById(id);
 
 const sheet = $('signin-sheet');
@@ -32,7 +35,7 @@ const els = {
 };
 let csrf = null;
 let token = null;
-let turnstileId = null;
+let gate = null;
 let turnstileToken = null;
 
 function show(state, msg = '') {
@@ -100,49 +103,33 @@ async function enter() {
 }
 
 // ── The email form ──────────────────────────────────────────────────────────
+// The gate follows a Carbon/Paper switch itself (a held token is kept; the next draw after
+// it is used or expires takes the new colours), as the upload page's check does.
 function loadTurnstile() {
-  if (window.turnstile) { drawTurnstile(); return; }
-  if (!document.querySelector(`script[src="${TURNSTILE_SRC}"]`)) {
-    const s = document.createElement('script');
-    s.src = TURNSTILE_SRC;
-    s.async = true;
-    document.head.appendChild(s);
-  }
-  const deadline = Date.now() + 15000;
-  const poll = setInterval(() => {
-    if (window.turnstile) { clearInterval(poll); drawTurnstile(); }
-    else if (Date.now() > deadline) { clearInterval(poll); show('ask', 'Cloudflare’s check didn’t load. Reload to try again.'); }
-  }, 200);
+  if (gate) return;
+  gate = openGate({
+    container: els.check,
+    purpose: 'signin',
+    on: {
+      asking: () => els.check.classList.add('is-asking'),
+      token: (t) => { turnstileToken = t; els.send.disabled = false; els.check.classList.remove('is-asking'); },
+      expired: () => { turnstileToken = null; els.send.disabled = true; },
+      error: (code) => {
+        turnstileToken = null; els.send.disabled = true;
+        if (code === 'load') dropGate();
+      },
+    },
+  });
+  const mine = gate;
+  setTimeout(() => { if (gate === mine && !mine.ready) dropGate(); }, GATE_WAIT_MS);
 }
 
-// Cloudflare draws the check in light or dark only, fixed when drawn (X5-1a): follow a
-// Carbon/Paper switch like upload-turnstile.js does. A token already held is kept (a redraw
-// would throw it away); the next draw after it is used or expires takes the new colours.
-const pageTheme = () => document.documentElement.getAttribute('data-theme') === 'carbon' ? 'dark' : 'light';
-let turnstileTheme = null;
-let themeWatch = null;
-
-function drawTurnstile() {
-  if (turnstileId !== null) return;
-  if (!themeWatch) {
-    themeWatch = new MutationObserver(() => {
-      if (turnstileId === null || turnstileToken || pageTheme() === turnstileTheme) return;
-      try { window.turnstile.remove(turnstileId); } catch { /* already gone */ }
-      turnstileId = null;
-      drawTurnstile();
-    });
-    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  }
-  turnstileTheme = pageTheme();
-  turnstileId = window.turnstile.render(els.check, {
-    sitekey: SITEKEY,
-    theme: turnstileTheme,
-    appearance: 'interaction-only',
-    size: 'flexible',   // full width, like the upload page's check
-    callback: (t) => { turnstileToken = t; els.send.disabled = false; },
-    'expired-callback': () => { turnstileToken = null; els.send.disabled = true; },
-    'error-callback': () => { turnstileToken = null; els.send.disabled = true; },
-  });
+// Cloudflare's check (or the gate page) didn't load: say so; a reload tries again.
+function dropGate() {
+  gate?.remove();
+  gate = null;
+  els.check.classList.remove('is-asking');
+  show('ask', 'Cloudflare’s check didn’t load. Reload to try again.');
 }
 
 function askForEmail(msg = '') {
@@ -159,7 +146,7 @@ async function sendLink(e) {
   els.send.disabled = true;
   const t = turnstileToken;
   turnstileToken = null;
-  if (turnstileId !== null) window.turnstile.reset(turnstileId);   // single use
+  gate?.reset();   // single use
   let r;
   try {
     r = await call('/auth/magic', { method: 'POST', body: { email, turnstile_token: t } });

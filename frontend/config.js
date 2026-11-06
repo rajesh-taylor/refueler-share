@@ -7,6 +7,9 @@
 // Config — single source of truth, consumed by upload.js and download.js
 // ─────────────────────────────────────────────────────────────────────────────
 export const WORKER_URL  = 'https://api.share.refueler.io';
+// Turnstile-Gate-1: the page that runs Cloudflare's check, framed by gate-client.js. Never a
+// CORS origin on the Worker; its tokens must name it (APP_TURNSTILE_HOSTNAME).
+export const GATE_ORIGIN = 'https://gate.share.refueler.io';
 export const CHUNK_SIZE  = 32 * 1024 * 1024;        // 32 MiB — Share-6-2 spec §2
 export const FREE_CAP    = 4 * 1024 * 1024 * 1024;  // 4 GB
 export const CITIZEN_CAP = 100 * 1024 * 1024 * 1024; // 100 GiB — Worker TIER_CAPS.citizen (B12-4a-2)

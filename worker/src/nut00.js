@@ -57,6 +57,17 @@ export function issueBlindSig(blindedPointHex, mintPrivkeyHex) {
   };
 }
 
+/**
+ * isBlindedPoint(hex) → boolean
+ * A compressed secp256k1 point as /credential/issue takes it (66 hex chars, 02/03, on the
+ * curve). Worker-Keys-2 leftover, fixed at Turnstile-Gate-1: checked before Turnstile so
+ * a malformed one is a 400, not a 500 from the signer.
+ */
+export function isBlindedPoint(hex) {
+  if (typeof hex !== 'string' || !/^0[23][0-9a-fA-F]{64}$/.test(hex)) return false;
+  try { pointFromHex(hex); return true; } catch { return false; }
+}
+
 // Alias used by index.js — returns { signedPoint, mintPubkey, keysetId, dleq }
 export function issueBlindSignature(blindedPointHex, mintPrivkeyHex) {
   const result = issueBlindSig(blindedPointHex, mintPrivkeyHex);

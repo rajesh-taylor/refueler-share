@@ -57,7 +57,7 @@ const EXPECTED_EXTRA = `{
     }
   ],
   "third_party_code": [
-    "https://challenges.cloudflare.com (Cloudflare Turnstile) — not ours, not covered"
+    "Cloudflare Turnstile (challenges.cloudflare.com): runs only in the gate page, gate.share.refueler.io, never in Share's own page; its script is Cloudflare's, not ours, not covered. The gate page itself is in this release (gate/ in SHA256SUMS)."
   ],
   "cashu_keysets": [],
   "nostr_relays": [],
@@ -73,7 +73,7 @@ const EXPECTED_MANIFEST = `{
     "files": {
       "/404.html": "85QPn1wgTtun-NsRNp9C3jB2d9Gbi6hQVbqvrJIMPN4",
       "/index.html": "dJflnpLvZ5W4bfv_fL5_YJPNuiR9-MGS41tDCueBPv0",
-      "/release-extra.json": "e48y89PVjub4ewoR0IE2_2pkOaRJx98Mk4FPau39epU",
+      "/release-extra.json": "tbFzFm4DXg5yX0DvUbDnZroFDYAMhBhbGzJU9dy8BeI",
       "/v/abcdef0123/Z.css": "u0Jj2e1i7IBkNDEHdGEj6YSZteK6W-q1Sv-Vn8x343I",
       "/v/abcdef0123/fonts/Satoshi-Variable.woff2": "5zmv-bTQLCZDQdbUhy7c2ijnk3Ou2pNvZZVmoc0-tH8",
       "/v/abcdef0123/share.js": "jmCbtxwguFjHfw6fkLsTGduEd7E_n5ZfGh4YUkv1CIE"
@@ -89,8 +89,8 @@ const EXPECTED_MANIFEST = `{
 
 const EXPECTED_SUMS = `f3940f9f5c204edba7f8db11369f42de307677d19b8ba85055baafac920c3cde  404.html
 7497e59e92ef6795b86dfbff7cbe7f6093cdba247df8c192e35b430ae7813efd  index.html
-7b8f32f3d3d58ee6f87b0a11d08136ff6a6439a449c7df0c93814f6aedfd7a95  release-extra.json
-071a03a596e4f576ad70a4f36dd09305bb78c23d375a9bf2e7671df3460890d0  release.json
+b5b173166e035e0e725f40ef51b0e766ba050d800c84185b1b3254f5dcbc05e2  release-extra.json
+05d98f708e1cd5fef1eda4a6491b52ecb3e829d373d1e4917f1506e9ffb5c20d  release.json
 bb4263d9ed62ec8064343107746123e98499b5e2ba5beab54aff959fcc77e372  v/abcdef0123/Z.css
 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476  v/abcdef0123/blake3/x.wasm
 e739aff9b4d02c264341d6d4872edcda28e79373aeda936f659566a1cd3eb47f  v/abcdef0123/fonts/Satoshi-Variable.woff2
@@ -222,4 +222,81 @@ test('CLI: generate writes dist + release files that match; compare exits 0 and 
     assert.throws(() => execFileSync(process.execPath, [SCRIPT, 'compare', '--expected', sums, '--got', other, '--satoshi-sha', SATOSHI], { stdio: 'pipe' }),
       (e) => e.status === 1);
   } finally { rmSync(d, { recursive: true }); rmSync(out, { recursive: true }); }
+});
+
+// ── Turnstile-Gate-1: the gate's files in the same release ───────────────────
+// Expected hashes computed with shasum -a 256 and openssl dgst -sha256 -binary | base64url over
+// the fixture bytes and the hand-written gate manifest below (6 Nov 2026).
+const GATE_CSP = "default-src 'none'; frame-ancestors https://share.refueler.io\n";
+function gateFixture() {
+  const d = mkdtempSync(join(tmpdir(), 'rm-gate-'));
+  const put = (p, data) => { mkdirSync(dirname(join(d, p)), { recursive: true }); writeFileSync(join(d, p), data); };
+  put('index.html', '<p>gate</p>\n');
+  put('404.html', '<p>no</p>\n');
+  put('robots.txt', 'User-agent: *\nDisallow: /\n');
+  put('_headers', '/*\n');
+  put('v/abcdef0123/gate.js', 'export {};\n');
+  put('v/abcdef0123/gate.css', 'html{}\n');
+  return d;
+}
+const EXPECTED_GATE_MANIFEST = `{
+  "manifest": {
+    "app": "https://github.com/rajesh-taylor/refueler-share",
+    "version": "app-abcdef0123",
+    "default_csp": "default-src 'none'; frame-ancestors https://share.refueler.io",
+    "files": {
+      "/404.html": "oQewyh9qk04Rd4Z_CCOOs-R-2aW-Nh6umBdw8V3gt_g",
+      "/index.html": "ffsX2NB8NHR4LwCn7DEdNBA9XeN4hg_UAEhGBHLVTe8",
+      "/robots.txt": "Mx6pCQ2wyfb1l72YQP1bFxgw9uCzuhyyTfqR8Mla7cE",
+      "/v/abcdef0123/gate.css": "MjtVaMRZHihDpjGrzJk0YfFD-5Q1O4Ci0wKx6chCh6Y",
+      "/v/abcdef0123/gate.js": "jmCbtxwguFjHfw6fkLsTGduEd7E_n5ZfGh4YUkv1CIE"
+    },
+    "default_index": "index.html",
+    "default_fallback": "/404.html",
+    "wasm": [],
+    "extra_csp": {}
+  }
+}`;
+const EXPECTED_GATE_SUMS = `a107b0ca1f6a934e1177867f08238eb3e47ed9a5be361eae981770f15de0b7f8  gate/404.html
+7dfb17d8d07c3474782f00a7ec311d34103d5de378860fd40048460472d54def  gate/index.html
+ebf07b7db9d37cfc083981cfcf7e1c9c1a47ea78e340c41ef9b4c981dad3557f  gate/release.json
+331ea9090db0c9f6f597bd9840fd5b171830f6e0b3ba1cb24dfa91f0c95aedc1  gate/robots.txt
+323b5568c4591e2843a631abcc993461f143fb94353b80a2d302b1e9c84287a6  gate/v/abcdef0123/gate.css
+8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881  gate/v/abcdef0123/gate.js
+`;
+
+test('known answer: the gate manifest and its gate/ lines in SHA256SUMS', () => {
+  const d = fixture(), g = gateFixture();
+  try {
+    const plain = run(d);
+    const r = run(d, { gateDist: g, gateCsp: GATE_CSP });
+    assert.equal(r.gateManifestText, EXPECTED_GATE_MANIFEST);
+    // The app's own lines are unchanged; the gate's are added with the gate/ prefix.
+    const lines = r.sumsText.split('\n').filter(Boolean);
+    assert.deepEqual(lines.filter((l) => l.includes('  gate/')), EXPECTED_GATE_SUMS.split('\n').filter(Boolean));
+    assert.deepEqual(lines.filter((l) => !l.includes('  gate/')), plain.sumsText.split('\n').filter(Boolean));
+    assert.equal(r.manifestText, plain.manifestText, 'the app manifest never lists gate files');
+    assert.equal(r.extraText, plain.extraText);
+  } finally { rmSync(d, { recursive: true, force: true }); rmSync(g, { recursive: true, force: true }); }
+});
+
+test('gate: a Satoshi or release-extra file in the gate refuses; --gate-dist without --gate-csp refuses', () => {
+  const d = fixture(), g = gateFixture();
+  try {
+    assert.throws(() => run(d, { gateDist: g }), /gate-csp/);
+    writeFileSync(join(g, 'release-extra.json'), '{}');
+    assert.throws(() => run(d, { gateDist: g, gateCsp: GATE_CSP }), /release-extra/);
+  } finally { rmSync(d, { recursive: true, force: true }); rmSync(g, { recursive: true, force: true }); }
+});
+
+test('CLI: --gate-dist writes the gate release.json, and SHA256SUMS lists gate/release.json with its hash', () => {
+  const d = fixture(), g = gateFixture(), out = mkdtempSync(join(tmpdir(), 'rm-out-'));
+  try {
+    const csp = join(out, 'app.txt'), gcsp = join(out, 'gate.txt');
+    writeFileSync(csp, CSP); writeFileSync(gcsp, GATE_CSP);
+    execFileSync('node', [SCRIPT, 'generate', '--dist', d, '--out', join(out, 'rel'), '--commit', COMMIT, '--prev', '0123456789',
+      '--csp', csp, '--satoshi-sha', SATOSHI, '--nvmrc', '22', '--eleventy', '3.1.6', '--standin', '--gate-dist', g, '--gate-csp', gcsp]);
+    assert.equal(readFileSync(join(g, 'release.json'), 'utf8'), EXPECTED_GATE_MANIFEST);
+    assert.match(readFileSync(join(out, 'rel', 'SHA256SUMS'), 'utf8'), /^ebf07b7db9d37cfc083981cfcf7e1c9c1a47ea78e340c41ef9b4c981dad3557f {2}gate\/release\.json$/m);
+  } finally { for (const x of [d, g, out]) rmSync(x, { recursive: true, force: true }); }
 });

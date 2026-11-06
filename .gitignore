@@ -50,3 +50,6 @@ frontend/app/fonts/Satoshi-*
 
 # Playwright run output (never commit)
 test-results/
+
+# Turnstile-Gate-1: the gate page build (eleventy.gate.js)
+dist-gate/

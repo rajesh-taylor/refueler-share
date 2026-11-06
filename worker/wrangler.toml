@@ -72,6 +72,14 @@ AUTH_MAIL_FROM             = "signin@mail.refueler.io"
 # Ops-Alerts-1 (src/ops.js): the hourly check's alert emails. The recipient is the secret
 # OPS_ALERT_TO (wrangler secret put), so the address stays out of this public repo.
 OPS_MAIL_FROM              = "alerts@mail.refueler.io"
+# Turnstile-Gate-1 (docs/Turnstile-Gate-plan-v1.md §5): the app widget's tokens must come from
+# the gate page, with action upload (/credential/issue) or signin (/auth/magic).
+# APP_TURNSTILE_LEGACY_UNTIL (unix seconds): while in the future, tokens from the old app
+# (share.refueler.io, no action) still pass. Set at deploy = ship + 48 h; it shuts itself.
+# Turnstile-Gate-1 ship Fri 6 Nov 2026 ~22:00 UTC → 1794178800 = Sun 8 Nov 2026 23:00 UTC.
+# "0" = shut. After it passes: remove share.refueler.io from the app widget (plan §8 step 7).
+APP_TURNSTILE_HOSTNAME     = "gate.share.refueler.io"
+APP_TURNSTILE_LEGACY_UNTIL = "1794178800"
 # Plans-Stripe-1: the page host a checkout Turnstile token must come from.
 # Becomes "pay.refueler.io" when Plans moves (Plans-Design-Opus).
 PLANS_TURNSTILE_HOSTNAME   = "refueler.io"

@@ -12,6 +12,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '.out', 'app');
 const PORT = +process.env.APP_PORT || 8765;
 const FAKE = process.env.FAKE_ORIGIN || 'http://localhost:8766';
+const GATE = process.env.GATE_ORIGIN || 'http://localhost:8768';
 
 export function harnessCsp(real) {
   const swap = (s, from, to) => {
@@ -21,6 +22,8 @@ export function harnessCsp(real) {
   let csp = real.trim();
   csp = swap(csp, 'https://api.share.refueler.io', FAKE);
   csp = swap(csp, '; upgrade-insecure-requests', '');
+  // Turnstile-Gate-1: the app frames the local gate (serve-gate.mjs).
+  csp = swap(csp, 'frame-src https://gate.share.refueler.io', `frame-src ${GATE}`);
   return csp;
 }
 

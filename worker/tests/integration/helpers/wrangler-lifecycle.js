@@ -26,6 +26,7 @@ import { spawn }                         from 'node:child_process';
 import { randomBytes }                   from 'node:crypto';
 import { rm, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join }                          from 'node:path';
+import { createServer }                  from 'node:http';
 import { startSupabaseMock }             from '../fixtures/supabase-mock.js';
 
 const PORT        = 8788;
@@ -43,6 +44,7 @@ const MAX_POLLS        = 60; // 30 seconds
 
 let wranglerProcess = null;
 let supabaseMock    = null;
+let siteverifyMock  = null;
 
 async function pollReady() {
   for (let i = 0; i < MAX_POLLS; i++) {
@@ -84,6 +86,19 @@ const b64 = (n = 32) => randomBytes(n).toString('base64');
 export async function setup({ provide }) {
   // ── 1. Start Supabase mock ──────────────────────────────────────────────
   supabaseMock = await startSupabaseMock();
+  // Turnstile-Gate-1: siteverify answers as it would for a token made on the gate for an upload
+  // (Cloudflare's test secret names example.com and no action, which the Worker now refuses).
+  // Every token succeeds, as with the test secret, so the Worker's own nonce replay still runs.
+  siteverifyMock = await new Promise((resolve) => {
+    const srv = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, hostname: 'gate.share.refueler.io', action: 'upload', 'error-codes': [] }));
+      });
+    });
+    srv.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${srv.address().port}/siteverify`, close: () => new Promise((r) => srv.close(r)) }));
+  });
   console.log(`[wrangler-lifecycle] Supabase mock at ${supabaseMock.url}`);
 
   // ── 2. Fresh state + the run's own vars file ───────────────────────────
@@ -98,6 +113,7 @@ export async function setup({ provide }) {
     SUPABASE_SERVICE_KEY:       hex(),                 // the mock ignores auth headers
     ADMIN_KEY:                  adminKey,
     TURNSTILE_SECRET_KEY:       TURNSTILE_TEST_SECRET,
+    TURNSTILE_VERIFY_URL:       siteverifyMock.url,
     STRIPE_WEBHOOK_SECRET:      stripeWebhookSecret,
     MINT_PRIVATE_KEY:           hex(),
     DL_TOKEN_KEY:               b64(),
@@ -159,4 +175,5 @@ export async function teardown() {
     supabaseMock.server.close();
     console.log('[wrangler-lifecycle] Supabase mock stopped.');
   }
+  if (siteverifyMock) await siteverifyMock.close();
 }

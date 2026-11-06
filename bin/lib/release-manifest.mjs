@@ -10,6 +10,10 @@
 //                                  manifest.json       = DIST/release.json, byte for byte
 //                                  release-extra.json  = DIST/release-extra.json
 //                                  SHA256SUMS          every served file, hex, `shasum -a 256 -c` format
+//             [--gate-dist DIR --gate-csp FILE]   Turnstile-Gate-1: the gate page (gate.share.refueler.io)
+//     Also writes into GATE-DIST (served on the gate host): release.json, the gate's own WEBCAT
+//     manifest (WEBCAT is per origin). SHA256SUMS lists the gate's files with a gate/ prefix:
+//     gate/<path> is served at https://gate.share.refueler.io/<path>.
 //   compare   --expected SHA256SUMS --got SHA256SUMS --satoshi-sha HEX
 //     The CI rebuild's check: same paths, same hashes; the expected Satoshi lines equal the pin.
 //
@@ -36,6 +40,7 @@ export const WEBCAT_CLI = '0.1.2';
 export const APP_URL = 'https://github.com/rajesh-taylor/refueler-share';
 export const MANIFEST_PATH = '/release.json';
 export const EXTRA_PATH = '/release-extra.json';
+export const GATE_PREFIX = '/gate';
 const NOT_SERVED = new Set(['/_headers']);
 const LITTER = new Set(['.DS_Store']);
 const SATOSHI_RE = /^\/v\/[0-9a-f]{4,40}\/fonts\/Satoshi-Variable\.woff2$/;
@@ -97,7 +102,8 @@ export function buildExtra({ commit, prev, nvmrc, eleventy, satoshiSha, paths })
       sha256: satoshiSha,
       why: 'Licence forbids redistribution; official Fontshare file, unmodified',
     })),
-    third_party_code: ['https://challenges.cloudflare.com (Cloudflare Turnstile) — not ours, not covered'],
+    // Turnstile-Gate-1: no https:// here — ship-app.sh refuses any app file naming Cloudflare's script URL.
+    third_party_code: ['Cloudflare Turnstile (challenges.cloudflare.com): runs only in the gate page, gate.share.refueler.io, never in Share\'s own page; its script is Cloudflare\'s, not ours, not covered. The gate page itself is in this release (gate/ in SHA256SUMS).'],
     cashu_keysets: [],
     nostr_relays: [],
     apk: null,
@@ -160,14 +166,32 @@ export function compareSums(expectedText, gotText, satoshiSha) {
   return problems;
 }
 
+// The gate's served files (no Satoshi there, no release-extra): path → hex, its release.json excluded.
+export function hashGate(gateDist) {
+  const hashes = new Map();
+  for (const p of listFiles(gateDist)) {
+    if (NOT_SERVED.has(p) || p === MANIFEST_PATH) continue;
+    if (p === EXTRA_PATH) throw new Error('the gate serves no release-extra.json');
+    if (isSatoshi(p)) throw new Error(`${p}: Satoshi has no place in the gate`);
+    hashes.set(p, sha256hex(readFileSync(join(gateDist, p))));
+  }
+  return hashes;
+}
+
 // Everything generate writes, as strings (the tests call this; the CLI writes it out).
-export function generate({ dist, commit, prev, csp, satoshiSha, nvmrc, eleventy, standin }) {
+export function generate({ dist, commit, prev, csp, satoshiSha, nvmrc, eleventy, standin, gateDist, gateCsp }) {
   const hashes = hashServed(dist, { satoshiSha, standin });
   const extraText = serializeExtra(buildExtra({ commit, prev, nvmrc, eleventy, satoshiSha, paths: [...hashes.keys()] }));
   hashes.set(EXTRA_PATH, sha256hex(extraText));
   const manifestText = serializeManifest(buildManifest({ release: commit.slice(0, 10), csp, hashes }));
   hashes.set(MANIFEST_PATH, sha256hex(manifestText));
-  return { manifestText, extraText, sumsText: buildSums(hashes) };
+  if (!gateDist) return { manifestText, extraText, sumsText: buildSums(hashes) };
+  if (!gateCsp) throw new Error('--gate-csp is required with --gate-dist');
+  const gate = hashGate(gateDist);
+  const gateManifestText = serializeManifest(buildManifest({ release: commit.slice(0, 10), csp: gateCsp, hashes: gate }));
+  gate.set(MANIFEST_PATH, sha256hex(gateManifestText));
+  for (const [p, h] of gate) hashes.set(GATE_PREFIX + p, h);
+  return { manifestText, extraText, gateManifestText, sumsText: buildSums(hashes) };
 }
 
 function args(argv) {
@@ -189,11 +213,14 @@ function main(argv) {
       if (!o[k]) throw new Error(`--${k} is required`);
     }
     for (const p of [MANIFEST_PATH, EXTRA_PATH]) rmSync(join(o.dist, p), { force: true });
+    if (o['gate-dist']) rmSync(join(o['gate-dist'], MANIFEST_PATH), { force: true });
     const r = generate({
       dist: o.dist, commit: o.commit, prev: o.prev || '', csp: readFileSync(o.csp, 'utf8'),
       satoshiSha: o['satoshi-sha'], nvmrc: o.nvmrc, eleventy: o.eleventy, standin: !!o.standin,
+      gateDist: o['gate-dist'] || '', gateCsp: o['gate-csp'] ? readFileSync(o['gate-csp'], 'utf8') : '',
     });
     writeFileSync(join(o.dist, MANIFEST_PATH), r.manifestText);
+    if (r.gateManifestText) writeFileSync(join(o['gate-dist'], MANIFEST_PATH), r.gateManifestText);
     writeFileSync(join(o.dist, EXTRA_PATH), r.extraText);
     mkdirSync(o.out, { recursive: true });
     writeFileSync(join(o.out, 'manifest.json'), r.manifestText);

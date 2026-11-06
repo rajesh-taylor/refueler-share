@@ -213,6 +213,7 @@ export function makeEnv(overrides = {}) {
     MINT_PRIVATE_KEY:        MINT_PRIVKEY_HEX,
     DL_TOKEN_KEY:            'QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=',
     TURNSTILE_SECRET_KEY:    'ts',
+    APP_TURNSTILE_HOSTNAME:  'gate.share.refueler.io',
     ADMIN_KEY:               ADMIN,
     TEST_CRED_KEY:           'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=',
     SUPABASE_URL:            'https://sb.test',

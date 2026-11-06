@@ -61,7 +61,7 @@ describe('approved wording', () => {
     });
   });
   it('security check blocked', () => {
-    expect(CHECK_BLOCKED).toBe('The security check couldn’t load. A content blocker or VPN may be stopping it; allow challenges.cloudflare.com, or try once without it.');
+    expect(CHECK_BLOCKED).toBe('The security check couldn’t load. A content blocker or VPN may be stopping it; allow challenges.cloudflare.com and gate.share.refueler.io, or try once without it.');
   });
   it('download stop lines', () => {
     expect(DL_TEXT).toEqual({
@@ -88,21 +88,29 @@ describe('approved wording', () => {
   });
 });
 
-describe('security check that never loads (upload-turnstile.js)', () => {
+describe('security check that never loads (upload-turnstile.js, through the gate)', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  it('after 15 s: the line shows, the button reads "Encrypt and upload" again, the script is removed', () => {
-    vi.useFakeTimers();
-    const added = [];
-    const el = () => ({ classList: { add() {}, remove() {} }, remove() { this.removed = true; }, innerHTML: '' });
-    const container = el(), wrap = el();
+  // Turnstile-Gate-1: the check runs in a framed gate page. Here the gate never answers.
+  function fakePage() {
+    const frames = [];
+    const el = (tag) => ({ tag, attrs: {}, classList: { add() {}, remove() {} }, setAttribute(k, v) { this.attrs[k] = v; },
+      remove() { this.removed = true; }, appendChild(c) { if (c.tag === 'iframe') frames.push(c); }, contentWindow: { postMessage() {} } });
+    const container = el('div'), wrap = el('div');
     vi.stubGlobal('document', {
       getElementById: (id) => (id === 'cf-turnstile' ? container : id === 'turnstile-wrap' ? wrap : null),
-      createElement: () => { const s = el(); added.push(s); return s; },
-      head: { appendChild() {} },
-      documentElement: { dataset: {} },
+      createElement: (tag) => el(tag),
+      documentElement: { getAttribute: () => null },
     });
-    vi.stubGlobal('window', {});
+    const listeners = [];
+    vi.stubGlobal('window', { addEventListener: (t, f) => listeners.push(f), removeEventListener: (t, f) => listeners.splice(listeners.indexOf(f), 1) });
+    vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
+    return { frames, listeners };
+  }
+
+  it('after 15 s with no gate: the line shows, gate_load is reported, the button reads "Encrypt and upload" again', () => {
+    vi.useFakeTimers();
+    const { frames, listeners } = fakePage();
     const domRefs = {
       uploadBtn: { textContent: UPLOAD_LABEL, disabled: false },
       passphraseToggle: { checked: false }, passphraseInput: { value: '' },
@@ -115,17 +123,22 @@ describe('security check that never loads (upload-turnstile.js)', () => {
     pressWhenChecked(go, state, domRefs, helpers);
     expect(domRefs.uploadBtn.textContent).toBe('Checking…');
     expect(domRefs.uploadBtn.disabled).toBe(true);
+    expect(frames).toHaveLength(1);
+    expect(frames[0].src).toBe('https://gate.share.refueler.io/');
+    expect(frames[0].attrs.sandbox).toBe('allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    expect(frames[0].attrs.referrerpolicy).toBe('no-referrer');
 
     vi.advanceTimersByTime(15500);
     expect(msgs).toEqual([CHECK_BLOCKED]);
-    expect(reports).toEqual([['turnstile_load', 'timeout', '']]);
+    expect(reports).toEqual([['gate_load', 'timeout', '']]);
     expect(domRefs.uploadBtn.textContent).toBe(UPLOAD_LABEL);
     expect(domRefs.uploadBtn.disabled).toBe(false);
-    expect(added[0].removed).toBe(true);
     expect(go).not.toHaveBeenCalled();
 
-    // The next press loads the script afresh.
+    // The next press removes the frame and inserts a fresh one.
     pressWhenChecked(go, state, domRefs, helpers);
-    expect(added.length).toBe(2);
+    expect(frames[0].removed).toBe(true);
+    expect(frames).toHaveLength(2);
+    expect(listeners).toHaveLength(1);
   });
 });

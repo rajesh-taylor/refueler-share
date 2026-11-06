@@ -5,7 +5,7 @@
 // (.github/workflows/watchdog.yml, every six hours), anyone from a copy of the repo (/verify/),
 // and Rajesh after a ship.
 //
-//   node bin/verify-live.mjs [--host https://share.refueler.io]
+//   node bin/verify-live.mjs [--host https://share.refueler.io] [--gate https://gate.share.refueler.io]
 //
 // 1  fetch the live page (cache-busted) → the release it loads, from /v/<sha>/share-early.js
 // 2  fetch that release's SHA256SUMS + manifest.json from GitHub's public download URLs; none
@@ -15,6 +15,12 @@
 // 4  headers on /, one asset and an unknown path: CSP = the manifest's default_csp, HSTS, no
 //    Report-Only, no X-Robots-Tag, no Link, no-transform, not browser-cacheable, a real 404
 // 5  the live release is GitHub's latest published release
+// 6  Turnstile-Gate-1 (6 Nov 2026): when SHA256SUMS lists gate/ files, every one is fetched from
+//    the gate host (gate/<path> → https://gate.share.refueler.io/<path>) and compared; the gate's
+//    headers are checked (CSP = its own release.json's default_csp, once that file's hash has
+//    matched GitHub's; noindex, no-referrer, nosniff, HSTS, no Link, no-transform, max-age=0,
+//    a real 404); and the app's CSP must not name challenges.cloudflare.com and must frame only
+//    the gate origin.
 // Exit 0 = everything matches. Exit 1 = anything else; failed fetches (network, 5xx) are listed
 // apart from mismatches, since a re-run usually clears them. Exit 2 = bad arguments.
 // The hashes always come from GitHub, never from the host being checked (P5): /release.json on
@@ -24,10 +30,11 @@
 
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseSums } from './lib/release-manifest.mjs';
+import { parseSums, GATE_PREFIX } from './lib/release-manifest.mjs';
 
 export const DEFAULTS = {
   host: 'https://share.refueler.io',
+  gate: 'https://gate.share.refueler.io',
   repo: 'rajesh-taylor/refueler-share',
   github: 'https://github.com',
   api: 'https://api.github.com',
@@ -135,6 +142,34 @@ export function crossCheck(sha, sums, manifest) {
   return problems;
 }
 
+// The gate's own header rules (plan §3): noindex, no-referrer, nosniff; no CORP rule (it is framed).
+function gateHeaderProblems(url, r, csp, { notFound }) {
+  const p = [];
+  const h = (n) => r.headers.get(n);
+  if (notFound && r.status !== 404) p.push(`${url}: HTTP ${r.status} for an unknown path (want a real 404)`);
+  if (!notFound && r.status !== 200) p.push(`${url}: HTTP ${r.status}`);
+  if (h('content-security-policy') !== csp) p.push(`${url}: CSP differs from the gate's release.json default_csp (served: ${h('content-security-policy') ?? 'none'})`);
+  if (h('content-security-policy-report-only') !== null) p.push(`${url}: a Report-Only CSP is present`);
+  if (h('x-robots-tag') !== 'noindex') p.push(`${url}: X-Robots-Tag: noindex missing (${h('x-robots-tag') ?? 'none'})`);
+  if (h('referrer-policy') !== 'no-referrer') p.push(`${url}: Referrer-Policy: no-referrer missing (${h('referrer-policy') ?? 'none'})`);
+  if (h('x-content-type-options') !== 'nosniff') p.push(`${url}: X-Content-Type-Options: nosniff missing`);
+  if (!/^max-age=31536000\b/.test(h('strict-transport-security') || '')) p.push(`${url}: HSTS (max-age=31536000) missing`);
+  if (h('link') !== null) p.push(`${url}: Link header present: ${h('link')}`);
+  const cc = (h('cache-control') || '').toLowerCase();
+  if (!(notFound && cc === 'no-store') && !cc.includes('no-transform')) p.push(`${url}: no-transform missing (${cc || 'no Cache-Control'})`);
+  if (!/max-age=0|no-store|no-cache/.test(cc)) p.push(`${url}: browser-cacheable (${cc || 'no Cache-Control'})`);
+  return p;
+}
+
+// The app's CSP once the gate exists: no Cloudflare script, and it frames only the gate.
+export function appCspGateProblems(csp, gateOrigin) {
+  const p = [];
+  if (/challenges\.cloudflare\.com/.test(csp || '')) p.push('the app CSP names challenges.cloudflare.com (Turnstile must run only in the gate)');
+  const frame = /(?:^|;)\s*frame-src ([^;]*)/.exec(csp || '')?.[1]?.trim();
+  if (frame !== gateOrigin) p.push(`the app CSP frame-src is "${frame ?? 'missing'}", not exactly ${gateOrigin}`);
+  return p;
+}
+
 function headerProblems(url, r, csp, { notFound }) {
   const p = [];
   const h = (n) => r.headers.get(n);
@@ -157,8 +192,9 @@ function headerProblems(url, r, csp, { notFound }) {
 export async function verifyLive(opts = {}) {
   const o = { ...DEFAULTS, ...opts };
   o.host = o.host.replace(/\/+$/, '');
+  o.gate = o.gate.replace(/\/+$/, '');
   const log = o.log || (() => {});
-  const found = { mismatch: [], missing: [], fetch: [], headers: [], release: [] };
+  const found = { mismatch: [], missing: [], fetch: [], headers: [], release: [], gate: [] };
   const done = (extra = {}) => ({ ok: Object.values(found).every((a) => a.length === 0), found, ...extra });
 
   // 1 + 2: the live release and its published files, with one late retry.
@@ -179,12 +215,18 @@ export async function verifyLive(opts = {}) {
     await sleep(o.retryWait * 1000);
   }
   const { sha } = live;
-  log(`▶ ${o.host} loads release app-${sha}; ${rel.sums.size} files listed in its SHA256SUMS on GitHub`);
-  found.release.push(...crossCheck(sha, rel.sums, rel.manifest));
+  // SHA256SUMS lists the app's files, and (Turnstile-Gate-1) the gate's under gate/.
+  const gateSums = new Map(), appSums = new Map();
+  for (const [p, h] of rel.sums) {
+    if (p.startsWith(`${GATE_PREFIX}/`)) gateSums.set(p.slice(GATE_PREFIX.length), h);
+    else appSums.set(p, h);
+  }
+  log(`▶ ${o.host} loads release app-${sha}; ${appSums.size} app files${gateSums.size ? ` + ${gateSums.size} gate files` : ''} listed in its SHA256SUMS on GitHub`);
+  found.release.push(...crossCheck(sha, appSums, rel.manifest));
 
   // 3: every listed file.
   let same = 0;
-  await pool([...rel.sums.keys()], o.concurrency, async (p) => {
+  await pool([...appSums.keys()], o.concurrency, async (p) => {
     const url = `${o.host}${urlFor(p.slice(1))}`;
     const r = await get(`${url}?${bust()}`, o, { cache: 'no-store' });
     if (r.error) found.fetch.push(`${p.slice(1)}: ${r.error}`);
@@ -196,7 +238,7 @@ export async function verifyLive(opts = {}) {
       else found.mismatch.push(`${p.slice(1)}: published ${want}, served ${got}`);
     }
   });
-  log(`  ${same} of ${rel.sums.size} files are the same as the release`);
+  log(`  ${same} of ${appSums.size} files are the same as the release`);
 
   // 4: headers.
   const csp = rel.manifest?.default_csp;
@@ -205,6 +247,40 @@ export async function verifyLive(opts = {}) {
     const r = await get(`${url}${notFound ? '' : `?${bust()}`}`, o, { cache: 'no-store' });
     if (r.error) found.fetch.push(`${url}: ${r.error}`);
     else found.headers.push(...headerProblems(url, r, csp, { notFound }));
+  }
+
+  // 6: the gate (Turnstile-Gate-1).
+  let gateSame = 0;
+  if (gateSums.size) {
+    found.release.push(...appCspGateProblems(csp, new URL(o.gate).origin));
+    let gateManifest = null;
+    await pool([...gateSums.keys()], o.concurrency, async (p) => {
+      const url = `${o.gate}${urlFor(p.slice(1))}`;
+      const r = await get(`${url}?${bust()}`, o, { cache: 'no-store' });
+      if (r.error) found.fetch.push(`gate/${p.slice(1)}: ${r.error}`);
+      else if (r.status === 404) found.missing.push(`gate/${p.slice(1)}: not served (404 at ${url})`);
+      else if (r.status !== 200) found.fetch.push(`gate/${p.slice(1)}: ${why(r)} at ${url}`);
+      else {
+        const got = sha256(r.body), want = gateSums.get(p);
+        if (got !== want) { found.mismatch.push(`gate/${p.slice(1)}: published ${want}, served ${got}`); return; }
+        gateSame++;
+        // Trusted only now its bytes match GitHub's hash (P5).
+        if (p === '/release.json') { try { gateManifest = JSON.parse(r.body.toString('utf8')).manifest; } catch { /* listed below */ } }
+      }
+    });
+    log(`  ${gateSame} of ${gateSums.size} gate files are the same as the release`);
+    if (!gateSums.has('/release.json')) found.gate.push('SHA256SUMS lists no gate/release.json');
+    else if (gateManifest && gateManifest.version !== `app-${sha}`) found.gate.push(`gate release.json is version ${gateManifest.version}, not app-${sha}`);
+    const gcsp = gateManifest?.default_csp;
+    if (gateSums.has('/release.json') && gateSame && !gcsp) found.gate.push('the gate release.json could not be read (no default_csp)');
+    if (gcsp) {
+      for (const [url, notFound] of [[`${o.gate}/`, false], [`${o.gate}/v/${sha}/gate.js`, false],
+        [`${o.gate}/no-such-page-${Math.floor(Math.random() * 1e9)}`, true]]) {
+        const r = await get(`${url}${notFound ? '' : `?${bust()}`}`, o, { cache: 'no-store' });
+        if (r.error) found.fetch.push(`${url}: ${r.error}`);
+        else found.gate.push(...gateHeaderProblems(url, r, gcsp, { notFound }));
+      }
+    }
   }
 
   // 5: the live release is the latest one published.
@@ -217,7 +293,7 @@ export async function verifyLive(opts = {}) {
     latest = JSON.parse(lr.body.toString('utf8')).tag_name;
     if (latest !== `app-${sha}`) found.release.push(`live is app-${sha} but the latest published release is ${latest} (rollback, or a failed deploy?)`);
   }
-  return done({ live: sha, latest, files: rel.sums.size, same });
+  return done({ live: sha, latest, files: appSums.size, same, gateFiles: gateSums.size, gateSame });
 }
 
 function report(r, host) {
@@ -226,6 +302,7 @@ function report(r, host) {
     ['missing', 'Listed in the release, not served'],
     ['release', 'Release'],
     ['headers', 'Headers'],
+    ['gate', 'Gate (gate.share.refueler.io)'],
     ['fetch', 'Could not fetch (network or server error, not a mismatch — run again once)'],
   ];
   for (const [k, title] of sections) {
@@ -234,18 +311,18 @@ function report(r, host) {
     for (const line of r.found[k].sort()) console.error(`  ✗ ${line}`);
   }
   if (r.ok) {
-    console.log(`\n✓ ${host} serves release app-${r.live}: all ${r.files} files match its published SHA256SUMS; headers as expected; it is the latest release`);
+    console.log(`\n✓ ${host} serves release app-${r.live}: all ${r.files} files match its published SHA256SUMS; headers as expected; it is the latest release${r.gateFiles ? `\n✓ the gate serves all ${r.gateFiles} of its files from the same release; its headers as expected` : ''}`);
     return 0;
   }
   const n = (k) => r.found[k].length;
-  const mismatches = n('mismatch') + n('missing') + n('release') + n('headers');
+  const mismatches = n('mismatch') + n('missing') + n('release') + n('headers') + n('gate');
   console.error(`\n✗ RED — ${host}${r.live ? ` (release app-${r.live})` : ''}: ${mismatches} mismatch(es), ${n('fetch')} fetch failure(s)`);
   return 1;
 }
 
 function parseArgs(argv) {
   const o = {};
-  const keys = { '--host': 'host', '--repo': 'repo', '--github': 'github', '--api': 'api', '--retry-wait': 'retryWait', '--backoff-ms': 'backoffMs' };
+  const keys = { '--host': 'host', '--gate': 'gate', '--repo': 'repo', '--github': 'github', '--api': 'api', '--retry-wait': 'retryWait', '--backoff-ms': 'backoffMs' };
   for (let i = 0; i < argv.length; i++) {
     const k = keys[argv[i]];
     if (!k || argv[i + 1] === undefined) throw new Error(`unknown or incomplete argument: ${argv[i]}`);
@@ -254,7 +331,7 @@ function parseArgs(argv) {
   for (const k of ['retryWait', 'backoffMs']) {
     if (k in o) { o[k] = Number(o[k]); if (!(o[k] >= 0)) throw new Error(`--${k} must be a number`); }
   }
-  for (const k of ['host', 'github', 'api']) {
+  for (const k of ['host', 'gate', 'github', 'api']) {
     if (k in o && !/^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(o[k])) throw new Error(`--${k} must be a URL`);
   }
   if ('repo' in o && !/^[\w.-]+\/[\w.-]+$/.test(o.repo)) throw new Error('--repo must be owner/name');

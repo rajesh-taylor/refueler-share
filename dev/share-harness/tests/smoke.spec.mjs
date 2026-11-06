@@ -383,3 +383,114 @@ test('Chromium: the streaming save path', async ({ page, browser, browserName })
   await rx.context().close();
   expect(problems).toEqual([]);
 });
+
+// ── Turnstile-Gate-1: the check runs in the gate frame, never in the app ────
+// The gate (serve-gate.mjs, :8768) is the real src/gate build under its real CSP, with the stub
+// in place of Cloudflare's script; ?ts= on the app URL reaches it (harness build only).
+const BLOCKED = /The security check couldn’t load\. A content blocker or VPN may be stopping it; allow challenges\.cloudflare\.com and gate\.share\.refueler\.io/;
+
+async function pick(page, url, name = 'gate.bin') {
+  await page.goto(url);
+  await expect(page.locator('#drop-zone')).toBeVisible();
+  await page.locator('#file-input').setInputFiles(makeFile(name, 4096).path);
+  await expect(page.locator('#options-card')).toBeVisible();
+}
+
+test('gate: Cloudflare\'s script never loads in the app page; the frame is the gate, sandboxed', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  await pick(page, '/');
+  const frame = page.locator('iframe#cf-gate');
+  await expect(frame).toHaveAttribute('src', 'http://localhost:8768/');
+  await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+  await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
+  await expect(page.locator('#share-card')).toBeHidden();
+  const link = await finishSend(page);
+  expect(link).toContain('?uuid=');
+  expect(await page.evaluate(() => typeof window.turnstile)).toBe('undefined');
+  expect(await page.locator('script[src*="turnstile"]').count()).toBe(0);
+  const gate = page.frames().find((f) => f.url().startsWith('http://localhost:8768/'));
+  expect(await gate.evaluate(() => typeof window.turnstile)).toBe('object');
+  expect(problems).toEqual([]);
+});
+
+test('gate: Cloudflare asks for a click → the box shows; a forged token from the page is ignored; the tick, then the press, uploads', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  await pick(page, '/?ts=click');
+  await expect(page.locator('#turnstile-wrap')).toBeVisible();
+  await expect(page.locator('#upload-btn')).toBeDisabled();
+  // Not from the gate frame: dropped (source and origin checks).
+  await page.evaluate(() => window.postMessage({ t: 'refueler-gate', v: 1, op: 'token', id: 'x', token: 'forged' }, '*'));
+  await page.waitForTimeout(300);
+  await expect(page.locator('#upload-btn')).toBeDisabled();
+  await page.frameLocator('iframe#cf-gate').getByText('Verify you are human (stub)').click();
+  await expect(page.locator('#upload-btn')).toBeEnabled();
+  await expect(page.locator('#turnstile-wrap')).toBeHidden();
+  const link = await finishSend(page);
+  expect(link).toContain('?uuid=');
+  expect(problems).toEqual([]);
+});
+
+test('gate: Cloudflare\'s script blocked inside the gate → the blocked line at once, the button back', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  await pick(page, '/?ts=blocked');
+  await page.locator('#upload-btn').click();
+  await expect(page.getByText(BLOCKED)).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#upload-btn')).toHaveText('Encrypt and upload');
+  await expect(page.locator('#upload-btn')).toBeEnabled();
+  expect(problems).toEqual([]);
+});
+
+test('gate: the gate page itself unreachable → the blocked line 15 s after the press', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  await page.route('http://localhost:8768/**', (r) => r.abort());
+  await pick(page, '/');
+  await page.locator('#upload-btn').click();
+  await expect(page.locator('#upload-btn')).toHaveText('Checking…');
+  await expect(page.getByText(BLOCKED)).toBeVisible({ timeout: 25_000 });
+  await expect(page.locator('#upload-btn')).toHaveText('Encrypt and upload');
+  // The next press inserts a fresh frame; with the gate back, the upload goes through.
+  await page.unroute('http://localhost:8768/**');
+  const link = await finishSend(page);
+  expect(link).toContain('?uuid=');
+});
+
+test('gate: a top-level visit shows one line and loads no Cloudflare script', async ({ page }) => {
+  await page.goto('http://localhost:8768/');
+  await expect(page.getByText('This page works only inside Share.')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => typeof window.turnstile)).toBe('undefined');
+  expect(await page.locator('script[src*="turnstile"]').count()).toBe(0);
+});
+
+test('gate: sign-in gets its token through the gate; the frame takes no room until asked', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  await fetch(`${FAKE}/_ctl?signout=1`);
+  await page.goto('/signin/');
+  const frame = page.locator('#si-check iframe#cf-gate');
+  await expect(frame).toHaveAttribute('src', 'http://localhost:8768/');
+  await expect(page.locator('#si-send')).toBeEnabled();
+  expect((await frame.boundingBox())?.height ?? 0).toBe(0);
+  expect(await page.evaluate(() => typeof window.turnstile)).toBe('undefined');
+  await page.locator('#si-email').fill('dev@refueler.io');
+  await page.locator('#si-send').click();
+  await expect(page.locator('#signin-sheet')).toHaveAttribute('data-state', 'sent');
+  expect(problems).toEqual([]);
+});
+
+// Cloudflare's real script in the gate, with its always-pass test sitekey (needs the network;
+// run with SMOKE_REAL_TURNSTILE=1). The spike (plan §11) covered the fail and click test keys.
+test('gate: real Turnstile (test sitekey) in the gate → upload', async ({ page, browserName }) => {
+  test.skip(!process.env.SMOKE_REAL_TURNSTILE, 'set SMOKE_REAL_TURNSTILE=1 (network)');
+  const problems = [];
+  await sender(page, browserName, problems);
+  await pick(page, '/?ts=real');
+  const link = await finishSend(page);
+  expect(link).toContain('?uuid=');
+  expect(await page.evaluate(() => typeof window.turnstile)).toBe('undefined');
+  expect(problems).toEqual([]);
+});

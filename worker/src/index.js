@@ -1,6 +1,7 @@
 /* eslint-disable no-undef, no-use-before-define */
 import { verifyTurnstileToken } from './turnstile.js';
-import { issueBlindSignature, verifyProofV2 } from './nut00.js';
+import { appTurnstileRule } from './app_turnstile.js';
+import { issueBlindSignature, verifyProofV2, isBlindedPoint } from './nut00.js';
 import { computeCommitment } from './commitment.js';
 import { createManifest, isExpired, isInGracePeriod, isDownloadBlocked, requiresPassphrase, TIER_CAPS, CHARTERED_CAP_BYTES } from './manifest.js';
 import { hashSecret, timingSafeEqual, issueDownloadToken, verifyDownloadToken } from './download_gate.js';
@@ -1233,7 +1234,12 @@ async function handleCredentialIssue(request, env) {
   const { turnstile_token } = body;
   if (!turnstile_token || typeof turnstile_token !== 'string') return err(400, 'Missing turnstile_token or blinded_message');
 
-  const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY);
+  // Worker-Keys-2 leftover: a blinded_message that isn't a curve point is the caller's
+  // mistake (400), found before the Turnstile token is spent, not a 500 after it.
+  if (!isBlindedPoint(blinded_message)) return err(400, 'Invalid blinded_message');
+
+  // Turnstile-Gate-1: made on the gate, for an upload (plan §5).
+  const turnstileOk = await verifyTurnstileToken(turnstile_token, env.TURNSTILE_SECRET_KEY, appTurnstileRule(env, 'upload'));
   if (!turnstileOk) return err(403, 'Turnstile verification failed');
 
   // ── Turnstile nonce binding (S42d) ──────────────────────────────────────

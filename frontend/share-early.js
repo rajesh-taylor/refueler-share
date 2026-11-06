@@ -31,7 +31,7 @@ if (location.hash.length > 1 || /[?&]uuid=[^&]/.test(location.search)) document.
   if (location.hash.length <= 1 && document.currentScript) {
     // Share-JS-Split-2: every module the upload page imports, so none waits on another.
     // X5-1b: timestamp.js (paid permanent record) and the vendored fflate/QR scripts load on use.
-    ['upload.js', 'upload-turnstile.js', 'upload-options.js', 'upload-folder.js', 'upload-start.js',
+    ['upload.js', 'upload-turnstile.js', 'gate-client.js', 'upload-options.js', 'upload-folder.js', 'upload-start.js',
      'upload-send.js', 'upload-resume.js', 'upload-store.js', 'upload-stop.js', 'upload-net.js',
      'upload-account.js', 'zip.js', 'merkle.js'].forEach(function (f) { preload(f); });
   }

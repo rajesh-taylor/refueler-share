@@ -11,7 +11,15 @@
 #   bin/ship-app.sh --rebuild <commit> [<prev>]
 #                              rebuild one release from git alone (git archive), the release
 #                              <prev> kept beside it, + its release files; deploys nothing
-#   bin/ship-app.sh --prove    prove only: is share.refueler.io serving exactly dist/?
+#   bin/ship-app.sh --prove    prove only: is share.refueler.io serving exactly dist/, and
+#                              gate.share.refueler.io exactly dist-gate/?
+#
+# Turnstile-Gate-1 (6 Nov 2026, refueler-share-private docs/Turnstile-Gate-plan-v1.md §2): the
+# same release also builds the gate page (src/gate/, eleventy.gate.js → dist-gate/), served on
+# gate.share.refueler.io from its own Pages project (refueler-share-gate). Both builds are made
+# twice and compared; the gate is deployed and proven BEFORE the app (the new app needs it; the
+# old app never touches it). SHA256SUMS lists the gate's files under gate/; the gate serves its
+# own /release.json. The gate's CSP is bin/lib/gate-csp.txt; the app's CSP names only the gate.
 #
 # What gets deployed is dist/, and dist/ is exactly what is hashed:
 #   dist/*.html, dist/signin/, dist/manifest.webmanifest   (Eleventy, eleventy.app.js)
@@ -41,13 +49,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 MODE="${1:-ship}"
 APP_HOST="${APP_HOST:-https://share.refueler.io}"
+GATE_HOST="${GATE_HOST:-https://gate.share.refueler.io}"
 PROJECT="refueler-share-app"
+GATE_PROJECT="refueler-share-gate"
 REPO="rajesh-taylor/refueler-share"
 # Every `gh` call names the repo, whatever directory the script is run from (Share-Release-1b:
 # run from ~, `gh release create` looked for a git repo in ~ and failed).
 export GH_REPO="$REPO"
 CSP_FILE="$ROOT/bin/lib/app-csp.txt"
+GATE_CSP_FILE="$ROOT/bin/lib/gate-csp.txt"
 DIST="$ROOT/dist"
+GATE_DIST="$ROOT/dist-gate"
+GATE_SRC="$ROOT/src/gate"
 RELEASE_OUT="$ROOT/build/release"
 APP_SRC="$ROOT/frontend/app"
 ELEVENTY="$ROOT/node_modules/.bin/eleventy"
@@ -91,6 +104,12 @@ assets_of() {
     | sed -En 's/^AA_(JS|CSS|VENDOR)="([^"]*)".*/\2/p' | tr '\n' ' '
 }
 
+# A commit's gate file list (AG_FILES), empty if it had no gate.
+gate_assets_of() {
+  git -C "$ROOT" show "$1:bin/lib/app-assets.sh" 2>/dev/null \
+    | sed -En 's/^AG_FILES="([^"]*)".*/\1/p' | tr '\n' ' '
+}
+
 # Satoshi into a release dir that has fonts/: the official file, or (CI) an empty stand-in.
 place_satoshi() {
   [ -d "$1/fonts" ] || return 0
@@ -122,6 +141,48 @@ write_headers() {
 EOF
 }
 
+write_gate_headers() {
+  local out="$1" csp
+  csp="$(tr -d '\n' < "$GATE_CSP_FILE")"
+  cat > "$out/_headers" <<EOF
+/*
+  Content-Security-Policy: $csp
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+  ! Link
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+EOF
+}
+
+# build_gate_into SRC OUT SHA PREV — the gate's deploy tree from the tree at SRC. PREV's gate
+# files are rebuilt from git beside it, when PREV had a gate.
+build_gate_into() {
+  local src="$1" out="$2" sha="$3" prev="$4" n tmp prev_files
+  rm -rf "$out"
+  # A release from before the gate (--rebuild of an older tag) has none: build nothing.
+  [ -f "$src/eleventy.gate.js" ] || return 0
+  ( cd "$src" && APP_SHA="$sha" "$ELEVENTY" --config=eleventy.gate.js --output="$out" --quiet ) >/dev/null \
+    || die "Eleventy gate build failed: cd $src && APP_SHA=$sha npx eleventy --config=eleventy.gate.js"
+  mkdir -p "$out/v/$sha"
+  for n in $AG_FILES; do
+    [ -f "$src/src/gate/$n" ] || die "gate file missing: src/gate/$n"
+    cp "$src/src/gate/$n" "$out/v/$sha/$n"
+  done
+  if [ -n "$prev" ] && [ "$prev" != "$sha" ]; then
+    prev_files="$(gate_assets_of "$prev")"
+    if [ -n "$prev_files" ]; then
+      tmp="$(mktmp)"
+      git -C "$ROOT" archive --format=tar "$prev" -- src/gate | tar -x -C "$tmp"
+      mkdir -p "$out/v/$prev"
+      for n in $prev_files; do cp "$tmp/src/gate/$n" "$out/v/$prev/$n"; done
+    fi
+  fi
+  write_gate_headers "$out"
+}
+
 # The release currently live (from its HTML), or empty.
 live_release() {
   curl -sS --max-time 20 "$APP_HOST/?v=$(date +%s)$RANDOM" 2>/dev/null \
@@ -147,16 +208,18 @@ build_into() {
     place_satoshi "$out/v/$prev"   # gitignored: not in the archive
   fi
   write_headers "$out"
+  build_gate_into "$src" "$out-gate" "$sha" "$prev"
 }
 
 # Every file a release takes from frontend/ is tracked by git (Satoshi excepted): an untracked
 # file would ship, and nobody could rebuild it from the public source.
 check_tracked() {
   local tracked n f bad=0
-  tracked="$(git -C "$ROOT" ls-files -- frontend)"
+  tracked="$(git -C "$ROOT" ls-files -- frontend src/gate)"
   for f in $(for n in $AA_ASSETS; do echo "frontend/$n"; done; \
              aa_files_under "$ROOT/frontend/blake3" | sed 's|^|frontend/blake3/|'; \
-             aa_files_under "$APP_SRC" | sed 's|^|frontend/app/|'); do
+             aa_files_under "$APP_SRC" | sed 's|^|frontend/app/|'; \
+             aa_files_under "$GATE_SRC" | sed 's|^|src/gate/|'); do
     [ "$f" = "frontend/app/fonts/Satoshi-Variable.woff2" ] && continue
     printf '%s\n' "$tracked" | grep -qxF "$f" || { echo "  ✗ not tracked by git: $f" >&2; bad=1; }
   done
@@ -170,7 +233,7 @@ build() {
   step "build dist/ (release $sha${prev:+, keeping $prev}) · node $(node -v) · eleventy $(eleventy_version)"
   check_satoshi
   build_into "$ROOT" "$DIST" "$sha" "$prev"
-  echo "  ✓ $(find "$DIST" -type f | wc -l | tr -d ' ') files"
+  echo "  ✓ $(find "$DIST" -type f | wc -l | tr -d ' ') files · gate $(find "$GATE_DIST" -type f | wc -l | tr -d ' ') files"
   if [ "$MODE" = "--check" ] && [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
     echo "  ⚠ uncommitted changes: second build and tracked-file check skipped (a ship refuses until committed)"
     return 0
@@ -181,11 +244,12 @@ build() {
   mkdir -p "$tmp/src"
   git -C "$ROOT" archive --format=tar HEAD | tar -x -C "$tmp/src"
   build_into "$tmp/src" "$tmp/dist" "$sha" "$prev"
-  if ! diffs="$(diff -r -q "$DIST" "$tmp/dist" 2>&1)"; then
-    printf '%s\n' "$diffs" | sed "s|$tmp/dist|<git archive build>|g; s|$DIST|dist|g; s|^|  ✗ |" >&2
-    die "the two builds differ — dist/ holds something git doesn't (uncommitted change, untracked or ignored file?) or the build isn't reproducible; nothing deployed"
+  if ! diffs="$( { diff -r -q "$DIST" "$tmp/dist"; diff -r -q "$GATE_DIST" "$tmp/dist-gate"; } 2>&1)"; then
+    # (both trees always have a gate here: the working tree and HEAD are this commit)
+    printf '%s\n' "$diffs" | sed "s|$tmp/dist-gate|<git archive build: gate>|g; s|$tmp/dist|<git archive build>|g; s|$GATE_DIST|dist-gate|g; s|$DIST|dist|g; s|^|  ✗ |" >&2
+    die "the two builds differ — dist/ or dist-gate/ holds something git doesn't (uncommitted change, untracked or ignored file?) or the build isn't reproducible; nothing deployed"
   fi
-  echo "  ✓ two builds byte-identical"
+  echo "  ✓ two builds byte-identical (app + gate)"
 }
 
 eleventy_version() { node -p "require('$ROOT/node_modules/@11ty/eleventy/package.json').version"; }
@@ -197,8 +261,11 @@ release_files() {
   nvmrc="$(git -C "$ROOT" show "$full:.nvmrc" 2>/dev/null | tr -d '[:space:]' || true)"
   [ "${CI_MODE:-0}" = "1" ] && standin="--standin"
   rm -rf "$RELEASE_OUT"
+  local gate_args=""
+  [ -d "$GATE_DIST" ] && gate_args="--gate-dist $GATE_DIST --gate-csp $GATE_CSP_FILE"
+  # shellcheck disable=SC2086
   node "$ROOT/bin/lib/release-manifest.mjs" generate --dist "$DIST" --out "$RELEASE_OUT" \
-    --commit "$full" --prev "$prev" --csp "$CSP_FILE" --satoshi-sha "$SATOSHI_SHA256" \
+    --commit "$full" --prev "$prev" --csp "$CSP_FILE" --satoshi-sha "$SATOSHI_SHA256" $gate_args \
     --nvmrc "${nvmrc:-none}" --eleventy "$(eleventy_version)" $standin \
     || die "release files could not be written (bin/lib/release-manifest.mjs)"
 }
@@ -249,8 +316,50 @@ check() {
   node "$ROOT/bin/check-no-uuid-path.mjs" --only "$DIST/v/$sha" >/dev/null || aa_fail "a transfer UUID is built into an API path in dist/v/$sha/ (bin/check-no-uuid-path.mjs)"
   # no third-party CSS/fonts in the app (CSP would block them; better to fail here)
   if grep -rlq 'fonts.googleapis\|fontshare\|gstatic' "$DIST" --include='*.html' --include='*.css'; then aa_fail "third-party font reference in dist/"; fi
+  # Turnstile-Gate-1: Cloudflare's script runs only in the gate. Never in the app's CSP, and no
+  # app file of this release loads it (the kept /v/<prev>/ is served as it was, for open tabs).
+  ! grep -q 'challenges\.cloudflare\.com' "$CSP_FILE" || aa_fail "bin/lib/app-csp.txt names challenges.cloudflare.com — Turnstile runs only in the gate"
+  grep -q "; frame-src https://gate.share.refueler.io;" "$CSP_FILE" || aa_fail "bin/lib/app-csp.txt: frame-src must be exactly https://gate.share.refueler.io"
+  for f in $(find "$DIST" -type f ! -path "$DIST/v/*" | LC_ALL=C sort) $(find "$DIST/v/$sha" -type f | LC_ALL=C sort); do
+    if grep -q 'https://challenges\.cloudflare\.com' "$f"; then aa_fail "${f#$DIST/} names https://challenges.cloudflare.com — Turnstile runs only in the gate (src/gate/)"; fi
+  done
+  check_gate "$sha"
   [ "$AA_FAILS" -eq 0 ] || die "check FAILED — $AA_FAILS problem(s) above; nothing deployed"
-  echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present · no UUID in a path"
+  echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present · no UUID in a path · no Cloudflare script in the app"
+  echo "  ✓ gate: no inline code · CSP exact (gate-csp.txt) · noindex · every gate file present"
+}
+
+check_gate() {
+  local sha="$1" f n ref csp_lines
+  ag_check_listed "$GATE_SRC"
+  for f in $(find "$GATE_DIST" -name '*.html' | LC_ALL=C sort); do
+    if perl -0ne 'exit((/<script(?![^>]*\bsrc=)[^>]*>/i) ? 0 : 1)' "$f"; then aa_fail "inline <script> in gate ${f#$GATE_DIST/}"; fi
+    if perl -0ne 'exit((/<[a-z][^>]*\son[a-z]+\s*=/i) ? 0 : 1)' "$f"; then aa_fail "on*= handler in gate ${f#$GATE_DIST/}"; fi
+    if perl -0ne 'exit((/<[a-z][^>]*\sstyle\s*=/i) ? 0 : 1)' "$f"; then aa_fail "style= attribute in gate ${f#$GATE_DIST/}"; fi
+    if grep -q '{{\|{%' "$f"; then aa_fail "unrendered template tag in gate ${f#$GATE_DIST/}"; fi
+    for ref in $(grep -o '"/v/[^"?#]*"' "$f" | tr -d '"' | LC_ALL=C sort -u); do
+      [ -f "$GATE_DIST$ref" ] || aa_fail "gate ${f#$GATE_DIST/} names $ref — not in dist-gate/"
+    done
+  done
+  grep -q "/v/$sha/gate.js" "$GATE_DIST/index.html" || aa_fail "gate index.html does not load release $sha"
+  [ -f "$GATE_DIST/404.html" ] || aa_fail "gate has no 404.html"
+  [ "$(cat "$GATE_DIST/robots.txt" 2>/dev/null)" = "$(printf 'User-agent: *\nDisallow: /')" ] || aa_fail "gate robots.txt is not 'Disallow: /'"
+  for n in $AG_FILES; do cmp -s "$GATE_SRC/$n" "$GATE_DIST/v/$sha/$n" || aa_fail "gate release $n is not src/gate/$n"; done
+  csp_lines="$(grep -c 'Content-Security-Policy' "$GATE_DIST/_headers" || true)"
+  [ "$csp_lines" = "1" ] || aa_fail "gate _headers has $csp_lines CSP lines (want exactly 1)"
+  [ "$(sed -n 's/^  Content-Security-Policy: //p' "$GATE_DIST/_headers")" = "$(tr -d '\n' < "$GATE_CSP_FILE")" ] \
+    || aa_fail "gate _headers CSP differs from bin/lib/gate-csp.txt"
+  grep -q "connect-src 'none';" "$GATE_CSP_FILE" || aa_fail "gate-csp.txt must keep connect-src 'none'"
+  grep -q "frame-ancestors https://share.refueler.io;" "$GATE_CSP_FILE" || aa_fail "gate-csp.txt: frame-ancestors must be exactly https://share.refueler.io"
+  ! grep -q "unsafe-inline\|unsafe-eval" "$GATE_CSP_FILE" || aa_fail "gate-csp.txt allows unsafe-inline or unsafe-eval"
+  grep -q '^  ! Link$' "$GATE_DIST/_headers"   || aa_fail "gate _headers lacks '! Link'"
+  grep -q 'no-transform' "$GATE_DIST/_headers" || aa_fail "gate _headers lacks no-transform"
+  grep -q '^  X-Robots-Tag: noindex$' "$GATE_DIST/_headers" || aa_fail "gate _headers lacks X-Robots-Tag: noindex"
+  grep -q '^  Referrer-Policy: no-referrer$' "$GATE_DIST/_headers" || aa_fail "gate _headers lacks Referrer-Policy: no-referrer"
+  grep -q '^  Strict-Transport-Security: max-age=31536000; includeSubDomains$' "$GATE_DIST/_headers" || aa_fail "gate _headers lacks Strict-Transport-Security"
+  for f in $(find "$GATE_DIST/v/$sha" -type f | LC_ALL=C sort); do
+    if grep -q 'sourceMappingURL' "$f"; then aa_fail "${f#$GATE_DIST/} has a sourceMappingURL line"; fi
+  done
 }
 
 # URL path for a dist file (Pages serves /x/index.html at /x/ and strips .html)
@@ -314,6 +423,52 @@ prove() {
   [ "$(curl -s -o /dev/null -w '%{http_code}' "$APP_HOST/no-such-page-$RANDOM")" = "404" ] || aa_fail "unknown path is not a 404 (SPA fallback? 404.html missing?)"
   [ "$AA_FAILS" -eq 0 ] || return 1
   echo "  ✓ headers: CSP (enforced) exact · HSTS · no Link · no-transform · max-age=0 · real 404"
+}
+
+# prove_gate — is gate.share.refueler.io serving dist-gate/ byte for byte, with its headers?
+prove_gate() {
+  local start now waited pending still f got url tmp csp cc lk nap
+  step "prove: $GATE_HOST serves dist-gate/ byte for byte (up to ${PROVE_TIMEOUT}s)"
+  tmp="$(mktmp)"
+  pending="$(cd "$GATE_DIST" && find . -type f ! -name '_headers' | sed 's|^\./||' | LC_ALL=C sort)"
+  start=$(date +%s)
+  while :; do
+    still=""
+    for f in $pending; do
+      url="$GATE_HOST$(url_for "$f")?v=$(date +%s)$RANDOM"
+      if ! curl -sSL --max-time 30 -o "$tmp/got" "$url" 2>/dev/null; then still="$still $f"; continue; fi
+      got="$(aa_hash "$tmp/got")"
+      [ "$got" = "$(aa_hash "$GATE_DIST/$f")" ] || still="$still $f"
+    done
+    [ -z "$still" ] && break
+    now=$(date +%s); waited=$((now - start))
+    if [ "$waited" -ge "$PROVE_TIMEOUT" ]; then
+      for f in $still; do echo "  ✗ GATE NOT LIVE / NOT IDENTICAL after ${waited}s: $f" >&2; done
+      echo "    Custom domain gate.share.refueler.io on Pages project $GATE_PROJECT active? Cloudflare" >&2
+      echo "    injections (Rocket Loader, Email Obfuscation, Web Analytics) off for the gate host?" >&2
+      return 1
+    fi
+    nap=$((PROVE_TIMEOUT - waited)); [ "$nap" -gt 15 ] && nap=15
+    set -- $still; echo "  … $# gate file(s) not live yet (${waited}s), retrying in ${nap}s"
+    pending="$still"; sleep "$nap"
+  done
+  echo "  ✓ every dist-gate/ file live and byte-identical"
+  csp="$(tr -d '\n' < "$GATE_CSP_FILE")"
+  for url in "$GATE_HOST/" "$GATE_HOST/v/$SHA/gate.js" "$GATE_HOST/no-such-page-$RANDOM"; do
+    [ "$(header_of "$url" 'content-security-policy')" = "$csp" ] || aa_fail "gate CSP header not exact on $url"
+    [ -z "$(header_of "$url" 'content-security-policy-report-only')" ] || aa_fail "a Report-Only CSP is on $url"
+    [ "$(header_of "$url" 'x-robots-tag')" = "noindex" ] || aa_fail "X-Robots-Tag: noindex missing on $url"
+    [ "$(header_of "$url" 'referrer-policy')" = "no-referrer" ] || aa_fail "Referrer-Policy: no-referrer missing on $url"
+    [ "$(header_of "$url" 'x-content-type-options')" = "nosniff" ] || aa_fail "X-Content-Type-Options: nosniff missing on $url"
+    case "$(header_of "$url" 'strict-transport-security')" in max-age=31536000*) ;; *) aa_fail "HSTS (max-age=31536000) missing on $url" ;; esac
+    lk="$(header_of "$url" 'link')"; [ -z "$lk" ] || aa_fail "Link header on $url: $lk"
+    cc="$(header_of "$url" 'cache-control' | tr 'A-Z' 'a-z')"
+    case "$url:$cc" in *no-such-page-*:no-store) ;; *:*no-transform*) ;; *) aa_fail "no-transform missing on $url ($cc)" ;; esac
+    case "$cc" in *max-age=0*|*no-store*|*no-cache*) ;; *) aa_fail "browser-cacheable $url ($cc) — the Cache Rule must list gate.share.refueler.io (Browser TTL = Respect origin)" ;; esac
+  done
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "$GATE_HOST/no-such-page-$RANDOM")" = "404" ] || aa_fail "gate: unknown path is not a 404"
+  [ "$AA_FAILS" -eq 0 ] || return 1
+  echo "  ✓ gate headers: CSP exact · noindex · no-referrer · HSTS · no Link · no-transform · max-age=0 · real 404"
 }
 
 # GitHub must refuse to move or delete app-* tags, and lock published releases.
@@ -390,13 +545,15 @@ case "$MODE" in
 
   --prove)
     [ -d "$DIST/v" ] || die "no dist/ — run bin/ship-app.sh --check first"
-    SHA="$(sed -n 's|.*src="/v/\([0-9a-f]\{4,40\}\)/theme-early\.js".*|\1|p' "$DIST/index.html" | head -1)"
+    [ -d "$GATE_DIST/v" ] || die "no dist-gate/ — run bin/ship-app.sh --check first"
+    SHA="$(sed -n 's|.*src="/v/\([0-9a-f]\{4,40\}\)/share-early\.js".*|\1|p' "$DIST/index.html" | head -1)"
+    prove_gate || die "prove FAILED — gate.share.refueler.io is not serving dist-gate/"
     prove || die "prove FAILED — share.refueler.io is not serving dist/"
-    echo "✓ PROVEN (app) — release $SHA"
+    echo "✓ PROVEN (app + gate) — release $SHA"
     ;;
 
   ship)
-    step "1/7 preflight"
+    step "1/9 preflight"
     [ "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)" = "main" ] || die "not on main"
     [ -z "$(git -C "$ROOT" status --porcelain)" ] || die "working tree not clean — commit first (the release is named after HEAD)"
     git -C "$ROOT" fetch --quiet origin main || die "could not fetch origin"
@@ -433,15 +590,15 @@ case "$MODE" in
     fi
     echo "  ✓ main, clean, pushed · gh signed in · ship token in Keychain · app-* tags protected · releases immutable"
     echo "  ✓ release $SHA · live now: $(live_release || true) · keeping: ${PREV:-none}${STATE:+ · $STATE}"
-    step "2/7"; build "$SHA" "$PREV"
-    step "3/7"; check "$SHA"
+    step "2/9"; build "$SHA" "$PREV"
+    step "3/9"; check "$SHA"
     release_files "$FULL" "$PREV"
     if [ "$STATE" = "reship" ]; then
       cmp -s "$RELEASE_OUT/SHA256SUMS" "$T/published/SHA256SUMS" \
         || die "re-ship of $TAG builds different files from its published release (diff build/release/SHA256SUMS against the release's) — nothing deployed"
-      step "4/7 release $TAG already published; this build matches its SHA256SUMS"
+      step "4/9 release $TAG already published; this build matches its SHA256SUMS"
     else
-      step "4/7 draft release $TAG (private until the deploy is proven)"
+      step "4/9 draft release $TAG (private until the deploy is proven)"
       release_notes "$TAG" "$FULL" "$PREV" > "$T/notes.md"
       gh release create "$TAG" --draft --target "$FULL" --title "$TAG" --notes-file "$T/notes.md" \
         "$RELEASE_OUT/manifest.json" "$RELEASE_OUT/release-extra.json" "$RELEASE_OUT/SHA256SUMS" >/dev/null \
@@ -449,17 +606,23 @@ case "$MODE" in
       [ "$(gh release view "$TAG" --json assets --jq '.assets | length')" = "3" ] || die "draft $TAG does not have its three files"
       echo "  ✓ draft $TAG with manifest.json, release-extra.json, SHA256SUMS"
     fi
-    step "5/7 deploy (Cloudflare Pages, direct upload, project $PROJECT)"
+    # Turnstile-Gate-1: the gate first. The new app needs it; the old app never touches it.
+    step "5/9 deploy the gate (Cloudflare Pages, direct upload, project $GATE_PROJECT)"
+    ( cd "$GATE_DIST" && "$ROOT/bin/cf-token.sh" ship "$ROOT/worker/node_modules/.bin/wrangler" pages deploy "$GATE_DIST" --project-name "$GATE_PROJECT" --branch main \
+        --commit-hash "$FULL" --commit-message "release $SHA (gate)" --commit-dirty=false ) \
+      || die "wrangler pages deploy (gate) failed$([ "$STATE" = new ] && echo " (the $TAG draft stays private; the next ship replaces it)")"
+    step "6/9"; prove_gate || die "prove FAILED — the gate is deployed but gate.share.refueler.io is not serving dist-gate/ exactly; the app was NOT deployed (the $TAG release is not published)"
+    step "7/9 deploy the app (Cloudflare Pages, direct upload, project $PROJECT)"
     # Run from a directory with no wrangler.toml (the Worker's would be read and ignored, with a warning).
     ( cd "$DIST" && "$ROOT/bin/cf-token.sh" ship "$ROOT/worker/node_modules/.bin/wrangler" pages deploy "$DIST" --project-name "$PROJECT" --branch main \
         --commit-hash "$FULL" --commit-message "release $SHA" --commit-dirty=false ) \
       || die "wrangler pages deploy failed$([ "$STATE" = new ] && echo " (the $TAG draft stays private; the next ship replaces it)")"
-    step "6/7"; prove || die "prove FAILED — deployed, but share.refueler.io is not serving dist/ exactly (the $TAG release is not published)"
+    step "8/9"; prove || die "prove FAILED — deployed, but share.refueler.io is not serving dist/ exactly (the $TAG release is not published)"
     if [ "$STATE" = "reship" ]; then
       echo ""
       echo "✓ SHIPPED (app) — $APP_HOST release $TAG (re-ship; already published)"
     else
-      step "7/7 publish $TAG as the latest release"
+      step "9/9 publish $TAG as the latest release"
       gh release edit "$TAG" --draft=false --latest >/dev/null \
         || die "LIVE but NOT PUBLISHED: run  gh release edit $TAG --draft=false --latest  (from $ROOT)"
       [ "$(gh release view "$TAG" --json isDraft --jq '.isDraft')" = "false" ] || die "LIVE but $TAG still a draft: gh release edit $TAG --draft=false --latest"
