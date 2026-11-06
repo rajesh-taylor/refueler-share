@@ -1,5 +1,5 @@
 /* src/gate/gate.css — the gate page (Turnstile-Gate-1, plan §3). Transparent: the app's page,
    grain included, shows through. No color-scheme: the app's frame sets normal (plan §11). */
 html, body { margin: 0; padding: 0; background: transparent; }
-#gate-widget { width: 100%; }
+#gate-widget { width: 300px; }
 .gate-top { margin: 16px; font: 400 14px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; color: #6b6760; }

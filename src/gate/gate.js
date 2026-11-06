@@ -67,7 +67,7 @@ function render() {
     action: job.action,
     theme,
     appearance: 'interaction-only',
-    size: 'flexible',
+    size: 'normal',      // 300 × 65, seated in the app's panel (Rajesh, option C, 6 Nov)
     'refresh-expired': 'auto',
     'before-interactive-callback': () => send({ op: 'asking' }),
     callback: (token) => {

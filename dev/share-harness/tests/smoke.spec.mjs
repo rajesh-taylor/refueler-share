@@ -404,6 +404,7 @@ test('gate: Cloudflare\'s script never loads in the app page; the frame is the g
   await expect(frame).toHaveAttribute('src', 'http://localhost:8768/');
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
   await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
+  await expect(frame).not.toHaveClass(/is-waiting/);
   await expect(page.locator('#share-card')).toBeHidden();
   const link = await finishSend(page);
   expect(link).toContain('?uuid=');
@@ -419,6 +420,7 @@ test('gate: Cloudflare asks for a click → the box shows; a forged token from t
   await sender(page, browserName, problems);
   await pick(page, '/?ts=click');
   await expect(page.locator('#turnstile-wrap')).toBeVisible();
+  expect((await page.locator('iframe#cf-gate').boundingBox()).width).toBe(300);   // option C: Cloudflare's fixed size
   await expect(page.locator('#upload-btn')).toBeDisabled();
   // Not from the gate frame: dropped (source and origin checks).
   await page.evaluate(() => window.postMessage({ t: 'refueler-gate', v: 1, op: 'token', id: 'x', token: 'forged' }, '*'));
@@ -450,6 +452,9 @@ test('gate: the gate page itself unreachable → the blocked line 15 s after the
   await pick(page, '/');
   await page.locator('#upload-btn').click();
   await expect(page.locator('#upload-btn')).toHaveText('Checking…');
+  // The frame stays invisible while the gate hasn't loaded: no blank error page in the box.
+  await expect(page.locator('iframe#cf-gate')).toHaveClass(/is-waiting/);
+  await expect(page.locator('iframe#cf-gate')).toHaveCSS('visibility', 'hidden');
   await expect(page.getByText(BLOCKED)).toBeVisible({ timeout: 25_000 });
   await expect(page.locator('#upload-btn')).toHaveText('Encrypt and upload');
   // The next press inserts a fresh frame; with the gate back, the upload goes through.

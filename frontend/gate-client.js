@@ -74,6 +74,9 @@ export function openGate({ container, purpose, on = {} }) {
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.setAttribute('loading', 'eager');
   frame.setAttribute('sandbox', SANDBOX);
+  // Invisible until the gate page has loaded: a blocked gate would otherwise paint the
+  // browser's blank error page into the box (seen live in Safari, 6 Nov).
+  frame.classList.add('is-waiting');
 
   let id = null;
   let ready = false;
@@ -88,6 +91,7 @@ export function openGate({ container, purpose, on = {} }) {
     if (m.op === 'ready') {
       if (ready) return;
       ready = true;
+      frame.classList.remove('is-waiting');
       id = newRequestId();
       shownTheme = pageTheme();
       post({ op: 'init', id, purpose, theme: shownTheme });
