@@ -77,6 +77,10 @@ jobs:
       - name: No transfer UUID in a path
         run: node bin/check-no-uuid-path.mjs
 
+      # H8 Trusted-Types-1: no DOM sink in a release file outside the share-dom policy.
+      - name: No DOM sink (Trusted Types)
+        run: node bin/check-dom-sinks.mjs
+
       # ── ESLint — worker/src/ only ────────────────────────────────────────
       - name: Lint worker/src/
         working-directory: worker

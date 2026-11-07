@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 
 test('known-answer vectors, real modules, real CSP', async ({ page, browserName }) => {
   const csp = [];
-  page.on('console', (m) => { if (/Content.Security.Policy/i.test(m.text())) csp.push(m.text()); });
+  page.on('console', (m) => { if (/Content.Security.Policy|Trusted.?(?:Types?|HTML|Script)|trusted-types/i.test(m.text())) csp.push(m.text()); });
   page.on('pageerror', (e) => csp.push('pageerror: ' + e.message));
 
   const res = await page.goto('/kat/');

@@ -19,6 +19,7 @@ import { WORKER_URL, FREE_EXPIRY }                     from './config.js';
 import { setCalmText }                                 from './progress.js';
 import { classifyLink, LINK_INCOMPLETE }               from './fragment.js';
 import { _countdown }                                  from './download-time.js';
+import { lateScriptURL }                               from './trusted-types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared mutable state — single object passed by reference to upload + download.
@@ -164,7 +165,7 @@ function _loadQr() {
     _qrLoading = new Promise((resolve) => {
       if (typeof QrCreator !== 'undefined') { resolve(true); return; }
       const s = document.createElement('script');
-      s.src = new URL('./qr-creator.min.js', import.meta.url).href;
+      s.src = lateScriptURL('qr-creator.min.js');   // H8: share-dom policy (trusted-types.js)
       s.onload  = () => resolve(typeof QrCreator !== 'undefined');
       s.onerror = () => { _qrLoading = null; resolve(false); };
       document.head.appendChild(s);

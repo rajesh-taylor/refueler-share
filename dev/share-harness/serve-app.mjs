@@ -27,7 +27,15 @@ export function harnessCsp(real) {
   return csp;
 }
 
-const CSP = harnessCsp(readFileSync(join(HERE, '..', '..', 'bin', 'lib', 'app-csp.txt'), 'utf8'));
+// H8 Trusted-Types-1: TT_REPORT_ONLY=1 moves the Trusted Types directives into a Report-Only
+// header (the rest stays enforced), so a run lists every violation without breaking the page.
+const TT = "; require-trusted-types-for 'script'; trusted-types share-dom";
+let CSP = harnessCsp(readFileSync(join(HERE, '..', '..', 'bin', 'lib', 'app-csp.txt'), 'utf8'));
+const REPORT_ONLY = process.env.TT_REPORT_ONLY === '1';
+if (REPORT_ONLY) {
+  if (!CSP.includes(TT)) throw new Error('app-csp.txt no longer has the Trusted Types directives: update serve-app.mjs');
+  CSP = CSP.replace(TT, '');
+}
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.wasm': 'application/wasm', '.woff2': 'font/woff2',
@@ -36,6 +44,7 @@ const TYPES = {
 const HEADERS = {
   'Content-Security-Policy': CSP, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
   'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin', 'Cache-Control': 'no-store',
+  ...(REPORT_ONLY ? { 'Content-Security-Policy-Report-Only': TT.slice(2) } : {}),
 };
 
 function resolve(pathname) {
@@ -57,4 +66,4 @@ http.createServer((req, res) => {
   if (!file) { res.writeHead(404, HEADERS); return res.end('not found'); }
   res.writeHead(200, { ...HEADERS, 'Content-Type': TYPES[extname(file)] || 'application/octet-stream' });
   createReadStream(file).pipe(res);
-}).listen(PORT, () => console.log(`app (real CSP) http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`app (real CSP${REPORT_ONLY ? ', Trusted Types report-only' : ''}) http://localhost:${PORT}`));

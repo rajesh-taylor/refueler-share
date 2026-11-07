@@ -5,6 +5,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Tidal + permanent-record option injection
 // ─────────────────────────────────────────────────────────────────────────────
+// H8 Trusted-Types-1: markup is built with DOM calls, never innerHTML (CSP require-trusted-types-for).
+// el('div', { className: 'x', id: 'y', role: 'alert' }, 'text', childEl) — role goes in as an attribute.
+function el(tag, props, ...children) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'role') n.setAttribute('role', v); else n[k] = v;
+  }
+  n.append(...children);
+  return n;
+}
+
 export function _injectTransferOptions(domRefs, transferOpts) {
   // 1–2. Delete after download: static markup since Share-Upload-2 (ids kept).
   transferOpts.destroyToggle = domRefs.destroyToggle;
@@ -22,22 +33,18 @@ export function _injectTransferOptions(domRefs, transferOpts) {
   tidal.id = 'tidal-window-section';
   tidal.className = 'tidal-window hidden';
   tidal.setAttribute('aria-label', 'Transfer availability window');
-  tidal.innerHTML = `
-    <div class="tidal-heading">
-      <div class="toggle-label">Availability window</div>
-      <div class="toggle-desc">Optionally restrict when this transfer can be downloaded</div>
-    </div>
-    <div class="tidal-pickers">
-      <div class="tidal-field">
-        <label for="available-from" class="tidal-label">Available from</label>
-        <input type="datetime-local" id="available-from" class="tidal-input" />
-      </div>
-      <div class="tidal-field">
-        <label for="available-until" class="tidal-label" id="available-until-label">Available until</label>
-        <input type="datetime-local" id="available-until" class="tidal-input" />
-      </div>
-    </div>
-    <div id="tidal-error" class="tidal-error hidden" role="alert"></div>`;
+  tidal.append(
+    el('div', { className: 'tidal-heading' },
+      el('div', { className: 'toggle-label' }, 'Availability window'),
+      el('div', { className: 'toggle-desc' }, 'Optionally restrict when this transfer can be downloaded')),
+    el('div', { className: 'tidal-pickers' },
+      el('div', { className: 'tidal-field' },
+        el('label', { htmlFor: 'available-from', className: 'tidal-label' }, 'Available from'),
+        el('input', { type: 'datetime-local', id: 'available-from', className: 'tidal-input' })),
+      el('div', { className: 'tidal-field' },
+        el('label', { htmlFor: 'available-until', className: 'tidal-label', id: 'available-until-label' }, 'Available until'),
+        el('input', { type: 'datetime-local', id: 'available-until', className: 'tidal-input' }))),
+    el('div', { id: 'tidal-error', className: 'tidal-error hidden', role: 'alert' }));
   paid.appendChild(tidal);
   transferOpts.tidalSection   = document.getElementById('tidal-window-section');
   transferOpts.availableFrom  = document.getElementById('available-from');
@@ -61,17 +68,14 @@ export function _injectTransferOptions(domRefs, transferOpts) {
   const permanentRow = document.createElement('div');
   permanentRow.className = 'mt16 hidden';
   permanentRow.id = 'permanent-record-row';
-  permanentRow.innerHTML = `
-    <div class="toggle-row">
-      <div>
-        <div class="toggle-label">Permanent record</div>
-        <div class="toggle-desc">A Bitcoin-anchored date stamp is added to this transfer</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="permanent-record-toggle" />
-        <span class="slider"></span>
-      </label>
-    </div>`;
+  permanentRow.append(
+    el('div', { className: 'toggle-row' },
+      el('div', {},
+        el('div', { className: 'toggle-label' }, 'Permanent record'),
+        el('div', { className: 'toggle-desc' }, 'A Bitcoin-anchored date stamp is added to this transfer')),
+      el('label', { className: 'switch' },
+        el('input', { type: 'checkbox', id: 'permanent-record-toggle' }),
+        el('span', { className: 'slider' }))));
   tidal.insertAdjacentElement('afterend', permanentRow);
   transferOpts.permanentRecordToggle = document.getElementById('permanent-record-toggle');
 
@@ -79,7 +83,9 @@ export function _injectTransferOptions(domRefs, transferOpts) {
   const prNotice = document.createElement('div');
   prNotice.id = 'permanent-record-notice';
   prNotice.className = 'destroy-notice hidden';
-  prNotice.innerHTML = `<strong>This creates an unforgeable record that this file existed.</strong> The stamp is public — it proves when, not who.`;
+  // Wording unchanged (H8); "unforgeable" / "proves" go at OSA-Copy-1.
+  prNotice.append(el('strong', {}, 'This creates an unforgeable record that this file existed.'),
+    ' The stamp is public — it proves when, not who.');
   permanentRow.insertAdjacentElement('afterend', prNotice);
   transferOpts.permanentRecordNotice = prNotice;
 

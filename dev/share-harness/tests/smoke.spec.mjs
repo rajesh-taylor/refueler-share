@@ -37,7 +37,7 @@ function makeFile(name, size) {
 
 // ── Pages: CSP and script errors fail the test wherever they happen ─────────
 function watch(page, problems) {
-  page.on('console', (m) => { if (/Content.Security.Policy/i.test(m.text())) problems.push(m.text()); });
+  page.on('console', (m) => { if (/Content.Security.Policy|Trusted.?(?:Types?|HTML|Script)|trusted-types/i.test(m.text())) problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
 }
 

@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { sha256Hex } from './crypto.js';
+import { lateScriptURL } from './trusted-types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Folder zips (Share-Upload-5; moved here Share-Folder-Resume-1 so tests run the
@@ -21,7 +22,7 @@ export function loadFflate() {
     _fflateLoading = new Promise((resolve) => {
       if (typeof fflate !== 'undefined') { resolve(true); return; }
       const s = document.createElement('script');
-      s.src = new URL('./fflate.min.js', import.meta.url).href;
+      s.src = lateScriptURL('fflate.min.js');   // H8: share-dom policy (trusted-types.js)
       s.onload  = () => resolve(typeof fflate !== 'undefined');
       s.onerror = () => { _fflateLoading = null; resolve(false); };
       document.head.appendChild(s);

@@ -137,12 +137,19 @@ export function _showPreDownloadModal(onConfirm, onCancel) {
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-labelledby', 'pre-dl-modal-heading');
-  overlay.innerHTML = `
-    <div class="pre-dl-modal-card">
-      <p class="pre-dl-modal-heading" id="pre-dl-modal-heading">This transfer is deleted after download</p>
-      <button id="pre-dl-modal-btn" class="rx-btn" type="button">Download</button>
-      <button id="pre-dl-modal-cancel" class="rx-btn up-ghost" type="button">Not now</button>
-    </div>`;
+  // H8: DOM calls, not innerHTML (Trusted Types).
+  const card = document.createElement('div');
+  card.className = 'pre-dl-modal-card';
+  const heading = document.createElement('p');
+  heading.className = 'pre-dl-modal-heading';
+  heading.id = 'pre-dl-modal-heading';
+  heading.textContent = 'This transfer is deleted after download';
+  const btn = document.createElement('button');
+  btn.id = 'pre-dl-modal-btn'; btn.className = 'rx-btn'; btn.type = 'button'; btn.textContent = 'Download';
+  const cancel = document.createElement('button');
+  cancel.id = 'pre-dl-modal-cancel'; cancel.className = 'rx-btn up-ghost'; cancel.type = 'button'; cancel.textContent = 'Not now';
+  card.append(heading, btn, cancel);
+  overlay.append(card);
   document.body.appendChild(overlay);
   document.getElementById('pre-dl-modal-btn').addEventListener('click', () => { overlay.remove(); onConfirm(); }, { once: true });
   document.getElementById('pre-dl-modal-cancel').addEventListener('click', () => { overlay.remove(); onCancel(); }, { once: true });

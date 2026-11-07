@@ -314,6 +314,9 @@ check() {
   # UUID-Out-Of-Path-1: no transfer UUID built into an API path (the sampled records keep paths).
   # This release only: the kept previous one (/v/<prev>/) is served as it was, for open tabs.
   node "$ROOT/bin/check-no-uuid-path.mjs" --only "$DIST/v/$sha" >/dev/null || aa_fail "a transfer UUID is built into an API path in dist/v/$sha/ (bin/check-no-uuid-path.mjs)"
+  # H8 Trusted-Types-1: no DOM sink in this release outside the share-dom policy, and the CSP enforces it.
+  node "$ROOT/bin/check-dom-sinks.mjs" --only "$DIST/v/$sha" >/dev/null || aa_fail "a DOM sink in dist/v/$sha/ outside the share-dom policy (bin/check-dom-sinks.mjs)"
+  grep -q "; require-trusted-types-for 'script'; trusted-types share-dom;" "$CSP_FILE" || aa_fail "bin/lib/app-csp.txt must have require-trusted-types-for 'script'; trusted-types share-dom"
   # no third-party CSS/fonts in the app (CSP would block them; better to fail here)
   if grep -rlq 'fonts.googleapis\|fontshare\|gstatic' "$DIST" --include='*.html' --include='*.css'; then aa_fail "third-party font reference in dist/"; fi
   # Turnstile-Gate-1: Cloudflare's script runs only in the gate. Never in the app's CSP, and no
@@ -325,7 +328,7 @@ check() {
   done
   check_gate "$sha"
   [ "$AA_FAILS" -eq 0 ] || die "check FAILED — $AA_FAILS problem(s) above; nothing deployed"
-  echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present · no UUID in a path · no Cloudflare script in the app"
+  echo "  ✓ no inline code · CSP exact · ! Link · no-transform · every asset present · no UUID in a path · no DOM sink (Trusted Types) · no Cloudflare script in the app"
   echo "  ✓ gate: no inline code · CSP exact (gate-csp.txt) · noindex · every gate file present"
 }
 

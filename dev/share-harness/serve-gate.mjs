@@ -30,6 +30,9 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const HEADERS = {
   'Content-Security-Policy': CSP, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
   'X-Robots-Tag': 'noindex', 'Cache-Control': 'no-store',
+  // H8 Trusted-Types-1: GATE_TT_REPORT_ONLY=1 reports what Trusted Types would refuse in the gate
+  // (Cloudflare's script included). The decision test for the gate CSP; never enforced here.
+  ...(process.env.GATE_TT_REPORT_ONLY === '1' ? { 'Content-Security-Policy-Report-Only': "require-trusted-types-for 'script'" } : {}),
 };
 
 function resolve(pathname) {
