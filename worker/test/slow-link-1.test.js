@@ -61,7 +61,7 @@ describe('hashStream — streaming WASM BLAKE3', () => {
     expect(hex(blake3(part))).toBe(want);
     expect(hex(await hashStream(streamOf(part, 1_000_003)))).toBe(want);
     expect(hex(await hashStream(streamOf(part, 65536)))).toBe(want);
-  });
+  }, 30_000);   // noble hashes 32 MiB in plain JS: can pass 5 s on a busy machine
 
   it('keeps no part in memory: the WASM heap stays small across 200 MiB hashed', async () => {
     const piece = randomBytes(1 << 20);

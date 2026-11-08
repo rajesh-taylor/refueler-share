@@ -33,6 +33,9 @@ function toHex(u8) {
   return s;
 }
 
+// Noble hashes 32 MiB in plain JS: about 3 s here, past Vitest's 5 s on a busy machine.
+const BIG_HASH_TIMEOUT = 30_000;
+
 function make32MiB() {
   const n = 32 * 1024 * 1024;
   const b = new Uint8Array(n);
@@ -72,7 +75,7 @@ describe('Share-6-5d — WASM BLAKE3 hashOneShot (via src/blake3_wasm.js)', () =
     expect(wasmHex).toBe(
       '04d09456cdd4e2a8b722124b554e7a4143e82906efe2866881a46f009c56a113'
     );
-  });
+  }, BIG_HASH_TIMEOUT);
 });
 
 describe('Share-6-5d — verifyChunkBody uses the WASM digest, semantics unchanged', () => {
@@ -106,5 +109,5 @@ describe('Share-6-5d — verifyChunkBody uses the WASM digest, semantics unchang
     const big = make32MiB();
     const sidecar = sidecarWith(0, blake3(big), 1);
     expect(verifyChunkBody(big, sidecar, 0)).toBe(true);
-  });
+  }, BIG_HASH_TIMEOUT);
 });

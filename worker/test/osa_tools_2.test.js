@@ -43,6 +43,8 @@ const pad    = (i) => String(i).padStart(4, '0');
 let sb;
 let failRpc = null;   // name of one Supabase function to fail (503), or null
 beforeEach(() => {
+  // Date only, frozen: the Worker's stamps and NOW() must read the same second.
+  vi.useFakeTimers({ toFake: ['Date'], now: Date.now() });
   forgetApiKey();
   sb = makeSupabase();
   failRpc = null;

@@ -40,6 +40,8 @@ coverage/
 refueler-share-financial-model.xlsx
 
 Claude outputs/
+# Can hold any command approved with "don't ask again", secrets included.
+.claude/settings.local.json
 *.timestamp-*.mjs
 frontend/signin/
 

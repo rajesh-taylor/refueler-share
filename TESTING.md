@@ -1,5 +1,5 @@
 # TESTING.md — refueler-share
-> **Version:** v1.2 | **Created:** S63 · 27 July 2026 | **Updated:** H8 Trusted-Types-1 · 7 Nov 2026
+> **Version:** v1.3 | **Created:** S63 · 27 July 2026 | **Updated:** Snag-List-1 · 8 Nov 2026
 > Canonical testing architecture for `rajesh-taylor/refueler-share`.
 > Referenced in investor due diligence and cited in the B9 security whitepaper.
 
@@ -28,7 +28,7 @@ Nothing in this document overrides an architectural lock in `CLAUDE.md`. Where a
 
 Worker suites, run separately (Vitest 4), then the browser tests (§2a):
 
-- **Main suite** — `worker/test/` (62 files, 1,461 passing, 29 todo), `cd worker && npm test`. Runs inside workerd via `@cloudflare/vitest-plugin`. Pure logic plus handlers against in-memory KV/R2. The old `worker/tests/unit/` files (`destroy.test.js`, `webhook_reg.test.js`) were stale copies of what `test/` now covers and were removed at Integration-Repair-1.
+- **Main suite** — `worker/test/` (66 files, 1,531 passing, 29 todo), `cd worker && npm test`. Runs inside workerd via `@cloudflare/vitest-plugin`. Pure logic plus handlers against in-memory KV/R2. The old `worker/tests/unit/` files (`destroy.test.js`, `webhook_reg.test.js`) were stale copies of what `test/` now covers and were removed at Integration-Repair-1.
 - **Integration suite** — `worker/tests/integration/` (3 files, 68 passing), `cd worker && npm run test:integration`. Real HTTP against `wrangler dev --local` (§3).
 
 **Integration suites:**
@@ -358,25 +358,16 @@ refueler-share/
   test-vectors/                       ← Test-Hardening-1: v1.json, gen.py, run.mjs
   dev/share-harness/tests/            ← kat + smoke specs; dev/mutants/run.mjs beside it
   playwright.config.mjs
+  tests/e2e/share-link.spec.js        ← older headed check; drives the LIVE site; run by hand, in no workflow
   scripts/
     tg-smoke.sh                       ← S-TG-5 production smoke (10 boundary checks)
   docs/
     r2-lifecycle.md
-    incident-response.md              ← B9 (S1 template, tabletop log, channel order)
   worker/
-    vitest.config.js                  ← unit config
+    vitest.config.js                  ← main suite config
     vitest.config.integration.js      ← S64
+    test/                             ← main suite (§2)
     tests/
-      unit/                           ← 242 passing
-        ratelimit.test.js
-        manifest.test.js
-        nut00.test.js
-        blake3.test.js
-        turnstile.test.js
-        stripe.test.js
-        destroy.test.js               ← S-TG-2 (64 tests)
-        webhook_reg.test.js           ← SW9 (50 tests)
-        kv-mock.js
       integration/                    ← S64+
         client.js
         round-trip.test.js
@@ -389,11 +380,6 @@ refueler-share/
           turnstile-mock.js
           supabase-mock.js
           stripe-events.js
-          lightning.js                ← B7
-          webhooks.js                 ← SW4
-          keypair.js                  ← B8
-          lnurl.js                    ← B9
-          mlkem-vectors.js            ← B10
         helpers/
           wrangler-lifecycle.js
       load/                           ← S68–S69
@@ -404,9 +390,15 @@ refueler-share/
   .github/
     workflows/
       ci.yml                          ← S70–S71, Level 1
-      integration.yml                 ← B7–B8, Level 2
-      staging-deploy.yml              ← B9+, Level 3
+      app-check.yml                   ← bin/ship-app.sh --ci + release-file tests
+      browser.yml                     ← browser tests (§2a)
+      release-rebuild.yml             ← rebuilds each published release from its tag
+      watchdog.yml                    ← live bytes against the release, every six hours
+      heartbeat.yml                   ← GET /health hourly
+      scorecard.yml
 ```
+
+Levels 2 and 3 (§7) have no workflow of their own yet.
 
 ---
 
