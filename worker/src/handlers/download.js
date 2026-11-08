@@ -141,7 +141,7 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
 
   if (isDownloadBlocked(manifest)) return err(410, 'Transfer expired');
 
-  if (chunkIndex === 0) {
+  if (chunkIndex === 0 && manifest.upload_complete === true) {
     logEvent(env, {
       endpoint:    'download_tier',
       tier:        storedTier(manifest.tier ?? 'free'),
@@ -158,6 +158,14 @@ export async function handleDownload(request, env, ctx, uuid, chunkIndex) {
     if (!token) return err(401, 'Download token required');
     const { valid, uuid: tokenUuid } = await verifyDownloadToken(token, env);
     if (!valid || tokenUuid !== uuid) return err(401, 'Invalid or expired download token');
+  }
+
+  // Worker-Leftovers-1: no part leaves until finalise has run, on every tier. After
+  // the password check, so a password transfer answers 401 to anyone without a token.
+  // Not 409: the client reads every 409 as an integrity failure.
+  if (manifest.upload_complete !== true) {
+    logEvent(env, { endpoint: 'download', status: 425, chunkIndex, errorMsg: 'upload_incomplete' });
+    return json({ error: 'upload_incomplete' }, 425);
   }
 
   if (chunkIndex === 0 && !manifest.download_initiated_at) {

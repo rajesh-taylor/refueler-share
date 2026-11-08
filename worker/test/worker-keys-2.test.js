@@ -234,7 +234,7 @@ describe('download with no merkle_root: Range', () => {
     headers: { 'CF-Connecting-IP': '198.51.100.40', ...(range ? { Range: range } : {}) },
   }, 0), env, ctx);
   const realR2 = async () => {
-    await testEnv.BUCKET.put(`${OPEN_UUID}/manifest.json`, JSON.stringify({ ...baseManifest, uuid: OPEN_UUID, total_chunks: 2 }));
+    await testEnv.BUCKET.put(`${OPEN_UUID}/manifest.json`, JSON.stringify({ ...baseManifest, uuid: OPEN_UUID, total_chunks: 2, upload_complete: true }));
     await testEnv.BUCKET.put(`${OPEN_UUID}/0000`, 'hello');
     return makeEnv({ BUCKET: testEnv.BUCKET });
   };

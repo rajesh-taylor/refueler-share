@@ -44,7 +44,7 @@ const ROUTES = [
   ['GET',    '/api/v1/receipt/acceptance'],
 ];
 
-const liveManifest = { uuid: UUID, total_chunks: 1, expiry_timestamp: NOW + 86400, file_name: 'encrypted-payload' };
+const liveManifest = { uuid: UUID, total_chunks: 1, upload_complete: true, expiry_timestamp: NOW + 86400, file_name: 'encrypted-payload' };
 const plainEnv = (manifest = liveManifest) => ({
   BUCKET:    makeBucket(manifest ? { [`${UUID}/manifest.json`]: { uploaded: NOW, body: JSON.stringify(manifest) } } : {}),
   STATUS_KV: makeKV(),

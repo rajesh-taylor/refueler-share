@@ -472,7 +472,7 @@ describe('routes, through worker.fetch', { timeout: 180_000 }, () => {
   const partLike = fc.oneof(headerSafe, fc.nat({ max: 12000 }).map((n) => String(n).padStart(4, '0')), fc.constantFrom('-001', '0x10', '1e3', '00.5', '٠٠٠١'.normalize('NFKD')).filter((s) => /^[\x20-\x7e]*$/.test(s)));
   const NOW_S = Math.floor(Date.now() / 1000);
   const manifest = {
-    uuid: UUID, tier: 'free', total_chunks: 2, total_bytes: 100, expiry_timestamp: NOW_S + 86400,
+    uuid: UUID, tier: 'free', total_chunks: 2, upload_complete: true, total_bytes: 100, expiry_timestamp: NOW_S + 86400,
     created_at: NOW_S - 60, status: 'complete', p2sh_secret_hash: 'a'.repeat(64),
   };
   const liveEnv = () => makeEnv({

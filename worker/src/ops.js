@@ -15,7 +15,13 @@
 // Counts are read-modify-write on KV: two writes in the same second can lose one.
 // That is fine — every rule asks "any?" or "at least", never an exact figure.
 // Outside Cloudflare, .github/workflows/heartbeat.yml calls GET /health hourly.
+//
+// Worker-Leftovers-1: the :15 check also reads one id from the database. Two failed
+// hours in a row send the "db" alert, through Cloudflare Email, so it still goes out
+// while the database is down. /health stays free of the database on purpose.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { supabaseFetch } from './utils.js';
 
 export const COUNTERS = [
   'webhook_ok', 'webhook_sig_fail', 'webhook_error',
@@ -29,6 +35,9 @@ export const SWEEP_STALE_SECONDS = 26 * HOUR; // the sweep runs at 03:30 daily
 export const R2_ERROR_THRESHOLD = 10;
 const SWEEP_LAST_OK = 'ops:sweep_last_ok';
 const HELLO = 'ops:hello';
+const DB_FAILS = 'ops:db_fails';
+export const DB_DOWN_AFTER = 2;     // failed hourly checks in a row
+const DB_PROBE_MS = 5000;
 
 const nowS = () => Math.floor(Date.now() / 1000);
 const hourKey = (t) => `ops:h:${Math.floor(t / HOUR)}`;
@@ -143,7 +152,35 @@ export const RULES = [
       'Check: Cloudflare status page (R2); then a test upload and download.',
     ],
   },
+  {
+    id: 'db',
+    route: 'Supabase REST API',
+    fires: (s, x) => x.dbFails >= DB_DOWN_AFTER,
+    subject: 'Database not answering',
+    body: (s, x) => [
+      `The database failed ${x.dbFails} hourly checks in a row.`,
+      'Check: the Supabase dashboard (project paused? incident?) and SUPABASE_SERVICE_KEY. Sign-in, paid sign-up and Chartered quota depend on it.',
+    ],
+  },
 ];
+
+/** One id, nothing about anyone. True = answered; null = no database configured. */
+async function probeDb(env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return null;
+  let timer;
+  try {
+    const res = await Promise.race([
+      supabaseFetch(env, 'GET', '/rest/v1/double_spend_attempts?select=id&limit=1'),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), DB_PROBE_MS); }),
+    ]);
+    await res.body?.cancel();
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const FOOTER = [
   '',
@@ -179,7 +216,7 @@ export async function runOpsCheck(env, now = nowS()) {
   if (!(await kv.get(HELLO))) {
     const ok = await sendOps(env, 'ops alerts are on', [
       'Ops alerts are on. This is the only email you get while nothing is wrong.',
-      `Watched: Stripe webhooks, the nightly sweep, email sending, R2 (${R2_ERROR_THRESHOLD}+ errors a day).`,
+      `Watched: Stripe webhooks, the nightly sweep, email sending, R2 (${R2_ERROR_THRESHOLD}+ errors a day), the database.`,
     ], now);
     if (ok) await kv.put(HELLO, String(now));
   }
@@ -191,7 +228,10 @@ export async function runOpsCheck(env, now = nowS()) {
     last = now;
     await kv.put(SWEEP_LAST_OK, String(now));
   }
-  const x = { sweepStale: now - last > SWEEP_STALE_SECONDS };
+  const before = Number(await kv.get(DB_FAILS)) || 0;
+  const dbFails = (await probeDb(env)) === false ? before + 1 : 0;
+  if (dbFails !== before) await kv.put(DB_FAILS, String(dbFails));
+  const x = { sweepStale: now - last > SWEEP_STALE_SECONDS, dbFails };
   const s = await sums(env, now);
   const day = Math.floor(now / DAY);
 
