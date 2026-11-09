@@ -217,11 +217,20 @@ export async function _carryOn(job, domRefs, state, helpers) {
     throw new UploadStop('unfinished', e.message);
   }
 
-  if (finRes.status === 409) {
+  let body = {};
+  if (finRes.status === 409) { try { body = await finRes.json(); } catch { /* not JSON */ } }
+  // Snag-List-2: an earlier finalise landed and its answer never reached us. The stored
+  // root equal to ours = this transfer is complete, so show the link. Anything else can't
+  // be repaired under this session: nothing is re-sent.
+  const finishedEarlier = body.error === 'already_complete';
+  if (finishedEarlier && body.merkle_root !== finaliseBody.merkle_root) {
+    reportError('finalise_root_mismatch', '', `uuid:${short}`);
+    throw new UploadStop('gone', 'finalise 409 already_complete, root differs');
+  }
+
+  if (finRes.status === 409 && !finishedEarlier) {
     // incomplete → { missing }; B12-1d wrong size → { segments } (the Worker deletes those).
     // The session stays open: carry on from the first part that has to go again.
-    let body = {};
-    try { body = await finRes.json(); } catch { /* not JSON */ }
     const redo = (body.missing || body.segments || []).map(s => parseInt(s, 10)).filter(n => n >= 0);
     reportError(body.error === 'wrong_size' ? 'finalise_wrong_size' : 'finalise_incomplete',
       `missing ${redo.length}`, `uuid:${short}`);
@@ -234,13 +243,13 @@ export async function _carryOn(job, domRefs, state, helpers) {
     reportError('finalise_status', `HTTP ${finRes.status}`, `uuid:${short}`);
     throw new UploadStop('gone', `finalise ${finRes.status}`);
   }
-  if (!finRes.ok) {
+  if (!finRes.ok && !finishedEarlier) {
     const txt = await finRes.text().catch(() => '');
     reportError('finalise_status', `HTTP ${finRes.status} ${_errCode(txt)}`.trim(), `uuid:${short}`);
     throw new UploadStop(finRes.status >= 500 ? 'unfinished' : 'browser', `finalise ${finRes.status}`);
   }
 
-  // 200 { ok:true, merkle_root } — transfer complete and ciphertext-verifiable.
+  // 200 { ok:true, merkle_root } or a matching already_complete — transfer complete and ciphertext-verifiable.
   // The resume record goes only now: a refresh after a failed finalise can still finish.
   clearResumeState(job.uuid, reportError).catch(() => {});
   domRefs.passphraseInput.value = '';

@@ -165,10 +165,12 @@ export async function handleFinalise(request, env, uuid, ctx) {
   if (!manifest) return err(404, 'Transfer not found');
   if (manifest.consumed === true) return err(410, 'Transfer has been destroyed');
   // KV-Fix-1a: finalise runs once. A replayed session must never re-write the
-  // sidecar / merkle_root of a completed transfer.
+  // sidecar / merkle_root of a completed transfer. Snag-List-2: the stored
+  // ciphertext-chunk root goes back to this session's holder, so a browser whose
+  // first finalise answer was lost can match it against its own and show the link.
   if (manifest.upload_complete === true) {
     aeLog(env, { endpoint: 'upload_finalise', status: 409, errorMsg: 'already_complete' });
-    return json({ error: 'already_complete' }, 409);
+    return json({ error: 'already_complete', merkle_root: manifest.merkle_root }, 409);
   }
   const chunkCount = session.totalChunks;
   if (manifest.total_chunks !== chunkCount) {
@@ -255,7 +257,7 @@ export async function handleFinalise(request, env, uuid, ctx) {
     (m.consumed === true || m.upload_complete === true) ? null
       : { ...m, merkle_root: merkleRoot, tree_algo: 'rfc6962-unbalanced-blake3-v1', upload_complete: true, status: 'complete' });
   if (upd.status === 'gone' || upd.before?.consumed === true) return err(410, 'Transfer has been destroyed');
-  if (upd.status === 'declined') return json({ error: 'already_complete' }, 409);
+  if (upd.status === 'declined') return json({ error: 'already_complete', merkle_root: upd.before?.merkle_root }, 409);
   if (upd.status !== 'written') return err(503, 'Transfer busy — please retry');
   manifest.merkle_root     = merkleRoot;                      // trusted b64url string
   manifest.tree_algo       = 'rfc6962-unbalanced-blake3-v1';  // pinned — never vary

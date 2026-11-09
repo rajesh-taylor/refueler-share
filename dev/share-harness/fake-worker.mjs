@@ -1,6 +1,7 @@
 // Fake Share Worker for the Share-Upload-2 preview harness. In-memory, localhost only.
 // Real credential signing (worker/src/nut00.js) so the browser's DLEQ check passes.
 // Control: GET /_ctl?fail=<issue|initiate|chunk:N|drop:N|finalise|finalise409|wrong_size|none>&slow=<ms per chunk PUT, and before each download's first byte>&rate=<MB/s>
+// finalise_lost: finalise lands, its answer is lost, once. finalise_other_root: the same, with a different root stored.
 // rate: chunk PUTs and downloads move at that speed, so byte progress shows (Share-Progress-1).
 // drop:N: part N's PUT or download is cut halfway once, then works (Chrome re-sends a cut PUT by itself).
 // down:N: part N's PUT and download answer 503 until fail changes — the page's retry line shows.
@@ -191,6 +192,7 @@ http.createServer(async (req, res) => {
     if (u.pathname === '/upload/urls') {
       const b = JSON.parse(await body(req)); const t = T.get(id);
       if (!t) return json(res, 401, { error: 'session' });
+      if (t.done) return json(res, 409, { error: 'Upload already complete' });
       return json(res, 200, { urls: [...Array(b.count)].map((_, k) => ({ index: b.from + k, url: url(id, b.from + k) })) });
     }
     if (p[0] === 'r2') {
@@ -205,6 +207,7 @@ http.createServer(async (req, res) => {
     if (u.pathname === '/upload/finalise') {
       const fb = JSON.parse(await body(req)); const t = T.get(id);
       if (!t) return json(res, 401, { error: 'session' });
+      if (t.done) return json(res, 409, { error: 'already_complete', merkle_root: t.root });   // Snag-List-2, as finalise.js
       if (ctl.fail === 'finalise409') return json(res, 409, { error: 'incomplete', missing: [3] });
       if (ctl.fail === 'wrong_size') return json(res, 409, { error: 'wrong_size', segments: [2] });
       if (ctl.fail === 'finalise') return json(res, 500, { error: 'boom' });
@@ -216,7 +219,14 @@ http.createServer(async (req, res) => {
       const bad = leaves.findIndex((h, i) => b64(h) !== fb.hashes?.[i]);
       if (bad >= 0 || fb.hashes.length !== t.total) return json(res, 400, { error: 'hash mismatch', index: bad });
       if (b64(buildMerkleTree(leaves).root) !== fb.merkle_root) return json(res, 400, { error: 'root mismatch' });
-      t.done = true; return json(res, 200, { ok: true, merkle_root: fb.merkle_root });
+      t.done = true; t.root = fb.merkle_root;
+      // Snag-List-2: finalise lands but the browser never hears (once); _other_root also stores a different root.
+      if (ctl.fail === 'finalise_lost' || ctl.fail === 'finalise_other_root') {
+        if (ctl.fail === 'finalise_other_root') t.root = 'B'.repeat(43);
+        ctl.fail = 'none';
+        return json(res, 500, { error: 'answer lost' });
+      }
+      return json(res, 200, { ok: true, merkle_root: fb.merkle_root });
     }
     if (u.pathname === '/meta') {
       if (ctl.fail === 'meta503') return json(res, 503, { error: 'unavailable' });

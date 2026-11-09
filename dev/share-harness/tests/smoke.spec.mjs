@@ -362,6 +362,68 @@ test('an upload carries on after a refresh, and the file arrives whole', async (
   expect(problems).toEqual([]);
 });
 
+// Snag-List-2: finalise landed but its answer was lost.
+async function sendUntilFinaliseStops(page, file, fail) {
+  await ctl(`fail=${fail}`);
+  await openUpload(page);
+  await page.locator('#file-input').setInputFiles(file.path);
+  await expect(page.locator('#options-card')).toBeVisible();
+  await page.locator('#upload-btn').click();
+  await expect(page.locator('#up-stopped-text')).toContainText('Everything was sent', { timeout: 90_000 });
+}
+
+test('finalise landed but its answer was lost: Try again shows the link, nothing is re-sent', async ({ page, browser, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  const file = makeFile('lost-answer.bin', CHUNK + 1024);
+  await sendUntilFinaliseStops(page, file, 'finalise_lost');
+
+  let again = 0;
+  page.on('request', (r) => { if (r.url().includes('/r2/') || r.url().endsWith('/upload/urls')) again++; });
+  await page.locator('#up-retry-btn').click();
+  await expect(page.locator('#share-card')).toBeVisible({ timeout: 30_000 });
+  expect(again).toBe(0);
+  const link = (await page.locator('#share-link-display').textContent()).trim();
+
+  const rx = await receiver(browser, problems);
+  await openCard(rx, link, file);
+  const got = await saved(rx, () => rx.locator('#rc-download-btn').click());
+  expect(sha(got)).toBe(sha(file.bytes));
+  await rx.context().close();
+
+  await openUpload(page);   // the record went with the link
+  await expect(page.locator('#resume-card')).toBeHidden();
+  expect(problems).toEqual([]);
+});
+
+test('finalise answer lost, then a refresh: the resume card finishes it', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  const file = makeFile('lost-refresh.bin', CHUNK + 1024);
+  await sendUntilFinaliseStops(page, file, 'finalise_lost');
+  await page.reload();
+  await expect(page.locator('#resume-card')).toBeVisible();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#resume-notice-btn').click()]);
+  await chooser.setFiles(file.path);
+  await expect(page.locator('#share-card')).toBeVisible({ timeout: 30_000 });
+  expect(problems).toEqual([]);
+});
+
+test('already complete with a different root stays a failure: no link, nothing re-sent', async ({ page, browserName }) => {
+  const problems = [];
+  await sender(page, browserName, problems);
+  const file = makeFile('other-root.bin', CHUNK + 1024);
+  await sendUntilFinaliseStops(page, file, 'finalise_other_root');
+
+  let again = 0;
+  page.on('request', (r) => { if (r.url().includes('/r2/') || r.url().endsWith('/upload/urls')) again++; });
+  await page.locator('#up-retry-btn').click();
+  await expect(page.locator('#up-stopped-text')).toContainText('can’t be resumed');
+  await expect(page.locator('#share-card')).toBeHidden();
+  expect(again).toBe(0);
+  expect(problems).toEqual([]);
+});
+
 test('Chromium: the streaming save path', async ({ page, browser, browserName }) => {
   test.skip(browserName !== 'chromium', 'only Chromium has showSaveFilePicker');
   const problems = [];

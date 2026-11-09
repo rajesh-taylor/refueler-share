@@ -150,9 +150,35 @@ describe('finalise — runs once', () => {
     });
     const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: kv, UPLOAD_SESSION_KEY: SESSION_KEY }, UUID, { waitUntil() {} });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: 'already_complete' });
+    expect(await res.json()).toEqual({ error: 'already_complete', merkle_root: 'orig' });   // Snag-List-2
     expect(JSON.parse(bucket._store.get(`${UUID}/manifest.json`).body).merkle_root).toBe('orig');
     expect(bucket._store.has(`${UUID}/hashes`)).toBe(false);
+  });
+
+  it('a finalise that loses the race also answers with the winner\'s root', async () => {
+    const UUID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4c';
+    const B32  = 'A'.repeat(43);
+    const key  = `${UUID}/manifest.json`;
+    const live = { uuid: UUID, total_chunks: 1, upload_complete: false };
+    const bucket = makeBucket({
+      [key]: { uploaded: 1, body: JSON.stringify(live) },
+      [`${UUID}/0000`]: { size: FULL, uploaded: 1 },
+    });
+    // The other finalise lands between this one's first read and its conditional write.
+    const list = bucket.list.bind(bucket);
+    bucket.list = async (opts) => {
+      const page = await list(opts);
+      bucket._store.set(key, { uploaded: 1, body: JSON.stringify({ ...live, upload_complete: true, merkle_root: 'winner' }) });
+      return page;
+    };
+    const req = transferRequest(`https://w.test/upload/finalise`, UUID, {
+      method: 'POST', headers: { 'X-Upload-Session': await sessionTok(UUID, 1) },
+      body: JSON.stringify({ hashes: [B32], merkle_root: B32 }),
+    });
+    const res = await handleFinalise(req, { BUCKET: bucket, STATUS_KV: makeKV(), UPLOAD_SESSION_KEY: SESSION_KEY }, UUID, { waitUntil() {} });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'already_complete', merkle_root: 'winner' });
+    expect(JSON.parse(bucket._store.get(key).body).merkle_root).toBe('winner');
   });
 });
 
