@@ -20,13 +20,13 @@
     "blake3-wasm": "2.1.5"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "1.4.11",
-    "@eslint/js": "9.39.5",
+    "@cloudflare/vitest-plugin": "1.6.0",
+    "@eslint/js": "10.0.1",
     "@vitest/runner": "4.1.12",
-    "@vitest/snapshot": "4.1.12",
-    "eslint": "9.39.5",
+    "@vitest/snapshot": "5.1.0",
+    "eslint": "10.14.0",
     "fast-check": "4.10.2",
-    "vitest": "4.1.12",
-    "wrangler": "4.156.0"
+    "vitest": "5.1.0",
+    "wrangler": "4.158.0"
   }
 }
