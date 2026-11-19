@@ -165,6 +165,8 @@ The residual threat `nut10` closes — a TLS-surviving on-endpoint adversary lif
 
 **Posture: bearer now, inscription later, parchment kept inscribable.** A pure bearer toll is an open decree — whoever holds it, it applies. A `nut10`-bound toll is a writ sealed to one errand. Reach for the seal when the bearer property is too loose; for Share today it is not. The slot is in the schema; the wax is ready; do not seal every scroll yet.
 
+**Payers copy every tag (added 19 Nov 2026, from Boardroom Brief 6; cashubtc/nuts#476, open).** Nothing changes for v1: the 402 still goes out with `nut10` absent, and #476 confirms the reserved-slot approach. When the slot is filled (B8+), every Share payer, the MCP `refueler_quote` path included, locks to the requested kind, data and **every** tag, including tags it doesn't recognise, and never filters them. Companion #474 (open) has mints ignore unknown NUT-10 tags.
+
 ---
 
 ## Cross-product forward notes (for BRIDGE; detailed design in each product's own project)
