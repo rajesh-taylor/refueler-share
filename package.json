@@ -11,7 +11,7 @@
     "test:browser": "dev/share-harness/build.sh && playwright test"
   },
   "devDependencies": {
-    "@11ty/eleventy": "3.1.7",
-    "@playwright/test": "1.64.1"
+    "@11ty/eleventy": "3.1.8",
+    "@playwright/test": "1.65.0"
   }
 }
